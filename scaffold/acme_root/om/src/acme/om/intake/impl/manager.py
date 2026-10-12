@@ -9,8 +9,9 @@ from acme.integrations.exceptions import DeliveryRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
-from acme.om.agents.loop import LoopManagerInterface
-from acme.om.attribution import PrincipalContext
+from acme.om.agents.impl.loop import HANDOVER_UNLOCK
+from acme.om.agents.loop_rules import open_loop
+from acme.om.attribution import AttributionManagerInterface, PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
@@ -29,7 +30,8 @@ from acme.om.intake.types.link import (
     WorkBinding,
 )
 from acme.om.intake.types.route import Effect, Routed
-from acme.om.steps.types.header import ParkReason
+from acme.om.steps import StepsManagerInterface
+from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -48,6 +50,8 @@ class IntakeOptions(Platform):
     links: int = Field(default=50, gt=0)
     # The most handles one read of a session's work answers.
     work: int = Field(default=50, gt=0)
+    # The most steps one read of a session's history takes.
+    page: int = Field(default=500, gt=0)
 
 
 class IntakeManagerImpl(IntakeManagerInterface):
@@ -56,7 +60,8 @@ class IntakeManagerImpl(IntakeManagerInterface):
         storage: IntakeStorageInterface,
         sessions: AgentSessionsManagerInterface,
         agents: AgentsManagerInterface,
-        loop: LoopManagerInterface,
+        attribution: AttributionManagerInterface,
+        steps: StepsManagerInterface,
         tools: ToolsManagerInterface,
         events: EventsManagerInterface,
         tenancy: TenancyManagerInterface,
@@ -69,7 +74,8 @@ class IntakeManagerImpl(IntakeManagerInterface):
         self._integrations = integrations
         self._sessions = sessions
         self._agents = agents
-        self._loop = loop
+        self._attribution = attribution
+        self._steps = steps
         self._tools = tools
         self._events = events
         self._tenancy = tenancy
@@ -310,11 +316,12 @@ class IntakeManagerImpl(IntakeManagerInterface):
         )
         if effect is Effect.HAND_OVER:
             # The agent stands down, whoever pushed: its loop parks on a
-            # hand-over only a person's giving back clears. The router takes
-            # it, since a pusher may hold no place, or no write, here. Parked
-            # on one already, it stays.
+            # hand-over only a person's giving back clears. The router parks
+            # it, since a pusher may hold no place, or no write, here, and a
+            # person takes an environment over in person alone. Parked on one
+            # already, it stays.
             if session.park is None or session.park.reason is not ParkReason.HANDOVER:
-                await self._loop.take_over(ctx, session.id)
+                await self._stand_down(ctx, session.id)
             pusher = None if member is None else member.user_id
             return routed.model_copy(update={"principal_id": pusher})
         if effect not in DELIVERED:
@@ -358,11 +365,31 @@ class IntakeManagerImpl(IntakeManagerInterface):
         return True
 
     async def _may_instruct(self, member: TenantContext, session_id: UUID) -> bool:
+        """Whether a mapped member's word instructs the session: they steer
+        it, and hold what each call it offers needs. A participant who does
+        not steer it, or one who takes no part, speaks as data."""
         try:
             await self._agents.require_instructor(member, session_id)
-        except NotAuthorized:
+            return await self._attribution.steers(member, session_id)
+        except NotAuthorized, NotFound:
             return False
-        return True
+
+    async def _stand_down(self, ctx: TenantContext, session_id: UUID) -> None:
+        """The session's loop parks on a hand-over that names no holder: a
+        new epoch fences the run that holds the loop, as a take-over's does,
+        and a person who may write gives it back in person."""
+        epoch = await self._steps.begin_run(ctx, session_id)
+        history: list[Step] = []
+        while True:
+            after = history[-1].seq if history else 0
+            page = await self._steps.get_steps(ctx, session_id, after, self._options.page)
+            history.extend(page.items)
+            if not page.has_more or not page.items:
+                break
+        loop = open_loop(history)
+        loop_id = new_id() if loop is None else loop.loop_id
+        park = Park(reason=ParkReason.HANDOVER, unlock=HANDOVER_UNLOCK)
+        await self._sessions.park(ctx, session_id, epoch, loop_id, park)
 
     async def _audit(
         self, ctx: TenantContext, kind: str, target: UUID, facts: dict[str, object]

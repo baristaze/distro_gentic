@@ -18,7 +18,7 @@ from acme.services.api.types.agent_sessions import AgentSessionView
 from acme.services.api.types.watch import (
     CommandProgressView,
     CommandRequest,
-    GiveBackRequest,
+    ControlGiveBackRequest,
     HandRunView,
     ItemPageView,
     ItemReadView,
@@ -112,7 +112,7 @@ async def command(
 
 @router.post("/agent-sessions/{session_id}/control/give-back", response_model=AgentSessionView)
 async def give_back(
-    ctx: Ctx, watch: WatchService, session_id: UUID, body: GiveBackRequest
+    ctx: Ctx, watch: WatchService, session_id: UUID, body: ControlGiveBackRequest
 ) -> AgentSessionView:
     """The person gives the environment back: their summary is the message
     the agent reads on resume. A command of theirs still running refuses it,

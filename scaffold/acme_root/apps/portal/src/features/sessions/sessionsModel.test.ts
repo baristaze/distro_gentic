@@ -27,6 +27,9 @@ const session: AgentSessionView = {
   created_by: "u1",
   archived_at: null,
   deleted_at: null,
+  visibility: "private",
+  participants: [],
+  steerer: "u1",
 };
 
 describe("sessions model", () => {
@@ -57,8 +60,8 @@ describe("sessions model", () => {
       one("Flaky test", { created_by: "u1", kind: "engineer" }),
       one("Docs", { created_by: "u2", kind: "analysis" }),
       one("Old", { created_by: "u1", archived_at: "2026-10-04T00:00:00Z" }),
-      one("Asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null } }),
-      one("Waits", { status: "parked", park: { reason: "provider", unlock: "provider", retry_at: null } }),
+      one("Asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } }),
+      one("Waits", { status: "parked", park: { reason: "provider", unlock: "provider", retry_at: null, cause: null } }),
     ];
     const ids = (filter: Partial<Parameters<typeof listed>[1]>) =>
       listed(sessions, { status: "any", owner: "everyone", kind: "", archived: false, query: "", ...filter }, "u1").map((each) => each.id);

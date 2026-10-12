@@ -8,9 +8,8 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import SecretUse
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agents.loop_rules import PRINCIPAL_UNLOCK
 from acme.om.attribution import AttributionManagerInterface
-from acme.om.attribution.rules import principal_of
+from acme.om.attribution.rules import PRINCIPAL_PARK, principal_of
 from acme.om.attribution.types.authority import SessionAuthority
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
@@ -308,7 +307,7 @@ class TrustManagerImpl(TrustManagerInterface):
         if (
             park is not None
             and park.reason is ParkReason.PERSON
-            and park.unlock == PRINCIPAL_UNLOCK
+            and park.unlock == PRINCIPAL_PARK.unlock
         ):
             await self._sessions.wake_session(ctx, session_id, park)
 
@@ -325,7 +324,7 @@ class TrustManagerImpl(TrustManagerInterface):
                 if (
                     park is not None
                     and park.reason is ParkReason.PERSON
-                    and park.unlock == PRINCIPAL_UNLOCK
+                    and park.unlock == PRINCIPAL_PARK.unlock
                 ):
                     await self._attribution.follow_parent(ctx, child.id)
                     await self._sessions.wake_session(ctx, child.id, park)

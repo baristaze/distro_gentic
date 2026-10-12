@@ -155,14 +155,15 @@ class Trusted:
         assert isinstance(transport, TransportTwinImpl)
         return transport
 
-    def member(self) -> TenantContext:
-        """Another member of the owner's tenant."""
+    def member(self, role: Role = Role.MEMBER) -> TenantContext:
+        """Another person of the owner's tenant, a member unless `role` says
+        otherwise."""
         return build_context(
             RequestContext(request_id=new_id(), app=APP),
             user_id=new_id(),
             org_id=self.owner.org_id,
-            role=Role.MEMBER,
-            permissions=permissions_of(Role.MEMBER),
+            role=role,
+            permissions=permissions_of(role),
             credential_kind=CredentialKind.SESSION_TOKEN,
         )
 

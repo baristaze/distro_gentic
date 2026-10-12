@@ -405,7 +405,14 @@ async def awaiting_approval(
     """The call the session parks on for a person's approval, once the last
     call it asked for is `tool`."""
     deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
-    approval = {"reason": "person", "unlock": "approval", "retry_at": None, "line": None}
+    approval = {
+        "reason": "person",
+        "unlock": "approval",
+        "retry_at": None,
+        "line": None,
+        "cause": None,
+        "holder": None,
+    }
     while asyncio.get_running_loop().time() < deadline:
         parked = await settled(stack, person, session_id)
         asked = of_type(await history(stack, person, session_id), "tool_request")[-1]

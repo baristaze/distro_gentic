@@ -200,6 +200,13 @@ async def test_a_pinned_session_reads_waiting_until_a_host_of_its_pool_is_online
         headers=created(owner),
         json={"kind": "assistant", "title": "the dropped object", "project_id": PROJECT_ID},
     )
+    # Open to the org, so the viewer sees it: what the viewer lacks is the write.
+    shared = await client.put(
+        f"/v1/agent-sessions/{started.json()['id']}/visibility",
+        headers=owner,
+        json={"visibility": "org_wide"},
+    )
+    assert shared.status_code == 200, shared.text
     path = f"/v1/agent-sessions/{started.json()['id']}/placement"
     unplaced = await client.get(path, headers=owner)
     assert unplaced.json()["pool"] is None and not unplaced.json()["waiting"]

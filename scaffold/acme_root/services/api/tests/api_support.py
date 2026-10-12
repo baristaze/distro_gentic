@@ -12,9 +12,12 @@ from uuid import UUID
 import httpx
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
+from acme.om.billing.root import build_billing
+from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -120,6 +123,18 @@ async def sign_in(client: httpx.AsyncClient, container: AppContainer) -> dict[st
     project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
     await container.storage.get_project_storage().create_project(org.id, project, ())
     return await sign_in_as(client, OWNER["email"], org.id)
+
+
+async def open_account(container: AppContainer, headers: dict[str, str]) -> None:
+    """Opens the signed-in person's tenant account on the platform's funding,
+    as `make seed` does locally, so a loop's calls have someone to charge."""
+    token = headers["Authorization"].removeprefix("Bearer ")
+    ctx = await container.managers.tenancy.authenticate(seed_request(), token)
+    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    request = AccountRequest(
+        funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"
+    )
+    await billing.open_account(ctx, request)
 
 
 async def add_member(container: AppContainer, org_id: UUID, email: str, role: Role) -> User:

@@ -334,7 +334,7 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
 COMPUTED = {
     "agents/impl/loop.py: fill.provider.value": "a provider's name",
     "agents/impl/loop.py: refused.unlock": "`<provider>:key`",
-    "agents/impl/loop.py: unlock": "`<provider>:billing`",
+    "agents/impl/loop.py: f'{fill.provider.value}:{cause}'": "`<provider>:billing`",
     "agents/impl/loop.py: str(started.key)": "a job's key",
     "agents/impl/loop.py: str(job.key)": "a job's key",
     "budgets/rules.py: unlock": "a budget's id",

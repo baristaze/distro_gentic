@@ -17,8 +17,8 @@ from acme.services.api.types.watch import (
     CommandPartView,
     CommandProgressView,
     CommandRequest,
+    ControlGiveBackRequest,
     EntryView,
-    GiveBackRequest,
     HandRunView,
     ItemPageView,
     ItemReadView,
@@ -200,6 +200,6 @@ class WatchServiceImpl(WatchServiceInterface):
         return view
 
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, body: GiveBackRequest
+        self, ctx: TenantContext, session_id: UUID, body: ControlGiveBackRequest
     ) -> AgentSessionView:
         return session_view(await self._watch.give_back(ctx, session_id, body.summary, body.stop))
