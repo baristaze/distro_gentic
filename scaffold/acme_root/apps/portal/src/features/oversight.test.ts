@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionView, BudgetUsageView, EventView } from "@acme/client";
 import { AuditPage } from "./audit/AuditPage";
-import { buttons, container, mount, newNet, notFound, PEOPLE, press, settle, unmount, type Call } from "./screenTesting";
+import { buttons, container, mount, newNet, notFound, PEOPLE, press, unmount, type Call } from "./screenTesting";
 import { UsagePage } from "./usage/UsagePage";
 
 const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
