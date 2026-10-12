@@ -2442,6 +2442,10 @@ select.acme-field {
 
 .acme-side-heading {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--acme-muted);
   font-size: 12px;
   font-weight: 600;
@@ -2470,7 +2474,9 @@ select.acme-field {
 }
 
 .acme-side-viewall {
+  flex-shrink: 0;
   padding: 4px 8px;
+  white-space: nowrap;
   border-radius: 6px;
   color: var(--acme-muted);
   font-size: 12px;
@@ -3188,6 +3194,10 @@ select.acme-field {
 
 .acme-sharing p {
   margin: 0;
+}
+
+.acme-sharing > .acme-chip {
+  justify-self: start;
 }
 
 .acme-sharing-people {

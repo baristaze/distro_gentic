@@ -267,11 +267,18 @@ describe("a session's steerer", () => {
   const seed = () => {
     server.sessions = [sessionOf("s1", "u1", "org_wide", ["u2"])];
     server.steps = {
-      s1: [stepOf(1, { text: "Fix the date parser.", author: "u1" }), stepOf(2, { text: "Try the leap-year case first.", author: "u2", participant: true })],
+      s1: [
+        stepOf(1, { text: "Fix the date parser.", author: "u1" }),
+        // Its creator made it org-wide: a switch of who sees it, recorded as a step.
+        stepOf(2, { type: "switched", visibility: "org_wide" }),
+        stepOf(3, { text: "Try the leap-year case first.", author: "u2", participant: true }),
+      ],
     };
   };
   const bubbles = () => [...container.querySelectorAll(".acme-bubble")];
   const chip = () => q<HTMLButtonElement>(".acme-sharing-chip")!;
+
+  const switches = () => [...container.querySelectorAll("[data-kind='shared']")].map((row) => row.querySelector("span")!.textContent);
 
   it("marks a participant's message as a suggestion, and moves the steer on the steerer's hand-off, which the page then shows", async () => {
     seed();
@@ -281,6 +288,7 @@ describe("a session's steerer", () => {
       [true, "Suggestion from Bea"],
     ]);
     expect(chip().textContent).toBe("You steer");
+    expect(switches()).toEqual(["Made org-wide: every member of the org sees it and may join"]);
 
     await click(chip());
     const hand = [...container.querySelectorAll("select")].find((select) => document.getElementById(select.getAttribute("aria-labelledby")!)?.textContent === "Hand the steer to")!;
@@ -293,7 +301,9 @@ describe("a session's steerer", () => {
 
     expect(server.writes).toEqual([{ method: "PUT", path: "/v1/agent-sessions/s1/principal", body: { steerer: "u2" } }]);
     expect(chip().textContent).toBe("Bea steers");
-    expect([...container.querySelectorAll("[data-kind='shared']")].map((row) => row.textContent)).toEqual([expect.stringContaining("Bea steers it from here")]);
+    // Each switch says what it was, never a new version of its agent.
+    expect(switches()).toEqual(["Made org-wide: every member of the org sees it and may join", "Bea steers it from here"]);
+    expect(container.textContent).not.toContain("Switched to a new version of its agent");
     // Ada takes part still, and her message is a suggestion now.
     expect(q("textarea")!.getAttribute("placeholder")).toBe("Suggest something to Bea, who steers it");
   });
