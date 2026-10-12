@@ -7,6 +7,7 @@ from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.automations import AutomationsManagerInterface
 from acme.om.billing import BillingManagerInterface
+from acme.om.connectors import ConnectorsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.levers import LeversManagerInterface
@@ -36,11 +37,13 @@ from acme.services.api.services import (
 from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
+from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.automations import AutomationsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
+from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.evidence import EvidenceServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
@@ -105,6 +108,7 @@ class ServicesImpl(ServicesInterface):
         projects: ProjectsServiceInterface,
         knowledge: KnowledgeServiceInterface,
         playbooks: PlaybooksServiceInterface,
+        connectors: ConnectorsServiceInterface,
         tools: ToolsServiceInterface,
         retention: RetentionServiceInterface,
         validations: ValidationsServiceInterface,
@@ -134,6 +138,7 @@ class ServicesImpl(ServicesInterface):
         self._projects = projects
         self._knowledge = knowledge
         self._playbooks = playbooks
+        self._connectors = connectors
         self._tools = tools
         self._retention = retention
         self._validations = validations
@@ -210,6 +215,9 @@ class ServicesImpl(ServicesInterface):
     def get_knowledge_service(self) -> KnowledgeServiceInterface:
         return self._knowledge
 
+    def get_connectors_service(self) -> ConnectorsServiceInterface:
+        return self._connectors
+
     def get_playbooks_service(self) -> PlaybooksServiceInterface:
         return self._playbooks
 
@@ -241,6 +249,7 @@ def build_services(
     knowledge: KnowledgeManagerInterface,
     playbooks: PlaybooksManagerInterface,
     levers: LeversManagerInterface,
+    connectors: ConnectorsManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -292,6 +301,7 @@ def build_services(
         projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
         knowledge=KnowledgeServiceImpl(knowledge),
         playbooks=PlaybooksServiceImpl(playbooks),
+        connectors=ConnectorsServiceImpl(connectors),
         tools=ToolsServiceImpl(managers.tools),
         retention=RetentionServiceImpl(managers.retention),
         validations=ValidationsServiceImpl(managers.platform_agents, managers.evidence),

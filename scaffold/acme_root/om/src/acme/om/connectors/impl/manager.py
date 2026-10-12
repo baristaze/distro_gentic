@@ -103,7 +103,7 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
     ) -> Connector:
         ctx.require(Permission.MANAGE_MEMBERS)
         if draft.name in self._toolsets:
-            raise ValidationFailed(f"{draft.name} is a toolset of the platform's kinds")
+            raise ValidationFailed(f"{draft.name} is a toolset a kind names")
         place = draft.place
         if place is ConnectorPlace.HOST and credential is not None:
             raise ValidationFailed("a host connector's credential stays on its host")
@@ -253,6 +253,13 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
             return 0
+        # Each credential goes from the store before the row that names it.
+        after: UUID | None = None
+        while page := await self._storage.read_connectors(ctx.org_id, after, self._options.page):
+            for connector in page:
+                if connector.secret is not None:
+                    await self._secrets.delete(ctx.org_id, connector.secret, deadline=ctx.deadline)
+            after = page[-1].id
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
     async def _list(self, ctx: TenantContext, connector: Connector) -> list[McpToolDefinition]:

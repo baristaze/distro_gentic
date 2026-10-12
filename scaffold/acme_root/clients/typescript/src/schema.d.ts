@@ -1623,6 +1623,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/connectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Connectors
+         * @description The tenant's connectors by id, after the id `after` names.
+         */
+        get: operations["list_connectors_v1_connectors_get"];
+        put?: never;
+        /**
+         * Connect
+         * @description A server connected, with no tool reviewed. Requires managing the org.
+         *     A cloud address that is this host or a private network is refused.
+         */
+        post: operations["connect_v1_connectors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{connector_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Connector */
+        get: operations["get_connector_v1_connectors__connector_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{connector_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach
+         * @description The connector attached to a kind: an attachment of that kind and
+         *     project already held is replaced.
+         */
+        post: operations["attach_v1_connectors__connector_id__attachments_post"];
+        /**
+         * Detach
+         * @description The attachment of `kind` and `project_id` taken away. A session that
+         *     pinned the connector keeps it.
+         */
+        delete: operations["detach_v1_connectors__connector_id__attachments_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{connector_id}/listing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listing
+         * @description What a cloud server lists now, each tool with the hash a review names
+         *     and the lever checks' findings. A host's server is listed on its host:
+         *     409.
+         */
+        get: operations["listing_v1_connectors__connector_id__listing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{connector_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review
+         * @description The tools a session may call, each at the hash the person read; in
+         *     person. It replaces the last review, and none withdraws every tool.
+         */
+        post: operations["review_v1_connectors__connector_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -3655,6 +3766,32 @@ export interface components {
             wait_seconds: number;
         };
         /**
+         * AttachRequest
+         * @description A kind the connector joins, for one project's sessions or every
+         *     session of the tenant, deferred until the agent loads it unless
+         *     `deferred` is false.
+         */
+        AttachRequest: {
+            /**
+             * Deferred
+             * @default true
+             */
+            deferred: boolean;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id?: string | null;
+        };
+        /** AttachmentView */
+        AttachmentView: {
+            /** Deferred */
+            deferred: boolean;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id: string | null;
+        };
+        /**
          * AutomationPrincipalView
          * @description The tenant's automation principal: its id, the role it holds, and who
          *     granted it.
@@ -4188,6 +4325,125 @@ export interface components {
             grant: string;
         };
         /**
+         * ConnectRequest
+         * @description A server on the internet, at its `url`, with the credential its calls
+         *     carry in `credential_header`, after `credential_scheme`; or the server
+         *     the tenant's host runs, by the name its owner gives it,
+         *     `host_server`, whose credential stays on that host.
+         */
+        ConnectRequest: {
+            /** Credential */
+            credential?: string | null;
+            /**
+             * Credential Header
+             * @default Authorization
+             */
+            credential_header: string;
+            /**
+             * Credential Scheme
+             * @default Bearer
+             */
+            credential_scheme: string;
+            /** Host Server */
+            host_server?: string | null;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string;
+            /** Url */
+            url?: string | null;
+        };
+        /**
+         * ConnectorPlace
+         * @description Where a connector's server runs, and so where its calls are made.
+         * @enum {string}
+         */
+        ConnectorPlace: "cloud" | "host";
+        /**
+         * ConnectorReviewRequest
+         * @description Every tool a person binds, none to withdraw them all. A host server's
+         *     review carries the definitions its host lists.
+         */
+        ConnectorReviewRequest: {
+            /** Definitions */
+            definitions?: components["schemas"]["DefinitionBody"][] | null;
+            /** Tools */
+            tools?: components["schemas"]["ReviewedToolBody"][];
+        };
+        /**
+         * ConnectorToolView
+         * @description A tool a person reviewed: the name a session calls it by, the
+         *     server's tool and the definition read, its class and its effect, and
+         *     what the lever checks found in its description.
+         */
+        ConnectorToolView: {
+            authorization_class: components["schemas"]["ToolClass"];
+            /** Definition Hash */
+            definition_hash: string;
+            /** Description */
+            description: string;
+            effect: components["schemas"]["Effect"];
+            /** Findings */
+            findings: components["schemas"]["FindingView"][];
+            /** Input Schema */
+            input_schema: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Server Tool */
+            server_tool: string;
+        };
+        /**
+         * ConnectorView
+         * @description A connector: where its server runs, its address or its host's server,
+         *     whether its calls carry a credential, never the credential; the tools
+         *     a person reviewed at review `review`, its toolset's version; the kinds
+         *     it is attached to; and `version`, which each write moves.
+         */
+        ConnectorView: {
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentView"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credential Header */
+            credential_header: string;
+            /** Credential Scheme */
+            credential_scheme: string;
+            /** Has Credential */
+            has_credential: boolean;
+            /** Host Server */
+            host_server: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            place: components["schemas"]["ConnectorPlace"];
+            /** Review */
+            review: number;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            /** Summary */
+            summary: string;
+            /** Tools */
+            tools: components["schemas"]["ConnectorToolView"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Url */
+            url: string | null;
+            /** Version */
+            version: number;
+        };
+        /**
          * ContenderView
          * @description What an arm's sessions ran: the agent kind, its version, and each model
          *     role's fill.
@@ -4360,6 +4616,28 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /**
+         * DefinitionBody
+         * @description A tool as a server lists it: its name, its description, its input
+         *     schema, and its annotations, as written.
+         */
+        DefinitionBody: {
+            /** Annotations */
+            annotations?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Input Schema */
+            input_schema?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
         };
         /**
          * DeleteAccountRequest
@@ -5992,6 +6270,29 @@ export interface components {
             requests: components["schemas"]["LeaseRequestView"][];
             resource: components["schemas"]["ResourceView"];
         };
+        /**
+         * ListedToolView
+         * @description A tool as the server lists it now, the hash a review names it by, and
+         *     what the lever checks find in its description.
+         */
+        ListedToolView: {
+            /** Annotations */
+            annotations: {
+                [key: string]: unknown;
+            };
+            /** Definition Hash */
+            definition_hash: string;
+            /** Description */
+            description: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][];
+            /** Input Schema */
+            input_schema: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+        };
         /** LivePageView */
         LivePageView: {
             /**
@@ -7177,6 +7478,22 @@ export interface components {
             keep: boolean;
         };
         /**
+         * ReviewedToolBody
+         * @description A tool a person binds: the server's tool, the hash of the definition
+         *     they read, and the class and the effect they give it, each said
+         *     outright: what a server says of its own tool is a hint, never
+         *     authority. A class that acts on the server's system waits for a person
+         *     at each call, as any outward call does.
+         */
+        ReviewedToolBody: {
+            authorization_class: components["schemas"]["ToolClass"];
+            /** Definition Hash */
+            definition_hash: string;
+            effect: components["schemas"]["Effect"];
+            /** Server Tool */
+            server_tool: string;
+        };
+        /**
          * Role
          * @enum {string}
          */
@@ -7922,6 +8239,14 @@ export interface components {
             /** Tool */
             tool: string;
         };
+        /**
+         * ToolClass
+         * @description The authorization classes every engine knows. An adopter adds domain
+         *     classes of its own by declaring them to the registry; a class is a name
+         *     either way, and policy keys on it.
+         * @enum {string}
+         */
+        ToolClass: "read" | "write" | "execute" | "network" | "integration" | "spawn" | "configuration" | "credentials" | "destructive";
         /**
          * ToolFailure
          * @description The class of a tool failure, decided where the failure happens. The
@@ -11761,6 +12086,265 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimantView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_connectors_v1_connectors_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_v1_connectors_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_connector_v1_connectors__connector_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attach_v1_connectors__connector_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detach_v1_connectors__connector_id__attachments_delete: {
+        parameters: {
+            query: {
+                kind: string;
+                project_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listing_v1_connectors__connector_id__listing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListedToolView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_v1_connectors__connector_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectorReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
                 };
             };
             /** @description Validation Error */

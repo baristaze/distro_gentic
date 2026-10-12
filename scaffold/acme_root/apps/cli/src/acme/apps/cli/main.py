@@ -41,6 +41,8 @@ from acme.client.realtime import ChannelRefused
 from acme.client.types import (
     AgentSessionView,
     AutomationRequest,
+    ConnectorReviewRequest,
+    ConnectorView,
     IssuedLoginView,
     IssuedSessionView,
     SessionControl,
@@ -699,6 +701,162 @@ def list_automations(as_json: Json = False, api: Api = None) -> None:
         for each in found:
             state = "enabled" if each.enabled else "disabled"
             typer.echo(f"{each.id}  {state}  {each.trigger.kind.value}  {each.name}")
+
+    run(go, api)
+
+
+connector_app = typer.Typer(
+    help="A connector: an MCP server of the org's, the tools of it a person "
+    "reviewed, and the kinds it is attached to.",
+    no_args_is_help=True,
+)
+app.add_typer(connector_app, name="connector")
+
+ConnectorId = Annotated[
+    UUID, typer.Argument(help="The connector's id, as `connector connect` printed it.")
+]
+KindName = Annotated[str, typer.Argument(help="The agent kind, such as engineer.")]
+ProjectOption = Annotated[
+    UUID | None, typer.Option("--project", help="One project's sessions alone; none for every one.")
+]
+
+
+def connector_line(each: ConnectorView) -> str:
+    where = each.url if each.url is not None else f"host:{each.host_server}"
+    return f"{each.id}  {each.name}  {where}  review {each.review}, {len(each.tools)} tools"
+
+
+@connector_app.command("connect")
+def connect(
+    name: Annotated[str, typer.Argument(help="Its name, which is its toolset's: tracker.")],
+    summary: Annotated[str, typer.Argument(help="The one line an agent reads of it.")],
+    url: Annotated[
+        str | None, typer.Option(help="A server on the internet: its https address.")
+    ] = None,
+    host_server: Annotated[
+        str | None,
+        typer.Option(help="A server inside the wall: the name the org's host runs it by."),
+    ] = None,
+    credential: Annotated[
+        str | None,
+        typer.Option(
+            envvar="ACME_CONNECTOR_CREDENTIAL",
+            help="What a cloud server's calls carry; read from the environment, never echoed.",
+        ),
+    ] = None,
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """Connect a server, with no tool reviewed. An owner's or an admin's. Its
+    credential is written and never read back."""
+    if (url is None) == (host_server is None):
+        raise typer.BadParameter("a connector has --url or --host-server, one of them")
+
+    async def go(client: ApiClient) -> None:
+        made = await client.connect(
+            name, summary, url=url, credential=credential, host_server=host_server
+        )
+        if as_json:
+            typer.echo(made.model_dump_json(indent=2))
+        else:
+            typer.echo(f"connected {made.id} ({made.name})")
+
+    run(go, api)
+
+
+@connector_app.command("list")
+def list_connectors(as_json: Json = False, api: Api = None) -> None:
+    """The org's connectors, one a line."""
+
+    async def go(client: ApiClient) -> None:
+        found = await client.connectors()
+        if as_json:
+            typer.echo(json.dumps([c.model_dump(mode="json") for c in found], indent=2))
+            return
+        for each in found:
+            typer.echo(connector_line(each))
+
+    run(go, api)
+
+
+@connector_app.command("listing")
+def connector_listing(connector_id: ConnectorId, as_json: Json = False, api: Api = None) -> None:
+    """What a cloud server lists now: each tool, the hash a review names it
+    by, and how many findings the lever checks have on its description. A
+    server inside the wall is listed on its host."""
+
+    async def go(client: ApiClient) -> None:
+        listed = await client.connector_listing(connector_id)
+        if as_json:
+            typer.echo(json.dumps([t.model_dump(mode="json") for t in listed], indent=2))
+            return
+        for tool in listed:
+            typer.echo(f"{tool.name}  {tool.definition_hash}  {len(tool.findings)} findings")
+
+    run(go, api)
+
+
+@connector_app.command("review")
+def review_connector(
+    connector_id: ConnectorId,
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="The review as JSON, as the API takes it.", exists=True, dir_okay=False
+        ),
+    ],
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """Bind the tools a session may call, each at the hash you read, in
+    person. It replaces the last review; one with no tool withdraws them all."""
+    try:
+        review = ConnectorReviewRequest.model_validate_json(path.read_bytes())
+    except ValueError as error:
+        raise typer.BadParameter(f"{path} is no review: {error}") from None
+
+    async def go(client: ApiClient) -> None:
+        reviewed = await client.review_connector(connector_id, review)
+        if as_json:
+            typer.echo(reviewed.model_dump_json(indent=2))
+        else:
+            names = ", ".join(tool.name for tool in reviewed.tools) or "no tool"
+            typer.echo(f"review {reviewed.review} of {reviewed.name}: {names}")
+
+    run(go, api)
+
+
+@connector_app.command("attach")
+def attach_connector(
+    connector_id: ConnectorId,
+    kind: KindName,
+    project: ProjectOption = None,
+    held: Annotated[
+        bool, typer.Option(help="In the registry from the start, not waiting for a load.")
+    ] = False,
+    api: Api = None,
+) -> None:
+    """Attach the connector to a kind's sessions, as a toolset its agent loads."""
+
+    async def go(client: ApiClient) -> None:
+        attached = await client.attach_connector(
+            connector_id, kind, project_id=project, deferred=not held
+        )
+        typer.echo(f"{attached.name} is attached to {kind}")
+
+    run(go, api)
+
+
+@connector_app.command("detach")
+def detach_connector(
+    connector_id: ConnectorId, kind: KindName, project: ProjectOption = None, api: Api = None
+) -> None:
+    """Take the connector from a kind's next sessions. A session that holds it
+    keeps it."""
+
+    async def go(client: ApiClient) -> None:
+        detached = await client.detach_connector(connector_id, kind, project_id=project)
+        typer.echo(f"{detached.name} is detached from {kind}")
 
     run(go, api)
 

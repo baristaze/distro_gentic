@@ -60,7 +60,7 @@ from acme.om.trust.types.identities import Executor
 
 TOKEN = "tok-5be0c3a91d7f24"
 
-RECORDS = Toolset(name="records", version=1, summary="Look the records up.", tools=("lookup",))
+RECORDS = Toolset(name="ledger", version=1, summary="Look the records up.", tools=("lookup",))
 
 OPERATOR = AgentKind(
     name="operator",
@@ -311,9 +311,9 @@ async def test_connecting_and_reviewing_are_a_managers_and_in_person(
     by_key = acting(at, Role.OWNER, CredentialKind.API_KEY)
     with pytest.raises(NotAuthorized, match="in person"):
         await at.connectors.review(by_key, connector.id, ConnectorReview())
-    with pytest.raises(ValidationFailed, match="toolset of the platform"):
+    with pytest.raises(ValidationFailed, match="a toolset a kind names"):
         await at.connectors.connect(
-            owner, ConnectorDraft(name="records", summary="x", url=words.url)
+            owner, ConnectorDraft(name="ledger", summary="x", url=words.url)
         )
     with pytest.raises(ValidationFailed, match="credential stays on its host"):
         await at.connectors.connect(

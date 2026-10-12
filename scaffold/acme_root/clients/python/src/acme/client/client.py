@@ -28,6 +28,8 @@ from acme.client.types import (
     ClaimantClaimView,
     ClaimantWorkView,
     ClaimView,
+    ConnectorReviewRequest,
+    ConnectorView,
     ControlView,
     CrossingKind,
     DeviceSignInView,
@@ -54,6 +56,7 @@ from acme.client.types import (
     LeaseView,
     LeverReadingView,
     LineView,
+    ListedToolView,
     MembershipChoicePageView,
     MembershipChoiceView,
     MeView,
@@ -956,6 +959,81 @@ class ApiClient:
             "POST", "/v1/playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
         )
         return PlaybookView.model_validate(published)
+
+    async def connectors(
+        self, *, after: UUID | None = None, limit: int = LIMIT_MAX
+    ) -> list[ConnectorView]:
+        params: dict[str, Any] = {"limit": limit}
+        if after is not None:
+            params["after"] = str(after)
+        found = await self.request("GET", "/v1/connectors", params=params)
+        return [ConnectorView.model_validate(connector) for connector in found]
+
+    async def connector(self, connector_id: UUID) -> ConnectorView:
+        read = await self.request("GET", f"/v1/connectors/{connector_id}")
+        return ConnectorView.model_validate(read)
+
+    async def connect(
+        self,
+        name: str,
+        summary: str,
+        *,
+        url: str | None = None,
+        credential: str | None = None,
+        host_server: str | None = None,
+    ) -> ConnectorView:
+        """A server on the internet at `url`, its calls carrying `credential`,
+        or the server the tenant's host runs as `host_server`. The credential
+        goes in once and never comes back."""
+        body: dict[str, Any] = {"name": name, "summary": summary}
+        for key, value in (("url", url), ("credential", credential), ("host_server", host_server)):
+            if value is not None:
+                body[key] = value
+        made = await self.request("POST", "/v1/connectors", json=body)
+        return ConnectorView.model_validate(made)
+
+    async def connector_listing(self, connector_id: UUID) -> list[ListedToolView]:
+        """What a cloud server lists now, each tool with the hash a review names."""
+        listed = await self.request("GET", f"/v1/connectors/{connector_id}/listing")
+        return [ListedToolView.model_validate(tool) for tool in listed]
+
+    async def review_connector(
+        self, connector_id: UUID, review: ConnectorReviewRequest
+    ) -> ConnectorView:
+        """The tools a session may call, each at the hash read; in person."""
+        reviewed = await self.request(
+            "POST",
+            f"/v1/connectors/{connector_id}/review",
+            json=review.model_dump(mode="json", exclude_unset=True),
+        )
+        return ConnectorView.model_validate(reviewed)
+
+    async def attach_connector(
+        self,
+        connector_id: UUID,
+        kind: str,
+        *,
+        project_id: UUID | None = None,
+        deferred: bool = True,
+    ) -> ConnectorView:
+        body: dict[str, Any] = {"kind": kind, "deferred": deferred}
+        if project_id is not None:
+            body["project_id"] = str(project_id)
+        attached = await self.request(
+            "POST", f"/v1/connectors/{connector_id}/attachments", json=body
+        )
+        return ConnectorView.model_validate(attached)
+
+    async def detach_connector(
+        self, connector_id: UUID, kind: str, *, project_id: UUID | None = None
+    ) -> ConnectorView:
+        params: dict[str, Any] = {"kind": kind}
+        if project_id is not None:
+            params["project_id"] = str(project_id)
+        detached = await self.request(
+            "DELETE", f"/v1/connectors/{connector_id}/attachments", params=params
+        )
+        return ConnectorView.model_validate(detached)
 
     async def tool_policy(self) -> ToolPolicyView:
         return ToolPolicyView.model_validate(await self.request("GET", "/v1/tools/policy"))

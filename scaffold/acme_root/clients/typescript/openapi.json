@@ -840,6 +840,71 @@
         "title": "AskRequest",
         "type": "object"
       },
+      "AttachRequest": {
+        "additionalProperties": false,
+        "description": "A kind the connector joins, for one project's sessions or every\nsession of the tenant, deferred until the agent loads it unless\n`deferred` is false.",
+        "properties": {
+          "deferred": {
+            "default": true,
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AttachRequest",
+        "type": "object"
+      },
+      "AttachmentView": {
+        "properties": {
+          "deferred": {
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "kind",
+          "project_id",
+          "deferred"
+        ],
+        "title": "AttachmentView",
+        "type": "object"
+      },
       "AutomationPrincipalView": {
         "description": "The tenant's automation principal: its id, the role it holds, and who\ngranted it.",
         "properties": {
@@ -1907,6 +1972,290 @@
         "title": "ConnectInstallationRequest",
         "type": "object"
       },
+      "ConnectRequest": {
+        "additionalProperties": false,
+        "description": "A server on the internet, at its `url`, with the credential its calls\ncarry in `credential_header`, after `credential_scheme`; or the server\nthe tenant's host runs, by the name its owner gives it,\n`host_server`, whose credential stays on that host.",
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "credential_header": {
+            "default": "Authorization",
+            "pattern": "^[A-Za-z0-9-]{1,64}$",
+            "title": "Credential Header",
+            "type": "string"
+          },
+          "credential_scheme": {
+            "default": "Bearer",
+            "maxLength": 32,
+            "title": "Credential Scheme",
+            "type": "string"
+          },
+          "host_server": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Server"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_]{0,23}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name",
+          "summary"
+        ],
+        "title": "ConnectRequest",
+        "type": "object"
+      },
+      "ConnectorPlace": {
+        "description": "Where a connector's server runs, and so where its calls are made.",
+        "enum": [
+          "cloud",
+          "host"
+        ],
+        "title": "ConnectorPlace",
+        "type": "string"
+      },
+      "ConnectorReviewRequest": {
+        "additionalProperties": false,
+        "description": "Every tool a person binds, none to withdraw them all. A host server's\nreview carries the definitions its host lists.",
+        "properties": {
+          "definitions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DefinitionBody"
+                },
+                "maxItems": 1000,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definitions"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewedToolBody"
+            },
+            "maxItems": 64,
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "title": "ConnectorReviewRequest",
+        "type": "object"
+      },
+      "ConnectorToolView": {
+        "description": "A tool a person reviewed: the name a session calls it by, the\nserver's tool and the definition read, its class and its effect, and\nwhat the lever checks found in its description.",
+        "properties": {
+          "authorization_class": {
+            "$ref": "#/components/schemas/ToolClass"
+          },
+          "definition_hash": {
+            "title": "Definition Hash",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/Effect"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingView"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server_tool": {
+            "title": "Server Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "server_tool",
+          "description",
+          "input_schema",
+          "definition_hash",
+          "authorization_class",
+          "effect",
+          "findings"
+        ],
+        "title": "ConnectorToolView",
+        "type": "object"
+      },
+      "ConnectorView": {
+        "description": "A connector: where its server runs, its address or its host's server,\nwhether its calls carry a credential, never the credential; the tools\na person reviewed at review `review`, its toolset's version; the kinds\nit is attached to; and `version`, which each write moves.",
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentView"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "credential_header": {
+            "title": "Credential Header",
+            "type": "string"
+          },
+          "credential_scheme": {
+            "title": "Credential Scheme",
+            "type": "string"
+          },
+          "has_credential": {
+            "title": "Has Credential",
+            "type": "boolean"
+          },
+          "host_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Server"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "place": {
+            "$ref": "#/components/schemas/ConnectorPlace"
+          },
+          "review": {
+            "title": "Review",
+            "type": "integer"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorToolView"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "summary",
+          "place",
+          "url",
+          "credential_header",
+          "credential_scheme",
+          "has_credential",
+          "host_server",
+          "tools",
+          "review",
+          "reviewed_by",
+          "attachments",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConnectorView",
+        "type": "object"
+      },
       "ContenderView": {
         "description": "What an arm's sessions ran: the agent kind, its version, and each model\nrole's fill.",
         "properties": {
@@ -2326,6 +2675,39 @@
           "approve"
         ],
         "title": "DecisionRequest",
+        "type": "object"
+      },
+      "DefinitionBody": {
+        "additionalProperties": false,
+        "description": "A tool as a server lists it: its name, its description, its input\nschema, and its annotations, as written.",
+        "properties": {
+          "annotations": {
+            "additionalProperties": true,
+            "title": "Annotations",
+            "type": "object"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DefinitionBody",
         "type": "object"
       },
       "DeleteAccountRequest": {
@@ -5708,6 +6090,50 @@
         "title": "LineView",
         "type": "object"
       },
+      "ListedToolView": {
+        "description": "A tool as the server lists it now, the hash a review names it by, and\nwhat the lever checks find in its description.",
+        "properties": {
+          "annotations": {
+            "additionalProperties": true,
+            "title": "Annotations",
+            "type": "object"
+          },
+          "definition_hash": {
+            "title": "Definition Hash",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingView"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "input_schema",
+          "annotations",
+          "definition_hash",
+          "findings"
+        ],
+        "title": "ListedToolView",
+        "type": "object"
+      },
       "LivePageView": {
         "properties": {
           "session_id": {
@@ -8310,6 +8736,38 @@
         "title": "ReviewRequest",
         "type": "object"
       },
+      "ReviewedToolBody": {
+        "additionalProperties": false,
+        "description": "A tool a person binds: the server's tool, the hash of the definition\nthey read, and the class and the effect they give it, each said\noutright: what a server says of its own tool is a hint, never\nauthority. A class that acts on the server's system waits for a person\nat each call, as any outward call does.",
+        "properties": {
+          "authorization_class": {
+            "$ref": "#/components/schemas/ToolClass"
+          },
+          "definition_hash": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Definition Hash",
+            "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/Effect"
+          },
+          "server_tool": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Server Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_tool",
+          "definition_hash",
+          "authorization_class",
+          "effect"
+        ],
+        "title": "ReviewedToolBody",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "owner",
@@ -10004,6 +10462,22 @@
         ],
         "title": "ToolCallView",
         "type": "object"
+      },
+      "ToolClass": {
+        "description": "The authorization classes every engine knows. An adopter adds domain\nclasses of its own by declaring them to the registry; a class is a name\neither way, and policy keys on it.",
+        "enum": [
+          "read",
+          "write",
+          "execute",
+          "network",
+          "integration",
+          "spawn",
+          "configuration",
+          "credentials",
+          "destructive"
+        ],
+        "title": "ToolClass",
+        "type": "string"
       },
       "ToolFailure": {
         "description": "The class of a tool failure, decided where the failure happens. The\nmodel reads it with advice on what to do next.",
@@ -20264,6 +20738,716 @@
         "summary": "Revoke Claimant",
         "tags": [
           "claimants"
+        ]
+      }
+    },
+    "/v1/connectors": {
+      "get": {
+        "description": "The tenant's connectors by id, after the id `after` names.",
+        "operationId": "list_connectors_v1_connectors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectorView"
+                  },
+                  "title": "Response List Connectors V1 Connectors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Connectors",
+        "tags": [
+          "connectors"
+        ]
+      },
+      "post": {
+        "description": "A server connected, with no tool reviewed. Requires managing the org.\nA cloud address that is this host or a private network is refused.",
+        "operationId": "connect_v1_connectors_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/v1/connectors/{connector_id}": {
+      "get": {
+        "operationId": "get_connector_v1_connectors__connector_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Connector",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/v1/connectors/{connector_id}/attachments": {
+      "delete": {
+        "description": "The attachment of `kind` and `project_id` taken away. A session that\npinned the connector keeps it.",
+        "operationId": "detach_v1_connectors__connector_id__attachments_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach",
+        "tags": [
+          "connectors"
+        ]
+      },
+      "post": {
+        "description": "The connector attached to a kind: an attachment of that kind and\nproject already held is replaced.",
+        "operationId": "attach_v1_connectors__connector_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/v1/connectors/{connector_id}/listing": {
+      "get": {
+        "description": "What a cloud server lists now, each tool with the hash a review names\nand the lever checks' findings. A host's server is listed on its host:\n409.",
+        "operationId": "listing_v1_connectors__connector_id__listing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListedToolView"
+                  },
+                  "title": "Response Listing V1 Connectors  Connector Id  Listing Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/v1/connectors/{connector_id}/review": {
+      "post": {
+        "description": "The tools a session may call, each at the hash the person read; in\nperson. It replaces the last review, and none withdraws every tool.",
+        "operationId": "review_v1_connectors__connector_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review",
+        "tags": [
+          "connectors"
         ]
       }
     },

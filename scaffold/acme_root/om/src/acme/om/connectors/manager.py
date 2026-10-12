@@ -95,5 +95,6 @@ class ConnectorsManagerInterface(ABC):
 
     @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
-        """A batch of a deleted tenant's rows, once its retention passed."""
+        """A batch of a deleted tenant's rows, once its retention passed,
+        each cloud connector's credential taken from the store first."""
         ...

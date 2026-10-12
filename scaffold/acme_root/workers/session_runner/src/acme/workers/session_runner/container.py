@@ -13,6 +13,7 @@ from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.root import InfraInterface
 from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
+from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
@@ -20,6 +21,8 @@ from acme.om.automations import AutomationsManagerInterface
 from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
+from acme.om.connectors.impl.manager import ConnectorsOptions
+from acme.om.connectors.root import ConnectorsLayer
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake import IntakeManagerInterface
@@ -210,6 +213,19 @@ class RunnerContainer:
             here at the runner's edge, as its claim loop mints one a claim."""
             return RequestContext(request_id=new_id(), app=app)
 
+        # A session's connectors, pinned as its first run begins: a cloud
+        # server called from here, a server inside the wall through the host
+        # that holds the session's workspace. A local stack's servers run
+        # beside it, so its addresses may be this host's.
+        connectors = ConnectorsLayer(
+            storage,
+            infra,
+            McpClientSdkImpl(),
+            placement=placement,
+            host=TransportRelayImpl(lambda: built[0].relay, stage).call_mcp,
+            options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
+        )
+
         def placed(direct: TransportInterface) -> TransportInterface:
             # The relay is the managers', built below on this transport, so
             # the edge is bound at call time.
@@ -253,6 +269,7 @@ class RunnerContainer:
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),
             stream_sink=stream,
+            attached_toolsets=connectors.attached,
         )
         built.append(managers)
         automations.append(
@@ -268,6 +285,7 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
+        connectors.build(managers)
         container = cls(
             settings, storage, infra, integrations, managers, stream, placing, ports.kinds
         )

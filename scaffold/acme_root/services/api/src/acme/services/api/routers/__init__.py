@@ -18,6 +18,7 @@ from acme.services.api.routers import (
     benchmarks,
     budgets,
     claimants,
+    connectors,
     events,
     evidence,
     flags,
@@ -78,6 +79,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # What sessions recall, and the procedures they follow.
     "knowledge": (knowledge.router,),
     "playbooks": (playbooks.router,),
+    # A tenant's own MCP servers, reviewed and attached to its kinds.
+    "connectors": (connectors.router,),
     # The tenant's layer of tool policy.
     "tools": (tools.router,),
     # How long the tenant keeps its sessions' content and shape, and one
