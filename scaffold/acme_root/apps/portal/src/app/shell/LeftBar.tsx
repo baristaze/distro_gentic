@@ -195,8 +195,8 @@ export function LeftBar({
         <Link to="/sessions?view=org" className="acme-side-viewall" title="The org's sessions, to explore and join">
           The org's
         </Link>
-        <Link to="/sessions" className="acme-side-viewall">
-          View all
+        <Link to="/sessions" className="acme-side-viewall" title="Your sessions, filtered and in full">
+          All
         </Link>
       </div>
       <div className="acme-sidebar-scroll">
