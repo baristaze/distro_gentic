@@ -19,6 +19,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
+from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.manager import AgentsManagerImpl, AgentsOptions
 from acme.om.agents.impl.sink import StreamSinkNullImpl
@@ -641,6 +642,7 @@ def build_managers(
     work_product: WorkProductInterface | None = None,
     projects_options: ProjectsOptions | None = None,
     product_kinds: ProductKinds | None = None,
+    attached_toolsets: AttachedToolsetsInterface | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -730,6 +732,10 @@ def build_managers(
     environment; and its resource kinds, which the leases manager reads
     beside `noop`. A name the platform holds is refused at boot. None adds
     nothing.
+
+    `attached_toolsets` answers the toolsets a session holds beyond its
+    kind, a tenant's own: the loop folds them into the session's kind at
+    each run. None attaches nothing.
 
     `placement_options` is the plan tier of a tenant no operator gave one,
     and each tier's share, the cap its lane passes to the claim; None keeps
@@ -1407,6 +1413,7 @@ def build_managers(
             loop_options or LoopOptions(),
             leases=leases,
             domain_classes=domain_classes,
+            attached=attached_toolsets or AttachedToolsetsNoneImpl(),
         ),
         evidence=evidence,
         placement=placement,

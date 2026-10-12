@@ -159,6 +159,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "automations": container.automations.purge_tenant,
             "playbooks": container.playbooks.purge_tenant,
             "knowledge": container.knowledge.purge_tenant,
+            # Its connectors, each credential with them, and what sessions pinned.
+            "connectors": container.connectors.purge_tenant,
             "notifications": container.notifications.purge_tenant,
         },
         # Once a pass, across every tenant: each namespace's rows past their

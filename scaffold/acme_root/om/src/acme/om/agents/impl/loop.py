@@ -27,6 +27,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents import line_rules as lines
 from acme.om.agents import loop_rules as rules
+from acme.om.agents.attached import NOTHING, Attached, AttachedToolsetsInterface, with_attached
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.rules import CHILDREN_PARK, after_turn, ends_parents_wait, notes_parent
 from acme.om.agents.sink import StreamSinkInterface
@@ -185,6 +186,8 @@ class _Run:
     # The jobs the loop parked on whose calls were open when the run began,
     # by key: whatever the run has not answered goes with its loop's end.
     jobs: dict[UUID, rules.StartedJob] = field(default_factory=lambda: {})
+    # What the session holds beyond its kind, folded into `kind` already.
+    attached: Attached = NOTHING
 
     @property
     def session_id(self) -> UUID:
@@ -230,11 +233,14 @@ class LoopManagerImpl(LoopManagerInterface):
         *,
         leases: LeasesManagerInterface,
         domain_classes: Sequence[str] = (),
+        attached: AttachedToolsetsInterface,
         jitter: Callable[[], float] = random.random,
     ) -> None:
         """`credentials` answers the client each call runs on and the
         credential it carries: the platform's key, or a tenant's. `leases`
-        answers where each request a tool asked in line stands."""
+        answers where each request a tool asked in line stands. `attached`
+        answers the toolsets a session holds beyond its kind."""
+        self._attached = attached
         self._jitter = jitter
         self._leases = leases
         self._steps = steps
@@ -293,8 +299,11 @@ class LoopManagerImpl(LoopManagerInterface):
                 # are settled by effect.
                 session = await self._sessions.resume(ctx, session_id, epoch, loop_id)
                 resumed = loop.park.reason is not ParkReason.HANDOVER and not loop.park.unsettled
-        kind = self._kinds.get(session.kind, session.kind_version)
-        registry = self._registry(session, kind, history)
+        # The session's own toolsets, once a run and the same each time,
+        # folded into its kind before anything renders.
+        attached = await self._attached.of(ctx, session)
+        kind = with_attached(self._kinds.get(session.kind, session.kind_version), attached)
+        registry = self._registry(session, kind, history, attached)
         tree = await self._agents.tree_of(ctx, session_id)
         above = await self._policies_above(ctx, session)
         run = _Run(
@@ -310,6 +319,7 @@ class LoopManagerImpl(LoopManagerInterface):
             deadline=tree.deadline,
             above=above or (),
             jobs={} if loop is None else rules.started_jobs(history, loop_id),
+            attached=attached,
         )
         if above is None:
             # Its calls are decided under every kind above it, and one of
@@ -557,7 +567,7 @@ class LoopManagerImpl(LoopManagerInterface):
         # The tools this request offers: the history's loads included, so a
         # load settled since the last request adds its tools here, and never
         # to a call of the turn that made it.
-        run.registry = self._registry(run.session, run.kind, history)
+        run.registry = self._registry(run.session, run.kind, history, run.attached)
         prompts = rules.kind_prompts(
             run.kind, run.registry, loads(history), rules.standing_text(history, run.start_seq)
         )
@@ -1357,7 +1367,7 @@ class LoopManagerImpl(LoopManagerInterface):
         try:
             loaded = load(
                 run.kind.deferred,
-                run.session.tools,
+                (*run.session.tools, *run.attached.names),
                 run.kind.waiting,
                 loads(history),
                 thaw_mapping(use.input),
@@ -1388,13 +1398,20 @@ class LoopManagerImpl(LoopManagerInterface):
         return _Settled()
 
     def _registry(
-        self, session: AgentSession, kind: AgentKind, history: Sequence[Step]
+        self,
+        session: AgentSession,
+        kind: AgentKind,
+        history: Sequence[Step],
+        attached: Attached,
     ) -> ToolRegistry:
-        """The run's registry: the tools of the catalog its session may call
-        that wait for no load, and those the history's loads added."""
-        names = callable_tools(session.tools, kind.waiting, loads(history))
+        """The run's registry: the tools of the catalog, and those attached
+        to the session, that it may call and that wait for no load, and those
+        the history's loads added."""
+        holds = (*session.tools, *attached.names)
+        names = callable_tools(holds, kind.waiting, loads(history))
         return ToolRegistry(
-            (tool for tool in self._catalog if tool.spec.name in names), self._domain_classes
+            (tool for tool in (*self._catalog, *attached.tools) if tool.spec.name in names),
+            self._domain_classes,
         )
 
     async def _answer(

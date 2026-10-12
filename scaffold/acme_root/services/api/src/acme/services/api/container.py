@@ -16,11 +16,14 @@ from acme.infra.observability import (
 from acme.infra.root import InfraInterface
 from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
+from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
+from acme.om.connectors.impl.manager import ConnectorsOptions
+from acme.om.connectors.root import build_connectors
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
@@ -332,6 +335,16 @@ class AppContainer:
             playbooks=playbooks.build(managers),
             # An operator reads which of them the sessions that stalled reached.
             levers=build_levers(storage),
+            # A person connects the tenant's servers and reviews their tools;
+            # the runner pins and calls them. A local stack's servers run
+            # beside it, so its addresses may be this host's.
+            connectors=build_connectors(
+                storage,
+                infra,
+                managers,
+                client=McpClientSdkImpl(),
+                options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
+            ),
         )
         return cls(
             settings,

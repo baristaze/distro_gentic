@@ -24,6 +24,7 @@ from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.machine import machine_probes
+from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
 from acme.apps.host.relay import HOST_MODES, ExecutorRelayImpl
 from acme.apps.host.seed import forget_key
@@ -111,6 +112,7 @@ def run() -> None:
         )
         # One broker: what the transport attaches, a snapshot takes back.
         broker = BrokerNullImpl()
+        owner = ceilings.load(settings.ceilings_path)
         executor = ExecutorRelayImpl(
             lambda: agents[0].client(),
             host_transports(settings, broker),
@@ -121,10 +123,13 @@ def run() -> None:
                 ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
             ),
             kept_whole=KEPT_WHOLE if settings.machine else frozenset(),
+            # The servers the owner names, each started for one call with a
+            # credential from the host's own store.
+            servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),
         )
         agent = HostAgent(
             settings,
-            ceilings.load(settings.ceilings_path),
+            owner,
             machine_probes()
             if store is None
             else real_probes(settings.workspace_user, host_snapshots(workspaces, store)),

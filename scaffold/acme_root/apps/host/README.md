@@ -41,8 +41,10 @@ macOS.
   or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
   home: the projects it serves, its minimum isolation, its egress, the
-  paths a result may read, whether it accepts people's commands, and how
-  many items it runs at once.
+  paths a result may read, whether it accepts people's commands, how
+  many items it runs at once, and the MCP servers it starts, each named
+  whole: its program, its arguments, its environment, and its
+  credential, a secret of its own store.
   Every item it claims is held to them, and to the modes it probed,
   before anything runs. An item that does not say what it needs is read
   as asking the most. Nothing the platform sends changes a ceiling, and
@@ -126,6 +128,14 @@ macOS.
   ceiling is answered as refused, so the agent reads why. A bare
   directory runs only as the host's dedicated user, which no transport
   here does yet, so an item at that mode is refused.
+- **Runs a tenant's MCP server for one call.** An `exec` item of the
+  operation `mcp_call` names a server and one of its tools. The host
+  starts the server its owner names under that name, with its
+  credential from the host's own store, calls the tool only when the
+  server lists it as the definition a person reviewed, answers its
+  text, and stops the server. A server its owner does not name is
+  refused, and nothing starts. The platform never opens a connection to
+  it.
 
 ```toml
 projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
@@ -134,6 +144,12 @@ egress = ["github.com:443"]                           # or "open"
 readable = ["/srv/work"]
 people_commands = false
 items_at_once = 4
+
+[mcp_servers.tracker]
+command = "/usr/local/bin/tracker-mcp"
+args = ["--read-only"]
+credential = "tracker-token"                          # a secret of the host's own store
+credential_env = "TRACKER_TOKEN"
 ```
 
 <!-- agents-only

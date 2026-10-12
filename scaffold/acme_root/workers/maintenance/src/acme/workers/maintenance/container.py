@@ -12,6 +12,7 @@ from acme.infra.root import InfraInterface
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, IntegrationsOverImpl
+from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
@@ -25,6 +26,8 @@ from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_o
 from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
+from acme.om.connectors.impl.manager import ConnectorsOptions
+from acme.om.connectors.root import build_connectors
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
@@ -285,6 +288,13 @@ class WorkerContainer:
         )
         self.knowledge = build_knowledge(
             storage, managers, options=KnowledgeOptions(purge_batch=batch)
+        )
+        self.connectors = build_connectors(
+            storage,
+            infra,
+            managers,
+            client=McpClientSdkImpl(),
+            options=ConnectorsOptions(purge_batch=batch),
         )
         # Billing's account, for its purge; its ledger stays.
         self.billing = build_billing_purge(storage, managers)

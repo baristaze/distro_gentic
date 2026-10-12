@@ -85,6 +85,7 @@ source = { editable = "apps/host" }
 dependencies = [
     { name = "acme-client" },
     { name = "acme-infra" },
+    { name = "acme-integrations" },
     { name = "typer" },
 ]
 
@@ -92,6 +93,7 @@ dependencies = [
 requires-dist = [
     { name = "acme-client", editable = "clients/python" },
     { name = "acme-infra", editable = "infra" },
+    { name = "acme-integrations", editable = "integrations" },
     { name = "typer", specifier = ">=0.15" },
 ]
 

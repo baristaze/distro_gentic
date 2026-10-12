@@ -18,6 +18,7 @@ from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -278,6 +279,7 @@ def trusted(
         clock,
         sleep,
         leases=managers.leases,
+        attached=AttachedToolsetsNoneImpl(),
     )
     return Trusted(
         infra=infra,

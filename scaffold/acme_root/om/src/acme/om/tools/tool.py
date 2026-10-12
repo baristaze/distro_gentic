@@ -110,6 +110,19 @@ class ToolRuntime:
         return self._session_id
 
     @property
+    def workspace(self) -> Workspace:
+        """The workspace the call is made in: what a tool names to reach the
+        machine that holds it by an operation of its own, as a tool of a
+        server inside a customer's wall does."""
+        return self._workspace
+
+    @property
+    def epoch(self) -> int:
+        """The writer epoch of the run that makes the call: what an operation
+        a tool sends on its own carries, so a lost run's never lands."""
+        return self._epoch
+
+    @property
     def key(self) -> UUID:
         """The call's idempotency key: the id of its request, the same on
         every run that repeats the call. A tool that reaches a system of its

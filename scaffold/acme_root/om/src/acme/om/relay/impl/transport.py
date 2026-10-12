@@ -27,6 +27,7 @@ from acme.infra.transports import (
     file_offset,
 )
 from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
+from acme.integrations.mcp import McpAnswer
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
@@ -44,12 +45,14 @@ from acme.om.relay.types.exec import (
     ExecRequest,
     ExecState,
     ListRequest,
+    McpRequest,
     ReadRequest,
     RunRequest,
     StopKind,
     WriteRequest,
 )
 from acme.om.steps.types.header import ToolFailure
+from acme.om.tools.types.tool import Effect
 from acme.om.trust.placement import PlacementInterface
 
 log = logging.getLogger(__name__)
@@ -231,6 +234,30 @@ class TransportRelayImpl(TransportInterface):
             workspace, request, new_id(), effect, self._clock() + self._file_time, epoch
         )
         return await self._through(workspace, call, 0, None)
+
+    async def call_mcp(
+        self,
+        workspace: Workspace,
+        request: McpRequest,
+        *,
+        key: UUID,
+        effect: Effect,
+        deadline: datetime,
+        epoch: int,
+    ) -> McpAnswer:
+        """A call of a tool of an MCP server the host that holds the workspace
+        runs, as an item keyed by the call, as a command is, so a run that
+        resumes the call meets it. The host answers the server's text, and
+        the server's own word that the tool failed as an exit of 1. A host
+        that refused the item raises `HostRefused` with its reason: a
+        server it does not run, or a tool it lists at another definition."""
+        call = self._call(workspace, request, key, effect.value, deadline, epoch)
+        progress = await self._through(workspace, call, self._occurrence(call), None)
+        outcome, output = _ended(progress)
+        if outcome.stopped is StopKind.DEADLINE or outcome.timed_out:
+            raise ToolFailed(ToolFailure.TIMEOUT, f"{request.server} did not answer in time")
+        _completed(outcome, output)
+        return McpAnswer(text=output.stdout, is_error=outcome.exit_code not in (0, None))
 
     @staticmethod
     def _call(

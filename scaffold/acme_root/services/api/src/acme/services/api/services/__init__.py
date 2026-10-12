@@ -9,6 +9,7 @@ from acme.services.api.services.agent_sessions import AgentSessionsServiceInterf
 from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
+from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface
@@ -39,6 +40,7 @@ __all__ = [
     "AutomationsServiceInterface",
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
+    "ConnectorsServiceInterface",
     "EventsServiceInterface",
     "EvidenceServiceInterface",
     "FlagsServiceInterface",
@@ -138,6 +140,9 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_knowledge_service(self) -> KnowledgeServiceInterface: ...
+
+    @abstractmethod
+    def get_connectors_service(self) -> ConnectorsServiceInterface: ...
 
     @abstractmethod
     def get_playbooks_service(self) -> PlaybooksServiceInterface: ...

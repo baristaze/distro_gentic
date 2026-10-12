@@ -14,6 +14,7 @@ from acme.services.api.services import (
     AutomationsServiceInterface,
     BenchmarksServiceInterface,
     BudgetsServiceInterface,
+    ConnectorsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
     FlagsServiceInterface,
@@ -148,6 +149,10 @@ def knowledge_service(connection: HTTPConnection) -> KnowledgeServiceInterface:
     return services_of(connection).get_knowledge_service()
 
 
+def connectors_service(connection: HTTPConnection) -> ConnectorsServiceInterface:
+    return services_of(connection).get_connectors_service()
+
+
 def playbooks_service(connection: HTTPConnection) -> PlaybooksServiceInterface:
     return services_of(connection).get_playbooks_service()
 
@@ -188,6 +193,7 @@ BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_ser
 LedgersService = Annotated[LedgersServiceInterface, Depends(ledgers_service)]
 ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
 KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
+ConnectorsService = Annotated[ConnectorsServiceInterface, Depends(connectors_service)]
 PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
 ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]
 RetentionService = Annotated[RetentionServiceInterface, Depends(retention_service)]

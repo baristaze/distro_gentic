@@ -23,6 +23,7 @@ from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -377,6 +378,7 @@ def loop_over(
     ceilings: PolicyLayer | None = None,
     sessions: AgentSessionsOptions | None = None,
     infra: InfraLocalImpl | None = None,
+    attached: AttachedToolsetsInterface | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -393,7 +395,8 @@ def loop_over(
     layer's call credentials. `ceilings` None keeps the platform's, and
     `sessions` None is the sessions' own options. `infra` None is the local
     root over `tmp_path`; a suite on real Docker hands in one whose
-    workspaces are containers. `roots` is what else the managers are built
+    workspaces are containers. `attached` answers the toolsets a session
+    holds beyond its kind. `roots` is what else the managers are built
     with."""
     infra = infra or InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
@@ -477,6 +480,7 @@ def loop_over(
         sleep,
         leases=managers.leases,
         jitter=jitter,
+        attached=attached or AttachedToolsetsNoneImpl(),
     )
     owner = owner or context(Role.OWNER, make_org())
     return Loop(

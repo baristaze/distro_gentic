@@ -151,6 +151,26 @@ class AskRequest(BaseModel):
     wait_seconds: Annotated[int | None, Field(ge=1, le=604800, title='Wait Seconds')] = 3600
 
 
+class AttachRequest(BaseModel):
+    """
+    A kind the connector joins, for one project's sessions or every
+    session of the tenant, deferred until the agent loads it unless
+    `deferred` is false.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    deferred: Annotated[bool | None, Field(title='Deferred')] = True
+    kind: Annotated[str, Field(max_length=64, min_length=1, title='Kind')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
+
+
+class AttachmentView(BaseModel):
+    deferred: Annotated[bool, Field(title='Deferred')]
+    kind: Annotated[str, Field(title='Kind')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+
+
 class BudgetScopeKind(StrEnum):
     session = 'session'
     tree = 'tree'
@@ -265,6 +285,40 @@ class ConnectInstallationRequest(BaseModel):
     grant: Annotated[str, Field(max_length=4096, min_length=1, title='Grant')]
 
 
+class HostServer(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_-]{0,63}$', title='Host Server')]
+
+
+class Url(RootModel[str]):
+    root: Annotated[str, Field(max_length=2000, title='Url')]
+
+
+class ConnectRequest(BaseModel):
+    """
+    A server on the internet, at its `url`, whose calls carry their
+    credential in `credential_header`, after `credential_scheme`; or the
+    server the tenant's host runs, by the name its owner gives it,
+    `host_server`, whose credential stays on that host.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    credential_header: Annotated[str | None, Field(pattern='^[A-Za-z0-9-]{1,64}$', title='Credential Header')] = 'Authorization'
+    credential_scheme: Annotated[str | None, Field(max_length=32, title='Credential Scheme')] = 'Bearer'
+    host_server: Annotated[HostServer | None, Field(title='Host Server')] = None
+    name: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,23}$', title='Name')]
+    summary: Annotated[str, Field(max_length=200, min_length=1, title='Summary')]
+    url: Annotated[Url | None, Field(title='Url')] = None
+
+
+class ConnectorPlace(StrEnum):
+    """
+    Where a connector's server runs, and so where its calls are made.
+    """
+    cloud = 'cloud'
+    host = 'host'
+
+
 class ContentState(StrEnum):
     """
     Where what a step says is. The state answers, so no caller compares
@@ -374,6 +428,17 @@ class CredentialKind(StrEnum):
     internal = 'internal'
 
 
+class CredentialRequest(BaseModel):
+    """
+    A cloud server's credential. It is written under the connector's own
+    name, and no response, log, or error ever carries it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    value: Annotated[SecretStr, Field(max_length=4096, min_length=1, title='Value')]
+
+
 class CrossingKind(StrEnum):
     enrollment = 'enrollment'
     claim = 'claim'
@@ -401,6 +466,20 @@ class DecisionRequest(BaseModel):
     )
     approve: Annotated[bool, Field(title='Approve')]
     note: Annotated[str | None, Field(max_length=100000, title='Note')] = ''
+
+
+class DefinitionBody(BaseModel):
+    """
+    A tool as a server lists it: its name, its description, its input
+    schema, and its annotations, as written.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    annotations: Annotated[dict[str, Any] | None, Field(title='Annotations')] = None
+    description: Annotated[str | None, Field(max_length=10000, title='Description')] = ''
+    input_schema: Annotated[dict[str, Any] | None, Field(title='Input Schema')] = None
+    name: Annotated[str, Field(max_length=128, min_length=1, title='Name')]
 
 
 class ReturnTo(RootModel[str]):
@@ -1709,6 +1788,29 @@ class ReviewRequest(BaseModel):
     keep: Annotated[bool, Field(title='Keep')]
 
 
+class AuthorizationClass2(StrEnum):
+    read = 'read'
+    integration = 'integration'
+    destructive = 'destructive'
+
+
+class ReviewedToolBody(BaseModel):
+    """
+    A tool a person binds: the server's tool, the hash of the definition
+    they read, and the class and the effect they give it, each said
+    outright: what a server says of its own tool is a hint, never
+    authority. A class that acts on the server's system waits for a person
+    at each call, as any outward call does.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authorization_class: Annotated[AuthorizationClass2, Field(title='Authorization Class')]
+    definition_hash: Annotated[str, Field(max_length=80, min_length=1, title='Definition Hash')]
+    effect: Effect
+    server_tool: Annotated[str, Field(max_length=128, min_length=1, title='Server Tool')]
+
+
 class Role(StrEnum):
     owner = 'owner'
     admin = 'admin'
@@ -2143,6 +2245,23 @@ class TenantCapView(BaseModel):
     lane: Annotated[str, Field(title='Lane')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class ToolClass(StrEnum):
+    """
+    The authorization classes every engine knows. An adopter adds domain
+    classes of its own by declaring them to the registry; a class is a name
+    either way, and policy keys on it.
+    """
+    read = 'read'
+    write = 'write'
+    execute = 'execute'
+    network = 'network'
+    integration = 'integration'
+    spawn = 'spawn'
+    configuration = 'configuration'
+    credentials = 'credentials'
+    destructive = 'destructive'
 
 
 class ToolFailure(StrEnum):
@@ -2675,6 +2794,22 @@ class CommandProgressView(BaseModel):
     truncated: Annotated[bool | None, Field(title='Truncated')] = False
 
 
+class Definitions(RootModel[list[DefinitionBody]]):
+    root: Annotated[list[DefinitionBody], Field(max_length=1000, title='Definitions')]
+
+
+class ConnectorReviewRequest(BaseModel):
+    """
+    Every tool a person binds, none to withdraw them all. A host server's
+    review carries the definitions its host lists.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    definitions: Annotated[Definitions | None, Field(title='Definitions')] = None
+    tools: Annotated[list[ReviewedToolBody] | None, Field(max_length=64, title='Tools')] = None
+
+
 class ControlRequest(BaseModel):
     """
     A control. An interrupt names the seq of the tool request it stops,
@@ -3078,6 +3213,19 @@ class LineView(BaseModel):
     places: Annotated[list[PlaceView], Field(title='Places')]
     requests: Annotated[list[LeaseRequestView], Field(title='Requests')]
     resource: ResourceView
+
+
+class ListedToolView(BaseModel):
+    """
+    A tool as the server lists it now, the hash a review names it by, and
+    what the lever checks find in its description.
+    """
+    annotations: Annotated[dict[str, Any], Field(title='Annotations')]
+    definition_hash: Annotated[str, Field(title='Definition Hash')]
+    description: Annotated[str, Field(title='Description')]
+    findings: Annotated[list[FindingView], Field(title='Findings')]
+    input_schema: Annotated[dict[str, Any], Field(title='Input Schema')]
+    name: Annotated[str, Field(title='Name')]
 
 
 class LivePartView(BaseModel):
@@ -3725,6 +3873,47 @@ class ClaimantClaimView(BaseModel):
     What a claim answers: the item, or none when nothing is ready.
     """
     item: ClaimantWorkView | None
+
+
+class ConnectorToolView(BaseModel):
+    """
+    A tool a person reviewed: the name a session calls it by, the
+    server's tool and the definition read, its class and its effect, and
+    what the lever checks found in its description.
+    """
+    authorization_class: ToolClass
+    definition_hash: Annotated[str, Field(title='Definition Hash')]
+    description: Annotated[str, Field(title='Description')]
+    effect: Effect
+    findings: Annotated[list[FindingView], Field(title='Findings')]
+    input_schema: Annotated[dict[str, Any], Field(title='Input Schema')]
+    name: Annotated[str, Field(title='Name')]
+    server_tool: Annotated[str, Field(title='Server Tool')]
+
+
+class ConnectorView(BaseModel):
+    """
+    A connector: where its server runs, its address or its host's server,
+    whether its calls carry a credential, never the credential; the tools
+    a person reviewed at review `review`, its toolset's version; the kinds
+    it is attached to; and `version`, which each write moves.
+    """
+    attachments: Annotated[list[AttachmentView], Field(title='Attachments')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    credential_header: Annotated[str, Field(title='Credential Header')]
+    credential_scheme: Annotated[str, Field(title='Credential Scheme')]
+    has_credential: Annotated[bool, Field(title='Has Credential')]
+    host_server: Annotated[str | None, Field(title='Host Server')]
+    id: Annotated[UUID, Field(title='Id')]
+    name: Annotated[str, Field(title='Name')]
+    place: ConnectorPlace
+    review: Annotated[int, Field(title='Review')]
+    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
+    summary: Annotated[str, Field(title='Summary')]
+    tools: Annotated[list[ConnectorToolView], Field(title='Tools')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    url: Annotated[str | None, Field(title='Url')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class ContenderView(BaseModel):
