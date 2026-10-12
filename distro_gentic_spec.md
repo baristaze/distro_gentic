@@ -3,13 +3,30 @@
 *`distro_gentic`, a platform spec for closed-loop agent fleets. A
 personal edition, preliminary.*
 
-An engine runs an agent. A platform runs a fleet of them: for many
-tenants, unattended, for days at a time, on machines it does not always
-own. And it **closes the loop**: work arrives on its own, evidence goes
-out, and the world's answer comes back into the same session. This spec
-says what the parts of such a platform are and what they guarantee, and
-why. The how belongs to its scaffold and its lenses ([The
-Repository](#the-repository)).
+An engine runs an agent. A platform defines, runs, and hosts a fleet of
+them: for many tenants, unattended, for days at a time, on machines it
+does not always own.
+
+- It **defines** an agent as an [agent
+  kind](#the-agents-a-platform-ships): its toolsets, the model size
+  each of its roles asks, the bounds it runs in, and a manual a tenant
+  may pin to it. The kinds it ships are templates a product copies. A
+  tenant shapes them with [playbooks and
+  knowledge](#playbooks-and-knowledge) and [connectors](#connectors),
+  each read for what would mislead an agent before a person publishes
+  it.
+- It **runs** each agent as a [session on the work
+  queue](#sessions-are-work), and it **closes the loop**: work arrives
+  on its own, evidence goes out, and the world's answer comes back into
+  the same session.
+- It **hosts** the session's work in a
+  [workspace](#workspaces-and-isolation) kept as a cache or a snapshot,
+  on the platform's own machines or on a customer's host inside its
+  wall.
+
+This spec says what the parts of such a platform are and what they
+guarantee, and why. The how belongs to its scaffold and its lenses
+([The Repository](#the-repository)).
 
 ## How to Read This
 
