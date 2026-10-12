@@ -29,7 +29,7 @@
       },
       "ActionBody": {
         "additionalProperties": false,
-        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
+        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`, and invoke the tenant's `playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
         "properties": {
           "agent_kind": {
             "anyOf": [
@@ -68,6 +68,20 @@
             },
             "title": "Params",
             "type": "object"
+          },
+          "playbook": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playbook"
           },
           "project_id": {
             "anyOf": [
@@ -148,6 +162,17 @@
             "title": "Params",
             "type": "object"
           },
+          "playbook": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playbook"
+          },
           "project_id": {
             "anyOf": [
               {
@@ -191,6 +216,7 @@
           "title",
           "project_id",
           "session_id",
+          "playbook",
           "params"
         ],
         "title": "ActionView",
@@ -4238,6 +4264,76 @@
         "title": "InviteMemberRequest",
         "type": "object"
       },
+      "InvocationView": {
+        "description": "A version brought into a session. `pinned` marks the manual the\nsession was made with, whose brief is its standing text; every other\ninvocation's brief arrived as its invoker's message.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invoked_by": {
+            "format": "uuid",
+            "title": "Invoked By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "playbook_id": {
+            "format": "uuid",
+            "title": "Playbook Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "playbook_id",
+          "name",
+          "version",
+          "invoked_by",
+          "pinned",
+          "created_at"
+        ],
+        "title": "InvocationView",
+        "type": "object"
+      },
+      "InvokeRequest": {
+        "additionalProperties": false,
+        "description": "The session a person brings the name's latest version into, one they\nmay instruct.",
+        "properties": {
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "InvokeRequest",
+        "type": "object"
+      },
       "IsolationMode": {
         "description": "The isolation levels a host can run a workspace at, strongest first.",
         "enum": [
@@ -7079,6 +7175,116 @@
         ],
         "title": "Permission",
         "type": "string"
+      },
+      "PinRequest": {
+        "additionalProperties": false,
+        "description": "A kind's manual: the name whose latest version is pinned to `kind`,\nfor the tenant's sessions of it, or with `project_id` those of one\nproject, where it wins over the tenant's.",
+        "properties": {
+          "kind": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "PinRequest",
+        "type": "object"
+      },
+      "PinView": {
+        "description": "A version pinned to a kind as its manual. Each session of the kind\nmade after it was pinned holds it; one made before keeps its own.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "playbook_id": {
+            "format": "uuid",
+            "title": "Playbook Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "project_id",
+          "playbook_id",
+          "name",
+          "version",
+          "created_at",
+          "updated_at",
+          "created_by",
+          "updated_by"
+        ],
+        "title": "PinView",
+        "type": "object"
       },
       "PlaceSessionRequest": {
         "additionalProperties": false,
@@ -27419,6 +27625,290 @@
         ]
       }
     },
+    "/v1/playbook-pins": {
+      "delete": {
+        "description": "The kind's pin for the tenant, or for one project, taken away. A\nsession made with it keeps it.",
+        "operationId": "unpin_v1_playbook_pins_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpin",
+        "tags": [
+          "playbooks"
+        ]
+      },
+      "get": {
+        "description": "The tenant's pins, by kind, the tenant's before a project's.",
+        "operationId": "list_pins_v1_playbook_pins_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PinView"
+                  },
+                  "title": "Response List Pins V1 Playbook Pins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pins",
+        "tags": [
+          "playbooks"
+        ]
+      },
+      "put": {
+        "description": "The name's latest version pinned to the kind as its manual, for the\ntenant or one project; pinned again, the version then latest.",
+        "operationId": "pin_v1_playbook_pins_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin",
+        "tags": [
+          "playbooks"
+        ]
+      }
+    },
     "/v1/playbooks": {
       "post": {
         "description": "The next version of the name.",
@@ -27617,6 +28107,127 @@
           }
         },
         "summary": "Get Playbook",
+        "tags": [
+          "playbooks"
+        ]
+      }
+    },
+    "/v1/playbooks/{name}/invocations": {
+      "post": {
+        "description": "The latest version brought into the session: its gates hold there\nfrom now on, and its brief arrives as the caller's message. Invoked\nagain, the version's invocation answers, and nothing is sent twice.",
+        "operationId": "invoke_v1_playbooks__name__invocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvocationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invoke",
         "tags": [
           "playbooks"
         ]

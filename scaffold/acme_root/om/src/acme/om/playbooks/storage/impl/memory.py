@@ -4,7 +4,7 @@ from acme.om.exceptions import UniqueKeyTaken
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.playbooks.storage import PlaybookStorageInterface
-from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation
+from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation, PlaybookPin
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
@@ -13,6 +13,7 @@ class PlaybookStorageMemoryImpl(MemoryStorageBase, PlaybookStorageInterface):
         super().__init__(outbox)
         self._playbooks: MemoryTable[Playbook] = {}
         self._invocations: MemoryTable[PlaybookInvocation] = {}
+        self._pins: MemoryTable[PlaybookPin] = {}
 
     async def create_playbook(
         self, org_id: UUID, playbook: Playbook, outbox_rows: tuple[OutboxRow, ...]
@@ -54,12 +55,55 @@ class PlaybookStorageMemoryImpl(MemoryStorageBase, PlaybookStorageInterface):
         rows = [i for i in self._rows(self._invocations, org_id) if i.session_id == session_id]
         return sorted(rows, key=lambda i: (i.created_at, i.id))[:limit]
 
+    async def put_pin(
+        self, org_id: UUID, pin: PlaybookPin, outbox_rows: tuple[OutboxRow, ...]
+    ) -> None:
+        async with self._lock:
+            # One pin a kind and a project in a tenant, the tenant's own among
+            # them: the unique index the table holds, its nulls not distinct.
+            if any(
+                (held.kind, held.project_id) == (pin.kind, pin.project_id) and held.id != pin.id
+                for held in self._rows(self._pins, org_id)
+            ):
+                raise UniqueKeyTaken(f"playbook_pins {pin.id}: the kind is pinned")
+            self._put(self._pins, org_id, pin, outbox_rows)
+
+    async def read_pin(
+        self, org_id: UUID, kind: str, project_id: UUID | None
+    ) -> PlaybookPin | None:
+        for held in self._rows(self._pins, org_id):
+            if (held.kind, held.project_id) == (kind, project_id):
+                return held
+        return None
+
+    async def read_pins(self, org_id: UUID, limit: int) -> list[PlaybookPin]:
+        rows = self._rows(self._pins, org_id)
+        return sorted(rows, key=lambda p: (p.kind, p.project_id is not None, str(p.project_id)))[
+            :limit
+        ]
+
+    async def delete_pin(
+        self, org_id: UUID, pin_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        async with self._lock:
+            if self._get(self._pins, org_id, pin_id) is None:
+                return False
+            self._land(org_id, outbox_rows)
+            del self._pins[pin_id]
+            return True
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
-            return _drop(self._playbooks, org_id, limit) + _drop(self._invocations, org_id, limit)
+            return (
+                _drop(self._playbooks, org_id, limit)
+                + _drop(self._invocations, org_id, limit)
+                + _drop(self._pins, org_id, limit)
+            )
 
 
-def _drop[E: Playbook | PlaybookInvocation](table: MemoryTable[E], org_id: UUID, limit: int) -> int:
+def _drop[E: Playbook | PlaybookInvocation | PlaybookPin](
+    table: MemoryTable[E], org_id: UUID, limit: int
+) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]
     for row_id in ids:
         del table[row_id]

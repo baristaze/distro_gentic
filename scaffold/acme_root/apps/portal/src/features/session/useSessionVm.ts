@@ -171,6 +171,16 @@ export function useSessionVm(id: string) {
 
   const send = (text: string, done: () => void) =>
     actions.message.mutate(text, { onSuccess: done, onError: fail("The message was not sent.") });
+  /** A playbook's latest version, by its name, brought into the session in
+   * the person's name; a name with no version is refused with the reason. */
+  const invoke = (name: string, done: () => void) =>
+    actions.invoke.mutate(name, {
+      onSuccess: (invoked) => {
+        notify(`Invoked ${invoked.name}, version ${invoked.version}.`);
+        done();
+      },
+      onError: fail("The playbook was not invoked."),
+    });
   const control = (command: "pause" | "resume" | "cancel" | "compact" | "unlock") =>
     actions.control.mutate({ command }, { onError: fail(`The ${command} was not sent.`) });
   const decide = (seq: number, approve: boolean, note: string) =>
@@ -335,6 +345,7 @@ export function useSessionVm(id: string) {
     command: command.data ?? null,
     commandKey,
     send,
+    invoke,
     control,
     decide,
     takeControl,
@@ -345,6 +356,7 @@ export function useSessionVm(id: string) {
     copyLink,
     archive,
     sending: actions.message.isPending,
+    invoking: actions.invoke.isPending,
     deciding: actions.decide.isPending,
     commands,
   };

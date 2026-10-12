@@ -139,9 +139,13 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   person, under an Idempotency-Key, edits it on the version `If-Match`
   names, and keeps or rejects a suggestion. A person publishes a
   playbook's next version with its gates, under an Idempotency-Key, and
-  the latest version of a name is read. (`/v1/knowledge`,
+  the latest version of a name is read. A person invokes the latest
+  version into a session they may instruct, once a version. A person who
+  manages the tenant pins one to a kind as its manual, for the tenant or
+  one project, lists the pins, and takes one away; each session of the
+  kind started after holds it as its standing text. (`/v1/knowledge`,
   `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
-  `/v1/playbooks/{name}`)
+  `/v1/playbooks/{name}`, `.../invocations`, `/v1/playbook-pins`)
 - **Automations.** A person makes one in person, under an
   Idempotency-Key, in a project of the tenant; any member lists and
   reads them; its creator edits one that runs as its creator, and a

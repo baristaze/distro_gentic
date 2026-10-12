@@ -140,9 +140,10 @@ async def test_a_matrix_without_the_row_that_matches_everything_is_refused_at_pu
 def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
     """Over every question the rows' values and an unnamed value make, each
     resolves, to the row that names the most keys among those that match,
-    the spec's order breaking a tie; for a question that asks a size, among
-    the rows that name the kind if one matches, else among those that name
-    the size."""
+    the spec's order breaking a tie; for a question that asks a size the
+    rows hold a row for, among the rows that name the kind if one matches,
+    else among those that name the size. Rows that hold none for it answer
+    it by the order alone."""
     rows = (
         MatrixRow(fills=(SONNET,)),
         MatrixRow(key=MatrixKey(role=MAIN), fills=(OPUS,)),
@@ -164,17 +165,19 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
         "plan_tier": ("pro", "standard"),
         "workload": ("batch", "standard"),
     }
-    for combination in itertools.product(*(values[key] for key in KEYS)):
+    unsized = tuple(row for row in rows if row.key.size is None)
+    combinations = itertools.product(*(values[key] for key in KEYS))
+    for held, combination in itertools.product((rows, unsized), combinations):
         query = MatrixQuery(**dict(zip(KEYS, combination, strict=True)))
-        matching = [row for row in rows if row.key.matches(query)]
-        if query.size is not None:
+        matching = [row for row in held if row.key.matches(query)]
+        if any(row.key.size is not None and row.key.size == query.size for row in held):
             matching = (
                 [row for row in matching if row.key.kind is not None]
                 or [row for row in matching if row.key.size is not None]
                 or matching
             )
         expected = max(matching, key=lambda row: row.key.specificity(query)[1:])
-        assert rules.answer(rows, query, anywhere) == expected.fills, query
+        assert rules.answer(held, query, anywhere) == expected.fills, (len(held), query)
 
     query = MatrixQuery(
         environment="production", role=MAIN, kind="engineer", plan_tier="pro", workload="batch"
@@ -228,6 +231,50 @@ def test_a_row_that_names_the_kind_answers_its_ask_before_every_size_row() -> No
     rows = (everything, wide, by_role, by_tier, own)
     unasked = asked.model_copy(update={"size": None})
     assert rules.answer(rows, unasked, anywhere) == (LUNA,), "as before: three keys beat two"
+
+
+def test_a_version_with_no_row_for_the_asked_size_answers_as_if_none_were_asked() -> None:
+    """A question asks its size only of a version that holds a row that
+    names that size. Of one that holds none, it resolves as a question that
+    asks no size, and a row that names the kind does not come first, so a
+    version with no size row answers each kind by the keys' order. A row
+    for the size puts the kind's row first."""
+    everything = MatrixRow(fills=(SONNET,))
+    asked = MatrixQuery(
+        environment="local",
+        size=ModelSize.L,
+        role=MAIN,
+        kind="analyst",
+        plan_tier="standard",
+        workload="standard",
+    )
+    summarized = asked.model_copy(update={"size": ModelSize.S, "role": SUMMARIZER})
+    wide = MatrixKey(role=MAIN, plan_tier="standard", workload="standard")
+    cases = (  # the question, the kind's row and its fill, the row that beats it and its fill
+        (asked, MatrixKey(role=MAIN, kind="analyst"), OPUS, wide, HAIKU),
+        (
+            asked,
+            MatrixKey(role=MAIN, kind="analyst"),
+            HAIKU,
+            MatrixKey(environment="local", role=MAIN),
+            OPUS,
+        ),
+        (summarized, MatrixKey(kind="analyst"), OPUS, MatrixKey(role=SUMMARIZER), HAIKU),
+    )
+    for query, own, owns, beats, answers in cases:
+        rows = (
+            everything,
+            MatrixRow(key=own, fills=(owns,)),
+            MatrixRow(key=beats, fills=(answers,)),
+        )
+        unasked = query.model_copy(update={"size": None})
+        assert rules.answer(rows, unasked, anywhere) == (answers,), "the order of no size"
+        assert rules.answer(rows, query, anywhere) == (answers,), "no row for its size"
+        other = ModelSize.S if query.size is ModelSize.L else ModelSize.L
+        another = (*rows, MatrixRow(key=MatrixKey(size=other), fills=(SOL,)))
+        assert rules.answer(another, query, anywhere) == (answers,), "a row for another size"
+        sized = (*rows, MatrixRow(key=MatrixKey(size=query.size), fills=(SOL,)))
+        assert rules.answer(sized, query, anywhere) == (owns,), "the kind's row first"
 
 
 # A model enters a role's fills only priced, and only qualified for it.

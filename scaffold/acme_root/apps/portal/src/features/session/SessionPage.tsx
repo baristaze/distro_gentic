@@ -20,9 +20,11 @@ import {
   PanelIcon,
   PauseIcon,
   PlayIcon,
+  Popover,
   PullRequestIcon,
   SendIcon,
   TextArea,
+  TextField,
   Tooltip,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
@@ -138,6 +140,7 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
           <span>Resume</span>
         </button>
       ) : null}
+      {may?.send ? <InvokePlaybook vm={vm} /> : null}
       <Menu label="More" trigger={<MoreIcon />} triggerLabel="More" triggerClassName="acme-icon-button" align="end">
         {may?.compact ? <MenuItem onSelect={() => vm.control("compact")}>Compact history</MenuItem> : null}
         {may?.cancel ? (
@@ -212,5 +215,37 @@ function Composer({ vm }: { vm: SessionVm }) {
         </div>
       </form>
     </div>
+  );
+}
+
+/** In the header, for one who may instruct the session: a playbook brought
+ * into it by its name, its latest version. Its brief arrives as the
+ * person's message, and its gates hold in the session, and its sub-agents,
+ * from then on. */
+function InvokePlaybook({ vm }: { vm: SessionVm }) {
+  const [name, setName] = useState("");
+  const [open, setOpen] = useState(0);
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (name.trim() && !vm.invoking) vm.invoke(name.trim(), () => {
+      setName("");
+      setOpen((count) => count + 1);
+    });
+  };
+  return (
+    <Popover key={open} label="Invoke a playbook" trigger={<span>Playbook</span>} triggerClassName="acme-chip" align="end" width={320}>
+      <form className="acme-invoke-playbook" aria-label="Invoke a playbook" onSubmit={onSubmit}>
+        <TextField
+          label="Playbook"
+          value={name}
+          placeholder="release-check"
+          onChange={setName}
+          info="Its latest version: its steps arrive as your message, and its gates hold here from now on."
+        />
+        <button type="submit" className="acme-chip" disabled={vm.invoking || !name.trim()}>
+          <span>Invoke</span>
+        </button>
+      </form>
+    </Popover>
   );
 }

@@ -1,11 +1,13 @@
 """Wire types of a tenant's playbooks: a version as published, and the next
-one a person publishes, with its gates."""
+one a person publishes, with its gates; an invocation of one into a
+session; and a pin of one to a kind as its manual."""
 
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.playbooks.types.playbook import MAX_BODY, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME
 from acme.om.tools.types.policy import Decision
 from acme.om.tools.types.tool import CLASS_NAME, TOOL_NAME
@@ -55,3 +57,51 @@ class PlaybookView(View):
     published_by: UUID
     created_at: datetime
     findings: list[FindingView] | None
+
+
+class InvokeRequest(RequestBody):
+    """The session a person brings the name's latest version into, one they
+    may instruct."""
+
+    session_id: UUID
+
+
+class InvocationView(View):
+    """A version brought into a session. `pinned` marks the manual the
+    session was made with, whose brief is its standing text; every other
+    invocation's brief arrived as its invoker's message."""
+
+    id: UUID
+    session_id: UUID
+    playbook_id: UUID
+    name: str
+    version: int
+    invoked_by: UUID
+    pinned: bool
+    created_at: datetime
+
+
+class PinRequest(RequestBody):
+    """A kind's manual: the name whose latest version is pinned to `kind`,
+    for the tenant's sessions of it, or with `project_id` those of one
+    project, where it wins over the tenant's."""
+
+    kind: str = Field(min_length=1, max_length=MAX_KIND)
+    name: str = Field(min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME)
+    project_id: UUID | None = None
+
+
+class PinView(View):
+    """A version pinned to a kind as its manual. Each session of the kind
+    made after it was pinned holds it; one made before keeps its own."""
+
+    id: UUID
+    kind: str
+    project_id: UUID | None
+    playbook_id: UUID
+    name: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    created_by: UUID
+    updated_by: UUID

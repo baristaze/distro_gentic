@@ -69,11 +69,13 @@ of](../../../../README.md).
   the platform runs calls, or without a row that names each size such a
   kind asks. Of the rows that match, the one that names the most keys
   wins, and of two that name as many, the one that names the earlier key,
-  in the order above. A question that asks a size takes a row that names
-  its kind first, whatever else either row names, then a row that names
-  the size, then the rest, each by that order. So an operator's row for a
-  kind answers it before any size's row, and a size's row answers an ask
-  before the role's row.
+  in the order above. When the version holds a row that names the size a
+  question asks, the question takes a row that names its kind first,
+  whatever else either row names, then a row that names the size, then
+  the rest, each by that order. So an operator's row for a kind answers
+  it before any size's row, and a size's row answers an ask before the
+  role's row. When the version holds no row for that size, the question
+  is asked with no size, and resolves by the order above alone.
 - **A model enters priced and qualified.** Each fill of a published
   version has a price row of its own and a passing benchmark for every
   model role its row serves, and names no retired model.
