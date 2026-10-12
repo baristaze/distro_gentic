@@ -7,6 +7,8 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.attribution.rules import principal_of
+from acme.om.attribution.types.authority import Visibility
+from acme.om.attribution.types.principal import Principal
 from acme.om.context import AppType, CredentialKind, TenantContext
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import (
@@ -14,23 +16,26 @@ from acme.om.steps.types.header import (
     ControlHeader,
     InputHeader,
     StandingSwitch,
+    SteerSwitch,
     SwitchedHeader,
+    VisibilitySwitch,
     WorkspaceSnapshot,
 )
-from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_standing
+from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_session
 
 
 def arrives(step: Step) -> bool:
-    """Whether a step is one the inbox appends: an input, a control, or the
-    session's standing text its maker pins."""
-    return step.type.is_input() or step.type.is_control() or switches_standing(step)
+    """Whether a step is one the inbox appends: an input, a control, or a
+    switch a person makes to the session itself: its standing text, its
+    steerer, or who sees it."""
+    return step.type.is_input() or step.type.is_control() or switches_session(step)
 
 
 def batch_refusal(session_id: UUID, steps: Sequence[Step], *, inputs_only: bool) -> str | None:
     """Why a batch may not be appended to `session_id`, or None when it may.
     Every step names the session it is appended to, no id comes twice, and
     the inbox's append (`inputs_only`) holds inputs, controls, and the
-    session's standing text its maker pins, and no input the engine wrote:
+    switches a person makes to the session, and no input the engine wrote:
     only a run, under its writer epoch, appends what the engine writes, its
     notices included."""
     if len({step.id for step in steps}) != len(steps):
@@ -38,7 +43,9 @@ def batch_refusal(session_id: UUID, steps: Sequence[Step], *, inputs_only: bool)
     if any(step.session_id != session_id for step in steps):
         return f"a step names another session than {session_id}"
     if inputs_only and not all(arrives(step) for step in steps):
-        return "the inbox appends inputs, controls, and standing text alone; a run appends the rest"
+        return (
+            "the inbox appends inputs, controls, and a session's switches; a run appends the rest"
+        )
     if inputs_only and any(s.type.is_input() and s.actor is Actor.ENGINE for s in steps):
         return "the engine's notice is a run's to write, under its epoch"
     return None
@@ -110,6 +117,41 @@ def standing_step(
     )
 
 
+def steer_step(
+    step_id: UUID, now: datetime, session_id: UUID, ctx: TenantContext, steerer: Principal
+) -> Step:
+    """The record that the session's steer moved to `steerer`, in `ctx`'s
+    name: a `switched` step that holds no content. It arrives outside any
+    run, so its loop id is its own."""
+    switch = SteerSwitch(steerer=steerer, by=principal_of(ctx))
+    return _switched(step_id, now, session_id, ctx, SwitchedHeader(steer=switch))
+
+
+def visibility_step(
+    step_id: UUID, now: datetime, session_id: UUID, ctx: TenantContext, visibility: Visibility
+) -> Step:
+    """Who sees the session from here, switched in `ctx`'s name: a
+    `switched` step that holds no content. It arrives outside any run, so
+    its loop id is its own."""
+    switch = VisibilitySwitch(visibility=visibility, by=principal_of(ctx))
+    return _switched(step_id, now, session_id, ctx, SwitchedHeader(visibility=switch))
+
+
+def _switched(
+    step_id: UUID, now: datetime, session_id: UUID, ctx: TenantContext, header: SwitchedHeader
+) -> Step:
+    return Step(
+        id=step_id,
+        created_at=now,
+        session_id=session_id,
+        loop_id=step_id,
+        type=StepType.SWITCHED,
+        actor=actor_of(ctx.credential_kind),
+        origin=origin_of(ctx.app.type),
+        header=header,
+    )
+
+
 def control_step(
     step_id: UUID,
     now: datetime,
@@ -120,7 +162,7 @@ def control_step(
     snapshot: WorkspaceSnapshot | None = None,
 ) -> Step:
     """A principal's control, out of band, through the surface `ctx` arrived
-    on. An interrupt names the request of the one call it stops, `call`, and
+    on, naming who sent it. An interrupt names the request of the one call it stops, `call`, and
     no other control names one; a restore names the snapshot of the
     session's that its workspace's next prepare starts from, and no other
     control names one. A decision on a tool call is the tools manager's to
@@ -139,7 +181,7 @@ def control_step(
         actor=actor_of(ctx.credential_kind),
         origin=origin_of(ctx.app.type),
         refs=() if call is None else (call,),
-        header=ControlHeader(command=command, snapshot=snapshot),
+        header=ControlHeader(command=command, snapshot=snapshot, principal=principal_of(ctx)),
     )
 
 

@@ -1,7 +1,9 @@
 """A step's header: its shape, typed per type, readable while its content is
 sealed. Each header names its `kind`, and a step holds the one its type
 fixes (`steps.types.step.HEADER_KINDS`). A header carries ids, names,
-counts, and flags, never what a person typed or a tool returned.
+counts, flags, and the cause of a loop's end or park, which names what a
+kind declares; never what a person typed into a session or a tool
+returned.
 
 An input and a tool request name their principal, and a model request its
 spender: the attribution the audit reads, typed where the step is made, so
@@ -13,10 +15,10 @@ from enum import StrEnum
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 
 from acme.integrations.model_providers.types import StopReason, Usage
-from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.attribution.types.authority import AuthorityMode, Visibility
 from acme.om.attribution.types.principal import AgentRef, Principal
 from acme.om.base import Platform
 from acme.om.context import Role
@@ -36,6 +38,26 @@ class ControlCommand(StrEnum):
     DENY = "deny"
     UNLOCK = "unlock"  # clears any park, such as by a raised budget
     RESTORE = "restore"  # the workspace's next prepare starts from a snapshot the history names
+
+
+MAX_CAUSE = 500
+"""The most characters of a cause: a longer one, such as a long setup
+command, is cut to it, never refused, so the step that ends or parks a loop
+is always written."""
+
+
+def _clipped(value: object) -> object:
+    """A cause past `MAX_CAUSE` cut to it, its last character an ellipsis."""
+    if isinstance(value, str) and len(value) > MAX_CAUSE:
+        return value[: MAX_CAUSE - 1] + "…"
+    return value
+
+
+Cause = Annotated[Stored, BeforeValidator(_clipped), Field(min_length=1, max_length=MAX_CAUSE)]
+"""Why a loop ended or parked, as a person reads it: composed from what the
+kind declares, such as a setup command and its exit code, or what a
+provider cannot meet. Never a command's output, a process's environment, or
+the host's state, which reach the log alone."""
 
 
 class ParkReason(StrEnum):
@@ -124,11 +146,21 @@ class Park(Platform):
     by its effect."""
     job: JobPark | None = None
     line: LinePark | None = None
+    cause: Cause | None = None
+    """Why it waits, when the engine can name it: a workspace's refusal,
+    such as a base still being built, or a key or an account a provider
+    refused, and who must act on it. None says no more than its reason."""
+    holder: UUID | None = None
+    """The user who holds the environment, on a hand-over alone: only they
+    give it back, or unlock it in person. A hand-over parked before the
+    engine named its holder names none."""
 
     @model_validator(mode="after")
     def _a_person_sets_no_clock(self) -> Self:
         if self.retry_at is not None and self.reason in PERSON_ONLY:
             raise ValueError(f"a {self.reason.value} park is cleared by a person, never by a time")
+        if self.holder is not None and self.reason is not ParkReason.HANDOVER:
+            raise ValueError("only a hand-over names the person who holds it")
         waits_for = ParkReason.JOB if self.line is None else ParkReason.RESOURCE
         if self.job is not None and (self.reason is not waits_for or self.retry_at is None):
             raise ValueError(
@@ -193,7 +225,12 @@ class InputHeader(Platform):
     whether that agent's session holds private data, so a child's report
     makes its parent hold what the child held. `artifact` is the handle of a
     child's report above the size bound, whose head and tail are the step's
-    two text blocks."""
+    two text blocks.
+
+    `participant` is set by the history on a message from a person who
+    takes part in the session and does not steer it: it is data, labelled
+    with its author, and it never instructs, wakes, or pays
+    (`attribution.rules.principal_authored`)."""
 
     kind: Literal["input"] = "input"
     waking: bool | None = None
@@ -202,6 +239,7 @@ class InputHeader(Platform):
     untrusted: bool = False
     holds_private: bool = False
     artifact: ArtifactRef | None = None
+    participant: bool = False
 
 
 class DecidedCall(Platform):
@@ -224,12 +262,14 @@ class DecidedCall(Platform):
 class ControlHeader(Platform):
     """`call` is the decided call of an approve or a deny, and of nothing
     else. `snapshot` is what a restore starts the workspace from, and is
-    named by nothing else."""
+    named by nothing else. `principal` is who sent it: a principal's control
+    names them, and the engine's own names none."""
 
     kind: Literal["control"] = "control"
     command: ControlCommand
     call: DecidedCall | None = None
     snapshot: WorkspaceSnapshot | None = None
+    principal: Principal | None = None
 
     @model_validator(mode="after")
     def _a_decision_names_its_call(self) -> Self:
@@ -361,8 +401,13 @@ class ParkedHeader(Platform):
 
 
 class LoopEndedHeader(Platform):
+    """A loop's outcome, and its cause when the engine can name it, such as
+    the setup command that failed and its exit code. None says no more than
+    the outcome."""
+
     kind: Literal["loop_ended"] = "loop_ended"
     outcome: LoopOutcome
+    cause: Cause | None = None
 
 
 class ToolsetSwitch(Platform):
@@ -383,23 +428,48 @@ class StandingSwitch(Platform):
     chars: int = Field(ge=0)
 
 
+class SteerSwitch(Platform):
+    """What a `switched` step says of the session's steer: the principal who
+    steers it from here, and who moved it there, the history's to write
+    (`attribution.rules.switched_by`): the steerer who handed it over, or a
+    holder of `manage_sessions` who took it."""
+
+    steerer: Principal
+    by: Principal
+
+
+class VisibilitySwitch(Platform):
+    """What a `switched` step says of who sees the session: org-wide or
+    private from here, and who switched it, the history's to write. Only
+    its creator's switch counts (`agent_sessions.rules.projected`)."""
+
+    visibility: Visibility
+    by: Principal
+
+
 class SwitchedHeader(Platform):
     """A switch, explicit: the fill set's new version and both fills it
     names, a toolset a load added to the session's registry, with the
-    tools it added, or the session's standing text. A switch is never
-    silent, so no fill changes, no tool joins a request, and no standing
-    text changes, without one."""
+    tools it added, the session's standing text, its steerer, or who sees
+    it. A switch is never silent, so no fill changes, no tool joins a
+    request, no standing text changes, and no steer or sight of the session
+    moves, without one."""
 
     kind: Literal["switched"] = "switched"
     fills: FillSwitch | None = None
     toolset: ToolsetSwitch | None = None
     standing: StandingSwitch | None = None
+    steer: SteerSwitch | None = None
+    visibility: VisibilitySwitch | None = None
 
     @model_validator(mode="after")
     def _one_switch(self) -> Self:
-        named = (self.fills, self.toolset, self.standing)
+        named = (self.fills, self.toolset, self.standing, self.steer, self.visibility)
         if sum(each is not None for each in named) != 1:
-            raise ValueError("a switch names one of a fill switch, a toolset, or standing text")
+            raise ValueError(
+                "a switch names one of a fill switch, a toolset, standing text, a steer, "
+                "or a visibility"
+            )
         return self
 
 

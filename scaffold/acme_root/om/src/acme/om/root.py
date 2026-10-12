@@ -66,7 +66,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
-from acme.om.exceptions import Unavailable, UnsafeConfiguration
+from acme.om.exceptions import NotFound, Unavailable, UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.hosts.impl.placement import inside_wall
@@ -511,6 +511,13 @@ async def purge_held(
         await managers.agents.purge_tree(org_id, tree_id)
 
 
+async def opens(managers: Managers, ctx: TenantContext, session_id: UUID) -> None:
+    """A history, or what its session keeps outside it, opens to whom the
+    session is visible: one it is not visible to finds nothing there."""
+    if not await managers.agent_sessions.is_visible(ctx, session_id):
+        raise NotFound(f"agent session {session_id} not found")
+
+
 def build_tenancy(
     storage: TenancyStorageInterface,
     relay: OutboxRelayInterface,
@@ -931,9 +938,12 @@ def build_managers(
         tenancy,
         steps_options or StepsOptions(),
         # Who may instruct a session is the agents' to answer, from its
-        # registry; they are built below on this manager, so the edge is
+        # registry; who steers it is attribution's, and who sees it the
+        # sessions'. Each is built below on this manager, so the edges are
         # bound at call time.
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
+        steers=lambda ctx, session_id: managers.attribution.steers(ctx, session_id),
+        opens=lambda ctx, session_id: opens(managers, ctx, session_id),
     )
     kinds = AgentKindCatalog(kinds=agent_kinds)
     # A session's project, which its workspace binds and its retention
@@ -1131,6 +1141,7 @@ def build_managers(
         artifact_seal or ArtifactSealKeysImpl(session_keys, storage.get_privacy_storage()),
         compaction_policy or CompactionPolicy(),
         WindowsOptions(),
+        opens=lambda ctx, session_id: opens(managers, ctx, session_id),
     )
     # The read tool pages through what windows keeps. The spawn tool starts
     # sub-agents through the agents manager, which is built below on this

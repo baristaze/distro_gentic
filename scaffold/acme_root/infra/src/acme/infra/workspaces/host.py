@@ -62,7 +62,7 @@ class WorkspaceHostImpl(WorkspaceProviderInterface):
         if why is None and (snapshot is not None or base is not None):
             why = f"a host workspace cannot start from a snapshot: {UNKEPT}"
         if why is not None:
-            raise IsolationRefused(why)
+            raise IsolationRefused(why, cause=why)
         directory = self._directory(org_id, workspace_id)
         await asyncio.to_thread(directory.mkdir, mode=0o700, parents=True, exist_ok=True)
         await asyncio.to_thread(self._mark(org_id, workspace_id).touch, mode=0o600)

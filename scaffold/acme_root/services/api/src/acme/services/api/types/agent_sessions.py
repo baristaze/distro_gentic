@@ -1,23 +1,25 @@
 """The wire types of agent sessions: a session, one step of its history,
-and what a person sends it. A step's view is flat: what it is, who wrote
-it, what it says as text, and the few fields of its header a reader acts
-on. Its content is the session's, so a reader of the org reads it as the
-session's own reader does."""
+an artifact it keeps, and what a person sends it. A step's view is flat:
+what it is, who wrote it, what it says as text, and the few fields of its
+header a reader acts on. Its content is the session's, so whoever the
+session is visible to reads it as the session's own reader does."""
 
 from datetime import datetime
 from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
-from pydantic import Field, JsonValue, model_validator
+from pydantic import AwareDatetime, Field, JsonValue, model_validator
 
 from acme.integrations.model_providers.types import StopReason
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.request import MAX_TITLE
+from acme.om.attribution.types.authority import Visibility
 from acme.om.attribution.types.principal import MAX_KIND
+from acme.om.steps.types.content import MAX_NAME
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
 from acme.om.steps.types.step import Actor, Origin, StepType
-from acme.om.tools.types.call import Verdict
+from acme.om.tools.types.call import MAX_REPORT, Verdict
 from acme.services.api.types.common import RequestBody, View
 
 MAX_MESSAGE = 100_000
@@ -39,12 +41,17 @@ class LineParkView(View):
 class ParkView(View):
     """Why a parked loop waits, what clears it, and when it tries again by
     itself; a park only a person clears has no time, and neither has a park
-    in line, which names where it stands."""
+    in line, which names where it stands. `cause` says why in words when the
+    engine can name it, such as a workspace base still being built, or a
+    key a provider refused and who must act. A hand-over names `holder`,
+    the user who holds the environment and alone gives it back."""
 
     reason: ParkReason
     unlock: str
     retry_at: datetime | None
     line: LineParkView | None = None
+    cause: str | None
+    holder: UUID | None = None
 
 
 class AgentSessionView(View):
@@ -52,8 +59,13 @@ class AgentSessionView(View):
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
     open. A sub-agent names the session that spawned it, and every session
-    the root of its tree. `deleted_at` is set only on the answer to a
-    delete: a deleted session is on no read until it is restored."""
+    the root of its tree. `visibility` says who sees it: every member of the
+    org, who may join it, or its creator and its `participants` alone.
+    `steerer` is the person whose messages instruct it, its creator until a
+    hand-off; a participant's message is data. A sub-agent names none: its
+    parent steers it, and it is seen as its root is. `deleted_at` is set
+    only on the answer to a delete: a deleted session is on no read until it
+    is restored."""
 
     id: UUID
     title: str
@@ -67,11 +79,14 @@ class AgentSessionView(View):
     created_by: UUID
     archived_at: datetime | None
     deleted_at: datetime | None
+    visibility: Visibility
+    participants: list[UUID]
+    steerer: UUID | None
 
 
 class AgentSessionPageView(View):
-    """One page of sessions, by id. `next_cursor` fetches the next page and
-    is null on the last one."""
+    """One page of root sessions, newest first. `next_cursor` fetches the
+    next page and is null on the last one."""
 
     items: list[AgentSessionView]
     next_cursor: str | None
@@ -135,8 +150,13 @@ class StepView(View):
     message, on a message an agent wrote (`agent`); the tools a model
     response called, why it stopped, and what it used; a tool call's tool,
     the id of the call it runs, and the class of its failure; a control's
-    command; a park; a loop's outcome; the snapshot a `snapshotted` step
-    names, or a restore starts from."""
+    command; a park; a loop's outcome, and its cause when the engine names
+    one, such as the setup command that failed and its exit code; the
+    snapshot a `snapshotted` step names, or a restore starts from. A message
+    names its `author`, and `participant` says it is a participant's, data,
+    never an instruction. A `switched` step that moved the steer names the
+    new `steerer`, and one that switched who sees the session its
+    `visibility`."""
 
     id: UUID
     seq: int
@@ -160,7 +180,12 @@ class StepView(View):
     command: ControlCommand | None
     park: ParkView | None
     outcome: LoopOutcome | None
+    cause: str | None
     snapshot: SnapshotView | None
+    author: UUID | None
+    participant: bool
+    steerer: UUID | None
+    visibility: Visibility | None
 
 
 class StepPageView(View):
@@ -296,6 +321,18 @@ class SessionModelUsageView(View):
     fills: list[FillUsageView]
 
 
+class ArtifactPageView(View):
+    """A page of what a session keeps whole outside its window, such as a
+    long tool result: its characters from `start`, the whole artifact's
+    length, and whether more follow."""
+
+    artifact_id: UUID
+    start: int
+    text: str
+    characters: int
+    has_more: bool
+
+
 class StartSessionRequest(RequestBody):
     """A session to start on the latest version of a kind the product runs,
     in a project of the caller's tenant. Outside a local stack a session
@@ -353,3 +390,44 @@ class DecisionRequest(RequestBody):
 
     approve: bool
     note: str = Field(default="", max_length=MAX_MESSAGE)
+
+
+class DeadlineRequest(RequestBody):
+    """The deadline the session's tree shares, set whole: an instant, or
+    null to take it away. One past now, or none, unlocks every session of
+    the tree parked on the deadline. An instant with no offset names no
+    moment, so it is refused."""
+
+    deadline: AwareDatetime | None
+
+
+class VisibilityRequest(RequestBody):
+    """Who sees the session from here: every member of the org, or its
+    creator and its participants alone."""
+
+    visibility: Visibility
+
+
+class PrincipalRequest(RequestBody):
+    """Who steers the session from here: a participant its steerer hands it
+    to. Left out, the caller takes it."""
+
+    steerer: UUID | None = None
+
+
+class GiveBackRequest(RequestBody):
+    """What the person who held the environment did there, which the model
+    reads as their message when the loop goes on."""
+
+    summary: str = Field(min_length=1, max_length=MAX_MESSAGE)
+
+
+class JobCompletionRequest(RequestBody):
+    """How a job ended, from the system it ran on: the tool's handle for
+    the work, its result as text, and the class of its failure when it
+    failed. A job that spends is counted at its whole hold: no cost is
+    taken over the wire."""
+
+    handle: str = Field(min_length=1, max_length=MAX_NAME)
+    text: str = Field(default="", max_length=MAX_REPORT)
+    failure: ToolFailure | None = None

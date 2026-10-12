@@ -1,19 +1,29 @@
-"""Agent session routes: start a session on a kind, list the tenant's and a
-session's children a page at a time, read one, archive, delete, and
-restore it, send it a message or a control, decide a tool call it waits
-on, and read its history a page at a time. A session's derived reads
-follow: what it asks of a person, the calls it holds for a decision, its
-bounds, its tool calls, and what its model calls used. Each function is one call into the agent
+"""Agent session routes: start a session on a kind, list the ones a
+person takes part in or sees, and a session's children, a page at a time,
+read one, archive, delete, and restore it, join one, switch who sees it,
+hand its steer on, send it a message or a control, decide a tool call it
+waits on, clear the park a person clears, and read its history and its
+artifacts a page at a time. A session's derived reads follow: what it asks
+of a person, the calls it holds for a decision, its bounds, its tool calls,
+and what its model calls used. Each function is one call into the agent
 sessions service; every create runs under the idempotency record, so a
 retried send is one step. The loop runs in the session runner: a route
-writes what a person said and answers once it is durable."""
+writes what a person said and answers once it is durable. A session the
+caller does not see answers 404, as one that never existed.
+
+Each park a person clears has its route, held to the permission its
+manager checks, and clearing it wakes the session: a message answers a
+question, a decision an approval, a moved deadline the deadline, an
+assignment a principal who no longer holds, a giving back the hand-over
+its holder holds, a job's completion its job, and an unlock the step
+guard, a spender, a lost workspace, and a key or a price fixed outside."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Body, Query, Response
 
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import Among, SessionStatus
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.resolve import AgentSessionsService
@@ -21,16 +31,22 @@ from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionView,
     ApprovalView,
+    ArtifactPageView,
     BoundsView,
     ControlRequest,
+    DeadlineRequest,
     DecisionRequest,
+    GiveBackRequest,
+    JobCompletionRequest,
     MessageRequest,
+    PrincipalRequest,
     QuestionView,
     SessionModelUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
     ToolCallPageView,
+    VisibilityRequest,
 )
 from acme.services.api.types.common import LIMIT_DEFAULT
 
@@ -49,13 +65,15 @@ async def start_session(
 async def list_sessions(
     ctx: Ctx,
     sessions: AgentSessionsService,
+    among: Among = Among.VISIBLE,
     status: SessionStatus | None = None,
     cursor: str | None = None,
     limit: int = LIMIT_DEFAULT,
 ) -> AgentSessionPageView:
-    """The tenant's sessions in a status, or in any, newest first, a page at
-    a time."""
-    return await sessions.get_sessions(ctx, status, cursor, limit)
+    """The org's root sessions in a status, or in any, newest first, a page
+    at a time: the ones the caller made or takes part in (`mine`), or every
+    one they see (`visible`)."""
+    return await sessions.get_sessions(ctx, among, status, cursor, limit)
 
 
 @router.get("/{session_id}", response_model=AgentSessionView)
@@ -146,6 +164,87 @@ async def decide_call(
     )
 
 
+# A deadline is set whole by a PUT, so a retry after a lost answer sets the
+# same deadline again and the route takes no Idempotency-Key.
+@router.put("/{session_id}/deadline", response_model=AgentSessionView)
+async def set_deadline(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID, body: DeadlineRequest
+) -> AgentSessionView:
+    """The deadline of the session's tree, moved for every session of it.
+    One past now, or null, unlocks each session parked on the deadline."""
+    return await sessions.set_deadline(ctx, session_id, body)
+
+
+# Who takes part, who sees it, and who steers it are each set whole by a
+# PUT, so a retry after a lost answer sets the same again and the routes
+# take no Idempotency-Key.
+@router.put("/{session_id}/participants/{user_id}", response_model=AgentSessionView)
+async def add_participant(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID, user_id: UUID
+) -> AgentSessionView:
+    """`user_id` takes part in the session: the caller joins one they see,
+    and its creator adds anyone. 403 for anyone else."""
+    return await sessions.add_participant(ctx, session_id, user_id)
+
+
+@router.put("/{session_id}/visibility", response_model=AgentSessionView)
+async def switch_visibility(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID, body: VisibilityRequest
+) -> AgentSessionView:
+    """Its creator switches who sees the session, recorded as a step: 403
+    for anyone else."""
+    return await sessions.switch_visibility(ctx, session_id, body)
+
+
+@router.put("/{session_id}/principal", response_model=AgentSessionView)
+async def assign_principal(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    body: Annotated[PrincipalRequest | None, Body()] = None,
+) -> AgentSessionView:
+    """The steer moves, recorded as a step: its steerer hands it to the
+    participant the body names, or with no body the caller takes it, for a
+    steerer who lapsed with `manage_sessions`. Its tool calls run under the
+    steerer, and a loop parked on a principal who no longer holds goes on.
+    403 for anyone else, 422 for one who takes no part in it."""
+    return await sessions.assign_principal(ctx, session_id, body)
+
+
+@router.post("/{session_id}/take-over", response_model=AgentSessionView)
+async def take_over(ctx: Ctx, sessions: AgentSessionsService, session_id: UUID) -> AgentSessionView:
+    """The caller, in person, takes the environment to work by hand: the
+    loop parks on a hand-over they hold. 409 when another person holds it."""
+    return await sessions.take_over(ctx, session_id)
+
+
+@router.post("/{session_id}/give-back", response_model=AgentSessionView)
+async def give_back(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    body: GiveBackRequest,
+    idem: Idem,
+) -> Response:
+    """The holder, in person, gives the environment back with what they
+    did there, and the loop goes on: 403 for anyone else."""
+    return await idem.run(200, lambda attempt: sessions.give_back(ctx, session_id, body))
+
+
+@router.post("/{session_id}/jobs/{key}/completion", response_model=AgentSessionView)
+async def complete_job(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    key: UUID,
+    body: JobCompletionRequest,
+    idem: Idem,
+) -> Response:
+    """How the job of `key` ended, from the system it ran on: the loop that
+    waits on it goes on. 404 for a job the session does not wait on."""
+    return await idem.run(200, lambda attempt: sessions.complete_job(ctx, session_id, key, body))
+
+
 @router.get("/{session_id}/steps", response_model=StepPageView)
 async def get_steps(
     ctx: Ctx,
@@ -156,6 +255,21 @@ async def get_steps(
 ) -> StepPageView:
     """The history in order, strictly after `after_seq`."""
     return await sessions.get_steps(ctx, session_id, after_seq, limit)
+
+
+@router.get("/{session_id}/artifacts/{artifact_id}", response_model=ArtifactPageView)
+async def get_artifact(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    artifact_id: UUID,
+    start: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1)] = 10_000,
+) -> ArtifactPageView:
+    """A page of what the session keeps whole outside its window, from the
+    character at `start`: an artifact is written once, so no character's
+    place moves between pages. The policy's page bounds `limit`."""
+    return await sessions.get_artifact(ctx, session_id, artifact_id, start, limit)
 
 
 @router.get("/{session_id}/questions", response_model=list[QuestionView])

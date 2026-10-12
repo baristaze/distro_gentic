@@ -117,9 +117,37 @@ The error streak still bounds the loop; the notice comes first."""
 
 APPROVAL_UNLOCK = "approval"
 SPENDER_UNLOCK = "spender"
-PRINCIPAL_UNLOCK = "principal"
 """What a person-park the loop writes waits on: a decision on a call, a
-principal who can pay, a principal who holds the calls."""
+principal who can pay. A principal who holds the calls is attribution's
+(`PRINCIPAL_PARK`)."""
+
+
+OPERATOR = "an operator of the platform"
+ADMIN = "an admin of the org"
+"""Who fixes a key or an account a provider refused: an operator for the
+platform's own key, an admin for a key the org saved."""
+
+FIXES = {
+    "billing": "{provider} refused the call for its account's billing: {who} settles it",
+    "credential": "{provider} did not take the key: {who} replaces it",
+    "permission": (
+        "the key lacks what this call needs, a permission, a region, or a model: {who} grants it"
+    ),
+    "key": "the org holds no {provider} key: {who} saves one",
+}
+"""What a provider park on a key or an account says, by the cause its
+unlock names, and who must act on it. The engine's own words: a provider's
+message may hold what a request carried, and reaches the log alone."""
+
+
+def fix_cause(provider: str, cause: str, tenants: bool) -> str | None:
+    """Why a provider park on a key or an account waits, and who must act:
+    `tenants` when the key is one the org saved, so an admin of the org
+    fixes it; an operator fixes the platform's own. None for a cause the
+    table does not hold."""
+    text = FIXES.get(cause)
+    who = ADMIN if tenants or cause == "key" else OPERATOR
+    return None if text is None else text.format(provider=provider, who=who)
 
 
 JOB_DEADLINE = "the job did not complete by its deadline, and was cancelled"
@@ -681,9 +709,16 @@ def nudge_text(kind: AgentKind) -> str:
 
 
 def ended_step(
-    step_id: UUID, at: datetime, session_id: UUID, loop_id: UUID, outcome: LoopOutcome
+    step_id: UUID,
+    at: datetime,
+    session_id: UUID,
+    loop_id: UUID,
+    outcome: LoopOutcome,
+    *,
+    cause: str | None = None,
 ) -> Step:
-    """The step that closes a loop with its outcome."""
+    """The step that closes a loop with its outcome, and its cause when the
+    engine names one."""
     return Step(
         id=step_id,
         created_at=at,
@@ -692,7 +727,7 @@ def ended_step(
         type=StepType.LOOP_ENDED,
         actor=Actor.ENGINE,
         origin=Origin.ENGINE,
-        header=LoopEndedHeader(outcome=outcome),
+        header=LoopEndedHeader(outcome=outcome, cause=cause),
     )
 
 

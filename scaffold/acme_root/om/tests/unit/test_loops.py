@@ -44,6 +44,7 @@ from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, StopReason
 from acme.om.agent_sessions.limits import Limit, Limits, tally_loop, tripped
 from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agents.impl.loop import LOST_SOURCE
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.loop_rules import REPEATED, kind_prompts, retry_wait
 from acme.om.agents.types.request import Handoff, Spawn
@@ -418,6 +419,10 @@ async def test_a_second_person_who_writes_during_a_call_lends_it_nothing(
     slow, lookup = loop.tools["slow"], loop.tools["lookup"]
     running = asyncio.ensure_future(loop.loops.run(owner, session_id))
     await slow.started.wait()
+    # The owner hands the steer on mid-call: only the steerer's message is
+    # an instruction, and only it pays.
+    await loop.managers.agent_sessions.add_participant(owner, session_id, colleague.user_id)
+    await loop.managers.attribution.assign_principal(owner, session_id, colleague.user_id)
     await loop.say(session_id, "Charge this one to me.", colleague)
     child = await loop.managers.agents.spawn(
         owner, session_id, Spawn(id=new_id(), kind="assistant", title="a part", objective="Count.")
@@ -531,6 +536,7 @@ async def test_a_lost_workspace_parks_the_loop_for_a_person_before_any_call(
         "workspace",
         None,
     ), "a person clears it, never a clock"
+    assert run.park.cause == LOST_SOURCE, "the engine's words, never the provider's message"
     assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
 
 
@@ -974,6 +980,10 @@ async def test_a_message_that_lands_after_the_render_is_neither_delivered_nor_cr
     session_id = await loop.start()
     owner, colleague = loop.owner, loop.colleague()
     await loop.say(session_id, "Find the total.")
+    # The steer is the colleague's before their message lands, so it
+    # instructs once a request delivers it.
+    await loop.managers.agent_sessions.add_participant(owner, session_id, colleague.user_id)
+    await loop.managers.attribution.assign_principal(owner, session_id, colleague.user_id)
     loop.anthropic.add(
         reply(use("lookup", use_id="use_1")),
         reply(use("lookup", q="what the colleague asked", use_id="use_2")),
