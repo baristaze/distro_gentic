@@ -127,7 +127,8 @@ class WatchManagerInterface(ABC):
         `IsolationRefused` while the host has not restored it in time, and
         `WorkspaceLost` when its store lost it, each with nothing handed
         over. Parked on a hand-over already, it stays, and nothing is
-        restored over the person's work. Audited as that person."""
+        restored over the person's work; one another person holds is
+        `Conflict`. Audited as that person."""
         ...
 
     @abstractmethod
@@ -164,6 +165,7 @@ class WatchManagerInterface(ABC):
         loop under a new epoch that fences any command of theirs no host
         took yet. A command of theirs a host still runs refuses it,
         `CommandRunning`, unless `stop` asks it stopped first, answered
-        `interrupted`. Audited as that person. `ValidationFailed` for a
-        session not handed over."""
+        `interrupted`. Audited as that person. Only the hand-over's holder
+        gives it back (`NotAuthorized`), and anyone in person one that names
+        no holder. `ValidationFailed` for a session not handed over."""
         ...

@@ -56,7 +56,8 @@ the record that it is theirs is an entry in the tenant's event stream.
 - **Take control.** The agent stands down: a new writer epoch fences
   the run that held the loop, which parks on a hand-over, and what that
   run still runs on the host is stopped. The session, its workspace,
-  and its evidence stay as they are.
+  and its evidence stay as they are. The hand-over is the person's: no
+  one else takes it from them or gives it back.
 - **Run a command.** While the agent stands down, the person's command
   runs as `exec` work on the host that holds the workspace, through the
   [relay](../relay/README.md), in the workspace's own isolation. The

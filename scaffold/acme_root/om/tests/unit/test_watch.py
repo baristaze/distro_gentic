@@ -39,7 +39,7 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.events import EventsManagerInterface
-from acme.om.exceptions import NotAuthorized, NotFound, StaleWriter
+from acme.om.exceptions import Conflict, NotAuthorized, NotFound, StaleWriter
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
@@ -700,6 +700,23 @@ async def test_giving_back_while_a_command_by_hand_runs_is_refused_unless_it_is_
     assert ended.outcome.stopped is StopKind.INTERRUPT
     controls = await watched.managers.relay.controls(request(), watched.host, None)
     assert [(c.item_id, c.kind) for c in controls] == [(run.item_id, StopKind.REVOKE)]
+
+
+async def test_a_hand_over_is_its_holders_alone(watched: Watched) -> None:
+    """Another person, in person, takes no control of a hand-over a person
+    holds and gives none back: only its holder does."""
+    await watched.watch.take_control(watched.person, watched.session_id)
+    admin = in_person(watched.owner, Role.ADMIN)
+
+    with pytest.raises(Conflict):
+        await watched.watch.take_control(admin, watched.session_id)
+    with pytest.raises(NotAuthorized):
+        await watched.watch.give_back(admin, watched.session_id, "Mine now.")
+
+    session = await watched.managers.agent_sessions.get_session(watched.owner, watched.session_id)
+    assert session.park is not None and session.park.holder == watched.person.user_id
+    back = await watched.watch.give_back(watched.person, watched.session_id, "Done by hand.")
+    assert back.park is None
 
 
 async def test_control_is_taken_by_a_person_in_person_who_may_instruct(

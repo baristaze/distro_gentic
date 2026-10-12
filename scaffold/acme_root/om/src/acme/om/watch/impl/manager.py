@@ -14,7 +14,14 @@ from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
-from acme.om.exceptions import LeaseLost, NotAuthorized, NotFound, Unavailable, ValidationFailed
+from acme.om.exceptions import (
+    Conflict,
+    LeaseLost,
+    NotAuthorized,
+    NotFound,
+    Unavailable,
+    ValidationFailed,
+)
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.intake.rules import in_person
@@ -201,6 +208,9 @@ class WatchManagerImpl(WatchManagerInterface):
             # never restored over their work.
             await self._restore_kept(ctx, session_id)
             session = await self._loop.take_over(ctx, session_id)
+        elif session.park.holder not in (None, ctx.user_id):
+            # A hand-over is its holder's: no one else takes it from them.
+            raise Conflict(f"agent session {session_id} is held by another person")
         cursor = await self._steps.get_cursor(ctx, session_id)
         # What the agent's run still runs on the host stops now, so nothing of
         # its runs beside the person's commands; theirs run under this epoch.
