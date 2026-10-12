@@ -157,7 +157,7 @@ it("shows the new org's home and sessions after a switch from the chip, read onc
   const after = readsAfterSwitch();
   expect(after.every((read) => read.token === tokenOf("beta"))).toBe(true);
   expect(after.filter((read) => read.path === "/v1/me")).toHaveLength(1);
-  expect(after.filter((read) => read.path.startsWith("/v1/agent-sessions?limit="))).toHaveLength(1);
+  expect(after.filter((read) => read.path.startsWith("/v1/agent-sessions?among=mine&limit="))).toHaveLength(1);
   expect(after.filter((read) => read.path === "/v1/flags")).toHaveLength(1);
   expect(queryClient.getQueryData(keys.flags)).toEqual({ flags: { "media-uploads": true } });
 });
@@ -186,7 +186,7 @@ it.each([
   ["/playbooks?name=release-notes", "/settings/playbooks?name=release-notes", "Playbooks"],
   ["/audit", "/settings/audit", "Audit"],
   ["/usage", "/settings/usage", "Usage"],
-  ["/approvals", "/sessions?needs=you", "All sessions"],
+  ["/approvals", "/sessions?needs=you", "Sessions"],
 ])("sends a bookmark to %s on to %s, in its place in the history", async (from, to, title) => {
   await open(from);
   const { pathname, search, hash } = router.state.location;

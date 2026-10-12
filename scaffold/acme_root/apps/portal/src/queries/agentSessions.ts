@@ -1,11 +1,13 @@
-// The tenant's agent sessions: the list, one session and its reads, what a
+// The tenant's agent sessions: the lists, one session and its reads, what a
 // person sends it, and its live view. Every read goes through the API under
 // the signed-in member's org; a session another org holds answers 404 and
-// is never in a list.
+// is never in a list. A list is the person's own (`mine`: the ones they made
+// or take part in) or every one they see (`visible`).
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import type {
   AgentSessionPageView,
+  Among,
   AgentSessionView,
   ApprovalView,
   BoundsView,
@@ -18,6 +20,7 @@ import type {
   HandRunView,
   InvocationView,
   InvokeRequest,
+  PrincipalRequest,
   QuestionView,
   SessionControl,
   SessionStatus,
@@ -28,6 +31,8 @@ import type {
   ToolCallPageView,
   ToolCallView,
   ValidationView,
+  Visibility,
+  VisibilityRequest,
 } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
@@ -61,13 +66,13 @@ export function useWalk(query: {
   return walking;
 }
 
-export function useAgentSessions(status: SessionStatus | null) {
+export function useAgentSessions(among: Among, status: SessionStatus | null) {
   const query = useInfiniteQuery({
-    queryKey: keys.agentSessions.list(status ?? "any", SESSIONS_PAGE_SIZE),
+    queryKey: keys.agentSessions.list(among, status ?? "any", SESSIONS_PAGE_SIZE),
     initialPageParam: null as string | null,
     getNextPageParam: (last: AgentSessionPageView) => last.next_cursor,
     queryFn: ({ pageParam, signal }) => {
-      const params = new URLSearchParams({ limit: String(SESSIONS_PAGE_SIZE) });
+      const params = new URLSearchParams({ among, limit: String(SESSIONS_PAGE_SIZE) });
       if (status) params.set("status", status);
       if (pageParam) params.set("cursor", pageParam);
       return api.get<AgentSessionPageView>(`/v1/agent-sessions?${params}`, { signal });
@@ -76,20 +81,65 @@ export function useAgentSessions(status: SessionStatus | null) {
   return { ...query, data: query.data?.pages.flatMap((page) => page.items) };
 }
 
-/** Every parked session of the org, page after page: a page may hold none
+/** Every parked session of the list, page after page: a page may hold none
  * parked for a reason a reader counts while later pages do. */
-export function useParkedSessions() {
+export function useParkedSessions(among: Among) {
   const query = useInfiniteQuery({
-    queryKey: keys.agentSessions.list("parked", WHOLE_PAGE_SIZE),
+    queryKey: keys.agentSessions.list(among, "parked", WHOLE_PAGE_SIZE),
     initialPageParam: null as string | null,
     getNextPageParam: (last: AgentSessionPageView) => last.next_cursor,
     queryFn: ({ pageParam, signal }) => {
       const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "";
-      return api.get<AgentSessionPageView>(`/v1/agent-sessions?status=parked&limit=${WHOLE_PAGE_SIZE}${cursor}`, { signal });
+      return api.get<AgentSessionPageView>(`/v1/agent-sessions?among=${among}&status=parked&limit=${WHOLE_PAGE_SIZE}${cursor}`, { signal });
     },
   });
   const walking = useWalk(query);
   return { ...query, data: query.data?.pages.flatMap((page) => page.items), isPending: query.isPending || walking };
+}
+
+/** Whether a session's tree may still change: it works or waits, and its
+ * sub-agents with it. */
+const working = (session: Pick<AgentSessionView, "status" | "archived_at">) => session.archived_at === null && session.status !== "idle";
+
+/** Every sub-agent beneath `rootId`, read through the children route,
+ * which shows a tree only to one who sees its root. A sub-agent that is
+ * done is not read beneath: none of its own works on. */
+async function treeBeneath(rootId: string, signal: AbortSignal): Promise<AgentSessionView[]> {
+  const read: AgentSessionView[] = [];
+  const seen = new Set([rootId]);
+  for (const queue = [rootId]; queue.length > 0; ) {
+    const parent = queue.shift()!;
+    for (let cursor: string | null = null; ; ) {
+      const after: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      const page: AgentSessionPageView = await api.get<AgentSessionPageView>(`${path(parent)}/children?limit=${WHOLE_PAGE_SIZE}${after}`, { signal });
+      for (const child of page.items) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
+        read.push(child);
+        if (working(child)) queue.push(child.id);
+      }
+      if (!page.next_cursor) break;
+      cursor = page.next_cursor;
+    }
+  }
+  return read;
+}
+
+const treesOf = (read: readonly { data?: AgentSessionView[] }[]) => read.flatMap((one) => one.data ?? []);
+
+/** The sub-agents of the roots that work or wait, at every depth: a list
+ * holds roots alone, and a sub-agent that needs a person lifts its tree.
+ * Each tree is read under the lists' key, so a push about any session reads
+ * it again with them. */
+export function useTrees(roots: readonly AgentSessionView[]): AgentSessionView[] {
+  const ids = [...new Set(roots.filter((root) => root.parent_id === null && working(root)).map((root) => root.id))];
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: [...keys.agentSessions.lists, "tree", id] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) => treeBeneath(id, signal),
+    })),
+    combine: treesOf,
+  });
 }
 
 const sessionQuery = (id: string, enabled: boolean) => ({
@@ -259,6 +309,21 @@ export function useStartSession() {
   });
 }
 
+/** A member joins a session they see, from a list: they take part from
+ * then on, and it is on their own list. */
+export function useJoinSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, me }: { id: string; me: string }) =>
+      api.request<AgentSessionView>("PUT", `${path(id)}/participants/${encodeURIComponent(me)}`),
+    onSettled: (_session, _error, { id }) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.agentSessions.one(id) }),
+        queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
+      ]),
+  });
+}
+
 /** A message to a session the caller names at the call: Home sends the
  * prompt to the session it has just started. */
 export function useSendMessage() {
@@ -305,6 +370,24 @@ export function useSessionActions(id: string) {
     giveBack: useMutation({
       mutationFn: (body: Pick<ControlGiveBackRequest, "summary"> & Partial<ControlGiveBackRequest>) => api.post<AgentSessionView>(`${path(id)}/control/give-back`, body),
       onSettled: settled,
+    }),
+    /** A person takes part: the caller joins a session they see, and its
+     * creator adds a member. */
+    join: useMutation({
+      mutationFn: (person: string) => api.request<AgentSessionView>("PUT", `${path(id)}/participants/${encodeURIComponent(person)}`),
+      onSettled: listed,
+    }),
+    /** Its creator switches who sees it. */
+    share: useMutation({
+      mutationFn: (visibility: Visibility) => api.request<AgentSessionView>("PUT", `${path(id)}/visibility`, { visibility } satisfies VisibilityRequest),
+      onSettled: listed,
+    }),
+    /** The steer moves: its steerer hands it to a participant, or, with
+     * no one named, the caller takes a lapsed steerer's. */
+    steer: useMutation({
+      mutationFn: (steerer: string | null) =>
+        api.request<AgentSessionView>("PUT", `${path(id)}/principal`, steerer === null ? undefined : ({ steerer } satisfies PrincipalRequest)),
+      onSettled: listed,
     }),
     archive: useMutation({
       mutationFn: () => api.post<AgentSessionView>(`${path(id)}/archive`),

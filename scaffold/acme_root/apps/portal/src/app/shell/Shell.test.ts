@@ -61,19 +61,27 @@ vi.mock("../api", () => ({
         return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as MeView);
       }
       if (path.startsWith("/v1/auth/memberships")) return Promise.resolve({ items: [{ org, user, role: "owner" }], next_cursor: null });
-      const one = /^\/v1\/agent-sessions\/([^/?]+)(\/steps)?/.exec(path);
+      const all = net.sessions as AgentSessionView[];
+      const one = /^\/v1\/agent-sessions\/([^/?]+)(\/[a-z-]+)?/.exec(path);
       if (one) {
-        const found = (net.sessions as AgentSessionView[]).find((each) => each.id === one[1]);
+        const found = all.find((each) => each.id === one[1]);
         if (!found) return Promise.reject(new Error(`no session ${one[1]}`));
-        return Promise.resolve(one[2] ? { items: [], has_more: false } : found);
+        if (one[2] === "/steps") return Promise.resolve({ items: [], has_more: false });
+        // Its sub-agents, as the children route answers one who sees its root.
+        if (one[2] === "/children") return Promise.resolve({ items: all.filter((each) => each.parent_id === found.id), next_cursor: null });
+        // The call it holds for a decision, while it is parked on one.
+        if (one[2] === "/approvals")
+          return Promise.resolve(found.park?.unlock === "approval" ? [{ session_id: found.id, tool: "run_command", seq: 3, authorization_class: "write" }] : []);
+        return Promise.resolve(found);
       }
-      if (path.startsWith("/v1/agent-sessions?status=parked")) {
-        const parked = (net.sessions as AgentSessionView[]).filter((each) => each.status === "parked");
-        return Promise.resolve({ items: parked, next_cursor: null });
-      }
-      if (path.startsWith("/v1/agent-sessions")) return Promise.resolve({ items: net.sessions, next_cursor: null });
-      if (path.startsWith("/v1/approvals")) {
-        return Promise.resolve({ items: [{ session_id: "asks", tool: "run_command", seq: 3 }], next_cursor: null });
+      if (path.startsWith("/v1/agent-sessions?")) {
+        // As the API lists them: roots alone, the person's own or every one they see.
+        const query = new URLSearchParams(path.split("?")[1]);
+        const own = (each: AgentSessionView) => each.created_by === user.id || each.participants.includes(user.id);
+        const items = all.filter(
+          (each) => each.parent_id === null && (query.get("among") !== "mine" || own(each)) && (query.get("status") !== "parked" || each.status === "parked"),
+        );
+        return Promise.resolve({ items, next_cursor: null });
       }
       return Promise.reject(new Error(`no read for ${path}`));
     },
@@ -190,7 +198,7 @@ it("holds the org chip, the search, New session, the slot's entries with their c
 it("says there are no sessions yet, and reads no held call while none waits", async () => {
   await mount();
   expect(q("aside")!.textContent).toContain("No sessions yet. Describe a task on Home.");
-  expect(net.gets.some((path) => path.startsWith("/v1/approvals"))).toBe(false);
+  expect(net.gets.some((path) => path.endsWith("/approvals"))).toBe(false);
 });
 
 it("groups the sessions into Needs you, Running, and Recent, a sub-agent under its parent, the held tool named", async () => {
@@ -228,6 +236,28 @@ it("folds a parent row's sub-agents, saying how many and how many need the perso
   expect(q("ul[aria-label='Sub-agents of runs']")!.textContent).toContain("asks");
 });
 
+it("lifts a root into Needs you when a sub-agent parks on a person, names its held call, and raises its toast, through the list as the API returns it", async () => {
+  const waits = { status: "parked" as const, park: { reason: "children" as const, unlock: "children", retry_at: null, cause: null } };
+  const working = [session("runs", waits), session("reads", { parent_id: "runs", root_id: "runs", status: "running", steerer: null })];
+  net.sessions = working;
+  await mount();
+  expect(group("Running")).toEqual(["runs"]);
+  expect(q(".acme-needs-toasts")).toBeNull();
+  net.sessions = working.map((one) =>
+    one.id === "reads" ? { ...one, status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } } : one,
+  );
+  await act(async () => queryClient.invalidateQueries());
+  await settle();
+  // The list holds the root alone; the sub-agent is read beneath it.
+  expect(net.gets.filter((path) => path.startsWith("/v1/agent-sessions?")).every((path) => !path.includes("reads"))).toBe(true);
+  expect(net.gets).toContain("/v1/agent-sessions/runs/children?limit=200");
+  expect(group("Needs you")).toEqual(["runs"]);
+  expect(q("ul[aria-label='Sub-agents of runs']")!.textContent).toContain("Needs your decision: run_command");
+  const toast = q(".acme-needs-toasts")!;
+  expect(toast.textContent).toContain("reads");
+  expect(toast.textContent).toContain("Approve run_command");
+});
+
 it("raises a toast on any page when a sub-agent of the person's starts to need them, which opens it", async () => {
   const running = [session("runs", { status: "running" }), session("asks", { title: "Check every caller", parent_id: "runs", root_id: "runs", status: "running" })];
   net.sessions = running;
@@ -247,14 +277,14 @@ it("raises a toast on any page when a sub-agent of the person's starts to need t
 });
 
 it("narrows the sessions by the filter it keeps, and says so when none matches", async () => {
-  net.sessions = [session("theirs", { created_by: "u2" })];
-  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, owner: "mine" } });
+  net.sessions = [session("analysis", { kind: "analysis" })];
+  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, kind: "engineer" } });
   await mount();
   expect(q("aside")!.textContent).toContain("No session matches the filter.");
-  expect(q("button[aria-label='Filter the sessions (on)']")).not.toBeNull();
+  expect(q("button[aria-label='Filter your sessions (on)']")).not.toBeNull();
   const show = [...container.querySelectorAll("button")].find((b) => b.textContent === "Show every session")!;
   await act(async () => show.click());
-  expect(group("Recent")).toEqual(["theirs"]);
+  expect(group("Recent")).toEqual(["analysis"]);
 });
 
 it("goes home from the org's name, and to Settings and the members from the chip's menu", async () => {

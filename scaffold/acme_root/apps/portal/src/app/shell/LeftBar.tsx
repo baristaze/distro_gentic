@@ -1,6 +1,7 @@
 // The left bar: what exists and what needs the person. The org chip, the
 // search, New session, the platform's and the product's entries, the
-// sessions grouped by what they ask (Needs you, Running, Recent) with each
+// person's own sessions grouped by what they ask (Needs you, Running,
+// Recent), a link to the org's to join, with each
 // sub-agent under its parent, a tree whose parent row folds it, and the user
 // chip with "?" beside it, which opens support. Its edge drags to resize.
 import { useId, type ReactNode } from "react";
@@ -11,7 +12,6 @@ import {
   NewSessionIcon,
   Popover,
   SearchIcon,
-  SegmentedControl,
   Select,
   SidebarIcon,
   SupportIcon,
@@ -30,11 +30,6 @@ const STATUS_OPTIONS: { value: SessionFilter["status"]; label: string }[] = [
   { value: "parked", label: "Parked" },
   { value: "pending", label: "Pending" },
   { value: "idle", label: "Idle" },
-];
-
-const OWNER_OPTIONS: readonly { value: SessionFilter["owner"]; label: string }[] = [
-  { value: "everyone", label: "Everyone" },
-  { value: "mine", label: "Mine" },
 ];
 
 function NavCount({ count }: { count: () => number | null }) {
@@ -127,7 +122,6 @@ function FilterPanel({ vm }: { vm: ShellVm }) {
   const set = (change: Partial<SessionFilter>) => vm.setFilter({ ...vm.filter, ...change });
   return (
     <div className="acme-filter-panel">
-      <SegmentedControl label="Whose sessions" value={vm.filter.owner} options={OWNER_OPTIONS} onChange={(owner) => set({ owner })} />
       <Select label="Status" value={vm.filter.status} options={STATUS_OPTIONS} onChange={(status) => set({ status: status as SessionFilter["status"] })} />
       <Select label="Agent" value={vm.filter.kind} options={[{ value: "", label: "Any agent" }, ...vm.kinds]} onChange={(kind) => set({ kind })} />
       <label className="acme-check">
@@ -182,11 +176,11 @@ export function LeftBar({
         </nav>
       </div>
       <div className="acme-side-sessions-head">
-        <span className="acme-side-heading">Sessions</span>
+        <span className="acme-side-heading">Your sessions</span>
         <Popover
-          label="Filter the sessions"
-          triggerLabel={vm.filtered ? "Filter the sessions (on)" : "Filter the sessions"}
-          triggerTitle="Filter the sessions"
+          label="Filter your sessions"
+          triggerLabel={vm.filtered ? "Filter your sessions (on)" : "Filter your sessions"}
+          triggerTitle="Filter your sessions"
           triggerClassName="acme-icon-button acme-filter-trigger"
           width={240}
           trigger={
@@ -198,6 +192,9 @@ export function LeftBar({
         >
           <FilterPanel vm={vm} />
         </Popover>
+        <Link to="/sessions?view=org" className="acme-side-viewall" title="The org's sessions, to explore and join">
+          The org's
+        </Link>
         <Link to="/sessions" className="acme-side-viewall">
           View all
         </Link>
@@ -216,7 +213,12 @@ export function LeftBar({
                 </button>
               </>
             ) : (
-              <p>No sessions yet. Describe a task on Home.</p>
+              <>
+                <p>No sessions yet. Describe a task on Home.</p>
+                <Link to="/sessions?view=org" className="acme-link">
+                  Or join one of the org's
+                </Link>
+              </>
             )}
           </div>
         ) : (

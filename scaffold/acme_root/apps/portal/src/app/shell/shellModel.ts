@@ -94,9 +94,8 @@ function dotOf(session: AgentSessionView): Dot {
 
 const RANK: Record<Group, number> = { needs_you: 0, running: 1, recent: 2 };
 
-function kept(session: AgentSessionView, filter: SessionFilter, me: string | null): boolean {
+function kept(session: AgentSessionView, filter: SessionFilter): boolean {
   if (session.archived_at !== null && !filter.archived) return false;
-  if (filter.owner === "mine" && session.created_by !== me) return false;
   if (!listedFor(session, filter.kind)) return false;
   if (filter.status !== "any" && session.status !== filter.status) return false;
   return true;
@@ -105,16 +104,17 @@ function kept(session: AgentSessionView, filter: SessionFilter, me: string | nul
 const newestFirst = (a: { at: string }, b: { at: string }) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
 const oldestFirst = (a: { at: string }, b: { at: string }) => -newestFirst(a, b);
 
-/** The sessions the left bar shows, grouped and nested. A session read
- * twice counts once; a sub-agent whose parent is not shown stands as a row
- * of its own. `held` maps a session to the tool it holds for a decision. */
+/** The sessions the left bar shows, grouped and nested: the person's own,
+ * as the server lists them. A session read twice counts once; a sub-agent
+ * whose parent is not shown stands as a row of its own. `held` maps a
+ * session to the tool it holds for a decision. */
 export function shellGroups(
   sessions: readonly AgentSessionView[],
-  options: { filter: SessionFilter; me: string | null; held?: ReadonlyMap<string, string> },
+  options: { filter: SessionFilter; held?: ReadonlyMap<string, string> },
 ): ShellGroups {
   const byId = new Map<string, AgentSessionView>();
   for (const session of sessions) {
-    if (!byId.has(session.id) && kept(session, options.filter, options.me)) byId.set(session.id, session);
+    if (!byId.has(session.id) && kept(session, options.filter)) byId.set(session.id, session);
   }
   const rows = new Map<string, ShellRow>();
   for (const session of byId.values()) {
@@ -185,15 +185,17 @@ export function needWords(session: Pick<AgentSessionView, "status" | "park" | "a
   return statusWords(session, held);
 }
 
-/** The sessions of the person's that need them now, by id: one they
- * started, or a sub-agent anywhere in a tree they started. */
+/** The sessions that need the person now, by id: one they steer, or a
+ * sub-agent anywhere in a tree they steer. Its creator steers it until a
+ * hand-off; a participant who does not steer it is not asked. */
 export function needingYou(
   sessions: readonly AgentSessionView[],
   me: string | null,
   held?: ReadonlyMap<string, string>,
 ): Map<string, NeedsYouNotice> {
   const byId = new Map(sessions.map((session) => [session.id, session]));
-  const mine = (session: AgentSessionView) => session.created_by === me || byId.get(session.root_id)?.created_by === me;
+  const steererOf = (session: AgentSessionView) => (session.parent_id === null ? session.steerer : byId.get(session.root_id)?.steerer);
+  const mine = (session: AgentSessionView) => steererOf(session) === me;
   const needing = new Map<string, NeedsYouNotice>();
   if (me === null) return needing;
   for (const session of byId.values()) {

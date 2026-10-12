@@ -152,7 +152,7 @@ describe("routeEnvelope", () => {
       invalidated: [keys.agentSessions.one("s1"), keys.agentSessions.lists],
     });
     expect(seen.some((key) => isPrefixOf(key, keys.agentSessions.read("s1", "steps")))).toBe(true);
-    expect(seen.some((key) => isPrefixOf(key, keys.agentSessions.list("any", 50)))).toBe(true);
+    expect(seen.some((key) => isPrefixOf(key, keys.agentSessions.list("mine", "any", 50)))).toBe(true);
     for (const kind of ["watch.stream.completed", "watch.control.taken"]) {
       const { queryClient: client } = recording();
       expect(routeEnvelope(client, pushOf(kind, { target_id: "s1" }))).toEqual({ invalidated: [keys.agentSessions.one("s1")] });

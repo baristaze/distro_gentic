@@ -77,10 +77,6 @@ export const keys = {
     list: (status: string, limit: number) => ["knowledge", "list", status, limit] as const,
     one: (id: string) => ["knowledge", id] as const,
   },
-  // The calls held for a person across the org's sessions.
-  approvals: {
-    all: ["approval"] as const,
-  },
   // The org's events, newest first, as the audit reads them.
   audit: {
     all: ["audit"] as const,
@@ -97,7 +93,7 @@ export const keys = {
   agentSessions: {
     all: ["agent_session"] as const,
     lists: ["agent_session", "list"] as const,
-    list: (status: string, limit: number) => ["agent_session", "list", status, limit] as const,
+    list: (among: string, status: string, limit: number) => ["agent_session", "list", among, status, limit] as const,
     one: (id: string) => ["agent_session", id] as const,
     read: (id: string, part: string) => ["agent_session", id, part] as const,
     command: (id: string, key: string) => ["agent_session", id, "command", key] as const,

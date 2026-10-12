@@ -5,6 +5,6 @@ import { outageNotices } from "./outageModel";
  * when it is a provider. A push that parks or wakes a session reads them
  * again. */
 export function useOutageVm() {
-  const parked = useParkedSessions();
+  const parked = useParkedSessions("visible");
   return { notices: outageNotices(parked.data ?? []) };
 }
