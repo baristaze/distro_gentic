@@ -959,12 +959,17 @@ class ApiClient:
         )
         return PlaybookView.model_validate(published)
 
-    async def invoke_playbook(self, name: str, session_id: UUID) -> InvocationView:
+    async def invoke_playbook(
+        self, name: str, session_id: UUID, *, idempotency_key: str | None = None
+    ) -> InvocationView:
         """The name's latest version brought into the session, in person: its
         gates hold there from now on, and its brief arrives as the caller's
         message. Invoked again, the same invocation."""
         invoked = await self.request(
-            "POST", f"/v1/playbooks/{name}/invocations", json={"session_id": str(session_id)}
+            "POST",
+            f"/v1/playbooks/{name}/invocations",
+            json={"session_id": str(session_id)},
+            idempotency_key=idempotency_key or str(uuid4()),
         )
         return InvocationView.model_validate(invoked)
 

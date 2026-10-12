@@ -57,7 +57,7 @@ class PlaybooksLayer:
             self._storage.get_playbook_storage(),
             self._storage.get_agent_session_storage(),
             SessionProjectsBoundImpl(self._storage.get_project_storage()),
-            self.options.per_session,
+            self.options,
             self._clock,
         )
 

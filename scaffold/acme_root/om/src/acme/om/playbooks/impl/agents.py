@@ -31,6 +31,7 @@ from acme.om.agents.types.tree import AgentTree
 from acme.om.base import new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import ValidationFailed
+from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.rules import skill_md
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation
@@ -46,14 +47,14 @@ class AgentsManagerManualImpl(AgentsManagerInterface):
         storage: PlaybookStorageInterface,
         session_rows: AgentSessionStorageInterface,
         projects: SessionProjectsInterface,
-        per_session: int,
+        options: PlaybooksOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
         self._storage = storage
         self._session_rows = session_rows
         self._projects = projects
-        self._per_session = per_session
+        self._options = options
         self._clock = clock
 
     async def start_session(self, ctx: TenantContext, start: Start) -> AgentSession:
@@ -124,7 +125,7 @@ class AgentsManagerManualImpl(AgentsManagerInterface):
         recorded = [
             invocation
             for invocation in await self._storage.read_invocations(
-                ctx.org_id, session_id, self._per_session
+                ctx.org_id, session_id, self._options.per_session
             )
             if invocation.pinned
         ]

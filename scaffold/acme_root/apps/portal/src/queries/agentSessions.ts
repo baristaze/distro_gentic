@@ -318,7 +318,9 @@ export function useSessionActions(id: string) {
      * arrives as the person's message, and its gates hold from now on. */
     invoke: useMutation({
       mutationFn: (name: string) =>
-        api.post<InvocationView>(`/v1/playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest),
+        api.post<InvocationView>(`/v1/playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
+          idempotencyKey: crypto.randomUUID(),
+        }),
       onSettled: settled,
     }),
   };

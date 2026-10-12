@@ -44,12 +44,12 @@ async def get_playbook(ctx: Ctx, playbooks: PlaybooksService, name: PlaybookName
 
 @router.post("/{name}/invocations", response_model=InvocationView, status_code=201)
 async def invoke(
-    ctx: Ctx, playbooks: PlaybooksService, name: PlaybookName, body: InvokeRequest
-) -> InvocationView:
+    ctx: Ctx, playbooks: PlaybooksService, name: PlaybookName, body: InvokeRequest, idem: Idem
+) -> Response:
     """The latest version brought into the session: its gates hold there
     from now on, and its brief arrives as the caller's message. Invoked
     again, the version's invocation answers, and nothing is sent twice."""
-    return await playbooks.invoke(ctx, name, body)
+    return await idem.run(201, lambda _attempt: playbooks.invoke(ctx, name, body))
 
 
 @pins.get("", response_model=list[PinView])
