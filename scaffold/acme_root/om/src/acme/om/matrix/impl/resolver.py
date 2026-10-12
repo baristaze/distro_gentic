@@ -4,8 +4,8 @@ environment ask, at the version the session is pinned to. What the session
 may not run on is filtered out first: a fill its eligibility does not
 admit, a retired model, and, for a tenant on its own keys, a provider it
 holds no key for. A role its kind asks a size of asks with that size, so a
-row that names the size answers it before the role's: each fill at the
-effort asked where it lists it, and the ask kept beside the fill."""
+row that names the size answers it, unless a row names the kind: each fill
+at the effort asked where it lists it, and the ask kept beside the fill."""
 
 import logging
 from collections.abc import Callable, Sequence

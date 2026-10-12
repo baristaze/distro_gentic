@@ -4,8 +4,10 @@ A question names an environment, a model role, an agent kind, a plan tier,
 and a workload class, and, for a role its kind asks a size of, the model
 size. A row names any of the six, and leaves the rest open; the row that
 matches every question names none. The most specific row that matches
-wins, and a version publishes only with the row that matches everything,
-so every question has an answer.
+wins: for a question that asks a size, a row that names the kind before a
+row that names the size, and that before the rest. A version publishes
+only with the row that matches everything, so every question has an
+answer.
 
 A version is written once, pending, and then published as it is: an edit
 is a new version. The current matrix is the latest version published."""
@@ -45,10 +47,7 @@ MAX_ROLES = 64
 
 KEYS = ("environment", "size", "role", "kind", "plan_tier", "workload")
 """The six keys of a question, in the spec's order. Of two rows that name
-as many keys, the one that names the earlier key is the more specific. The
-size comes before the role, so a role a kind asks a size of takes its
-size's row over the role's, as the engine resolves an ask; and the role
-before the kind, so a row for one kind's role names both."""
+as many keys, the one that names the earlier key is the more specific."""
 
 
 class MatrixQuery(Platform):
@@ -81,18 +80,27 @@ class MatrixKey(Platform):
             getattr(self, key) is None or getattr(self, key) == getattr(query, key) for key in KEYS
         )
 
-    @property
-    def specificity(self) -> tuple[int, tuple[bool, ...]]:
-        """How specific the row is: the keys it names, then which ones, the
-        spec's order first. Two keys that compare equal name the same keys,
-        so two rows that match one question with it are the same row."""
+    def specificity(self, query: MatrixQuery) -> tuple[int, int, tuple[bool, ...]]:
+        """How specific the row is for `query`, a question it matches. For
+        a question that asks a size, a row that names the kind comes first,
+        whatever else it or a size's row names, so an operator's row for a
+        kind is never passed over for a size's; then a row that names the
+        size, as the engine answers an ask by its size; then the rest.
+        Within each, and for a question that asks no size, which no row that
+        names a size matches, the row that names more keys, then the one
+        that names the earlier key, in the spec's order. Two rows that
+        compare equal name the same keys, so two rows that match one
+        question with it are the same row."""
         named = tuple(getattr(self, key) is not None for key in KEYS)
-        return sum(named), named
+        first = 0
+        if query.size is not None:
+            first = 2 if self.kind is not None else 1 if self.size is not None else 0
+        return first, sum(named), named
 
     @property
     def everything(self) -> bool:
         """Whether it matches every question."""
-        return not any(self.specificity[1])
+        return all(getattr(self, key) is None for key in KEYS)
 
 
 class MatrixRow(Platform):

@@ -59,12 +59,16 @@ a question that asks it. The keys' order, which breaks a tie between two
 rows that name as many keys, is now environment, size, role, kind, plan
 tier, workload.
 
-- The size comes before the role. So a role a kind asks a size of takes
-  the size's row over the role's, as the engine resolves an ask. A new
-  kind that asks a size takes its row with no edit to the matrix.
-- The role stays before the kind, so no question that asks no size
-  resolves differently. An operator's row for one kind's role names
-  both, and its two keys beat a size row's one.
+- A question that asks a size takes a row that names its kind first,
+  whatever else either row names. An operator's row for a kind is never
+  passed over for a size's row, however either is narrowed.
+- Then it takes a row that names the size, before every row that names
+  neither, as the engine resolves an ask. A new kind that asks a size
+  takes its size's row with no edit to the matrix.
+- Within each, the row that names more keys wins, then the one that
+  names the earlier key. A question that asks no size resolves as it
+  did: no row that names a size matches it, and the other keys keep
+  their order.
 - A row that names a size and no role serves every role the version
   serves, as the row that matches everything does. Each of its fills
   needs a passing benchmark for each of them, and a tenant on its own
@@ -101,9 +105,10 @@ stored without a size reads as one that names none.
 - Each shipped kind's sessions keep their cached prefix: its tool
   definitions are unchanged.
 - The first version an operator publishes after this needs a row for L
-  and for S. Until then, the published version answers an asked role by
-  its role's row, as it did.
-- A row an operator writes for a kind alone, naming no role, loses to a
-  size's row for an asked role, as it already lost to the role's row.
+  and for S. Until then, the published version answers an asked role as
+  it did, except that a row that names the kind comes first.
+- A row an operator writes for a kind, naming no role, answers each role
+  the kind asks a size of before the role's row, which it lost to
+  before. A role the kind asks nothing of ranks it as it did.
 - An idle workspace is held for its kind's grace, never past the cache's
   life. A runner's grace is no longer set per runner.

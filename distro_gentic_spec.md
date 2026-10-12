@@ -946,9 +946,9 @@ has an answer.
   will serve. Benchmarks never gate a code change; they gate a matrix
   release.
 - **A kind asks a size, never a model.** A role a kind asks a model
-  size of takes the size's row before the role's, so a new kind needs no
-  row of its own. A version is published only with a row for each size
-  a kind asks.
+  size of takes a row that names the kind first, then the size's row
+  before the role's, so a new kind needs no row of its own. A version is
+  published only with a row for each size a kind asks.
 - **Tenants choose only among qualified fills.** By default a tenant
   never names a model. A tenant on its own keys may override the fill for
   a model role, among qualified fills from providers it holds keys for.

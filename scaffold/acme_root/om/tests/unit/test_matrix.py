@@ -140,7 +140,9 @@ async def test_a_matrix_without_the_row_that_matches_everything_is_refused_at_pu
 def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
     """Over every question the rows' values and an unnamed value make, each
     resolves, to the row that names the most keys among those that match,
-    the spec's order breaking a tie."""
+    the spec's order breaking a tie; for a question that asks a size, among
+    the rows that name the kind if one matches, else among those that name
+    the size."""
     rows = (
         MatrixRow(fills=(SONNET,)),
         MatrixRow(key=MatrixKey(role=MAIN), fills=(OPUS,)),
@@ -165,7 +167,13 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
     for combination in itertools.product(*(values[key] for key in KEYS)):
         query = MatrixQuery(**dict(zip(KEYS, combination, strict=True)))
         matching = [row for row in rows if row.key.matches(query)]
-        expected = max(matching, key=lambda row: row.key.specificity)
+        if query.size is not None:
+            matching = (
+                [row for row in matching if row.key.kind is not None]
+                or [row for row in matching if row.key.size is not None]
+                or matching
+            )
+        expected = max(matching, key=lambda row: row.key.specificity(query)[1:])
         assert rules.answer(rows, query, anywhere) == expected.fills, query
 
     query = MatrixQuery(
@@ -187,6 +195,39 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
     assert rules.answer(rows, own, anywhere) == (HAIKU, SOL), "a row for the kind's role first"
     unasked = asked.model_copy(update={"size": None})
     assert rules.answer(rows, unasked, anywhere) == (OPUS,), "a size row answers only its ask"
+
+
+def test_a_row_that_names_the_kind_answers_its_ask_before_every_size_row() -> None:
+    """For a question that asks a size, a row that names the kind answers
+    first, whatever other keys it or a size row names; a size row answers
+    before a row that names neither; and a question that asks no size
+    resolves as it did before the matrix keyed a size."""
+    own = MatrixRow(key=MatrixKey(role=MAIN, kind="analyst"), fills=(HAIKU,))
+    by_role = MatrixRow(key=MatrixKey(size=ModelSize.L, role=MAIN), fills=(OPUS,))
+    by_tier = MatrixRow(key=MatrixKey(size=ModelSize.L, plan_tier="standard"), fills=(SOL,))
+    wide = MatrixRow(
+        key=MatrixKey(role=MAIN, plan_tier="standard", workload="standard"), fills=(LUNA,)
+    )
+    everything = MatrixRow(fills=(SONNET,))
+    asked = MatrixQuery(
+        environment="staging",
+        size=ModelSize.L,
+        role=MAIN,
+        kind="analyst",
+        plan_tier="standard",
+        workload="standard",
+    )
+    other = asked.model_copy(update={"kind": "planner"})
+    for sized in (by_role, by_tier):
+        rows = (everything, wide, sized, own)
+        assert rules.answer(rows, asked, anywhere) == (HAIKU,), "the kind's row first"
+        assert rules.answer(rows, other, anywhere) == sized.fills, "a size row before the rest"
+        without = rules.answer(rows, asked, lambda fill: fill != HAIKU)
+        assert without == sized.fills, "a kind's row left with no fill answers nothing"
+
+    rows = (everything, wide, by_role, by_tier, own)
+    unasked = asked.model_copy(update={"size": None})
+    assert rules.answer(rows, unasked, anywhere) == (LUNA,), "as before: three keys beat two"
 
 
 # A model enters a role's fills only priced, and only qualified for it.
@@ -630,7 +671,8 @@ async def test_a_products_kind_takes_the_row_of_the_size_it_asks_until_a_row_nam
     role. With no row that names it, the matrix answers its ask with the L
     row, ahead of the main role's row: no operator edits the matrix for it.
     Once the operator publishes a row for the kind's main role, that row
-    answers its next session; the first keeps its version."""
+    answers its next session, beside L rows narrowed by the role and by the
+    plan tier; the first keeps its version."""
     ProductKinds(agents=(TRIAGE,), toolsets=(LOOKUPS,))
     fleet = await fleet_over(tmp_path, kinds=(ASSISTANT, DELIVERY, TRIAGE))
     await fleet.publish(resized(ModelSize.L, OPUS, SOL))
@@ -644,7 +686,11 @@ async def test_a_products_kind_takes_the_row_of_the_size_it_asks_until_a_row_nam
     assert fleet.loop.anthropic.calls[-1].model == SONNET.model, "the main role's row"
 
     own = MatrixRow(key=MatrixKey(role=MAIN, kind=TRIAGE.name), fills=(HAIKU,))
-    await fleet.publish((*resized(ModelSize.L, OPUS, SOL), own))
+    narrowed = (
+        MatrixRow(key=MatrixKey(size=ModelSize.L, role=MAIN), fills=(OPUS,)),
+        MatrixRow(key=MatrixKey(size=ModelSize.L, plan_tier=DEFAULT_TIER), fills=(SOL,)),
+    )
+    await fleet.publish((*resized(ModelSize.L, OPUS, SOL), *narrowed, own))
     second = await fleet.loop.start(TRIAGE.name)
     fleet.loop.anthropic.add(reply(said("Three of them."), model=HAIKU.model))
     assert await loop_once(fleet, second) is RunEnd.ENDED
