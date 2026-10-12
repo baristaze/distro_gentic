@@ -7,10 +7,36 @@ of](../../../../README.md).
 Every agent here is a kind of the one [loop](../agents/README.md): a
 profile with its own powers. A profile names the tools the agent may
 call, when its work is done, whose authority its calls run under, the
-workspace it works in, and which of its calls run without asking.
+workspace it works in, and which of its calls run without asking. It
+names its tools in toolsets, asks a model size of each model role it
+calls, and holds its workspace warm for a while after a loop.
 
 ## What it holds
 
+- **Toolsets**: the platform's tools in eight groups a kind takes whole.
+  `files` lists, reads, and searches a workspace; `code` changes its
+  files and runs commands; `knowledge` searches and reads what the team
+  knows; `delivery` validates, opens the pull request, and submits the
+  result; `sub_agents` starts sub-agents and waits for them; `records`
+  is the assistant's readers; `handoff` hands work to an engineer; and
+  `artifacts` reads back a result kept outside the window. Every shipped
+  kind is built from them, and names alone a tool whose toolset would
+  give it more than it may call: analysis runs commands and edits
+  nothing. A kind built from toolsets renders the same tool definitions
+  as the same tools named one by one, so its sessions' cached prefix
+  holds. A product adds toolsets of its own beside these, and never
+  changes one of them
+  ([ADR 2055](../../../../../docs/adr/2055-a-kind-is-built-from-toolsets-asks-a-size-and-holds-its-workspace-for-its-own-grace.md)).
+- **Model sizes**: every shipped kind asks L of its own turns and S of
+  its compaction, the sizes of the models those roles ran on before. The
+  [matrix](../matrix/README.md) answers an ask by its size's row, so a
+  product's new kind gets a model with no edit to the matrix.
+- **A warm grace**: how long a kind's workspace stays held after a loop,
+  so a follow-up finds it warm. The engineer and analysis hold theirs for
+  the prompt cache's life, five minutes, the shortest a provider the
+  platform calls keeps a request's prefix. A product names a grace for
+  each of its kinds, never longer; one it names none for takes the
+  cache's life.
 - **The engineer** takes an objective to a validated, reviewable change.
   It works in a container of its own, from which nothing leaves: it reads
   files, searches the code, changes a file one place at a time or writes
@@ -167,6 +193,15 @@ workspace it works in, and which of its calls run without asking.
   is read from the project's repository by the platform, and its
   protected paths come from its base, whatever the delivered commit
   holds there.
+- **A kind version pins its tool definitions.** A kind rebuilt from
+  toolsets with the same tools keeps its version; one whose tools change
+  is a new version.
+- **A product never changes the platform's toolsets.** A toolset of its
+  own under one of their names is refused, and so is a kind that names a
+  toolset neither declares, at its version and with its tools.
+- **No warm grace runs past the prompt cache's life.** A follow-up later
+  than that writes its prefix again, so a held workspace saves it
+  little; a product's grace past it is refused.
 - **Nothing routes.** A person chooses an agent by choosing the session
   they type in.
 - **Every validation session belongs to one org.**
@@ -176,7 +211,10 @@ workspace it works in, and which of its calls run without asking.
 A process ships these agents by handing its root the corpus
 (`PlatformAgents`); their kinds and tools join the adopter's, and the
 tools a product's slot names (`ProductKinds.assistant_tools`) join the
-assistant's current version. The tools that read a manager take it late,
+assistant's current version. The toolsets a product's slot declares
+(`ProductKinds.toolsets`) join the platform's, and the session runner's
+held-workspace sweep reads each session's kind's warm grace from the slot
+(`ProductKinds.warm_grace`). The tools that read a manager take it late,
 once the root has built it; the engineer's pull request also takes the
 intake the process builds over those managers, and with none it opens
 nothing. The automations the assistant reads are built over the managers
