@@ -227,13 +227,14 @@ async def test_a_model_enters_only_the_roles_a_passing_benchmark_qualified_it_fo
         *CATCH_ALL[:2],
         *(
             MatrixRow(key=row.key.model_copy(update={"role": role}), fills=row.fills)
-            for row, role in zip(SIZED, (MAIN, SUMMARIZER), strict=True)
+            for row, role in zip(SIZED, (MAIN, SUMMARIZER, MAIN), strict=True)
         ),
         CATCH_ALL[-1],
     )
     version = await operators.stage(fleet.admin, (MAIN, SUMMARIZER), rows)
     await fleet.qualify(SONNET, MAIN)  # the row that matches everything serves both
     await fleet.qualify(SOL, MAIN)
+    await fleet.qualify(OPUS, MAIN)
     await fleet.qualify(HAIKU, SUMMARIZER)
     await fleet.qualify(LUNA, SUMMARIZER, passed=False)
 
@@ -655,11 +656,13 @@ async def test_a_products_kind_takes_the_row_of_the_size_it_asks_until_a_row_nam
 async def test_a_version_without_a_row_for_a_size_a_shipped_kind_asks_is_refused(
     tmp_path: Path,
 ) -> None:
-    """Every shipped kind asks L of its own turns and S of its compaction,
-    so a version names a row for each: one that names no row for S is not
-    published, though its role rows and its catch-all row would answer."""
+    """Every shipped kind asks L or XL of its own turns and S of its
+    compaction, so a version names a row for each: one that names no row
+    for S is not published, though its role rows and its catch-all row
+    would answer."""
     assert {(ask.role, ask.size) for kind in SHIPPED for ask in kind.asks} == {
         (MAIN, ModelSize.L),
+        (MAIN, ModelSize.XL),
         (SUMMARIZER, ModelSize.S),
     }
     fleet = await fleet_over(tmp_path)
