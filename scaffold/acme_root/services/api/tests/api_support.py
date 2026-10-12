@@ -12,6 +12,7 @@ from uuid import UUID
 import httpx
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
@@ -49,6 +50,7 @@ def build_container(
     agent_kinds: tuple[AgentKind, ...] = (),
     tool_catalog: tuple[ToolInterface, ...] = (),
     ports: PlatformPorts | None = None,
+    payments: PaymentProviderInterface | None = None,
     **overrides: object,
 ) -> AppContainer:
     """The test container over the memory storage root and the local infra
@@ -58,7 +60,8 @@ def build_container(
     overrides, one that needs storage to behave a certain way passes its own
     root, one whose kinds name the product's tools passes them, and one
     that signs in through the identity provider passes the
-    integrations root over the twin. The developer's `.env` is never read:
+    integrations root over the twin; one that posts a payment passes the
+    payment provider's twin that signs it. The developer's `.env` is never read:
     its DSN would send every error a test raises on purpose to the local
     tracker."""
     settings = ApiSettings.model_validate(
@@ -79,6 +82,7 @@ def build_container(
         or PlatformPorts(
             kinds=ProductKinds(agents=agent_kinds, tools=lambda _managers: tool_catalog)
         ),
+        payments=payments,
     )
 
 
