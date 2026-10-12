@@ -22,7 +22,8 @@ class MatrixResolverInterface(ModelResolverInterface):
         """The switches a session owes at the start of a loop: each role of
         `head` whose fill's model was retired, or whose fill `required`, the
         session's retention now, no longer admits, with the fill the latest
-        published version answers it now and why, and that version's number.
+        published version answers it now, at the effort the role's ask
+        names where the fill lists it, and why, and that version's number.
         None when it owes none. `UnresolvedRole` when a role has nothing
         left to run on."""
         ...

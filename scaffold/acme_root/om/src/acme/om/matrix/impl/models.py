@@ -23,6 +23,7 @@ from acme.om.models.types.fill import (
     Fill,
     FillSet,
     FillSwitch,
+    ModelAsk,
     ModelRole,
     SwitchReason,
 )
@@ -55,6 +56,7 @@ class ModelsManagerMatrixImpl(ModelsManagerInterface):
         session_id: UUID,
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
+        asks: Sequence[ModelAsk] = (),
     ) -> FillSet:
         ctx.require(Permission.WRITE)
         try:
@@ -65,7 +67,7 @@ class ModelsManagerMatrixImpl(ModelsManagerInterface):
         # tenant's retention requires, kept on the fill set, so a fallback
         # or a switch later meets it too.
         required = await self._required(ctx, session_id, eligibility)
-        return await self._inner.resolve_fill_set(ctx, session_id, roles, required)
+        return await self._inner.resolve_fill_set(ctx, session_id, roles, required, asks)
 
     async def renew_fill_set(
         self, ctx: TenantContext, session_id: UUID, epoch: int, loop_id: UUID

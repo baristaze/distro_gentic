@@ -3,7 +3,9 @@ question its kind, its tenant's plan tier, its workload class, and the
 environment ask, at the version the session is pinned to. What the session
 may not run on is filtered out first: a fill its eligibility does not
 admit, a retired model, and, for a tenant on its own keys, a provider it
-holds no key for."""
+holds no key for. A role its kind asks of is answered by the role's row,
+since the matrix keys no model size: each fill at the effort asked where it
+lists it, and the ask kept beside the fill."""
 
 import logging
 from collections.abc import Callable, Sequence
@@ -38,6 +40,7 @@ from acme.om.models.types.fill import (
     Eligibility,
     Fill,
     FillSet,
+    ModelAsk,
     ModelRole,
     RoleFill,
     SwitchReason,
@@ -110,7 +113,11 @@ class MatrixResolverImpl(MatrixResolverInterface):
         session_id: UUID,
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
+        asks: Sequence[ModelAsk] = (),
     ) -> tuple[RoleFill, ...]:
+        asked = {found.role: found for found in asks}
+        if len(asked) != len(asks):
+            raise UnresolvedRole("a kind asks a model role twice")
         pin = await self._tenants.read_pin(ctx.org_id, session_id)
         version = await (self._current() if pin is None else self._version(pin.matrix_version))
         retired = await self.retired()
@@ -119,7 +126,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
 
         def answers(at: MatrixVersion) -> tuple[RoleFill, ...]:
             return tuple(
-                self._answer(at, ask(role), eligibility, retired, tenant)
+                self._answer(at, ask(role), eligibility, retired, tenant, asked.get(role))
                 for role in sorted(set(roles))
             )
 
@@ -150,7 +157,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
         retired = await self.retired()
         gone = [
             (
-                entry.role,
+                entry,
                 SwitchReason.RETIRED if ModelRef.of(entry.fill) in retired else SwitchReason.POLICY,
             )
             for entry in head.roles
@@ -162,8 +169,12 @@ class MatrixResolverImpl(MatrixResolverInterface):
         ask = await self._asking(ctx, session_id)
         tenant = await self._tenant(ctx)
         switches = tuple(
-            (role, self._answer(current, ask(role), required, retired, tenant).fill, reason)
-            for role, reason in gone
+            (
+                entry.role,
+                self._answer(current, ask(entry.role), required, retired, tenant, entry.ask).fill,
+                reason,
+            )
+            for entry, reason in gone
         )
         return current.number, switches
 
@@ -178,7 +189,10 @@ class MatrixResolverImpl(MatrixResolverInterface):
         eligibility: Eligibility,
         retired: frozenset[ModelRef],
         tenant: _Tenant,
+        asked: ModelAsk | None,
     ) -> RoleFill:
+        """The role's fills, the first its fill and the rest its fallbacks,
+        each at the effort `asked` names where the fill lists it."""
         role = query.role
         if role not in version.roles:
             raise UnresolvedRole(f"matrix version {version.number} serves no model role {role}")
@@ -198,9 +212,11 @@ class MatrixResolverImpl(MatrixResolverInterface):
                 f"no fill of matrix version {version.number} the session may run on "
                 f"serves the model role {role}"
             )
+        effort = None if asked is None else asked.effort
+        fills = tuple(dict.fromkeys(fill.at(effort) for fill in fills))
         for fill in fills:
             self.check(fill)
-        return RoleFill(role=role, fill=fills[0], fallbacks=fills[1:])
+        return RoleFill(role=role, fill=fills[0], fallbacks=fills[1:], ask=asked)
 
     async def _version(self, number: int) -> MatrixVersion:
         """The version a session is pinned to, kept across every later

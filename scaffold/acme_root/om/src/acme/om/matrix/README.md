@@ -38,6 +38,9 @@ of](../../../../README.md).
   run on is taken out first: a fill its tenant's retention does not
   admit, a retired model, and, for a tenant on its own keys, a provider
   it holds no key for. The most specific row with a fill left answers.
+  A role the session's kind asks of takes its row the same way, since
+  the matrix keys no model size: each fill runs at the effort asked
+  where it lists that effort, and the fill set keeps the ask beside it.
 - **Renew.** At the start of each loop, a fill whose model was retired
   switches to what the latest version answers now, by a `switched` step,
   and the session is pinned to that version.
