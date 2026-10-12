@@ -11,7 +11,10 @@ kinds of thing [Acme is made of](../../../../README.md).
   requirements, the success measures, what is forbidden), its approval
   gates, which travel in a namespaced metadata extension, and what the
   [lever checks](../levers/README.md) found in it as it was published.
-- **Invocation**: a version a principal brought into one session.
+- **Invocation**: a version brought into one session: by a principal,
+  or the manual the session was made with, marked pinned.
+- **Pin**: a version a tenant set as a kind's manual, for the tenant's
+  sessions of the kind or for one project's.
 
 ## What can happen
 
@@ -22,11 +25,27 @@ kinds of thing [Acme is made of](../../../../README.md).
   instruct it. Its brief arrives as that principal's message, and its
   gates hold there, and in every sub-agent below it, from then on, a
   session between them marked deleted or not.
+- **Invoke** a version as an automation's start runs, under the context
+  it runs as, into the session it started. The person who saved the
+  automation chose the playbook then, as they wrote its brief.
+- **Pin** a name's latest version to a kind as its manual, and take it
+  away, by a person in person who manages the tenant. A pin for a
+  project wins over the tenant's.
+- **Make a session with its manual.** A start, a spawn, or a hand-off
+  of a session not yet made records its kind's pinned version as the
+  session's pinned invocation, then sends the version's brief as the
+  session's standing text: its gates hold from the first call, and its
+  text renders whole in the system layer of every request. A session
+  that stands already keeps the manual it was made with.
 
 ## The rules
 
-- **Only a person publishes,** and only a principal invokes. An agent's
-  call does neither.
+- **Only a person publishes,** and only a principal or an automation
+  invokes. Only a person who manages the tenant pins. An agent's call
+  does none of them.
+- **A manual is whole and fixed.** A brief past what a session's
+  standing text holds is refused when it is pinned, and a session never
+  takes a manual after it is made.
 - **A gate only narrows.** A gate denies a call or holds it for a
   person's approval; none allows. A call the policy beneath refuses or
   holds stays so.
@@ -39,4 +58,7 @@ A root wraps its tools manager in the playbooks layer, so every call of
 a session passes, after the policy beneath it, the gates of the
 playbooks it and each session above it invoked. Where a session of that
 chain cannot be read, its gates are unknown, and the call waits for a
-person.
+person. A root that makes sessions also wraps its agents manager in the
+layer, so each session it makes takes its kind's manual. An automation
+reaches the manager through its root, to invoke the playbook a start
+names.
