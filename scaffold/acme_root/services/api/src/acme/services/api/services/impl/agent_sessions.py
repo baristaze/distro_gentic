@@ -449,7 +449,8 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         held: list[ApprovalView] = []
         for root in page.items:
             for session in await self._tree(ctx, root):
-                if waits_on_approval(session.park):
+                # A sub-agent marked deleted is on no list, as a root is not.
+                if session.deleted_at is None and waits_on_approval(session.park):
                     held += approvals_of(session, await self._history(ctx, session.id))
         last = page.items[-1].id if page.items and page.has_more else None
         return ApprovalPageView(

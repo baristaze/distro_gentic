@@ -1128,7 +1128,10 @@ class ListSessionsImpl(NativeToolImpl):
     async def _line(
         self, ctx: TenantContext, session: AgentSession, query: SessionsQuery
     ) -> SessionLine | None:
-        """The session's line when it passes the query's filters."""
+        """The session's line when it passes the query's filters. A sub-agent
+        marked deleted is read through to its own, and listed on no line."""
+        if session.deleted_at is not None:
+            return None
         reason = query.park_reason
         status = SessionStatus.PARKED if reason is not None else query.status
         if status is not None and session.status is not status:
