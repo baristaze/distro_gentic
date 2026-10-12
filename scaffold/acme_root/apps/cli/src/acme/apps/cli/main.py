@@ -716,7 +716,7 @@ app.add_typer(connector_app, name="connector")
 ConnectorId = Annotated[
     UUID, typer.Argument(help="The connector's id, as `connector connect` printed it.")
 ]
-KindName = Annotated[str, typer.Argument(help="The agent kind, such as engineer.")]
+ConnectorKind = Annotated[str, typer.Argument(help="The agent kind, such as engineer.")]
 ProjectOption = Annotated[
     UUID | None, typer.Option("--project", help="One project's sessions alone; none for every one.")
 ]
@@ -845,7 +845,7 @@ def review_connector(
 @connector_app.command("attach")
 def attach_connector(
     connector_id: ConnectorId,
-    kind: KindName,
+    kind: ConnectorKind,
     project: ProjectOption = None,
     held: Annotated[
         bool, typer.Option(help="In the registry from the start, not waiting for a load.")
@@ -865,7 +865,7 @@ def attach_connector(
 
 @connector_app.command("detach")
 def detach_connector(
-    connector_id: ConnectorId, kind: KindName, project: ProjectOption = None, api: Api = None
+    connector_id: ConnectorId, kind: ConnectorKind, project: ProjectOption = None, api: Api = None
 ) -> None:
     """Take the connector from a kind's next sessions. A session that holds it
     keeps it."""
