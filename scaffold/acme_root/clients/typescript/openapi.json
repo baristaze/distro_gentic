@@ -21109,25 +21109,9 @@
     },
     "/v1/billing/payments": {
       "post": {
-        "description": "The credit of a payment the provider confirmed: the body is the\nprovider's confirmation, byte for byte, and `Payment-Signature` its\nsignature. `delivery_refused` when the signature does not check out.",
+        "description": "The credit of a payment the provider confirmed: the body is the\nprovider's confirmation, byte for byte, and `Payment-Signature` its\nsignature. `webhook_signature_invalid` when the signature does not\ncheck out, and nothing is credited.",
         "operationId": "confirm_payment_v1_billing_payments_post",
         "parameters": [
-          {
-            "in": "header",
-            "name": "Payment-Signature",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Payment-Signature"
-            }
-          },
           {
             "in": "header",
             "name": "authorization",
@@ -21174,6 +21158,40 @@
                 }
               ],
               "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Payment-Signature",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Payment-Signature"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],

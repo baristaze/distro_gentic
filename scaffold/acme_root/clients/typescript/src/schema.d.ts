@@ -1608,7 +1608,8 @@ export interface paths {
          * Confirm Payment
          * @description The credit of a payment the provider confirmed: the body is the
          *     provider's confirmation, byte for byte, and `Payment-Signature` its
-         *     signature. `delivery_refused` when the signature does not check out.
+         *     signature. `webhook_signature_invalid` when the signature does not
+         *     check out, and nothing is credited.
          */
         post: operations["confirm_payment_v1_billing_payments_post"];
         delete?: never;
@@ -12627,10 +12628,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                "Payment-Signature"?: string | null;
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                "Payment-Signature"?: string | null;
+                "idempotency-key"?: string | null;
             };
             path?: never;
             cookie?: never;

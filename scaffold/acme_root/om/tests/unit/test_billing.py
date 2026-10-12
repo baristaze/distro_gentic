@@ -1037,6 +1037,7 @@ async def test_a_call_no_price_covers_parks_until_a_release_prices_its_model(
     park = parked.park
     assert parked.end is RunEnd.PARKED and park is not None
     assert (park.reason, park.unlock) == (ParkReason.BUDGET, PRICE_UNLOCK)
+    assert park.retry_at is not None
     assert park.retry_at == money.loop.clock() + PRICE_RETRY, "it tries again by itself"
     assert park.cause is not None and "an operator of the platform prices it" in park.cause
     told = notice_of(park)
