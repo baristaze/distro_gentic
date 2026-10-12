@@ -14,6 +14,7 @@ from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateImpl, MoneyGat
 from acme.om.billing.impl.manager import BillingManagerImpl
 from acme.om.billing.impl.pager import OperatorPagerMemoryImpl
 from acme.om.billing.impl.prices import PriceBookTableImpl
+from acme.om.billing.prices import PriceBookInterface
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog
@@ -37,7 +38,7 @@ class Money:
     gate: MoneyGateImpl
     calls: MoneyCallGateImpl
     billing: BillingManagerImpl
-    prices: PriceBookTableImpl
+    prices: PriceBookInterface
     payments: PaymentProviderTwinImpl
     pager: OperatorPagerMemoryImpl
 
@@ -63,7 +64,7 @@ class Money:
 def money_over(
     tmp_path: Path,
     *,
-    prices: PriceBookTableImpl | None = None,
+    prices: PriceBookInterface | None = None,
     options: MoneyGateOptions | None = None,
     plans: PlanCatalog = PLANS,
     loop_options: LoopOptions | None = None,

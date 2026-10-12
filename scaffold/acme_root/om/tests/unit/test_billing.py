@@ -32,10 +32,13 @@ from acme.om.base import new_id
 from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateOptions
 from acme.om.billing.impl.prices import PriceBookTableImpl
 from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.billing.prices import PriceBookInterface
 from acme.om.billing.rules import (
     ANOMALY_UNLOCK,
     FUNDS_UNLOCK,
     HELD_UNLOCK,
+    PRICE_RETRY,
+    PRICE_UNLOCK,
     AnomalyGuard,
     LimitKind,
     credential_of,
@@ -977,6 +980,78 @@ async def test_a_spend_limit_parks_on_its_budget_and_is_told_as_a_spend_limit(
     told = notice_of(parked.park)
     assert told.limit is LimitKind.SPEND
     assert not any(word in told.text.lower() for word in ("rate", "provider", "pace"))
+
+
+# A call no price gives a cost: the operator prices its model in a release.
+
+
+class Releases(PriceBookInterface):
+    """The price book across releases: the table one release reads, then,
+    once `release` is called, the next one's, in place of a new process."""
+
+    def __init__(self, table: PriceTable) -> None:
+        self._book = PriceBookTableImpl((table,))
+
+    def release(self, table: PriceTable) -> None:
+        self._book = PriceBookTableImpl((table,))
+
+    @property
+    def version(self) -> str:
+        return self._book.version
+
+    def price_of(self, provider: str, model: str) -> ModelPrice | None:
+        return self._book.price_of(provider, model)
+
+    def price_at(self, version: str, provider: str, model: str) -> ModelPrice | None:
+        return self._book.price_at(version, provider, model)
+
+
+@pytest.mark.parametrize("by", ["funds", "limit"])
+async def test_a_call_no_price_covers_parks_until_a_release_prices_its_model(
+    tmp_path: Path, by: str
+) -> None:
+    """The table in force prices every model but the one the session calls:
+    whether the buckets or a cost budget meet it first, the session parks on
+    the price before any call, says an operator prices the model, and tries
+    again by itself. A release prices it, and the next try calls."""
+    first = LIST_PRICES.model_copy(update={"version": "2026-09-01"})
+    book = Releases(first)
+    money = money_over(tmp_path, prices=book)
+    await money.open(plan="team")
+    owner = money.loop.owner
+    session_id = await money.loop.start()
+    fills = await money.loop.managers.models.resolve_fill_set(
+        owner, session_id, ASSISTANT.roles, Eligibility()
+    )
+    fill = fills.fill_for(MAIN)
+    assert fill is not None
+    rows = tuple(row for row in LIST_PRICES.rows if row.model != fill.model)
+    book.release(first.model_copy(update={"rows": rows}))
+    if by == "limit":
+        budget = make_budget(BudgetScopeKind.TENANT, str(owner.org_id), cost_micros=10**9)
+        await money.loop.managers.budgets.create_budget(owner, budget)
+    await money.loop.say(session_id, "What is the total?")
+
+    parked = await money.loop.loops.run(owner, session_id)
+
+    park = parked.park
+    assert parked.end is RunEnd.PARKED and park is not None
+    assert (park.reason, park.unlock) == (ParkReason.BUDGET, PRICE_UNLOCK)
+    assert park.retry_at == money.loop.clock() + PRICE_RETRY, "it tries again by itself"
+    assert park.cause is not None and "an operator of the platform prices it" in park.cause
+    told = notice_of(park)
+    assert told.limit is LimitKind.SPEND and "an operator of the platform" in told.text
+    assert money.loop.anthropic.calls == []
+
+    book.release(LIST_PRICES)
+    money.loop.clock.now = park.retry_at
+    money.loop.anthropic.add(reply(said("The total is 12.")))
+    # Its retry time: the sweep wakes a session still parked on its park.
+    await money.loop.managers.agent_sessions.wake_session(owner, session_id, park)
+    resumed = await money.loop.loops.run(owner, session_id)
+
+    assert (resumed.end, resumed.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED), resumed
+    assert len(money.loop.anthropic.calls) == 1
 
 
 # The anomaly guard.
