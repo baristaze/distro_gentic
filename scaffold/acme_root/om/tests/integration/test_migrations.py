@@ -309,7 +309,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
         held[org] = workspace.id
     core = migrated[DatabaseRole.CORE]
 
-    await downgrade(DatabaseRole.CORE, core, "202610091922")
+    await downgrade(DatabaseRole.CORE, core, "202610121743")
     await upgrade(DatabaseRole.CORE, core)
 
     for org, session_id in held.items():
@@ -317,7 +317,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
     assert await check(DatabaseRole.CORE, core) == []
 
 
-V0_2_0_HEAD = "202610091928"
+V0_2_0_HEAD = "202610121749"
 """The core head of the release before the one notice left the table."""
 
 
@@ -572,7 +572,7 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
         assert await storage.read_validation(org, session.id) == session
 
 
-BEFORE_REFUSAL = "202610091933"
+BEFORE_REFUSAL = "202610121754"
 """A core head before a validation session held why it was refused."""
 
 
@@ -655,7 +655,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     finally:
         await engine.dispose()
 
-    await downgrade(DatabaseRole.CORE, core, "202610091930")
+    await downgrade(DatabaseRole.CORE, core, "202610121751")
     previous = await actions_of(core, org)
     await upgrade(DatabaseRole.CORE, core)
 
@@ -665,7 +665,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     assert await check(DatabaseRole.CORE, core) == []
 
 
-BEFORE_LEVERS = "202610110914"
+BEFORE_LEVERS = "202610121800"
 """The core head before a playbook version carried what the lever checks
 found in it."""
 
@@ -697,7 +697,7 @@ async def test_a_version_the_release_before_wrote_reads_as_never_checked(
     assert await check(DatabaseRole.CORE, core) == []
 
 
-BEFORE_PINS = "202610112033"
+BEFORE_PINS = "202610121801"
 """The core head before a playbook was pinned to a kind as its manual."""
 
 
