@@ -248,6 +248,15 @@ describe("Sessions", () => {
     expect(container.textContent).not.toContain("Bea's private notes");
   });
 
+  it("offers an admin no Join on another member's private session, and Join on an org-wide one", async () => {
+    seed();
+    await open("u3", `/sessions/${encodeURIComponent("Bea's private notes")}`);
+    expect(container.textContent).not.toContain("Join this session");
+    expect(container.textContent).not.toContain("Join");
+    await open("u3", `/sessions/${encodeURIComponent("Bea's flaky test")}`);
+    expect(container.textContent).toContain("Join this session to take part");
+  });
+
   it("joins a session of the org's: the person takes part, and it is on their own list", async () => {
     seed();
     await open("u1", "/sessions?view=org");

@@ -356,7 +356,7 @@ export function sharingOf(
       mayWrite && standing === "made" && members !== null
         ? members.filter((member) => member.id !== session.created_by && !session.participants.includes(member.id)).map((member) => nameOf(member.id))
         : [],
-    mayJoin: mayWrite && !takesPart,
+    mayJoin: mayWrite && !takesPart && session.visibility === "org_wide",
     mayShare: mayWrite && standing === "made",
     mayTakeSteer: mayWrite && permissions.includes("manage_sessions") && !steering && lapsed,
   };
