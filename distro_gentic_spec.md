@@ -945,10 +945,12 @@ has an answer.
   does, and only after a benchmark run passes for the model roles it
   will serve. Benchmarks never gate a code change; they gate a matrix
   release.
-- **A kind asks a size, never a model.** A role a kind asks a model
-  size of takes a row that names the kind first, then the size's row
-  before the role's, so a new kind needs no row of its own. A version is
-  published only with a row for each size a kind asks.
+- **A kind asks a size, never a model.** In a version that holds a row
+  for the model size a kind asks of a role, the role takes a row that
+  names the kind first, then the size's row before the role's, so a new
+  kind needs no row of its own. In a version that holds none, the role
+  resolves as one asked no size. A version is published only with a row
+  for each size a kind asks.
 - **Tenants choose only among qualified fills.** By default a tenant
   never names a model. A tenant on its own keys may override the fill for
   a model role, among qualified fills from providers it holds keys for.
