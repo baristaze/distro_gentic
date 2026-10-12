@@ -973,7 +973,7 @@ class ApiClient:
         read = await self.request("GET", f"/v1/connectors/{connector_id}")
         return ConnectorView.model_validate(read)
 
-    async def connect(
+    async def connect_server(
         self,
         name: str,
         summary: str,

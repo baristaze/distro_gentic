@@ -28,7 +28,7 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
     def __init__(self, connectors: ConnectorsManagerInterface) -> None:
         self._connectors = connectors
 
-    async def connect(
+    async def connect_server(
         self, ctx: TenantContext, body: ConnectRequest, connector_id: UUID
     ) -> ConnectorView:
         draft = ConnectorDraft(
@@ -39,7 +39,7 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
             credential_scheme=body.credential_scheme,
             host_server=body.host_server,
         )
-        connected = await self._connectors.connect(ctx, draft, connector_id=connector_id)
+        connected = await self._connectors.connect_server(ctx, draft, connector_id=connector_id)
         return view_of(connected)
 
     async def put_credential(

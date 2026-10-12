@@ -727,7 +727,7 @@ def connector_line(each: ConnectorView) -> str:
 
 
 @connector_app.command("connect")
-def connect(
+def connect_server(
     name: Annotated[str, typer.Argument(help="Its name, which is its toolset's: tracker.")],
     summary: Annotated[str, typer.Argument(help="The one line an agent reads of it.")],
     url: Annotated[
@@ -746,7 +746,7 @@ def connect(
         raise typer.BadParameter("a connector has --url or --host-server, one of them")
 
     async def go(client: ApiClient) -> None:
-        made = await client.connect(name, summary, url=url, host_server=host_server)
+        made = await client.connect_server(name, summary, url=url, host_server=host_server)
         if as_json:
             typer.echo(made.model_dump_json(indent=2))
         else:

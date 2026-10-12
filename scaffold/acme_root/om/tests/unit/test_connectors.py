@@ -249,7 +249,7 @@ async def connected(at: Tenant, url: str, *tools: str) -> UUID:
     """A cloud connector at `url`, its credential `TOKEN`, with `tools`
     reviewed, attached to the operator."""
     owner = at.loop.owner
-    connector = await at.connectors.connect(
+    connector = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=url)
     )
     await at.connectors.put_credential(owner, connector.id, SecretStr(TOKEN))
@@ -307,16 +307,16 @@ async def test_connecting_and_reviewing_are_a_managers_and_in_person(
     owner = at.loop.owner
     draft = ConnectorDraft(name="words", summary="Look words up.", url=words.url)
     with pytest.raises(NotAuthorized):
-        await at.connectors.connect(acting(at, Role.MEMBER), draft)
-    connector = await at.connectors.connect(owner, draft)
+        await at.connectors.connect_server(acting(at, Role.MEMBER), draft)
+    connector = await at.connectors.connect_server(owner, draft)
     by_key = acting(at, Role.OWNER, CredentialKind.API_KEY)
     with pytest.raises(NotAuthorized, match="in person"):
         await at.connectors.review(by_key, connector.id, ConnectorReview())
     with pytest.raises(ValidationFailed, match="a toolset a kind names"):
-        await at.connectors.connect(
+        await at.connectors.connect_server(
             owner, ConnectorDraft(name="ledger", summary="x", url=words.url)
         )
-    inside = await at.connectors.connect(
+    inside = await at.connectors.connect_server(
         owner, ConnectorDraft(name="inside", summary="x", host_server="tracker")
     )
     with pytest.raises(ValidationFailed, match="credential stays on its host"):
@@ -457,7 +457,7 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
     nothing = NoConnection()
     at = tenant(tmp_path, inside=True, client=nothing, host=host)
     owner = at.loop.owner
-    inside = await at.connectors.connect(
+    inside = await at.connectors.connect_server(
         owner,
         ConnectorDraft(name="tracker", summary="Read the team's tickets.", host_server="tracker"),
     )
@@ -486,7 +486,7 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
     )
     await at.connectors.attach(owner, inside.id, ConnectorAttachment(kind="operator"))
     # A cloud server attached too serves no session inside the wall.
-    outside = await at.connectors.connect(
+    outside = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=words.url)
     )
     await at.connectors.attach(owner, outside.id, ConnectorAttachment(kind="operator"))
@@ -515,7 +515,7 @@ async def test_a_host_servers_failure_is_the_calls_and_its_review_carries_defini
     host = HostCalls(McpAnswer(text="no such ticket", is_error=True))
     at = tenant(tmp_path, inside=True, client=NoConnection(), host=host)
     owner = at.loop.owner
-    inside = await at.connectors.connect(
+    inside = await at.connectors.connect_server(
         owner, ConnectorDraft(name="tracker", summary="Read tickets.", host_server="tracker")
     )
     with pytest.raises(ValidationFailed, match="send the definitions"):

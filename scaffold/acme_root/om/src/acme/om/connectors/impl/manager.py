@@ -93,7 +93,7 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         )
         self._tools = frozenset(tool for kind in kinds.kinds for tool in kind.tools)
 
-    async def connect(
+    async def connect_server(
         self, ctx: TenantContext, draft: ConnectorDraft, *, connector_id: UUID | None = None
     ) -> Connector:
         ctx.require(Permission.MANAGE_MEMBERS)

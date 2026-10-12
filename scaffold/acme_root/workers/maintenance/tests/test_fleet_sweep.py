@@ -23,10 +23,11 @@ FLEET = (f"{PACKAGE}.workers", f"{PACKAGE}.om")
 """What a program needs to reach the fleet: a worker's loop, or the managers
 and the storage beneath them."""
 
-INSIDE = (f"{PACKAGE}-client", f"{PACKAGE}-infra")
+INSIDE = (f"{PACKAGE}-client", f"{PACKAGE}-infra", f"{PACKAGE}-integrations")
 """The distributions a program inside a customer's wall may depend on: the
-API's client, and the infra adapters a host runs its work through, which
-import neither a worker nor the managers."""
+API's client, the infra adapters a host runs its work through, and the
+integrations, whose MCP client starts the servers a host's owner names.
+None of them imports a worker or the managers."""
 
 
 def sources(under: Path) -> list[Path]:
@@ -69,12 +70,14 @@ def test_the_maintenance_sweep_carries_the_platforms_duties(tmp_path: Path) -> N
 def test_a_host_never_runs_the_sweep() -> None:
     """Every program under `apps/`, a host's among them,
     imports nothing that reaches the fleet and depends on no distribution
-    that does, the infra it runs its work through included; and the sweep's
-    loop is built only by a cloud worker."""
+    that does, the infra it runs its work through and the integrations it
+    starts servers through included; and the sweep's loop is built only by
+    a cloud worker."""
     apps = ROOT / "apps"
     programs = [path.parent for path in sorted(apps.glob("*/pyproject.toml"))]
     assert apps / "host" in programs, "the host is one of them"
-    for path in [p for under in [*programs, ROOT / "infra"] for p in sources(under)]:
+    inside = [*programs, ROOT / "infra", ROOT / "integrations"]
+    for path in [p for under in inside for p in sources(under)]:
         reached = {name for name in imported(path) if name.startswith(FLEET)}
         assert not reached, f"{path.relative_to(ROOT)} imports {sorted(reached)}"
     for program in programs:

@@ -1637,12 +1637,12 @@ export interface paths {
         get: operations["list_connectors_v1_connectors_get"];
         put?: never;
         /**
-         * Connect
+         * Connect Server
          * @description A server connected, with no credential and no tool reviewed. Requires
          *     managing the org. A cloud address that is this host or a private
          *     network is refused.
          */
-        post: operations["connect_v1_connectors_post"];
+        post: operations["connect_server_v1_connectors_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12168,7 +12168,7 @@ export interface operations {
             };
         };
     };
-    connect_v1_connectors_post: {
+    connect_server_v1_connectors_post: {
         parameters: {
             query?: never;
             header?: {

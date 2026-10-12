@@ -24,7 +24,7 @@ from acme.om.context import TenantContext
 
 class ConnectorsManagerInterface(ABC):
     @abstractmethod
-    async def connect(
+    async def connect_server(
         self, ctx: TenantContext, draft: ConnectorDraft, *, connector_id: UUID | None = None
     ) -> Connector:
         """A server the tenant connects, with no credential, no tool

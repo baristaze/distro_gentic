@@ -17,7 +17,7 @@ from acme.services.api.types.connectors import (
 
 class ConnectorsServiceInterface(ABC):
     @abstractmethod
-    async def connect(
+    async def connect_server(
         self, ctx: TenantContext, body: ConnectRequest, connector_id: UUID
     ) -> ConnectorView: ...
 

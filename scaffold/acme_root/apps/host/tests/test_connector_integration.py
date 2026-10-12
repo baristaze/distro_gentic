@@ -165,7 +165,7 @@ async def test_a_server_inside_the_wall_is_called_by_its_host_and_never_by_the_p
 
     # A person connects it by that name, reviews the tool, and attaches it.
     connectors = build_connectors(runner.storage, runner.infra, managers, client=no_connection)
-    connector = await connectors.connect(
+    connector = await connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", host_server="words")
     )
     await connectors.review(

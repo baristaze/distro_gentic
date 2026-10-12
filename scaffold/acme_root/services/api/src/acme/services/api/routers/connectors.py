@@ -36,13 +36,15 @@ async def list_connectors(
 
 
 @router.post("", response_model=ConnectorView, status_code=201)
-async def connect(
+async def connect_server(
     ctx: Ctx, connectors: ConnectorsService, body: ConnectRequest, idem: Idem
 ) -> Response:
     """A server connected, with no credential and no tool reviewed. Requires
     managing the org. A cloud address that is this host or a private
     network is refused."""
-    return await idem.run(201, lambda attempt: connectors.connect(ctx, body, attempt.target_id))
+    return await idem.run(
+        201, lambda attempt: connectors.connect_server(ctx, body, attempt.target_id)
+    )
 
 
 @router.put("/{connector_id}/credential", response_model=ConnectorView)

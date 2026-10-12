@@ -20859,7 +20859,7 @@
       },
       "post": {
         "description": "A server connected, with no credential and no tool reviewed. Requires\nmanaging the org. A cloud address that is this host or a private\nnetwork is refused.",
-        "operationId": "connect_v1_connectors_post",
+        "operationId": "connect_server_v1_connectors_post",
         "parameters": [
           {
             "in": "header",
@@ -20960,7 +20960,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Connect",
+        "summary": "Connect Server",
         "tags": [
           "connectors"
         ]
