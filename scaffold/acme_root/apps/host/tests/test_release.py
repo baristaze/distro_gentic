@@ -44,7 +44,7 @@ from acme.om import root as platform_root
 from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
-from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
@@ -369,9 +369,14 @@ async def test_a_session_parked_on_a_hand_over_keeps_its_hosted_instance_past_th
     api: Stack, tmp_path: Path, remote: Path
 ) -> None:
     run = await placed(api, tmp_path, remote)
-    # A person takes control: the loop parks on a hand-over and its item
-    # completes, and the person's commands run in the workspace meanwhile.
-    parked = await run.managers.loop.take_over(run.owner, run.session_id)
+    # A person takes control, in person: the loop parks on a hand-over and
+    # its item completes, and the person's commands run in the workspace
+    # meanwhile.
+    signed_in = run.owner.security.model_copy(
+        update={"credential_kind": CredentialKind.SESSION_TOKEN}
+    )
+    by_hand = run.owner.model_copy(update={"security": signed_in})
+    parked = await run.managers.loop.take_over(by_hand, run.session_id)
     assert parked.park is not None and parked.park.reason is ParkReason.HANDOVER
     await run.managers.work.complete(run.owner, run.item)
 

@@ -1001,6 +1001,7 @@ async def test_an_account_holds_each_workspace_from_its_prepare_to_its_release(
     setting.write_text("1\n")
     monkeypatch.setattr(accounts, "HARDLINKS", setting)
     monkeypatch.setattr(accounts, "switch_to", switched)
+    monkeypatch.setattr(accounts, "filter_refusal", unfiltered)
     monkeypatch.setattr(accounts, "_opened", opened)
     monkeypatch.setattr(accounts, "end_account", done)
     monkeypatch.setattr(WorkspaceAccountImpl, "_took", serves)

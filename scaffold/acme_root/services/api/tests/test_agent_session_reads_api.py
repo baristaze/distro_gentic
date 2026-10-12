@@ -572,9 +572,11 @@ async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_
     """Every route this file reads or writes a session by, called by another
     tenant with a session that exists: each is the 404 an unknown id gets.
     The tenant-wide lists another tenant reads carry none of it. A viewer
-    reads every one."""
+    reads every one of a session open to the org."""
     session = await a_loop(client, container, owner, calls=1, park=APPROVAL)
     path = f"/v1/agent-sessions/{session['id']}"
+    shared = await client.put(f"{path}/visibility", headers=owner, json={"visibility": "org_wide"})
+    assert shared.status_code == 200, shared.text
     viewer = await viewer_of(client, container, owner)
     _, other = await container.managers.tenancy.bootstrap(
         seed_request(), "Other", "other", "owner@other.test", "Other"
