@@ -2,14 +2,20 @@
 the configured root refuses it anywhere but a local environment: what it
 signs, what it verifies, and what it records say `twin`, whatever a
 delivery claims. The forge's twin holds each owner's repositories by an
-installation of that owner's own, and refuses a write through any other."""
+installation of that owner's own, and refuses a write through any other,
+and a read of a recorded pull request too."""
 
 import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from acme.integrations.events import INTEGRATIONS, IntegrationAbsentImpl
+from acme.integrations.events import (
+    INTEGRATIONS,
+    ChangedFile,
+    IntegrationAbsentImpl,
+    PullRequestRead,
+)
 from acme.integrations.events.twin import (
     SIGNATURE_HEADER,
     IntegrationTwinImpl,
@@ -168,3 +174,35 @@ async def test_an_integration_this_process_lacks_refuses_every_call() -> None:
         absent.verify_delivery(b"{}", {}, NOW)
     with pytest.raises(ProviderUnavailable):
         await absent.post("ann", "hello")
+    with pytest.raises(ProviderUnavailable):
+        await absent.read_pull_request("acme/app#7", installation="1")
+
+
+async def test_a_recorded_pull_request_reads_back_through_its_owners_installation() -> None:
+    forge, chat = IntegrationTwinImpl("forge"), IntegrationTwinImpl("chat")
+    recorded = PullRequestRead(
+        address="acme/app#7",
+        url="twin://acme/app/pull/7",
+        title="Handle the empty cart",
+        body="",
+        state="open",
+        head="c2",
+        head_ref="sessions/7",
+        base_ref="main",
+        files=(ChangedFile(path="src/cart.py", status="modified", patch="@@ -1 +1 @@\n-a\n+b"),),
+        provenance="real",
+    )
+    forge.record_pull_request(recorded, {"src/cart.py": b"b\n"})
+    mine = twin_installation("acme")
+
+    read = await forge.read_pull_request("acme/app#7", installation=mine)
+    assert read.provenance == "twin" and read.files == recorded.files
+    assert await forge.read_file("acme/app#7", "src/cart.py", "c2", installation=mine) == b"b\n"
+    for refused in (
+        forge.read_pull_request("acme/app#7", installation=twin_installation("other")),
+        forge.read_pull_request("acme/app#8", installation=mine),
+        forge.read_file("acme/app#7", "src/cart.py", "c1", installation=mine),
+        chat.read_pull_request("acme/app#7", installation=mine),
+    ):
+        with pytest.raises(ProviderRefused):
+            await refused

@@ -21,9 +21,10 @@ installed it. Anyone else who may reach the installation is refused, so no
 one connects it before its installer does. That token is used once and
 kept nowhere. The id alone is never trusted (ADR 2020).
 
-Deliveries are read in `github_wire.py`. Each write goes through the
-installation its caller names, with that installation's token, which
-reaches no repository another installation holds; `installation_of`
+Deliveries are read in `github_wire.py`. Each write, and each read of a
+pull request or a file, goes through the installation its caller names,
+with that installation's token, which reaches no repository another
+installation holds; `installation_of`
 answers which one holds a repository, so its caller can find whether the
 writing tenant connected it before anything is written. One App serves
 every installation of it."""
@@ -37,7 +38,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, NoReturn
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 import httpx
 from cryptography.hazmat.primitives import hashes
@@ -48,11 +49,14 @@ from pydantic import SecretStr
 from acme.infra.base import utcnow
 from acme.integrations.events import (
     Acknowledged,
+    ChangedFile,
+    CheckRun,
     IntegrationInterface,
     OpenedPullRequest,
     PostedMessage,
     Provenance,
     ProvidedEvent,
+    PullRequestRead,
 )
 from acme.integrations.events.git import push_bundle
 from acme.integrations.events.github_wire import FORGE, marked, read_delivery
@@ -72,6 +76,13 @@ MAX_INSTALLATION_PAGES = 10
 MAX_DELIVERY_PAGES = 10
 """The most pages of the App's recent deliveries searched for an install's
 record, a hundred to a page."""
+MAX_FILE_PAGES = 30
+"""The most pages of a pull request's files read, a hundred to a page: the
+three thousand GitHub lists at most."""
+MAX_FILE_BYTES = 1_000_000
+"""The largest file a read of one at a commit answers."""
+STATUS_ENDS = frozenset({"success", "failure", "error"})
+"""A commit status's states that end it; `pending` does not."""
 
 ADDRESS = re.compile(r"^([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})#([0-9]{1,10})$")
 """A pull request or an issue: `<owner>/<repo>#<number>`."""
@@ -388,6 +399,129 @@ class GitHubImpl(IntegrationInterface):
             )
         except KeyError, ValueError, TypeError:
             raise ProviderUnavailable("the forge answered no pull request") from None
+
+    # Reads, each through the installation its caller names.
+
+    async def read_pull_request(self, address: str, *, installation: str) -> PullRequestRead:
+        owner, repo, number = self._address(address)
+        token = await self.installation_token(installation)
+        pulls = f"{self._api}/repos/{owner}/{repo}/pulls/{number}"
+        held = await self._call("GET", pulls, bearer=token, doing=f"the pull request {address}")
+        if not isinstance(held, dict):
+            raise ProviderUnavailable("the forge answered no pull request")
+        try:
+            head = str(held["head"]["sha"])
+            merged = held.get("merged_at") is not None
+            read = PullRequestRead(
+                address=f"{owner}/{repo}#{number}".lower(),
+                url=str(held["html_url"]),
+                title=str(held["title"]),
+                body=str(held.get("body") or ""),
+                state="merged" if merged else str(held["state"]),
+                head=head,
+                head_ref=str(held["head"]["ref"]),
+                base_ref=str(held["base"]["ref"]),
+                files=(),
+                provenance=REAL,
+            )
+            changed = int(held.get("changed_files", 0))
+        except KeyError, ValueError, TypeError:
+            raise ProviderUnavailable("the forge answered no pull request") from None
+        files = await self._files(pulls, token, address)
+        checks = await self._checks(owner, repo, head, token)
+        return read.model_copy(
+            update={"files": files, "complete": len(files) >= changed, "checks": checks}
+        )
+
+    async def read_file(self, address: str, path: str, ref: str, *, installation: str) -> bytes:
+        owner, repo, _ = self._address(address)
+        token = await self.installation_token(installation)
+        response = await self._send(
+            "GET",
+            f"{self._api}/repos/{owner}/{repo}/contents/{quote(path)}",
+            bearer=token,
+            accept="application/vnd.github.raw+json",
+            params={"ref": ref},
+            doing=f"{path} at {ref}",
+        )
+        if len(response.content) > MAX_FILE_BYTES:
+            raise ProviderRefused(f"{path} at {ref} is past {MAX_FILE_BYTES} bytes")
+        return response.content
+
+    async def _files(self, pulls: str, token: SecretStr, address: str) -> tuple[ChangedFile, ...]:
+        """The files the pull request changes, a page at a time, up to the
+        most GitHub lists."""
+        files: list[ChangedFile] = []
+        for page in range(1, MAX_FILE_PAGES + 1):
+            listed = await self._call(
+                "GET",
+                f"{pulls}/files",
+                bearer=token,
+                params={"per_page": 100, "page": page},
+                doing=f"the files of {address}",
+            )
+            if not isinstance(listed, list):
+                raise ProviderUnavailable("the forge listed no files")
+            try:
+                files.extend(
+                    ChangedFile(
+                        path=str(entry["filename"]),
+                        status=str(entry["status"]),
+                        patch=None if entry.get("patch") is None else str(entry["patch"]),
+                    )
+                    for entry in listed
+                )
+            except KeyError, TypeError:
+                raise ProviderUnavailable("the forge listed a file it did not name") from None
+            if len(listed) < 100:
+                break
+        return tuple(files)
+
+    async def _checks(
+        self, owner: str, repo: str, head: str, token: SecretStr
+    ) -> tuple[CheckRun, ...]:
+        """The checks at `head`: its check runs, and the statuses older
+        systems report through, the latest of each context."""
+        commit = f"{self._api}/repos/{owner}/{repo}/commits/{head}"
+        runs = await self._call(
+            "GET",
+            f"{commit}/check-runs",
+            bearer=token,
+            params={"per_page": 100},
+            doing=f"the checks at {head}",
+        )
+        combined = await self._call(
+            "GET", f"{commit}/status", bearer=token, doing=f"the statuses at {head}"
+        )
+        try:
+            checks = [
+                CheckRun(
+                    name=str(run["name"]),
+                    status=str(run["status"]),
+                    conclusion=None if run.get("conclusion") is None else str(run["conclusion"]),
+                )
+                for run in runs["check_runs"]
+            ]
+            checks.extend(
+                CheckRun(
+                    name=str(status["context"]),
+                    status="completed" if status["state"] in STATUS_ENDS else "in_progress",
+                    conclusion=str(status["state"]) if status["state"] in STATUS_ENDS else None,
+                )
+                for status in combined["statuses"]
+            )
+        except KeyError, TypeError:
+            raise ProviderUnavailable("the forge answered no checks") from None
+        return tuple(checks)
+
+    def _address(self, address: str) -> tuple[str, str, str]:
+        """The owner, the repository, and the number `address` names;
+        `ProviderRefused` for one that names no pull request."""
+        named = ADDRESS.match(address)
+        if named is None:
+            raise ProviderRefused(f"{address} names no pull request as owner/repo#n")
+        owner, repo, number = named.groups()
+        return owner, repo, number
 
     async def _open_of(
         self, owner: str, repo: str, head: str, token: SecretStr

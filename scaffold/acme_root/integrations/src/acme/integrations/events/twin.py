@@ -27,8 +27,11 @@ So two tenants each connect an installation of their own. Made to write
 from the platform's bundle, as a forge does (`git.py`), with a
 repository's `credential` where it is given one: the local stack's forge
 twin writes, so the next loop finds what was pushed. Made not to, it holds
-names alone, with no commits behind them. Any other integration's twin
-holds no repository, and a chat's ignores the installation a post names."""
+names alone, with no commits behind them. A pull request it is to answer a
+read of is recorded in it, with its files at its head
+(`record_pull_request`), and read through its owner's installation as a
+write goes. Any other integration's twin holds no repository, and a chat's
+ignores the installation a post names."""
 
 import hashlib
 import hmac
@@ -47,6 +50,7 @@ from acme.integrations.events import (
     PostedMessage,
     Provenance,
     ProvidedEvent,
+    PullRequestRead,
     delivery_key,
 )
 from acme.integrations.events.git import push_bundle
@@ -148,6 +152,17 @@ class IntegrationTwinImpl(IntegrationInterface):
         head."""
         self.pull_requests: list[OpenedPullRequest] = []
         """Every pull request the platform opened through the twin, in order."""
+        self._recorded: dict[str, PullRequestRead] = {}
+        self._contents: dict[tuple[str, str, str], bytes] = {}
+
+    def record_pull_request(self, read: PullRequestRead, files: Mapping[str, bytes]) -> None:
+        """Holds a pull request as its system would answer a read of it, and
+        `files`, each path's content at its head, so a read answers the
+        recorded pull request, and its files at its head, as the twin's."""
+        repository = read.address.partition("#")[0].lower()
+        self._recorded[read.address.lower()] = read.model_copy(update={"provenance": TWIN})
+        for path, content in files.items():
+            self._contents[(repository, read.head, path)] = content
 
     def _id(self, kind: str) -> str:
         return f"twin_{kind}_{next(self._counter):06d}"
@@ -267,6 +282,23 @@ class IntegrationTwinImpl(IntegrationInterface):
         )
         self.pull_requests.append(opened)
         return opened
+
+    async def read_pull_request(self, address: str, *, installation: str) -> PullRequestRead:
+        self._holds_repositories()
+        self._through(installation, address)
+        held = self._recorded.get(address.lower())
+        if held is None:
+            raise ProviderRefused(f"the twin holds no pull request {address}")
+        return held
+
+    async def read_file(self, address: str, path: str, ref: str, *, installation: str) -> bytes:
+        self._holds_repositories()
+        self._through(installation, address)
+        repository = address.partition("#")[0].lower()
+        content = self._contents.get((repository, ref, path))
+        if content is None:
+            raise ProviderRefused(f"{repository} holds no file {path} at {ref}")
+        return content
 
     def _holds_repositories(self) -> None:
         if self._name != FORGE:

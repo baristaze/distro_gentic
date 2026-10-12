@@ -501,3 +501,105 @@ async def test_a_write_goes_through_the_installation_it_names_and_no_other(
             await forge(key, unreachable).post(
                 "octo-org/widgets#12", "Fixed.", installation=installation
             )
+
+
+# A pull request read back, with its files, its patches, and its checks.
+
+HEAD = "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b"
+CART = b"def total(cart):\n    return 0\n"
+
+
+def reading(calls: list[httpx.Request]) -> Handler:
+    """GitHub's recorded answers to a read of octo-org/widgets#12 and of a
+    file at its head, through the installation's token."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        path = request.url.path
+        if path == "/app/installations/71001/access_tokens":
+            return answer("installation_token", 201)
+        if path == "/repos/octo-org/widgets/pulls/12":
+            return answer("pull_request_read")
+        if path == "/repos/octo-org/widgets/pulls/12/files":
+            return answer("pull_request_files")
+        if path == f"/repos/octo-org/widgets/commits/{HEAD}/check-runs":
+            return answer("check_runs")
+        if path == f"/repos/octo-org/widgets/commits/{HEAD}/status":
+            return answer("commit_status")
+        if path == "/repos/octo-org/widgets/contents/src/cart.py":
+            return httpx.Response(200, content=CART)
+        raise AssertionError(request.url)
+
+    return handle
+
+
+async def test_a_pull_request_reads_back_with_its_files_patches_and_checks(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    calls: list[httpx.Request] = []
+    read = await forge(key, reading(calls)).read_pull_request(
+        "octo-org/widgets#12", installation=HOLDER
+    )
+    assert (read.address, read.state, read.head, read.head_ref, read.base_ref) == (
+        "octo-org/widgets#12",
+        "open",
+        HEAD,
+        "agent/fix-totals",
+        "main",
+    )
+    assert read.provenance == "real" and read.complete
+    cart, logo = read.files
+    assert (cart.path, cart.status) == ("src/cart.py", "modified")
+    assert cart.patch is not None and cart.patch.startswith("@@ -10,7 +10,9 @@")
+    assert (logo.path, logo.patch) == ("assets/logo.png", None)
+    assert [(c.name, c.status, c.conclusion) for c in read.checks] == [
+        ("unit", "completed", "failure"),
+        ("lint", "in_progress", None),
+        ("ci/legacy", "completed", "success"),
+        ("ci/deploy-preview", "in_progress", None),
+    ]
+    # Every read carries the installation's token, and none writes.
+    assert {c.method for c in calls if "access_tokens" not in c.url.path} == {"GET"}
+    token = json.loads(recorded("installation_token"))["token"]
+    assert all(
+        c.headers["authorization"] == f"Bearer {token}"
+        for c in calls
+        if "access_tokens" not in c.url.path
+    )
+
+
+async def test_a_file_reads_at_the_commit_it_names(key: rsa.RSAPrivateKey) -> None:
+    calls: list[httpx.Request] = []
+    content = await forge(key, reading(calls)).read_file(
+        "octo-org/widgets#12", "src/cart.py", HEAD, installation=HOLDER
+    )
+    assert content == CART
+    (asked,) = [c for c in calls if c.url.path.endswith("/src/cart.py")]
+    assert asked.url.params["ref"] == HEAD
+    assert asked.headers["accept"] == "application/vnd.github.raw+json"
+
+
+async def test_a_read_that_names_no_pull_request_or_installation_is_refused(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    client = forge(key, unreachable)
+    for address in ("octo-org/widgets", "../x#1", "a/b#c"):
+        with pytest.raises(ProviderRefused):
+            await client.read_pull_request(address, installation=HOLDER)
+        with pytest.raises(ProviderRefused):
+            await client.read_file(address, "src/cart.py", HEAD, installation=HOLDER)
+    with pytest.raises(ProviderRefused):
+        await client.read_pull_request("octo-org/widgets#12", installation="../71001")
+
+
+async def test_a_pull_request_that_lists_fewer_files_than_it_changes_is_incomplete(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/octo-org/widgets/pulls/12":
+            held = json.loads(recorded("pull_request_read"))
+            return httpx.Response(200, json={**held, "changed_files": 3})
+        return reading([])(request)
+
+    read = await forge(key, handle).read_pull_request("octo-org/widgets#12", installation=HOLDER)
+    assert len(read.files) == 2 and not read.complete
