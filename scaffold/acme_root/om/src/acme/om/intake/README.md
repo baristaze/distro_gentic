@@ -65,7 +65,8 @@ of](../../../../README.md).
   delivery whose installation no tenant connected reaches no tenant, and
   nothing a delivery says names one
   ([ADR 2020](../../../../../docs/adr/2020-an-installation-maps-to-one-tenant.md)).
-- **Only a mapped user who may instruct speaks as a principal.** Any
+- **Only a mapped user who may instruct speaks as a principal:** one
+  who steers the session and holds what its calls need. Any
   other text from outside is an event: the agent reads it quoted, as
   data, labelled with the origin the platform set, never one the event
   claims.
@@ -74,7 +75,8 @@ of](../../../../README.md).
 - **Noise never wakes the agent.** A bot, CI output, and a passing check
   wait for the next model call.
 - **The agent never fights a person.** A person's push parks its loop on
-  a hand-over that only the person's giving back clears.
+  a hand-over that names no holder, which a person's giving back, in
+  person, clears.
 - **A chat approval counts only from a mapped user whose role may
   decide the call,** and it is decided and audited as that user.
 - **An account is linked by a person, in person,** never by an agent's
@@ -92,8 +94,11 @@ The table is `rules.effect_of`. A principal's message is appended under
 the mapped user's live context (`PrincipalContext`, the engine's
 transition), so `steps` keeps its principal and asks `InstructCheck`;
 any other input is a `StepType.EVENT` with `Actor.EXTERNAL` and
-`Origin.INTEGRATION`, under a service principal. A hand-over is
-`LoopManagerInterface.take_over` under the router's own context. A chat
+`Origin.INTEGRATION`, under a service principal. Whether a mapped user
+instructs is `AgentsManagerInterface.require_instructor` and
+`AttributionManagerInterface.steers`. A hand-over is a `handover` park
+with no holder, written under the router's own context at a new writer
+epoch: `LoopManagerInterface.take_over` is a person's, in person. A chat
 approval is `ToolsManagerInterface.decide_call` under the mapped user's
 context, then an audit entry of that context.
 -->

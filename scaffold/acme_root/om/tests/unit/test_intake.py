@@ -80,6 +80,14 @@ async def mapped(platform: Wired, role: Role, external_id: str = "U-ANN") -> Ten
     return person
 
 
+async def steering(platform: Wired, session_id: UUID, person: TenantContext) -> None:
+    """`person` takes part in the session, and its owner hands them its
+    steer: only the steerer's word instructs it."""
+    sessions, attribution = platform.managers.agent_sessions, platform.managers.attribution
+    await sessions.add_participant(platform.owner, session_id, person.user_id)
+    await attribution.assign_principal(platform.owner, session_id, person.user_id)
+
+
 async def session(platform: Wired, session_id: UUID) -> AgentSession:
     return await platform.managers.agent_sessions.get_session(platform.owner, session_id)
 
@@ -104,6 +112,7 @@ def platform(tmp_path: Path) -> Wired:
 async def test_a_principals_message_wakes_and_unarchives(platform: Wired) -> None:
     person = await mapped(platform, Role.MEMBER)
     session_id = await bound(platform)
+    await steering(platform, session_id, person)
     await platform.managers.agent_sessions.archive_session(platform.owner, session_id)
     routed = await platform.intake.route(platform.service, event(Arrival.MESSAGE))
     assert routed.effect is Effect.WAKE
@@ -121,6 +130,7 @@ async def test_a_principals_message_wakes_and_unarchives(platform: Wired) -> Non
 async def test_a_mapped_instructors_comment_wakes_as_their_message(platform: Wired) -> None:
     person = await mapped(platform, Role.MEMBER)
     session_id = await bound(platform)
+    await steering(platform, session_id, person)
     routed = await platform.intake.route(platform.service, event(Arrival.COMMENT))
     assert (routed.effect, routed.principal_id) == (Effect.WAKE, person.user_id)
     (message,) = await inputs(platform, session_id)
