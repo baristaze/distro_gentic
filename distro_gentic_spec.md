@@ -290,9 +290,10 @@ in.
   filtered by its identity, never by what it asks for.
 - **Owner's ceilings.** A host enforces limits its owner sets and the
   platform cannot raise: the projects it serves, its minimum isolation,
-  its egress, the paths it lets a result read, and whether it accepts
-  people's commands. A compromised control plane still cannot widen what
-  a host does.
+  its egress, the paths it lets a result read, whether it accepts
+  people's commands, and the MCP servers it starts, each named whole
+  ([Connectors](#connectors)). A compromised control plane still
+  cannot widen what a host does.
 - **What it holds.** No database credential, no model key, no history:
   its own credential, its local secret store (keyed by tenant first, as
   every secret is), and the files of its workspaces. The one credential
@@ -658,7 +659,42 @@ no stopping condition, a brief longer than a session holds whole. A
 finding advises and never refuses the publish; it is kept with the
 version it read. Afterwards, an operator reads which levers the
 sessions that stalled reached, against the sessions that did not reach
-them, from the steps' headers alone.
+them, from the steps' headers alone. The same checks read a connector's
+tool descriptions as a person reviews them ([Connectors](#connectors)).
+
+### Connectors
+
+`optional`
+
+A **connector** is a tenant's own MCP server, which its agents take as
+a toolset ([`agentic_core` Agent Kinds][e-kinds]): a tracker, a wiki, a
+cloud's read API. A person who manages the tenant connects one, reviews
+the tools of it a session may call, and attaches it to a kind, for one
+project or for every session. A session of that kind holds it as a
+toolset, deferred until its agent loads it unless it is attached
+otherwise.
+
+- **Reviewed, then pinned.** A person binds each tool at the definition
+  they read, pinned by its hash, and gives it its class and its effect,
+  since what a server says of its own tool is a hint. Each call lists
+  the server again and refuses a tool whose definition moved, so a
+  server's change never reaches a model before a person reviews it.
+- **Still within a session.** A session pins its connectors as its first
+  run begins. A later review or attachment reaches the next session, so
+  a session's tool definitions never move under it. A tool a person
+  withdraws, or reviews again, stops at its next call in every session.
+- **On its session's side of the wall.** A server on the internet is
+  called from the platform's cloud, for the sessions there, and its
+  credential is the tenant's secret, resolved at the call. A server
+  inside the customer's wall runs on the tenant's host, which its owner
+  configures, for the sessions placed there. Its call is `exec` work to
+  the host that holds the session's workspace, its credential stays in
+  that host's store, and the platform never opens a connection to it.
+- **The cloud calls the internet.** An address the platform's cloud
+  calls is public: never this host, a private network, or a link-local
+  one, whether it is named or resolved.
+
+What a server answers is data, quoted as any tool's output.
 
 ### Notifications
 
@@ -969,7 +1005,9 @@ profile with its own powers, built from the platform's **toolsets**:
 groups of tools a kind takes whole. A kind also asks a model size of
 each role it calls, and holds its workspace warm for a grace of its own
 ([A Workspace Is a Cache](#a-workspace-is-a-cache)). A product adds
-kinds the same way, as data, and the models and the rhythm follow.
+kinds the same way, as data, and the models and the rhythm follow. A
+tenant adds toolsets of its own to a kind: its connectors
+([Connectors](#connectors)).
 
 - The **engineer** takes an objective to a validated, reviewable change.
   Its workspace has no network and starts from its project's

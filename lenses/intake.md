@@ -6,11 +6,11 @@ feedback returns to the same session.
 
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
-it, twins in the suites, automations, playbooks and knowledge, and
-notifications. It leaves the inbox and how data renders to the engine;
-steering messages to `watch`; who may speak as a principal and how
-outside text is labelled to `wall`; and the provenance a twin feeds into
-evidence to `evidence`.
+it, twins in the suites, automations, playbooks and knowledge,
+connectors, and notifications. It leaves the inbox and how data renders
+to the engine; steering messages to `watch`; who may speak as a
+principal and how outside text is labelled to `wall`; and the provenance
+a twin feeds into evidence to `evidence`.
 
 ## INT-01 Events come in through the guideline's inbound queue
 
@@ -246,5 +246,40 @@ people who cannot clear it; a notification with no link to the action
 that clears it.
 
 **Severity.** medium
+
+**Check.** review
+
+## INT-12 A connector's tools are reviewed, pinned, and called from their side
+
+**Principle.** A connector is a tenant's own MCP server, which its
+agents take as a toolset. A person binds each tool at the definition
+they read, pinned by its hash, with its class and its effect; each call
+lists the server again and refuses a moved definition. A session pins
+its connectors as its first run begins, so its tool definitions never
+move under it. A server on the internet is called from the platform's
+cloud, its credential the tenant's secret resolved at the call; one
+inside the wall runs on the tenant's host, which its owner configures,
+and is reached through `exec` work alone. The platform's cloud calls
+public addresses alone.
+
+**Source.** Work In, Results Out, Connectors; Placement and Workspace
+Hosts, Workspace Hosts.
+
+**Look for.** Where a connector's tools join a session's registry, and
+when; what a call checks before it reaches the server; where the
+credential is resolved, and what the server's answer becomes; what a
+host connector's call opens, and from where; how a cloud address is
+held, at the connect and at each call.
+
+**Violation.** A server's tool in a registry that no person reviewed, or
+at a definition other than its pin; a class or an effect taken from the
+server's own hints; a session's tool definitions that move with a later
+review or attachment; the platform opening a connection to a server
+inside a customer's wall, or a host starting a server its owner did not
+name whole; a credential in a step, a log line, or an answer; the
+platform's cloud calling this host, a private network, or a link-local
+address a tenant named, or a name that resolves to one.
+
+**Severity.** high
 
 **Check.** review
