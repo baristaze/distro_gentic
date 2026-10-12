@@ -144,6 +144,8 @@ vi.mock("../../app/api", () => ({
     },
     post: (path: string, body?: unknown) => {
       net.posts.push({ path, body });
+      if (path.endsWith("/invocations"))
+        return Promise.resolve({ id: "i1", session_id: "sa", playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
       return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
     },
   },
@@ -317,6 +319,24 @@ describe("the org's own session", () => {
     const send = composer.querySelector<HTMLButtonElement>("button[aria-label='Send']")!;
     expect(send.disabled).toBe(false);
     expect([...composer.querySelectorAll("button")].map((button) => button.textContent || button.getAttribute("aria-label"))).toEqual(["Pause", "Send"]);
+  });
+
+  it("invokes a playbook by its name from its header, into this session", async () => {
+    await open("a", "/sessions/sa");
+    const chip = [...container.querySelectorAll<HTMLButtonElement>(".acme-session-head button")].find((button) => button.textContent === "Playbook")!;
+    await act(async () => chip.click());
+    const form = document.querySelector<HTMLFormElement>("form[aria-label='Invoke a playbook']")!;
+    const field = form.querySelector<HTMLInputElement>("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "release-check");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const invoke = [...form.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Invoke")!;
+    expect(invoke.disabled).toBe(false);
+    await act(async () => invoke.click());
+    await settle();
+    expect(net.posts).toContainEqual({ path: "/v1/playbooks/release-check/invocations", body: { session_id: "sa" } });
+    expect(document.querySelector("form[aria-label='Invoke a playbook']")).toBeNull();
   });
 
   it("says a person has control in place of Send while they hold it", async () => {

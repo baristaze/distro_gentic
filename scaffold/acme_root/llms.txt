@@ -40,7 +40,7 @@ served to it. Exposure is by listing, never by folder.
 - [Relay](om/src/acme/om/relay/README.md): a tool call into a tenant's wall as keyed exec work: run once on the host that holds the workspace, its output streamed and its result kept under its key, stopped at once over the host's control stream
 - [Intake](om/src/acme/om/intake/README.md): an outside event routed to the session it names by the routing table, outside text as data, a hand-over on a person's push, and approvals from chat as the mapped user
 - [Automations](om/src/acme/om/automations/README.md): events and schedules turned into bounded work, run as the creator or the tenant's automation principal: a cost cap held by each run's budget, a rate, a concurrency, a hop limit, a schedule fired once a slot, and every firing a recorded run
-- [Playbooks](om/src/acme/om/playbooks/README.md): versioned Agent Skills briefs a person publishes, whose gates only narrow a session's policy
+- [Playbooks](om/src/acme/om/playbooks/README.md): versioned Agent Skills briefs a person publishes, invoked into a session or pinned to a kind as its manual, whose gates only narrow a session's policy
 - [Knowledge](om/src/acme/om/knowledge/README.md): what a session recalls by trigger as it starts, as data, and only once a person reviewed it
 - [Notifications](om/src/acme/om/notifications/README.md): a park that needs a person tells exactly the people who can clear it, on their channels, with the link to the one action
 - [The platform's agents](om/src/acme/om/platform_agents/README.md): the engineer, analysis, the planner, and the platform assistant as profiles over the one loop; the assistant's reach and its corpus from this map; the validation session, with no agent

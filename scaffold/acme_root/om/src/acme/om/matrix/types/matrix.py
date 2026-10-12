@@ -4,10 +4,11 @@ A question names an environment, a model role, an agent kind, a plan tier,
 and a workload class, and, for a role its kind asks a size of, the model
 size. A row names any of the six, and leaves the rest open; the row that
 matches every question names none. The most specific row that matches
-wins: for a question that asks a size, a row that names the kind before a
-row that names the size, and that before the rest. A version publishes
-only with the row that matches everything, so every question has an
-answer.
+wins: for a question that asks a size the version holds a row for, a row
+that names the kind before a row that names the size, and that before the
+rest. A version that holds no row for the size answers the question as
+one that asks none. A version publishes only with the row that matches
+everything, so every question has an answer.
 
 A version is written once, pending, and then published as it is: an edit
 is a new version. The current matrix is the latest version published."""
@@ -88,9 +89,10 @@ class MatrixKey(Platform):
         size, as the engine answers an ask by its size; then the rest.
         Within each, and for a question that asks no size, which no row that
         names a size matches, the row that names more keys, then the one
-        that names the earlier key, in the spec's order. Two rows that
-        compare equal name the same keys, so two rows that match one
-        question with it are the same row."""
+        that names the earlier key, in the spec's order. Of a version that
+        holds no row for its size, the question is asked with no size
+        (`rules.answer`). Two rows that compare equal name the same keys,
+        so two rows that match one question with it are the same row."""
         named = tuple(getattr(self, key) is not None for key in KEYS)
         first = 0
         if query.size is not None:

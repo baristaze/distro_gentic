@@ -231,6 +231,9 @@ def worker_managers(
         workspace_projects=ports.workspace_projects,
         product_kinds=ports.kinds,
         models_layer=matrix.layer,
+        # An automation's start and an intake event make sessions here, each
+        # with its kind's manual.
+        agents_layer=PlaybooksLayer(storage).agents,
     )
     refuse_open_money(settings.environment, managers)
     return managers
@@ -278,6 +281,7 @@ class WorkerContainer:
             project_required=settings.environment != LOCAL,
             options=AutomationsOptions(purge_batch=batch),
             actions=kinds.actions,
+            playbooks=lambda: self.playbooks,
         )
         self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
             managers

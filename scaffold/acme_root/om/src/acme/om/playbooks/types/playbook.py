@@ -1,14 +1,16 @@
 """A playbook: a team's procedure as a versioned, executable brief, in the
 Agent Skills format, with its approval gates in a namespaced metadata
-extension. And an invocation: a playbook a principal brought into one
-session, whose gates join that session's policy."""
+extension. An invocation: a playbook brought into one session, whose gates
+join that session's policy. And a pin: a version a tenant set as a kind's
+manual, which each new session of the kind holds as its standing text."""
 
 from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.attribution.types.principal import MAX_KIND
+from acme.om.base import Created, Identifiable, Platform, Trackable
 from acme.om.levers.types.lever import LeverFinding
 from acme.om.steps.types.content import MAX_NAME, Stored
 from acme.om.tools.types.policy import Decision
@@ -70,11 +72,29 @@ class Playbook(Identifiable, Created):
 
 
 class PlaybookInvocation(Identifiable, Created):
-    """A playbook version brought into a session by a principal. Its gates
-    hold in that session from then on."""
+    """A playbook version brought into a session. Its gates hold in that
+    session from then on. `pinned` marks the manual the session was made
+    with, its kind's pin, whose text is the session's standing text; every
+    other invocation's brief arrived as its invoker's message."""
 
     session_id: UUID
     playbook_id: UUID
     name: Stored = Field(min_length=1, max_length=MAX_NAME)
     version: int = Field(ge=1)
     invoked_by: UUID
+    pinned: bool = False
+
+
+class PlaybookPin(Identifiable, Trackable):
+    """A version a tenant pinned to a kind as its manual, for the tenant's
+    every session of the kind, or, with `project_id`, for those of one
+    project, where it wins over the tenant's. Each new session it reaches
+    pins the version's brief as its standing text and its gates into its
+    policy. One pin a kind and a project; pinned again, it names the
+    version then latest, and a session made before keeps its own."""
+
+    kind: str = Field(min_length=1, max_length=MAX_KIND)
+    project_id: UUID | None = None
+    playbook_id: UUID
+    name: Stored = Field(min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME)
+    version: int = Field(ge=1)

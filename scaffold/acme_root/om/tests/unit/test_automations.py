@@ -56,6 +56,8 @@ from acme.om.intake.types.event import (
 )
 from acme.om.intake.types.link import HandleKind, Installation
 from acme.om.models.types.fill import MAIN, Eligibility
+from acme.om.playbooks.rules import skill_md
+from acme.om.playbooks.types.playbook import PlaybookDraft, PlaybookGate
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import ToolUseBlock
@@ -63,6 +65,7 @@ from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.policy import Decision
 from acme.om.tools.types.tool import ToolInput
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 
@@ -305,6 +308,52 @@ async def test_a_run_starts_its_session_as_the_creator_with_the_event_as_data(
     assert (brief.type, brief.actor) == (StepType.MESSAGE, Actor.PERSON)
     assert isinstance(brief.header, InputHeader) and brief.header.principal.id == creator.user_id
     assert brief.as_text() == "Answer the comment on the pull request."
+
+
+TRIAGE = PlaybookDraft(
+    name="triage-a-comment",
+    description="How a comment on a pull request is answered.",
+    body="1. Read the comment.\n2. Answer it from the records.",
+    gates=(PlaybookGate(tool="lookup", decision=Decision.DENY),),
+)
+
+
+async def test_a_start_invokes_its_playbook_as_the_creator_before_the_event_and_the_brief(
+    platform: Wired, creator: TenantContext
+) -> None:
+    published = await platform.playbooks.publish(creator, TRIAGE)
+    invoking = automation().action.model_copy(update={"playbook": TRIAGE.name})
+    await made(platform, creator, action=invoking)
+    (run,) = await fired(platform, comment())
+    assert run.session_id is not None
+    steps = await platform.history(run.session_id)
+    playbook, data, brief = (s for s in steps if s.type.is_input())
+    assert (playbook.type, playbook.actor) == (StepType.MESSAGE, Actor.PERSON)
+    assert isinstance(playbook.header, InputHeader)
+    assert playbook.header.principal.id == creator.user_id
+    assert playbook.as_text() == skill_md(published)
+    assert (data.type, brief.as_text()) == (
+        StepType.EVENT,
+        "Answer the comment on the pull request.",
+    )
+    gates = await platform.playbooks.gates_of(platform.owner, run.session_id)
+    assert gates == published.gates, "its gates hold in the session it started"
+
+
+async def test_a_start_that_names_no_published_playbook_is_refused_when_saved(
+    platform: Wired, creator: TenantContext
+) -> None:
+    invoking = automation().action.model_copy(update={"playbook": TRIAGE.name})
+    with pytest.raises(ValidationFailed):
+        await made(platform, creator, action=invoking)
+    with pytest.raises(ValidationError):
+        Action(
+            kind=ActionKind.MESSAGE_SESSION,
+            brief="Look again.",
+            session_id=new_id(),
+            playbook=TRIAGE.name,
+        )
+    assert "playbook" not in automation().action.model_dump(), "the release before reads it"
 
 
 async def test_every_firing_is_a_recorded_run_and_one_event_makes_one(

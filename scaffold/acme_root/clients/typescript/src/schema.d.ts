@@ -2983,6 +2983,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/playbook-pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pins
+         * @description The tenant's pins, by kind, the tenant's before a project's.
+         */
+        get: operations["list_pins_v1_playbook_pins_get"];
+        /**
+         * Pin
+         * @description The name's latest version pinned to the kind as its manual, for the
+         *     tenant or one project; pinned again, the version then latest.
+         */
+        put: operations["pin_v1_playbook_pins_put"];
+        post?: never;
+        /**
+         * Unpin
+         * @description The kind's pin for the tenant, or for one project, taken away. A
+         *     session made with it keeps it.
+         */
+        delete: operations["unpin_v1_playbook_pins_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/playbooks": {
         parameters: {
             query?: never;
@@ -3017,6 +3047,28 @@ export interface paths {
         get: operations["get_playbook_v1_playbooks__name__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/playbooks/{name}/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invoke
+         * @description The latest version brought into the session: its gates hold there
+         *     from now on, and its brief arrives as the caller's message. Invoked
+         *     again, the version's invocation answers, and nothing is sent twice.
+         */
+        post: operations["invoke_v1_playbooks__name__invocations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3456,7 +3508,9 @@ export interface components {
         /**
          * ActionBody
          * @description `start_session`: start a session of `agent_kind` titled `title` in the
-         *     tenant's project `project_id`. `message_session`: send the brief to the
+         *     tenant's project `project_id`, and invoke the tenant's `playbook` of
+         *     that name into it first, its latest version at each firing, when one is
+         *     named; a name with no version is refused. `message_session`: send the brief to the
          *     standing session `session_id`; an enabled one is refused, since nothing
          *     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
          *     other kind is one the product declares, which takes its `params` and no
@@ -3473,6 +3527,8 @@ export interface components {
             params?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Playbook */
+            playbook?: string | null;
             /** Project Id */
             project_id?: string | null;
             /** Session Id */
@@ -3492,6 +3548,8 @@ export interface components {
             params: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Playbook */
+            playbook: string | null;
             /** Project Id */
             project_id: string | null;
             /** Session Id */
@@ -5603,6 +5661,57 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
+         * InvocationView
+         * @description A version brought into a session. `pinned` marks the manual the
+         *     session was made with, whose brief is its standing text; every other
+         *     invocation's brief arrived as its invoker's message.
+         */
+        InvocationView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoked By
+             * Format: uuid
+             */
+            invoked_by: string;
+            /** Name */
+            name: string;
+            /** Pinned */
+            pinned: boolean;
+            /**
+             * Playbook Id
+             * Format: uuid
+             */
+            playbook_id: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * InvokeRequest
+         * @description The session a person brings the name's latest version into, one they
+         *     may instruct.
+         */
+        InvokeRequest: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /**
          * IsolationMode
          * @description The isolation levels a host can run a workspace at, strongest first.
          * @enum {string}
@@ -6948,6 +7057,65 @@ export interface components {
          * @enum {string}
          */
         Permission: "read" | "write" | "manage_members" | "manage_keys";
+        /**
+         * PinRequest
+         * @description A kind's manual: the name whose latest version is pinned to `kind`,
+         *     for the tenant's sessions of it, or with `project_id` those of one
+         *     project, where it wins over the tenant's.
+         */
+        PinRequest: {
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Project Id */
+            project_id?: string | null;
+        };
+        /**
+         * PinView
+         * @description A version pinned to a kind as its manual. Each session of the kind
+         *     made after it was pinned holds it; one made before keeps its own.
+         */
+        PinView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /**
+             * Playbook Id
+             * Format: uuid
+             */
+            playbook_id: string;
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
+        };
         /**
          * PlaceSessionRequest
          * @description One of the tenant's pools, or None for the cloud.
@@ -15162,6 +15330,112 @@ export interface operations {
             };
         };
     };
+    list_pins_v1_playbook_pins_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_v1_playbook_pins_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_v1_playbook_pins_delete: {
+        parameters: {
+            query: {
+                kind: string;
+                project_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     publish_v1_playbooks_post: {
         parameters: {
             query?: never;
@@ -15222,6 +15496,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoke_v1_playbooks__name__invocations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvocationView"];
                 };
             };
             /** @description Validation Error */

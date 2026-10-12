@@ -310,6 +310,7 @@ def wired(
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
+        agents_layer=playbooks.agents,
     )
     trust.build(managers)
 
@@ -369,6 +370,7 @@ def wired(
             principal_context=members,
             clock=clock,
             actions=actions,
+            playbooks=lambda: playbooks.build(managers),
         ),
         playbooks=playbooks.build(managers),
         knowledge=knowledge.build(managers),

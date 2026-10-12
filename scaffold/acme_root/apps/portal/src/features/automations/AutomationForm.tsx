@@ -90,6 +90,13 @@ export function AutomationForm({
           />
           <TextField label="Session title" placeholder="e.g. Update dependencies" value={draft.title} onChange={set("title")} />
           {projectOptions.length > 0 ? <Select label="Project" value={draft.projectId} options={projectOptions} onChange={set("projectId")} /> : null}
+          <TextField
+            label="Playbook"
+            placeholder="e.g. release-check"
+            info="Invoked into each session it starts, before the brief: its latest version, and its gates hold there. Optional."
+            value={draft.playbook}
+            onChange={set("playbook")}
+          />
         </div>
       ) : (
         <TextField label="Standing session id" placeholder="Paste a session's id from its address" value={draft.sessionId} onChange={set("sessionId")} />

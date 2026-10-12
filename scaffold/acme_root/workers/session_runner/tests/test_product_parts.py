@@ -2,8 +2,11 @@
 that builds the managers, each built as its binary builds it: the API's
 container starts a session of the product's own kind, the session runner
 runs it, its tool reading a manager the runner built, and the maintenance
-worker knows the kind too. The roots are memory and the local infra, the
-model is scripted, and nothing is passed to any `build` but its settings."""
+worker knows the kind too. A playbook a person invokes into that session
+through the API holds in the runner: its brief reaches the model, and its
+gate refuses the product's tool. The roots are memory and the local infra,
+the model is scripted, and nothing is passed to any `build` but its
+settings."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -23,6 +26,7 @@ from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.content import TextBlock, ToolUseBlock
 from acme.integrations.model_providers.registry import scripted_model_providers
+from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -169,6 +173,91 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
 
     assert processes.read == [TITLE], "the product's tool ran in the runner, reading its manager"
     assert status == SessionStatus.IDLE.value
+
+
+async def run_until_idle(
+    processes: Processes, client: httpx.AsyncClient, headers: dict[str, str], session_id: str
+) -> str:
+    """The runner run until the session is idle again, its status then."""
+    runner = build_runner(processes.runner)
+    running = asyncio.create_task(runner.run())
+    status = ""
+    try:
+        for _ in range(500):
+            read = await client.get(f"/v1/agent-sessions/{session_id}", headers=headers)
+            status = read.json()["status"]
+            if status == SessionStatus.IDLE.value:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        runner.stop()
+        await running
+    return status
+
+
+# Check 1: a person invokes a playbook into a session through the API; its
+# gates narrow the session's policy and its text reaches the model.
+
+
+async def test_a_playbook_invoked_through_the_api_reaches_the_model_and_its_gate_holds(
+    processes: Processes, client: httpx.AsyncClient
+) -> None:
+    api = processes.api
+    owner, org = await api.managers.tenancy.bootstrap(
+        seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
+    )
+    seeded = await seed_platform(api.storage, api.managers, owner, (LEDGER,))
+    assert seeded.project is not None
+    headers = await sign_in_as(client, "ann@example.test", org.id)
+    brief = "Never read the title; say the ledger is closed."
+    published = await client.post(
+        "/v1/playbooks",
+        headers=created(headers),
+        json={
+            "name": "closed-ledgers",
+            "description": "What an agent does with a closed ledger.",
+            "body": brief,
+            "gates": [{"tool": ReadTitleImpl.SPEC.name, "decision": "deny"}],
+        },
+    )
+    assert published.status_code == 201, published.text
+    started = await client.post(
+        "/v1/agent-sessions",
+        headers=created(headers),
+        json={"kind": LEDGER.name, "title": TITLE, "project_id": str(seeded.project.id)},
+    )
+    assert started.status_code == 201, started.text
+    session_id = started.json()["id"]
+
+    twin = processes.runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
+    assert isinstance(twin, ModelProviderScriptedImpl)
+    asks = ToolUseBlock(id=f"use_{new_id().hex[:12]}", name=ReadTitleImpl.SPEC.name, input={})
+    twin.add(
+        ModelReply(
+            blocks=(TextBlock(text="Reading the title."), asks),
+            stop_reason=StopReason.TOOL_USE,
+            usage=Usage(input=10, output=5),
+            model=SONNET,
+        ),
+        answers("The ledger is closed."),
+    )
+    invoked = await client.post(
+        "/v1/playbooks/closed-ledgers/invocations",
+        headers=headers,
+        json={"session_id": session_id},
+    )
+    assert invoked.status_code == 201, invoked.text
+    assert (invoked.json()["version"], invoked.json()["pinned"]) == (1, False)
+
+    status = await run_until_idle(processes, client, headers, session_id)
+    assert status == SessionStatus.IDLE.value
+    first = twin.calls[0]
+    said = [b.text for m in first.messages for b in m.blocks if isinstance(b, TextBlock)]
+    assert any(brief in text for text in said), "the brief reached the model as a message"
+    assert processes.read == [], "the gate refused the product's tool"
+    steps = await client.get(f"/v1/agent-sessions/{session_id}/steps", headers=headers)
+    (response,) = [s for s in steps.json()["items"] if s["type"] == "tool_response"]
+    assert response["failure"] == "denied"
 
 
 async def test_the_maintenance_worker_knows_a_products_kind(processes: Processes) -> None:

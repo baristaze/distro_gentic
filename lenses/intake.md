@@ -195,16 +195,23 @@ product's action closed before its check says its work ended.
 executable briefs, in the Agent Skills format with their gates in a
 namespaced metadata extension. Only a person publishes a playbook. A
 principal or an automation invokes one, and its gates compile into the
-session's policy, where they can only narrow it.
+session's policy, where they can only narrow it. A person who manages
+the tenant pins one to a kind as its manual: each session of the kind
+made after the pin holds its brief as its standing text, whole on every
+request, and its gates in its policy, and keeps that version for its
+life.
 
 **Source.** Work In, Results Out, Playbooks and Knowledge.
 
-**Look for.** Who may publish a playbook; who may invoke one; how its
-gates compile into the session's policy.
+**Look for.** Who may publish a playbook; who may invoke one, and who
+may pin one; how its gates compile into the session's policy; where a
+manual renders, and when a session takes it.
 
-**Violation.** A playbook an agent publishes, or one run unversioned; a
-playbook the agent invokes on its own; a gate that widens a session's
-policy, adds a tool, or lifts an approval.
+**Violation.** A playbook an agent publishes, invokes on its own, or
+pins; one run unversioned; a gate that widens a session's policy, adds
+a tool, or lifts an approval; a manual rendered as a message or cut to
+an excerpt, or one that changes under a session already made; a manual
+whose gates hold only after the session's first call.
 
 **Severity.** high
 

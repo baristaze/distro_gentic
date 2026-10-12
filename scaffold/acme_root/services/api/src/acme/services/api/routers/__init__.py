@@ -76,9 +76,10 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's projects, each bound to its repository, and the fetch
     # credential the platform reads that repository with.
     "projects": (projects.router,),
-    # What sessions recall, and the procedures they follow.
+    # What sessions recall, and the procedures they follow, each invoked
+    # into a session or pinned to a kind as its manual.
     "knowledge": (knowledge.router,),
-    "playbooks": (playbooks.router,),
+    "playbooks": (playbooks.router, playbooks.pins),
     # A tenant's own MCP servers, reviewed and attached to its kinds.
     "connectors": (connectors.router,),
     # The tenant's layer of tool policy.

@@ -45,6 +45,7 @@ from acme.client.types import (
     ConnectorView,
     IssuedLoginView,
     IssuedSessionView,
+    PinView,
     SessionControl,
     SessionStatus,
     StepView,
@@ -874,6 +875,75 @@ def detach_connector(
         typer.echo(f"{detached.name} is detached from {kind}")
 
     run(go, api)
+
+
+# Playbooks
+
+playbook_app = typer.Typer(
+    help="A playbook: invoke one into a session, or pin one to a kind as its manual.",
+    no_args_is_help=True,
+)
+app.add_typer(playbook_app, name="playbook")
+
+PlaybookName = Annotated[str, typer.Argument(help="The playbook's name; its latest version.")]
+KindName = Annotated[str, typer.Argument(help="The agent kind.")]
+PinProject = Annotated[
+    UUID | None,
+    typer.Option("--project", help="One project's sessions alone, not the org's every one."),
+]
+
+
+def pin_line(pin: PinView) -> str:
+    scope = "every project" if pin.project_id is None else f"project {pin.project_id}"
+    return f"{pin.kind}  {pin.name} {pin.version}  {scope}"
+
+
+@playbook_app.command("invoke")
+def invoke_playbook(
+    session_id: SessionId, name: PlaybookName, as_json: Json = False, api: Api = None
+) -> None:
+    """Bring a playbook into a session you may instruct, in person. Its gates
+    hold there from now on, and its brief arrives as your message."""
+    invoked = run(lambda client: client.invoke_playbook(name, session_id), api)
+    if as_json:
+        typer.echo(invoked.model_dump_json(indent=2))
+    else:
+        typer.echo(f"invoked {invoked.name} {invoked.version} into {invoked.session_id}")
+
+
+@playbook_app.command("pin")
+def pin_playbook(
+    kind: KindName,
+    name: PlaybookName,
+    project: PinProject = None,
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """Pin a playbook to a kind as its manual, in person. Each session of the
+    kind started from now on holds it as its standing text; one started
+    before keeps its own."""
+    pinned = run(lambda client: client.pin_playbook(kind, name, project_id=project), api)
+    typer.echo(pinned.model_dump_json(indent=2) if as_json else f"pinned {pin_line(pinned)}")
+
+
+@playbook_app.command("unpin")
+def unpin_playbook(
+    kind: KindName, project: PinProject = None, as_json: Json = False, api: Api = None
+) -> None:
+    """Take a kind's manual away, in person. A session started with it keeps it."""
+    unpinned = run(lambda client: client.unpin_playbook(kind, project_id=project), api)
+    typer.echo(unpinned.model_dump_json(indent=2) if as_json else f"unpinned {pin_line(unpinned)}")
+
+
+@playbook_app.command("pins")
+def list_pins(as_json: Json = False, api: Api = None) -> None:
+    """The org's manuals, one a line, by kind."""
+    found = run(lambda client: client.playbook_pins(), api)
+    if as_json:
+        typer.echo(json.dumps([pin.model_dump(mode="json") for pin in found], indent=2))
+        return
+    for pin in found:
+        typer.echo(pin_line(pin))
 
 
 # Realtime
