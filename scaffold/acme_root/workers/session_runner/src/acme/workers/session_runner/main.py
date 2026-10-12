@@ -37,7 +37,7 @@ from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
-from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
+from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 log = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         managers.steps,
         managers.work,
         managers.tenancy,
-        HeldOptions(grace=timedelta(seconds=container.settings.runner_workspace_grace_seconds)),
+        container.kinds.warm_grace,
         relay=managers.relay,
         cloud=managers.cloud_pool,
     )

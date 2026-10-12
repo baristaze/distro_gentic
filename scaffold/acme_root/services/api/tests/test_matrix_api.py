@@ -21,7 +21,7 @@ from acme.om.matrix.types.record import ModelRef
 from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.services.api.container import AppContainer
-from acme.services.api.seed import seed_matrix
+from acme.services.api.seed import BENCHMARK, seed_matrix
 
 SONNET: dict[str, Any] = {
     "provider": "anthropic",
@@ -77,7 +77,9 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_its_options(
     by_role = {option["role"]: option["fills"] for option in options}
     assert {"main", "summarizer"} <= set(by_role)
     assert all(fill["provider"] == "anthropic" for fills in by_role.values() for fill in fills)
-    (main,) = by_role["main"]
+    # The main role's own row first, then the rows of the sizes, which
+    # serve every role.
+    main = by_role["main"][0]
     assert main["model"] == "claude-sonnet-5-5"
 
     chosen = await client.put("/v1/matrix/choices/main", headers=owner, json={"fill": main})
@@ -114,9 +116,12 @@ async def test_a_tenant_the_platform_pays_for_chooses_nothing(
 
 def a_version(*fills: dict[str, Any]) -> dict[str, Any]:
     """Every model role a version must serve, each answered by the row that
-    matches every question."""
+    matches every question, and a row for each model size a shipped kind
+    asks, on the same fills."""
     roles = sorted({MAIN, SUMMARIZER, *(role for kind in SHIPPED for role in kind.roles)})
-    return {"roles": roles, "rows": [{"fills": list(fills)}]}
+    sizes = sorted({ask.size for kind in SHIPPED for ask in kind.asks})
+    sized = [{"matches": {"size": size}, "fills": list(fills)} for size in sizes]
+    return {"roles": roles, "rows": [{"fills": list(fills)}, *sized]}
 
 
 def a_result(fill: dict[str, Any], role: str, passed: bool = True) -> dict[str, Any]:
@@ -135,11 +140,19 @@ async def test_an_operator_publishes_a_version_once_its_fills_qualify(
     client: httpx.AsyncClient, container: AppContainer
 ) -> None:
     writer, _ = await enrol_operator(client, container, "root@example.test", OperatorRole.WRITE)
-    staged = await client.post("/v1/admin/matrix/versions", headers=writer, json=a_version(OPUS))
+    opus = {**OPUS, "efforts": ["high", "xhigh"]}
+    staged = await client.post("/v1/admin/matrix/versions", headers=writer, json=a_version(opus))
     assert staged.status_code == 201, staged.text
     version = staged.json()
     assert (version["number"], version["status"]) == (1, "pending")
     assert version["rows"][0]["matches"]["role"] is None
+    # A row names the size it answers, and a fill the efforts an ask may
+    # move it to, as the operator sent them.
+    assert [row["matches"]["size"] for row in version["rows"]] == [None, "l", "s"]
+    assert {tuple(row["fills"][0]["efforts"]) for row in version["rows"]} == {("high", "xhigh")}
+    missing = {**a_version(opus), "rows": a_version(opus)["rows"][:2]}
+    unsized = await client.post("/v1/admin/matrix/versions", headers=writer, json=missing)
+    assert unsized.status_code == 201, unsized.text
 
     unqualified = await client.post("/v1/admin/matrix/versions/1/publish", headers=writer)
     assert unqualified.status_code == 422, unqualified.text
@@ -153,6 +166,9 @@ async def test_an_operator_publishes_a_version_once_its_fills_qualify(
         recorded = await client.post("/v1/admin/matrix/results", headers=writer, json=result)
         assert recorded.status_code == 201, recorded.text
         assert recorded.json() | result == recorded.json(), "recorded as sent"
+    no_s = await client.post("/v1/admin/matrix/versions/2/publish", headers=writer)
+    assert no_s.status_code == 422, no_s.text
+    assert "no row names the model size s" in no_s.json()["error"]["message"]
     published = await client.post("/v1/admin/matrix/versions/1/publish", headers=writer)
     assert published.status_code == 200, published.text
     assert published.json()["status"] == "published"
@@ -195,7 +211,8 @@ async def test_staging_and_publishing_need_the_operators_write_and_a_tenant_reac
     later = await client.get(f"/v1/admin/matrix/versions/{number + 1}", headers=reader)
     assert later.status_code == 404, later.text
     matrix = container.storage.get_matrix_storage()
-    assert await matrix.read_results(ModelRef.model_validate(retiring), 10) == []
+    results = await matrix.read_results(ModelRef.model_validate(retiring), 100)
+    assert {result.benchmark for result in results} <= {BENCHMARK}, "the seed's alone"
     assert await matrix.read_retirements(10) == []
 
 

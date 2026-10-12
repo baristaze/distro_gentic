@@ -8,12 +8,14 @@ of](../../../../README.md).
 
 - **Question**: what a session asks for each [model
   role](../models/README.md): the environment the platform runs in, the
-  model role, the session's agent kind, its tenant's plan tier, and its
-  workload class. A product names its sessions' workload classes; with
-  none named, every session's is `standard`.
+  model size its agent kind asks of the role, if it asks one, the model
+  role, the session's agent kind, its tenant's plan tier, and its workload
+  class. A product names its sessions' workload classes; with none named,
+  every session's is `standard`.
 - **Row**: the fills that answer a set of questions, the first the fill
-  and the rest its fallbacks. A row names any of the five keys and leaves
-  the rest open. The row that names none matches every question.
+  and the rest its fallbacks. A row names any of the six keys and leaves
+  the rest open. The row that names none matches every question. A row
+  that names a size answers only a role a kind asks that size of.
 - **Version**: the model roles the matrix serves and its rows, written
   once. It is pending until an operator publishes it, and the latest
   version published is the matrix. A change is a new version.
@@ -28,8 +30,9 @@ of](../../../../README.md).
 ## What can happen
 
 - **Stage and publish.** An operator stages a version, then publishes it
-  once every fill in it is priced and qualified, and a row matches every
-  question. Each reason it may not be published is named.
+  once every fill in it is priced and qualified, a row matches every
+  question, and a row names each size a kind asks. Each reason it may not
+  be published is named.
 - **Record.** An operator records a benchmark's result, or a provider's
   retirement of a model. No code change waits on either.
 - **Resolve.** A session's first loop resolves its fills at the version
@@ -38,9 +41,10 @@ of](../../../../README.md).
   run on is taken out first: a fill its tenant's retention does not
   admit, a retired model, and, for a tenant on its own keys, a provider
   it holds no key for. The most specific row with a fill left answers.
-  A role the session's kind asks of takes its row the same way, since
-  the matrix keys no model size: each fill runs at the effort asked
-  where it lists that effort, and the fill set keeps the ask beside it.
+  A role the session's kind asks a size of asks with that size, so a new
+  kind takes its size's row with no edit here: each fill runs at the
+  effort asked where it lists that effort, and the fill set keeps the ask
+  beside it.
 - **Renew.** At the start of each loop, a fill whose model was retired
   switches to what the latest version answers now, by a `switched` step,
   and the session is pinned to that version.
@@ -61,10 +65,17 @@ of](../../../../README.md).
 ## The rules
 
 - **Every question has an answer.** No version is published without the
-  row that matches everything, or without a model role the engine or a
-  kind the platform runs calls. Of the rows that match, the one that names
-  the most keys wins, and of two that name as many, the one that names the
-  earlier key, in the order above.
+  row that matches everything, without a model role the engine or a kind
+  the platform runs calls, or without a row that names each size such a
+  kind asks. Of the rows that match, the one that names the most keys
+  wins, and of two that name as many, the one that names the earlier key,
+  in the order above. When the version holds a row that names the size a
+  question asks, the question takes a row that names its kind first,
+  whatever else either row names, then a row that names the size, then
+  the rest, each by that order. So an operator's row for a kind answers
+  it before any size's row, and a size's row answers an ask before the
+  role's row. When the version holds no row for that size, the question
+  is asked with no size, and resolves by the order above alone.
 - **A model enters priced and qualified.** Each fill of a published
   version has a price row of its own and a passing benchmark for every
   model role its row serves, and names no retired model.
@@ -88,8 +99,8 @@ that a root hands `build_managers(models_layer=...)`: `impl/resolver.py`
 is the engine's resolver, `impl/models.py` the face over the engine's
 models manager (eligibility from the retention snapshot, renewal, and the
 purge of pins and choices), and `impl/credentials.py` the call credentials
-the loop and a compaction ask. The pure rules are `rules.py`. ADR 2012
-records the decisions.
+the loop and a compaction ask. The pure rules are `rules.py`. ADRs 2012
+and 2055 record the decisions.
 -->
 
 ## How another namespace composes it

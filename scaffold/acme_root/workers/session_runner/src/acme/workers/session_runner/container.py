@@ -37,7 +37,7 @@ from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.root import LOCAL, Managers, PlatformPorts, build_managers
+from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
@@ -64,6 +64,7 @@ class RunnerContainer:
         managers: Managers,
         stream: StreamServiceInterface,
         placement: PlacementOptions | None = None,
+        kinds: ProductKinds | None = None,
     ) -> None:
         self.settings = settings
         self.storage = storage
@@ -75,6 +76,9 @@ class RunnerContainer:
         self.placement = placement or PlacementOptions()
         # The loop's stream sink: what it streams, on the shared cache.
         self.stream = stream
+        # What the product adds to the platform's kinds, as the managers were
+        # built with it: each kind's warm grace, which the held sweep reads.
+        self.kinds = kinds or ProductKinds()
         # Where a session's acts through the platform's account are recorded;
         # whoever can clear a park its runs wrote is told, on their channels.
         self.intake: IntakeManagerInterface = build_intake(
@@ -268,7 +272,9 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
-        container = cls(settings, storage, infra, integrations, managers, stream, placing)
+        container = cls(
+            settings, storage, infra, integrations, managers, stream, placing, ports.kinds
+        )
         held.append(container)
         return container
 

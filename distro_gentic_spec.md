@@ -379,8 +379,10 @@ workspace; an `unsafe` one completes `interrupted`, outcome unknown.
 
 A **workspace** is the checkout the tools work on: a session branch,
 inside the instance a host prepared. The branch, its commits, and the
-artifacts live elsewhere. After a loop, the instance stays warm for a
-short grace so a follow-up can reattach; then it is released. It is
+artifacts live elsewhere. After a loop, the instance stays warm for its
+kind's grace so a follow-up can reattach; then it is released. No grace
+runs past the provider's prompt-cache life, since a later follow-up
+writes its cached prefix again anyway. It is
 released at once when the session is archived or cancelled. A session
 that merely exists holds no machine.
 
@@ -947,8 +949,8 @@ platform's key.
 ## Models Are a Fleet Decision
 
 The platform is the expert on which model serves which task. It answers
-with a **matrix**: for each environment, model role, agent kind, plan
-tier, and workload class, a fill ([`agentic_core` Roles and
+with a **matrix**: for each environment, model size, model role, agent
+kind, plan tier, and workload class, a fill ([`agentic_core` Roles and
 Fills][e-roles]). The most specific row
 wins, and a row that matches everything is required, so every question
 has an answer.
@@ -960,6 +962,12 @@ has an answer.
   does, and only after a benchmark run passes for the model roles it
   will serve. Benchmarks never gate a code change; they gate a matrix
   release.
+- **A kind asks a size, never a model.** In a version that holds a row
+  for the model size a kind asks of a role, the role takes a row that
+  names the kind first, then the size's row before the role's, so a new
+  kind needs no row of its own. In a version that holds none, the role
+  resolves as one asked no size. A version is published only with a row
+  for each size a kind asks.
 - **Tenants choose only among qualified fills.** By default a tenant
   never names a model. A tenant on its own keys may override the fill for
   a model role, among qualified fills from providers it holds keys for.
@@ -976,7 +984,11 @@ the matrix version just published, before the bill shows it.
 
 One loop, many kinds ([`agentic_core` Agent
 Kinds][e-kinds]). A platform ships a few, each a
-profile with its own powers:
+profile with its own powers, built from the platform's **toolsets**:
+groups of tools a kind takes whole. A kind also asks a model size of
+each role it calls, and holds its workspace warm for a grace of its own
+([A Workspace Is a Cache](#a-workspace-is-a-cache)). A product adds
+kinds the same way, as data, and the models and the rhythm follow.
 
 - The **engineer** takes an objective to a validated, reviewable change.
   Its workspace has no network and starts from its project's

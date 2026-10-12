@@ -17,19 +17,21 @@ an unclaimed instance to `fleet`.
 **Principle.** A workspace is the checkout the tools work on: a session
 branch, inside the instance a host prepared. The branch, its commits,
 and the artifacts live elsewhere. After a loop, the instance stays warm
-for a short grace so a follow-up can reattach; then it is released. It
-is released at once when the session is archived or cancelled. A session
-that merely exists holds no machine.
+for its kind's grace so a follow-up can reattach; then it is released.
+No grace runs past the provider's prompt-cache life. It is released at
+once when the session is archived or cancelled. A session that merely
+exists holds no machine.
 
 **Source.** Workspaces and Isolation, A Workspace Is a Cache.
 
 **Look for.** The instance's lifecycle: what holds it after a loop
-ends, the grace, and the release on archive and on cancel; anything kept
-only in the workspace.
+ends, the grace its session's kind names and its bound, and the release
+on archive and on cancel; anything kept only in the workspace.
 
-**Violation.** An instance kept after a loop ends and its grace runs
-out, or kept after the session is archived or cancelled; a commit or an
-artifact whose only copy is in the workspace. (A loop parked on a
+**Violation.** An instance kept after a loop ends and its kind's grace
+runs out, or after the session is archived or cancelled; a grace one
+setting holds for every kind, or one past the prompt-cache life; a
+commit or an artifact whose only copy is in the workspace. (A loop parked on a
 hand-over has not ended: taking control keeps the workspace, as WAT-05
 says.)
 

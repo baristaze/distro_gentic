@@ -102,9 +102,9 @@ macOS.
   how to drop them for the host's user.
 - **Lets go of an instance when asked.** The platform asks the host
   that holds a session's workspace to release it once no run accounts
-  for it past a grace, after it has pushed the checkout's work. The host
-  stops the instance it made and keeps its files, so the session's next
-  call here starts it anew over them. A release runs and reads nothing,
+  for it past its kind's warm grace, after it has pushed the checkout's
+  work. The host stops the instance it made and keeps its files, so the
+  session's next call here starts it anew over them. A release runs and reads nothing,
   so only the tenant fence applies: it lets go only of what this host
   made for that session and tenant.
 - **Destroys an instance when asked.** A run that validates a pinned

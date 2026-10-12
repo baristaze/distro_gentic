@@ -3,9 +3,9 @@ question its kind, its tenant's plan tier, its workload class, and the
 environment ask, at the version the session is pinned to. What the session
 may not run on is filtered out first: a fill its eligibility does not
 admit, a retired model, and, for a tenant on its own keys, a provider it
-holds no key for. A role its kind asks of is answered by the role's row,
-since the matrix keys no model size: each fill at the effort asked where it
-lists it, and the ask kept beside the fill."""
+holds no key for. A role its kind asks a size of asks with that size, so a
+row that names the size answers it, unless a row names the kind: each fill
+at the effort asked where it lists it, and the ask kept beside the fill."""
 
 import logging
 from collections.abc import Callable, Sequence
@@ -126,7 +126,9 @@ class MatrixResolverImpl(MatrixResolverInterface):
 
         def answers(at: MatrixVersion) -> tuple[RoleFill, ...]:
             return tuple(
-                self._answer(at, ask(role), eligibility, retired, tenant, asked.get(role))
+                self._answer(
+                    at, ask(role, asked.get(role)), eligibility, retired, tenant, asked.get(role)
+                )
                 for role in sorted(set(roles))
             )
 
@@ -171,7 +173,9 @@ class MatrixResolverImpl(MatrixResolverInterface):
         switches = tuple(
             (
                 entry.role,
-                self._answer(current, ask(entry.role), required, retired, tenant, entry.ask).fill,
+                self._answer(
+                    current, ask(entry.role, entry.ask), required, retired, tenant, entry.ask
+                ).fill,
                 reason,
             )
             for entry, reason in gone
@@ -234,8 +238,9 @@ class MatrixResolverImpl(MatrixResolverInterface):
 
     async def _asking(
         self, ctx: TenantContext, session_id: UUID
-    ) -> Callable[[ModelRole], MatrixQuery]:
-        """The question the session asks for each model role."""
+    ) -> Callable[[ModelRole, ModelAsk | None], MatrixQuery]:
+        """The question the session asks for each model role, with the size
+        its kind asks of it, if any."""
         session = await self._sessions.read_session(ctx.org_id, session_id)
         if session is None:
             raise NotFound(f"agent session {session_id} not found")
@@ -243,9 +248,10 @@ class MatrixResolverImpl(MatrixResolverInterface):
         tier = self._options.default_tier if share is None else share.plan_tier
         workload = self._workload(session)
 
-        def ask(role: ModelRole) -> MatrixQuery:
+        def ask(role: ModelRole, asked: ModelAsk | None) -> MatrixQuery:
             return MatrixQuery(
                 environment=self._options.environment,
+                size=None if asked is None else asked.size,
                 role=role,
                 kind=session.kind,
                 plan_tier=tier,

@@ -6,8 +6,10 @@ would run on for good. Each pass reads what this host's provider holds,
 whichever process prepared it. An instance whose session has a loop item
 queued or claimed is a run's, or soon will be, and is left alone: a live
 run always holds its loop item claimed. One no run accounts for is let go
-once a pass finds it so past a grace, which a follow-up still reattaches
-within. It goes through the release a run makes, under its tenant's
+once a pass finds it so past its grace, which a follow-up still reattaches
+within: the warm grace of its session's kind, read once when a pass first
+finds it so, and never past the prompt cache's life. One whose session
+this database no longer reads takes the default grace. It goes through the release a run makes, under its tenant's
 context: what its checkout holds is pushed to a snapshot ref first, and a
 push that does not land lets nothing go, so the next pass tries again.
 
@@ -49,7 +51,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from acme.infra.workspaces import (
     Durability,
@@ -59,11 +61,12 @@ from acme.infra.workspaces import (
 )
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents.loop_rules import kept_snapshot
-from acme.om.base import EMPTY_UUID, Platform, utcnow
+from acme.om.base import EMPTY_UUID, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
+from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.steps import StepsManagerInterface
@@ -86,19 +89,18 @@ REFUSED = (ValidationFailed, NotAuthorized)
 the tenant's holds: pushing the same work again would be refused again."""
 
 
-class HeldOptions(Platform):
-    # How long an instance no run accounts for stays, counted from the first
-    # pass that finds it so, before it is let go.
-    grace: timedelta = Field(default=timedelta(minutes=5), gt=timedelta(0))
+Graces = Callable[[str], timedelta]
+"""Each agent kind's warm grace, by its name (`ProductKinds.warm_grace`)."""
 
 
 class HeldWorkspacesSweep:
     """Lets go of each instance this host holds that no run accounts for,
-    once a pass finds it so past the grace, and of each such instance a
-    tenant's host holds when `relay` is given, or a machine of the cloud
-    pool holds when `cloud` is. When a pass first found each one so is held
-    in memory: a runner that restarts counts the grace again, so it lets go
-    later, never sooner."""
+    once a pass finds it so past its session's kind's grace (`graces`), and
+    of each such instance a tenant's host holds when `relay` is given, or a
+    machine of the cloud pool holds when `cloud` is. When each one may go,
+    counted from the pass that first found it so, is held in memory: a
+    runner that restarts counts the grace again, so it lets go later, never
+    sooner."""
 
     def __init__(
         self,
@@ -109,7 +111,7 @@ class HeldWorkspacesSweep:
         steps: StepsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
-        options: HeldOptions,
+        graces: Graces,
         clock: Callable[[], datetime] = utcnow,
         relay: RelayManagerInterface | None = None,
         cloud: CloudPoolManagerInterface | None = None,
@@ -121,12 +123,12 @@ class HeldWorkspacesSweep:
         self._steps = steps
         self._work = work
         self._tenancy = tenancy
-        self._options = options
+        self._graces = graces
         self._clock = clock
         self._relay = relay
         self._cloud = cloud
-        # Each instance no run accounted for at a pass, and when a pass first
-        # found it so.
+        # Each instance no run accounted for at a pass, and when it may go:
+        # its grace past the pass that first found it so.
         self._unaccounted: dict[UUID, datetime] = {}
         # Each instance logged as one this database holds no record of.
         self._logged: set[UUID] = set()
@@ -200,8 +202,7 @@ class HeldWorkspacesSweep:
             if await self._work.has_open(ctx, WorkKind.LOOP, instance.id):
                 self._unaccounted.pop(instance.id, None)
                 return False
-        since = self._unaccounted.setdefault(instance.id, now)
-        if now - since < self._options.grace:
+        if now < await self._until(ctx, instance.id, now):
             return False
         if ctx is None:
             await self._tools.purge_workspace(instance.org_id, instance.id)
@@ -266,8 +267,7 @@ class HeldWorkspacesSweep:
         ):
             self._unaccounted.pop(session_id, None)
             return False
-        since = self._unaccounted.setdefault(session_id, now)
-        if now - since < self._options.grace:
+        if now < await self._until(ctx, session_id, now):
             return False
         cursor = await self._steps.get_cursor(ctx, session_id)
         if cursor.epoch == 0:
@@ -311,6 +311,25 @@ class HeldWorkspacesSweep:
         )
         self._unaccounted.pop(session_id, None)
         return True
+
+    async def _until(self, ctx: TenantContext | None, session_id: UUID, now: datetime) -> datetime:
+        """When the instance of a session no run accounts for may go: its
+        grace past the pass that first found it so, read at that pass."""
+        until = self._unaccounted.get(session_id)
+        if until is None:
+            until = self._unaccounted[session_id] = now + await self._grace(ctx, session_id)
+        return until
+
+    async def _grace(self, ctx: TenantContext | None, session_id: UUID) -> timedelta:
+        """The warm grace of the session's kind, or the default for a session
+        of a deleted tenant, or one marked deleted."""
+        if ctx is None:
+            return WARM_GRACE
+        try:
+            session = await self._sessions.get_session(ctx, session_id)
+        except NotFound:
+            return WARM_GRACE
+        return self._graces(session.kind)
 
     async def _released(self, ctx: TenantContext, session_id: UUID) -> bool:
         """Whether a release of the session's instance was asked after its

@@ -1,10 +1,14 @@
 """The model matrix: which fills serve which question, by version.
 
 A question names an environment, a model role, an agent kind, a plan tier,
-and a workload class. A row names any of the five, and leaves the rest
-open; the row that matches every question names none. The most specific
-row that matches wins, and a version publishes only with the row that
-matches everything, so every question has an answer.
+and a workload class, and, for a role its kind asks a size of, the model
+size. A row names any of the six, and leaves the rest open; the row that
+matches every question names none. The most specific row that matches
+wins: for a question that asks a size the version holds a row for, a row
+that names the kind before a row that names the size, and that before the
+rest. A version that holds no row for the size answers the question as
+one that asks none. A version publishes only with the row that matches
+everything, so every question has an answer.
 
 A version is written once, pending, and then published as it is: an edit
 is a new version. The current matrix is the latest version published."""
@@ -18,7 +22,7 @@ from pydantic import Field, StringConstraints, model_validator
 
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import Identifiable, Platform
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.placement.types.share import PlanTier
 
 NAME = r"^[a-z][a-z0-9-]{0,31}$"
@@ -42,16 +46,19 @@ MAX_FILLS = 8
 MAX_ROLES = 64
 """The model roles one version serves at most."""
 
-KEYS = ("environment", "role", "kind", "plan_tier", "workload")
-"""The five keys of a question, in the spec's order. Of two rows that name
+KEYS = ("environment", "size", "role", "kind", "plan_tier", "workload")
+"""The six keys of a question, in the spec's order. Of two rows that name
 as many keys, the one that names the earlier key is the more specific."""
 
 
 class MatrixQuery(Platform):
     """One question: which fills serve this model role, for this agent kind
-    on this plan tier, in this workload class and environment."""
+    on this plan tier, in this workload class and environment. `size` is the
+    model size the kind asks of the role, and None when it asks none, which
+    no row that names a size answers."""
 
     environment: Environment
+    size: ModelSize | None = None
     role: ModelRole
     kind: AgentKindName
     plan_tier: PlanTier
@@ -63,6 +70,7 @@ class MatrixKey(Platform):
     a key left None matches every value."""
 
     environment: Environment | None = None
+    size: ModelSize | None = None
     role: ModelRole | None = None
     kind: AgentKindName | None = None
     plan_tier: PlanTier | None = None
@@ -73,18 +81,28 @@ class MatrixKey(Platform):
             getattr(self, key) is None or getattr(self, key) == getattr(query, key) for key in KEYS
         )
 
-    @property
-    def specificity(self) -> tuple[int, tuple[bool, ...]]:
-        """How specific the row is: the keys it names, then which ones, the
-        spec's order first. Two keys that compare equal name the same keys,
+    def specificity(self, query: MatrixQuery) -> tuple[int, int, tuple[bool, ...]]:
+        """How specific the row is for `query`, a question it matches. For
+        a question that asks a size, a row that names the kind comes first,
+        whatever else it or a size's row names, so an operator's row for a
+        kind is never passed over for a size's; then a row that names the
+        size, as the engine answers an ask by its size; then the rest.
+        Within each, and for a question that asks no size, which no row that
+        names a size matches, the row that names more keys, then the one
+        that names the earlier key, in the spec's order. Of a version that
+        holds no row for its size, the question is asked with no size
+        (`rules.answer`). Two rows that compare equal name the same keys,
         so two rows that match one question with it are the same row."""
         named = tuple(getattr(self, key) is not None for key in KEYS)
-        return sum(named), named
+        first = 0
+        if query.size is not None:
+            first = 2 if self.kind is not None else 1 if self.size is not None else 0
+        return first, sum(named), named
 
     @property
     def everything(self) -> bool:
         """Whether it matches every question."""
-        return not any(self.specificity[1])
+        return all(getattr(self, key) is None for key in KEYS)
 
 
 class MatrixRow(Platform):

@@ -13,7 +13,7 @@ from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.matrix.types.matrix import MAX_FILLS, MAX_ROLES, MAX_ROWS, NAME, MatrixStatus
 from acme.om.matrix.types.record import MAX_MODEL, BenchmarkName
-from acme.om.models.types.fill import ModelRole, OutputShape
+from acme.om.models.types.fill import ModelRole, ModelSize, OutputShape
 from acme.services.api.types.common import RequestBody, View
 
 Name = Annotated[str, StringConstraints(pattern=NAME)]
@@ -28,15 +28,17 @@ class EligibilityBody(RequestBody):
 
 
 class FillBody(RequestBody):
-    """A fill: a provider's model, how hard it works, its output bound and
-    shape, its context window, and what it offers. The output bound fits
-    inside the window, and a schema is named exactly when the output is one.
-    An output left out is text, and an eligibility left out offers
-    nothing."""
+    """A fill: a provider's model, how hard it works and the efforts a kind's
+    ask may move it to (those its model takes), its output bound and shape,
+    its context window, and what it offers. The output bound fits inside
+    the window, and a schema is named exactly when the output is one. An
+    output left out is text, an eligibility left out offers nothing, and
+    efforts left out let no ask move the fill."""
 
     provider: ProviderName
     model: str = Field(min_length=1, max_length=200)
     effort: Effort | None = None
+    efforts: list[Effort] = Field(default_factory=list[Effort], max_length=len(Effort))
     thinking_budget: int | None = Field(default=None, gt=0)
     max_output_tokens: int = Field(gt=0)
     output: OutputShape | None = None
@@ -54,6 +56,7 @@ class FillView(View):
     provider: ProviderName
     model: str
     effort: Effort | None
+    efforts: list[Effort]
     thinking_budget: int | None
     max_output_tokens: int
     output: OutputShape
@@ -65,9 +68,11 @@ class FillView(View):
 class MatrixKeyBody(RequestBody):
     """What a row answers: each key it names must equal the question's, and a
     key left out matches every value. The row that names none matches every
-    question."""
+    question. A row that names a model size answers only a role a kind asks
+    that size of: after a row that names the kind, and before the rest."""
 
     environment: Name | None = None
+    size: ModelSize | None = None
     role: ModelRole | None = None
     kind: KindName | None = None
     plan_tier: Name | None = None
@@ -93,6 +98,7 @@ class StageRequest(RequestBody):
 
 class MatrixKeyView(View):
     environment: str | None
+    size: ModelSize | None
     role: str | None
     kind: str | None
     plan_tier: str | None

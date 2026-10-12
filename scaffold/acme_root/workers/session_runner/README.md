@@ -44,9 +44,10 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
 - **The sweep** takes back the expired leases and relays the outbox a crash
   left. Then it reads the workspace instances this host holds for its
   deployment (`ACME_WORKSPACE_DEPLOYMENT`). One whose session has no loop
-  item queued or claimed is no run's; once a pass finds it so past a
-  grace (`ACME_RUNNER_WORKSPACE_GRACE_SECONDS`), it is released the way a
-  run releases it, its work pushed to a snapshot ref first. A push that
+  item queued or claimed is no run's; once a pass finds it so past its
+  grace, the warm grace of its session's kind and never past the prompt
+  cache's life (`ProductKinds.warm_grace`), it is released the way a run
+  releases it, its work pushed to a snapshot ref first. A push that
   does not land keeps it for the next pass. One whose tenant is deleted
   is purged. One whose tenant or session the database holds no record
   of, as after a restore, is left alone and logged. One whose session is
@@ -54,7 +55,7 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   a release would lose what its commands wrote outside its files. Then it
   reads every workspace a tenant's host holds, by the relay's bindings,
   and holds each to the same proofs. One whose loop is parked on a hand-over is
-  the person's, and stays. Past the grace, its work is pushed to a
+  the person's, and stays. Past its grace, its work is pushed to a
   snapshot ref through the relay, unless a snapshot after the session's
   last step holds it already, as a loop's end leaves it; only then is its
   host asked to let the instance go. One whose release was asked since

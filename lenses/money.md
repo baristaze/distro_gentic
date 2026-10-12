@@ -228,18 +228,28 @@ funding mode that falls back to the platform's key.
 ## MNY-12 The matrix answers every question
 
 **Principle.** The platform answers which model serves which task with a
-matrix: for each environment, model role, agent kind, plan tier, and
-workload class, a fill. The most specific row wins, and a row that
-matches everything is required, so every question has an answer.
+matrix: for each environment, model size, model role, agent kind, plan
+tier, and workload class, a fill. The most specific row wins, and a row
+that matches everything is required, so every question has an answer.
+In a version that holds a row for the model size a kind asks of a role,
+the role takes a row that names the kind first, then the size's row
+before the role's; in one that holds none, it resolves as a role asked
+no size. A version is published only with a row for each size a kind
+asks.
 
 **Source.** Models Are a Fleet Decision.
 
-**Look for.** The matrix's keys and its resolution order; the check for
-the row that matches everything.
+**Look for.** The matrix's keys and its resolution order; the size a
+question carries for a role its kind asks of; the check for the row that
+matches everything and for a row per asked size.
 
 **Violation.** A model chosen outside the matrix; a resolution that
-picks a less specific row over a more specific one; a matrix that can be
-published without the row that matches everything.
+picks a less specific row over a more specific one; an asked role
+answered by its role's row while a row names its size, or by a size's
+row while a row names its kind; a row that names the kind put first in a
+version that holds no row for the size asked; a matrix that can be
+published without the row that matches everything, or without a row for
+a size a kind asks.
 
 **Severity.** medium
 

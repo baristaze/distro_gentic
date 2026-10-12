@@ -9,6 +9,7 @@ the queue, run on a fresh executor with no model call."""
 
 import hashlib
 import json
+from collections.abc import Collection
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -112,16 +113,19 @@ from acme.om.platform_agents.tools import (
     SearchCodeImpl,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import build_managers, engine_tools
+from acme.om.root import ProductKinds, build_managers, engine_tools
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.native.load_toolset import callable_tools
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
+from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
 from acme.om.tools.types.tool import ToolClass, ToolInput
+from acme.om.tools.types.toolset import Toolset
 from acme.om.windows.rules import READ_ARTIFACT
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
@@ -311,7 +315,8 @@ def test_the_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their
     for the sessions pinned to it."""
     assert READ_ARTIFACT in latest.tools and READ_ARTIFACT not in before.tools
     assert latest.version == before.version + 1
-    assert latest.model_copy(update={"version": before.version, "tools": before.tools}) == before
+    same = {"version": before.version, "tools": before.tools, "toolsets": before.toolsets}
+    assert latest.model_copy(update=same) == before
     assert latest in SHIPPED and before in SHIPPED
     assert READ_ARTIFACT in {tool.spec.name for tool in shipped_catalog()}
 
@@ -516,6 +521,166 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
         prompts = [prompt for prompt in kind.prompts if prompt]
         assert [block.text for block in call.system[: len(prompts)]] == prompts, kind.name
         assert call.system_break == len(prompts), f"{kind.name} caches the end of its prompts"
+
+
+NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
+    (kinds.ENGINEER, 1): (
+        "list_files",
+        "read_file",
+        "write_file",
+        "run_command",
+        "validate",
+        "open_pull_request",
+        "submit_result",
+    ),
+    **{
+        (kinds.ENGINEER, version): (
+            "list_files",
+            "read_file",
+            "search_code",
+            "edit_file",
+            "write_file",
+            "run_command",
+            "search_knowledge",
+            "read_knowledge",
+            "suggest_knowledge",
+            "validate",
+            "open_pull_request",
+            "submit_result",
+        )
+        for version in (2, 3, 4)
+    },
+    **{
+        (kinds.ENGINEER, version): (
+            "list_files",
+            "read_file",
+            "search_code",
+            "edit_file",
+            "write_file",
+            "run_command",
+            "search_knowledge",
+            "read_knowledge",
+            "suggest_knowledge",
+            "spawn_sub_agent",
+            "wait_for_sub_agents",
+            "validate",
+            "open_pull_request",
+            "submit_result",
+            *(("read_artifact",) if version >= 7 else ()),
+        )
+        for version in (5, 6, 7, 8)
+    },
+    (kinds.ANALYSIS, 1): ("list_files", "read_file", "run_command"),
+    **{
+        (kinds.ANALYSIS, version): (
+            "list_files",
+            "read_file",
+            "search_code",
+            "run_command",
+            "search_knowledge",
+            "read_knowledge",
+            *(("spawn_sub_agent", "wait_for_sub_agents") if version >= 3 else ()),
+            *(("read_artifact",) if version >= 4 else ()),
+        )
+        for version in (2, 3, 4)
+    },
+    (kinds.PLANNER, 1): ("read_session", "hand_off_to_engineer"),
+    (kinds.PLATFORM_ASSISTANT, 1): (
+        "search_corpus",
+        "read_session",
+        "draft_tool_policy",
+        "hand_off_to_engineer",
+    ),
+    (kinds.PLATFORM_ASSISTANT, 2): (
+        "search_corpus",
+        "search_knowledge",
+        "read_knowledge",
+        "read_session",
+        "list_sessions",
+        "read_wait",
+        "list_projects",
+        "read_project",
+        "list_automations",
+        "read_automation",
+        "draft_tool_policy",
+        "hand_off_to_engineer",
+    ),
+}
+"""Each shipped kind's tools as it named them one by one, before it was
+built from toolsets."""
+
+
+def tool_block(catalog: tuple[ToolInterface, ...], names: Collection[str]) -> str:
+    """The tool definitions a registry of `names` renders, as the bytes a
+    request carries them in."""
+    registry = ToolRegistry(tool for tool in catalog if tool.spec.name in names)
+    return json.dumps([tool.model_dump(mode="json") for tool in registry.render()])
+
+
+def test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one() -> None:
+    """A kind built from the platform's toolsets renders, at every version
+    still shipped, the same tool definitions, byte for byte, as the tools
+    it named one by one: its sessions' cached prefix holds, and its powers
+    are the same. It defers nothing, so every tool is in its first request,
+    and each toolset it names is the platform's."""
+    catalog = shipped_catalog()
+    assert {(kind.name, kind.version) for kind in SHIPPED} == set(NAMED_ONE_BY_ONE)
+    for kind in SHIPPED:
+        named = NAMED_ONE_BY_ONE[(kind.name, kind.version)]
+        assert not kind.deferred and not kind.waiting, (kind.name, kind.version)
+        assert set(kind.toolsets) <= set(kinds.TOOLSETS), (kind.name, kind.version)
+        assert sorted(kind.tools) == sorted(named), (kind.name, kind.version)
+        held = callable_tools(kind.tools, kind.waiting, ())
+        assert tool_block(catalog, held) == tool_block(catalog, named), (kind.name, kind.version)
+
+
+def a_product_kind(*toolsets: Toolset, name: str = "triage") -> AgentKind:
+    return AgentKind(
+        name=name,
+        version=1,
+        toolsets=toolsets,
+        done_rule=DoneRule.ANSWER,
+        authority=AuthorityMode.STEADY,
+    )
+
+
+def test_a_products_kinds_name_the_platforms_toolsets_and_its_own() -> None:
+    """A product's kind is built from the platform's toolsets and the ones
+    the product adds beside them. A product never changes one of the
+    platform's, and a kind names only a toolset one of the two declares,
+    at the version and with the tools declared."""
+    own = Toolset(name="tickets", version=1, summary="Read tickets.", tools=("read_ticket",))
+    kind = a_product_kind(kinds.FILES_TOOLSET, own)
+    product = ProductKinds(agents=(kind,), toolsets=(own,))
+    assert set(product.agents[0].tools) == {*kinds.FILES_TOOLSET.tools, "read_ticket"}
+    taken = own.model_copy(update={"name": kinds.FILES_TOOLSET.name})
+    with pytest.raises(ValueError, match="is the platform's"):
+        ProductKinds(toolsets=(taken,))
+    with pytest.raises(ValueError, match="declares a version of a toolset twice"):
+        ProductKinds(toolsets=(own, own))
+    with pytest.raises(ValueError, match="neither the platform nor the product declares"):
+        ProductKinds(agents=(kind,))
+    other = kinds.FILES_TOOLSET.model_copy(update={"tools": (kinds.READ_FILE,)})
+    with pytest.raises(ValueError, match="neither the platform nor the product declares"):
+        ProductKinds(agents=(a_product_kind(other),))
+
+
+def test_each_kind_holds_its_workspace_warm_for_its_grace_within_the_cache_life() -> None:
+    """The engineer and analysis hold their workspace warm after a loop for
+    the prompt cache's life, and no longer; a product's kind names its own
+    grace, never past that life, and only for a kind of its own."""
+    for kind in SHIPPED:
+        assert timedelta(0) <= ProductKinds().warm_grace(kind.name) <= kinds.PROMPT_CACHE_LIFE
+    assert set(kinds.GRACES) == {kinds.ENGINEER, kinds.ANALYSIS}
+    brief = timedelta(minutes=1)
+    product = ProductKinds(agents=(a_product_kind(),), graces={"triage": brief})
+    assert product.warm_grace("triage") == brief
+    assert product.warm_grace(kinds.ENGINEER) == kinds.GRACES[kinds.ENGINEER]
+    assert ProductKinds().warm_grace("unknown") == kinds.WARM_GRACE
+    with pytest.raises(ValueError, match="runs outside the prompt cache's life"):
+        ProductKinds(agents=(a_product_kind(),), graces={"triage": timedelta(hours=1)})
+    with pytest.raises(ValueError, match="no agent kind of the product's"):
+        ProductKinds(graces={kinds.ENGINEER: brief})
 
 
 async def test_the_engineer_starts_two_sub_agents_and_wakes_on_each_report(

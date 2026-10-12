@@ -7,7 +7,7 @@ from collections.abc import Callable, Collection, Iterable, Sequence
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.matrix.types.matrix import MatrixQuery, MatrixRow, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef
-from acme.om.models.types.fill import Eligibility, Fill, ModelRole
+from acme.om.models.types.fill import Eligibility, Fill, ModelRole, ModelSize
 from acme.om.retention.types.policy import RetentionPolicy
 
 Admits = Callable[[Fill], bool]
@@ -15,20 +15,27 @@ Admits = Callable[[Fill], bool]
 
 
 def answer(rows: Sequence[MatrixRow], query: MatrixQuery, admits: Admits) -> tuple[Fill, ...]:
-    """The fills of the most specific row that matches `query`, those
-    `admits` takes, in the row's order: the fill, then its fallbacks. What a
-    session may not run on is filtered out before the row is chosen, so a
-    row left with none answers nothing and a less specific one answers. An
-    empty answer when no row is left."""
+    """The fills of the most specific row of a version's `rows` that
+    matches `query`, those `admits` takes, in the row's order: the fill,
+    then its fallbacks. What a session may not run on is filtered out
+    before the row is chosen, so a row left with none answers nothing and a
+    less specific one answers. An empty answer when no row is left.
+
+    A question asks its size only of a version that holds a row that names
+    that size. Of one that holds none, it is asked with no size, and
+    resolves by the keys' order alone, as a question that asks no size
+    does: a version with no size row answers every kind by that order."""
+    if query.size is not None and all(row.key.size != query.size for row in rows):
+        query = query.model_copy(update={"size": None})
     best: tuple[Fill, ...] = ()
-    best_key: tuple[int, tuple[bool, ...]] | None = None
+    best_key: tuple[int, int, tuple[bool, ...]] | None = None
     for row in rows:
         if not row.key.matches(query):
             continue
         fills = tuple(fill for fill in row.fills if admits(fill))
         if not fills:
             continue
-        specificity = row.key.specificity
+        specificity = row.key.specificity(query)
         if best_key is None or specificity > best_key:
             best, best_key = fills, specificity
     return best
@@ -119,18 +126,28 @@ def publish_refusals(
     qualified: Callable[[ModelRef, ModelRole], bool],
     retired: Callable[[ModelRef], bool],
     required: Collection[ModelRole],
+    sizes: Collection[ModelSize] = (),
 ) -> list[str]:
     """Why `version` may not be published, every reason, or none. It needs
-    the row that matches every question, and it serves every model role in
-    `required`, the roles the kinds it answers call. Each fill of each row
-    needs a price row of its own, a passing benchmark for every model role
-    the row serves, and a model no provider has retired."""
+    the row that matches every question, it serves every model role in
+    `required`, the roles the kinds it answers call, and it has a row that
+    names each model size in `sizes`, the sizes those kinds ask, so an ask
+    is answered by its size and never falls to a row sized for another
+    question. Each fill of each row needs a price row of its own, a passing
+    benchmark for every model role the row serves, and a model no provider
+    has retired."""
     refusals: list[str] = []
     if not any(row.key.everything for row in version.rows):
         refusals.append("no row matches every question")
     refusals.extend(
         f"it serves no model role {role}, which a kind it answers calls"
         for role in sorted(set(required) - set(version.roles))
+    )
+    named = {row.key.size for row in version.rows}
+    refusals.extend(
+        f"no row names the model size {size}, which a kind it answers asks"
+        for size in ModelSize
+        if size in sizes and size not in named
     )
     for row in version.rows:
         for fill in row.fills:

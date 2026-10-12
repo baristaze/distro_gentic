@@ -3,7 +3,7 @@ hands back one frozen object with a field per manager."""
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.base import QuietNull
@@ -114,7 +114,14 @@ from acme.om.platform_agents.catalog import (
     with_shipped,
 )
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
-from acme.om.platform_agents.kinds import ENVIRONMENT_KINDS, SHIPPED
+from acme.om.platform_agents.kinds import (
+    ENVIRONMENT_KINDS,
+    GRACES,
+    PROMPT_CACHE_LIFE,
+    SHIPPED,
+    TOOLSETS,
+    WARM_GRACE,
+)
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -178,6 +185,7 @@ from acme.om.tools.seal import RecordSealInterface, SnapshotSealInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
+from acme.om.tools.types.toolset import Toolset
 from acme.om.trust.owners import SecretOwnerInterface
 from acme.om.watch.kinds import StreamKind
 from acme.om.windows import WindowsManagerInterface
@@ -300,6 +308,12 @@ class ProductKinds:
     ended, and checking the person who writes one (`automations.actions`);
     and its resource kinds, each with the shape of its ask, the hooks a
     grant asks, and its check of an ask if it has one (`leases.kinds`).
+    Its toolsets join the platform's (`platform_agents.kinds.TOOLSETS`),
+    and each toolset its kinds name is one of the two; a name the
+    platform's toolsets hold is refused. Each of its agent kinds may name
+    its warm grace, how long its workspace stays held after a loop, at
+    most the prompt cache's life; one it names none for takes the
+    default (`warm_grace`).
     Its agent kinds join the platform's catalog, which refuses a version
     declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
@@ -323,8 +337,38 @@ class ProductKinds:
     actions: ProductActions = no_actions
     assistant_tools: tuple[str, ...] = ()
     resources: ProductResources = no_resources
+    toolsets: tuple[Toolset, ...] = ()
+    graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
 
     def __post_init__(self) -> None:
+        platform = {toolset.name for toolset in TOOLSETS}
+        declared = {(toolset.name, toolset.version): toolset for toolset in self.toolsets}
+        if len(declared) != len(self.toolsets):
+            raise ValueError("the product declares a version of a toolset twice")
+        for toolset in self.toolsets:
+            if toolset.name in platform:
+                raise ValueError(
+                    f"toolset {toolset.name} is the platform's, which no product changes"
+                )
+        declared.update({(toolset.name, toolset.version): toolset for toolset in TOOLSETS})
+        own = {kind.name for kind in self.agents}
+        for kind in self.agents:
+            for toolset in (*kind.toolsets, *kind.deferred):
+                if declared.get((toolset.name, toolset.version)) != toolset:
+                    raise ValueError(
+                        f"{kind.name} v{kind.version} names toolset {toolset.name} at version "
+                        f"{toolset.version}, which neither the platform nor the product declares"
+                    )
+        for name, grace in self.graces.items():
+            if name not in own:
+                raise ValueError(
+                    f"a warm grace names {name}, which is no agent kind of the product's"
+                )
+            if not timedelta(0) <= grace <= PROMPT_CACHE_LIFE:
+                raise ValueError(
+                    f"{name}'s warm grace of {grace} runs outside the prompt cache's life "
+                    f"of {PROMPT_CACHE_LIFE}"
+                )
         for spec in self.work:
             if spec.claimant is None:
                 raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
@@ -339,6 +383,15 @@ class ProductKinds:
                         f"stream kind {stream.name} is {role} by {kind}, "
                         "which is no claimant kind of the product's"
                     )
+
+    def warm_grace(self, kind: str) -> timedelta:
+        """How long a session of `kind` keeps its workspace held after a
+        loop, for a follow-up to find it warm: the grace the product names
+        for one of its kinds, the platform's for one it ships, and the
+        default for any other."""
+        if kind in self.graces:
+            return self.graces[kind]
+        return GRACES.get(kind, WARM_GRACE)
 
 
 @dataclass(frozen=True)

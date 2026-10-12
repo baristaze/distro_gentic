@@ -18,6 +18,7 @@ const fill = (model: string): FillView => ({
   provider: "anthropic",
   model,
   effort: null,
+  efforts: [],
   thinking_budget: null,
   max_output_tokens: 4096,
   output: "text",
