@@ -255,7 +255,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert not [s for s in history if s.type is StepType.SNAPSHOTTED], "the parent keeps none"
         child = request.id
 
-        # The child starts from its own copy, which the host keeps as its.
+        # The child starts from its own copy, which the host keeps as the child's.
         restore = next(
             step.header
             for step in await steps_of(runner, owner, child)
@@ -279,6 +279,8 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert tried.outcome is LoopOutcome.SUCCEEDED, tried
         read, _ = outputs(await steps_of(runner, owner, child))
         assert "from-the-parent" in read
+        holder = await managers.relay.binding_of(owner, child)
+        assert holder is not None and holder.host_id == UUID(host.credential.claimant_id)
 
         asked = message_step(new_id(), utcnow(), parent, owner, "What does the workspace hold?")
         await managers.agent_sessions.receive(owner, parent, [asked])
