@@ -9,8 +9,9 @@ child's; the platform records where it lives, never its bytes, and nothing
 reaches the platform's bucket. The child's first prepare restores the copy
 on a host of the same pool, and it reads the parent's file there; what the
 child writes never reaches the parent's workspace. A host that cannot take
-a snapshot of the workspace refuses the fork with its reason, before the
-tree's slot is taken or the child is made.
+a snapshot of the workspace refuses the fork with its reason, and a session
+that keeps no content at rest is refused before any host is asked: each
+before the tree's slot is taken or the child is made.
 
 Needs a migrated database (`make migrate`); the fork's case needs a local
 Docker as well."""
@@ -56,6 +57,7 @@ from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.amount import Amount
 from acme.om.exceptions import NotFound
+from acme.om.privacy.types.session_privacy import StorageMode, StoragePolicy
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import (
@@ -71,6 +73,7 @@ from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
+from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -299,8 +302,19 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         await runner.storage.close()
 
 
-async def test_a_fork_whose_host_takes_no_snapshot_is_refused_and_spends_nothing(
-    api: Stack, tmp_path: Path
+@pytest.mark.parametrize(
+    ("memory_only", "reason"),
+    [
+        # A bare directory's commands write outside it, so its host takes
+        # no snapshot of it, and says so.
+        (False, "has not probed snapshots of a host workspace"),
+        # A session that keeps no content at rest puts no copy at rest: no
+        # host is asked.
+        (True, "keeps no content at rest"),
+    ],
+)
+async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
+    api: Stack, tmp_path: Path, memory_only: bool, reason: str
 ) -> None:
     runner = runner_over(api, ON_A_DIRECTORY)
     owner, managers = api.owner, runner.managers
@@ -308,14 +322,15 @@ async def test_a_fork_whose_host_takes_no_snapshot_is_refused_and_spends_nothing
     model = runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(model, ModelProviderScriptedImpl)
     pool = await api.pool("pool-a")
-    # A bare directory's commands write outside it, so its host takes no
-    # snapshot of it.
     host, _ = await directory_host(api, pool.id, tmp_path / "host")
     session = await managers.agents.start_session(
         owner, Start(id=new_id(), kind=ON_A_DIRECTORY.name, title="a hypothesis")
     )
     parent = session.id
     await api.container.managers.hosts.place_session(owner, parent, pool.id)
+    if memory_only:
+        policy = StoragePolicy(mode=StorageMode.MEMORY_ONLY, keep_shape=False)
+        await managers.privacy.set_policy(owner, parent, policy)
     said = message_step(new_id(), utcnow(), parent, owner, "Write the note, then fork.")
     await managers.agent_sessions.receive(owner, parent, [said])
     try:
@@ -336,10 +351,15 @@ async def test_a_fork_whose_host_takes_no_snapshot_is_refused_and_spends_nothing
         header = refused.header
         assert isinstance(header, ToolResponseHeader) and header.failure is ToolFailure.PERMANENT
         text = outputs([refused])[0]
-        assert "has not probed snapshots of a host workspace" in text, text
+        assert reason in text, text
         assert (await managers.agents.tree_of(owner, parent)).size == before, "no slot taken"
         with pytest.raises(NotFound):
             await managers.agent_sessions.get_session(owner, request.id)
         assert await managers.workspaces.kept_snapshots(owner, request.id) == ()
+        assert await managers.workspaces.kept_snapshots(owner, parent) == ()
+        latest = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, parent)
+        assert latest is not None
+        asked = latest.payload["operation"]
+        assert asked == ("prepare" if memory_only else "snapshot"), asked
     finally:
         await runner.storage.close()

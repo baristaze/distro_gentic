@@ -10,8 +10,7 @@ holds, then lets go only of what its own run holds. A restore, a rewind or a
 fork's, starts a workspace this process prepares from the platform's
 bucket, and one a host of the tenant's holds from that host's store, never
 across the wall. A fork of a workspace a host holds is taken by that host
-at the spawn and kept there as the child's (`fork_point`); one on a machine
-of the cloud pool is refused. The pin holds the
+at the spawn and kept there as the child's (`fork_point`). The pin holds the
 session's durability and base with its isolation. A provider's refusal
 clears, since another host may give the isolation later, unless it refuses
 what the prepare asks beyond it (a snapshot's durability, a base, or a
@@ -93,11 +92,6 @@ store."""
 ErasePurged = Callable[[UUID, UUID, UUID], Awaitable[None]]
 """Asks the same for a session's purge, which runs for no principal: given
 the tenant, the session, and the host."""
-
-POOLED_FORK = (
-    "a fork of a workspace on a machine of the cloud pool is not taken: the pool keeps "
-    "the machine's whole disk at a run's end, and its host takes no snapshot"
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -360,19 +354,12 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
     def fork_point(
         self, ctx: TenantContext, request: Step, workspace: Workspace, epoch: int
     ) -> TakeSnapshot | None:
-        """The fork point of a workspace this process does not hold, for the
-        engine's tools (`ForkPoints`): one a host holds is taken by that
-        host, and one on a machine of the cloud pool is refused, each before
-        the tree's slot is taken or the child is made. None for every other
-        workspace, which the engine takes through its own provider."""
+        """The fork point of a workspace a host of the tenant's holds, for the
+        engine's tools (`ForkPoints`): that host takes it, before the tree's
+        slot is taken or the child is made. None for every other workspace,
+        which the engine takes through its own provider, or refuses."""
         if workspace.id in self._hosted:
             return lambda: self._fork_on_host(ctx, request, workspace)
-        if workspace.id in self._pooled:
-
-            async def refused() -> TakenSnapshot:
-                raise SnapshotRefused(POOLED_FORK)
-
-            return refused
         return None
 
     async def fork_snapshot(
