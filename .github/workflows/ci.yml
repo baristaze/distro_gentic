@@ -67,7 +67,9 @@ jobs:
     # guideline move.
     name: a copy of the scaffold as ${{ matrix.name }} passes its own gates
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # Its two gates take about half an hour on a hosted runner, so the bound
+    # leaves room for a slower one.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
