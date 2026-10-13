@@ -118,9 +118,17 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         )
 
     async def snapshot_on_host(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
     ) -> UUID:
-        item_id = await self._relay().ask_snapshot(ctx, session_id, spec, snapshot_id)
+        item_id = await self._relay().ask_snapshot(
+            ctx, session_id, spec, snapshot_id, kept_for=kept_for
+        )
         if item_id is None:
             raise SnapshotRefused(
                 f"no live host holds session {session_id}'s workspace, so none snapshots it"

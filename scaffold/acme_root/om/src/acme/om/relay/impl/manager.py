@@ -363,7 +363,13 @@ class RelayManagerImpl(RelayManagerInterface):
         return item_id
 
     async def ask_snapshot(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
     ) -> UUID | None:
         ctx.require(Permission.WRITE)
         holder = await self.holder(ctx, session_id)
@@ -375,6 +381,7 @@ class RelayManagerImpl(RelayManagerInterface):
             session_id=session_id,
             spec=spec,
             snapshot=HostSnapshot(id=snapshot_id),
+            kept_for=kept_for,
         )
         item_id = await self._enqueue_workspace(ctx, session_id, payload)
         OUTCOMES.labels(subsystem="relay", outcome="snapshot_asked").inc()

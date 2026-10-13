@@ -88,7 +88,13 @@ from acme.om.tools.rules import (
 )
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.storage import ToolStorageInterface
-from acme.om.tools.tool import JobToolInterface, TakenSnapshot, ToolInterface, ToolRuntime
+from acme.om.tools.tool import (
+    JobToolInterface,
+    TakenSnapshot,
+    TakeSnapshot,
+    ToolInterface,
+    ToolRuntime,
+)
 from acme.om.tools.types.call import (
     Gate,
     GateOutcome,
@@ -105,6 +111,13 @@ log = logging.getLogger(__name__)
 CREATED = "tools.tool_policy.created"
 UPDATED = "tools.tool_policy.updated"
 SECRET_USED = "tools.secret.used"
+
+ForkPoints = Callable[[TenantContext, Step, Workspace, int], TakeSnapshot | None]
+"""A platform's own fork point for a call's workspace, given the call's
+request, its workspace, and its run's epoch: one for a workspace that a
+machine of the platform's takes elsewhere, such as a host inside a
+customer's wall, or None, so the engine takes it through its own
+provider."""
 
 
 class ToolsOptions(Platform):
@@ -147,7 +160,9 @@ class ToolsManagerImpl(ToolsManagerInterface):
         snapshots: SnapshotStore,
         bases: WorkspaceBases,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        fork_points: ForkPoints | None = None,
     ) -> None:
+        self._fork_points = fork_points
         self._broker = broker
         self._snapshots = snapshots
         self._bases = bases
@@ -811,11 +826,23 @@ class ToolsManagerImpl(ToolsManagerInterface):
                 for use in tool.spec.secrets
             ),
             audit=audit,
-            snapshot=lambda: self._fork_point(ctx, request, workspace, epoch),
+            snapshot=lambda: self._fork(ctx, request, workspace, epoch),
             on_output=on_output,
             read_only=read_only,
             answer_chars=self._options.max_output_chars,
         )
+
+    async def _fork(
+        self, ctx: TenantContext, request: Step, workspace: Workspace, epoch: int
+    ) -> TakenSnapshot:
+        """The call's workspace taken for a spawn: through the platform's own
+        fork point when it answers one, else through this process's
+        provider."""
+        if self._fork_points is not None:
+            elsewhere = self._fork_points(ctx, request, workspace, epoch)
+            if elsewhere is not None:
+                return await elsewhere()
+        return await self._fork_point(ctx, request, workspace, epoch)
 
     def _sealing(self, ctx: TenantContext, request: Step) -> RecordSeal:
         """The seal the call's command goes to the transport with: its

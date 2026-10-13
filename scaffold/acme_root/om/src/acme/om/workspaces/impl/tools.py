@@ -7,8 +7,10 @@ provider's, clears: a host of the session's placement may give it later, so
 the loop asks again and never ends for one. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
 holds, then lets go only of what its own run holds. A restore, a rewind or a
-fork's, starts the workspace this process prepares, and is lost for one a
-host of the tenant's holds, which no snapshot reaches. The pin holds the
+fork's, starts a workspace this process prepares from the platform's
+bucket, and one a host of the tenant's holds from that host's store, never
+across the wall. A fork of a workspace a host holds is taken by that host
+at the spawn and kept there as the child's (`fork_point`). The pin holds the
 session's durability and base with its isolation. A provider's refusal
 clears, since another host may give the isolation later, unless it refuses
 what the prepare asks beyond it (a snapshot's durability, a base, or a
@@ -37,6 +39,7 @@ holds is pushed, and the machine goes when the run's release comes."""
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -64,7 +67,7 @@ from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import named_snapshot, snapshotted_step
-from acme.om.tools.tool import TakenSnapshot
+from acme.om.tools.tool import TakenSnapshot, TakeSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.workspaces.manager import WorkspacesManagerInterface
@@ -89,6 +92,18 @@ store."""
 ErasePurged = Callable[[UUID, UUID, UUID], Awaitable[None]]
 """Asks the same for a session's purge, which runs for no principal: given
 the tenant, the session, and the host."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class TakenOnHost(TakenSnapshot):
+    """A live workspace a host took whole for a fork and keeps in its own
+    store as the child's (`kept_for`). No byte of it reaches this process,
+    so `archive` is empty: `taken` is the record of the host's answer, its
+    place and its digest, under the parent whose workspace it took."""
+
+    kept_for: UUID
+    taken: KeptSnapshot
+
 
 FIRST_POLL = timedelta(milliseconds=50)
 LAST_POLL = timedelta(seconds=1)
@@ -336,9 +351,22 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             await self._recorded(ctx, session_id, taken)
         return step
 
+    def fork_point(
+        self, ctx: TenantContext, request: Step, workspace: Workspace, epoch: int
+    ) -> TakeSnapshot | None:
+        """The fork point of a workspace a host of the tenant's holds, for the
+        engine's tools (`ForkPoints`): that host takes it, before the tree's
+        slot is taken or the child is made. None for every other workspace,
+        which the engine takes through its own provider, or refuses."""
+        if workspace.id in self._hosted:
+            return lambda: self._fork_on_host(ctx, request, workspace)
+        return None
+
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
     ) -> WorkspaceSnapshot:
+        if isinstance(taken, TakenOnHost):
+            return await self._copy_on_host(ctx, child_id, snapshot_id, taken)
         kept = await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
         await self._recorded(ctx, child_id, kept)
         return kept
@@ -448,9 +476,33 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         store, once it is recorded, and the step that names it. The host
         takes back what its broker attached, scans for its secrets' values,
         and keeps nothing that holds one."""
-        assert self._placed is not None
         snapshot_id = new_id()
-        item_id = await self._placed.snapshot_on_host(ctx, session_id, workspace.spec, snapshot_id)
+        record = await self._kept_on_host(ctx, session_id, workspace.spec, snapshot_id)
+        taken = WorkspaceSnapshot(
+            id=snapshot_id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        )
+        step = snapshotted_step(new_id(), self._clock(), session_id, loop_id, taken)
+        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
+        return stored
+
+    async def _kept_on_host(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
+    ) -> KeptSnapshot:
+        """The record of the snapshot the host that holds the session's
+        workspace keeps under `snapshot_id`, once the relay recorded its
+        answer under the session: its own, or, with `kept_for`, a fork's
+        copy the host keeps as that child's. `SnapshotRefused` with the
+        host's reason, or when no answer comes in time."""
+        assert self._placed is not None
+        item_id = await self._placed.snapshot_on_host(
+            ctx, session_id, spec, snapshot_id, kept_for=kept_for
+        )
         by = self._clock() + self._snapshot_wait
         wait = FIRST_POLL
         while (record := await self._workspaces.kept_snapshot(ctx, snapshot_id)) is None:
@@ -464,12 +516,80 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 )
             await self._sleep(min(wait.total_seconds(), left))
             wait = min(wait * 2, LAST_POLL)
-        taken = WorkspaceSnapshot(
-            id=snapshot_id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        return record
+
+    async def _fork_on_host(
+        self, ctx: TenantContext, request: Step, workspace: Workspace
+    ) -> TakenOnHost:
+        """The workspace a host holds, taken live by that host for a spawn in
+        the call `request`, and kept in its own store as the child's: a
+        spawn's child takes the call's key as its id (`spawn_sub_agent`), so
+        the copy is the child's before the child is made, and no erase of
+        the parent's snapshots reaches it. The parent keeps nothing of it.
+        Refused, with the host's reason, before anything of the tree is
+        spent: a session that keeps no content at rest, no live host that
+        holds the workspace, or a host that takes no snapshot of it."""
+        session_id = request.session_id
+        if self._snapshots is None:
+            raise SnapshotRefused("this process keeps no snapshot store, so it forks no workspace")
+        await self._snapshots.at_rest(ctx, session_id)
+        taken = await self._kept_on_host(
+            ctx, session_id, workspace.spec, new_id(), kept_for=request.id
         )
-        step = snapshotted_step(new_id(), self._clock(), session_id, loop_id, taken)
-        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
-        return stored
+        return TakenOnHost(workspace_id=workspace.id, archive=b"", kept_for=request.id, taken=taken)
+
+    async def _copy_on_host(
+        self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenOnHost
+    ) -> WorkspaceSnapshot:
+        """The fork's copy a host keeps as the child's, recorded as the
+        child's under `snapshot_id`: where the take lives, and its digest
+        keyed by the child, so once the child's key is revoked nothing
+        confirms what it held. No byte moves: the child's first prepare
+        restores it on a host of the pool whose store keeps it. A child that
+        keeps no content at rest keeps none, and the host is asked to let
+        the copy go."""
+        kept = taken.taken
+        if taken.kept_for != child_id or kept.host_id is None or kept.digest is None:
+            raise SnapshotRefused(
+                f"the host kept the fork's copy for session {taken.kept_for}, not session {child_id}"
+            )
+        if self._snapshots is None or self._keyed_hash is None:
+            raise SnapshotRefused("this process keys no hash, so it records no host's snapshot")
+        try:
+            await self._snapshots.at_rest(ctx, child_id)
+        except InfraException as refused:
+            if refused.code != SnapshotRefused.code:
+                raise
+            # Nothing names the copy, so nothing would ever erase it.
+            if self._erase_on_host is None:
+                log.error("session %s: no host is asked to erase its copy", child_id)
+            else:
+                await self._erase_on_host(ctx, child_id, kept.host_id)
+            raise
+        keyed = await self._keyed_hash(ctx, child_id, kept.digest.encode())
+        now = self._clock()
+        stored = await self._workspaces.keep_snapshot(
+            ctx,
+            KeptSnapshot(
+                id=snapshot_id,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                session_id=child_id,
+                hash=HASH_SCHEME + keyed,
+                size=kept.size,
+                pool_id=kept.pool_id,
+                host_id=kept.host_id,
+                reference=kept.reference,
+                digest=kept.digest,
+            ),
+        )
+        # A spawn asked again finds the copy recorded already: the one
+        # stored is the one named.
+        return WorkspaceSnapshot(
+            id=stored.id, hash=stored.hash, size=stored.size, workspace_id=taken.workspace_id
+        )
 
     async def _on_machine(
         self,

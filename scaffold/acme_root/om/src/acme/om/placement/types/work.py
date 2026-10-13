@@ -77,7 +77,10 @@ class WorkspacePayload(Platform):
     store keeps the snapshots. A prepare that starts the workspace from a
     snapshot names it (`snapshot`: its reference, digest, and size), and
     goes to the lane of the host that holds the workspace when one does, so
-    that host replaces it; a snapshot names the id it is kept under.
+    that host replaces it; a snapshot names the id it is kept under, and,
+    for a fork, the child it is kept for (`kept_for`): the host takes the
+    session's workspace and keeps the copy as the child's, so no erase of
+    the session's snapshots reaches it.
 
     The work's target is the session. A prepare names the spec it is held
     to and, after it, what it asks of its host, which the host holds to its
@@ -98,6 +101,7 @@ class WorkspacePayload(Platform):
     project_id: UUID | None = None
     instance_of: UUID | None = None
     snapshot: HostSnapshot | None = None
+    kept_for: UUID | None = None
 
     @model_validator(mode="after")
     def _names_where_it_runs(self) -> WorkspacePayload:
@@ -118,4 +122,8 @@ class WorkspacePayload(Platform):
                 raise ValueError("a restore names its snapshot's reference, digest, and size")
         elif named is not None:
             raise ValueError("a release, a purge, or an erase names no snapshot")
+        if self.kept_for is not None and (
+            self.operation is not WorkspaceOperation.SNAPSHOT or self.kept_for == self.session_id
+        ):
+            raise ValueError("only a snapshot is kept for another session, and never its own")
         return self

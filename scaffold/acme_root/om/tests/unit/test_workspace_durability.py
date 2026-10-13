@@ -366,6 +366,7 @@ class Placed(PlacedWorkspacesInterface):
         self.pool_id, self.host_id = pool_id, new_id()
         self.restores: list[HostSnapshot | None] = []
         self.asked: list[UUID] = []
+        self.kept_for: list[UUID | None] = []
         self.refuses: str | None = None
 
     async def pool_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
@@ -384,13 +385,20 @@ class Placed(PlacedWorkspacesInterface):
         return Workspace(id=session_id, org_id=ctx.org_id, spec=spec, location="host:1")
 
     async def snapshot_on_host(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
     ) -> UUID:
         self.asked.append(snapshot_id)
+        self.kept_for.append(kept_for)
         if self.refuses is None:
             kept = HostSnapshot(
                 id=snapshot_id,
-                reference=f"{ctx.org_id}/{session_id}/{snapshot_id}",
+                reference=f"{ctx.org_id}/{kept_for or session_id}/{snapshot_id}",
                 digest="sha256:" + "ab" * 32,
                 size=7,
             )

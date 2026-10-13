@@ -111,12 +111,20 @@ class RelayManagerInterface(ABC):
 
     @abstractmethod
     async def ask_snapshot(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
     ) -> UUID | None:
         """Platform-internal: asks the host that holds the session's
         workspace, live and online, to keep a snapshot of it in its own
-        store under `snapshot_id`, as `workspace` work on that host's lane.
-        The work's id; None when no live host holds the workspace."""
+        store under `snapshot_id`, as `workspace` work on that host's lane:
+        the session's own, or, with `kept_for`, a fork's copy kept as that
+        child's. The work's id; None when no live host holds the
+        workspace."""
         ...
 
     @abstractmethod
