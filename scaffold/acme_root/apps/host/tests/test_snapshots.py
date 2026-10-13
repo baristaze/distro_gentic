@@ -5,7 +5,8 @@ hash, never the bytes: nothing reaches the platform's bucket. A restore
 travels with its prepare, and the host starts the workspace from its store
 once the bytes match their digest; bytes altered there lose it. A snapshot
 that holds the value of a secret the host keeps is refused, and nothing is
-kept. A revoked key asks the host to erase its copies. A person who takes
+kept. A revoked key asks the host to erase its copies; a fork's copy, kept
+as the child's, outlives the parent's erase. A person who takes
 control of a workspace whose instance went since its run gets it back from
 its latest snapshot, never its files alone. A host that did not
 probe snapshots refuses a workspace kept by them, and a session pinned to
@@ -274,6 +275,40 @@ async def test_a_revoked_key_asks_the_host_to_erase_its_copies_and_the_records_g
 
     assert not (store / str(api.owner.org_id) / str(session_id)).exists(), "erased on the host"
     assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+
+
+async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    org = str(api.owner.org_id)
+    pool = await api.pool()
+    parent = await a_pinned_session(api, pool.id)
+    child = await a_pinned_session(api, pool.id)
+    host, twin, store = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, parent)
+    twin.files[parent] = b"as the spawn took it"
+    taken_id = new_id()
+
+    await managers.relay.ask_snapshot(api.owner, parent, KEPT, taken_id, kept_for=child)
+    await claimed(host)
+    await managers.relay.ask_snapshot(api.owner, parent, KEPT, new_id())  # the parent's own
+    await claimed(host)
+
+    taken = await managers.workspaces.kept_snapshot(api.owner, taken_id)
+    assert taken is not None and taken.session_id == parent, "the take is the parent's answer"
+    copy = store / taken.reference
+    assert copy.is_relative_to(store / org / str(child)), "kept as the child's"
+    assert copy.read_bytes() == b"as the spawn took it"
+
+    await managers.privacy.revoke_key(api.owner, parent)
+    await claimed(host)
+
+    assert not (store / org / str(parent)).exists(), "the parent's own are erased"
+    assert copy.read_bytes() == b"as the spawn took it", "the child's copy outlives them"
+    await managers.relay.ask_erase(api.owner, child, UUID(host.credential.claimant_id))
+    await claimed(host)
+    assert not copy.exists(), "the child's erase takes it"
 
 
 # Check 4: a host that did not probe snapshots.

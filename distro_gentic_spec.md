@@ -445,7 +445,8 @@ workspace itself stays a cache.
   Their bytes never cross: the platform records the reference and the
   hash alone, and a host of the same pool whose store holds one restores
   it. A snapshot kept on one side of the wall never restores on the
-  other.
+  other. A sub-agent forked from a workspace on a customer's host starts
+  from a copy that host takes at the spawn and keeps as the child's.
 - **Probed, or it waits.** A host advertises snapshots at a level only
   when its probe showed it can keep one there. A session kept by
   snapshots and pinned to a pool with no such host waits on the
