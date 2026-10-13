@@ -30,7 +30,7 @@ function session(id: string, over: Partial<AgentSessionView> = {}): AgentSession
 }
 const park = (reason: ParkView["reason"], unlock: string): ParkView => ({ reason, unlock, retry_at: null, cause: null });
 const ids = (rows: readonly ShellRow[]) => rows.map((row) => row.id);
-const options = { filter: DEFAULT_FILTER, me: "u1" };
+const options = { filter: DEFAULT_FILTER };
 
 it("groups rows into Needs you, Running, and Recent", () => {
   const sessions = [
@@ -79,20 +79,20 @@ it("keeps the newest thirty in Recent", () => {
   expect(recent[0]!.id).toBe(`s${RECENT_MAX + 4}`);
 });
 
-it("narrows by owner, agent, status, and leaves the archived out unless asked", () => {
+it("narrows by agent and status, and leaves the archived out unless asked", () => {
   const sessions = [
     session("mine"),
-    session("theirs", { created_by: "u2" }),
+    session("joined", { created_by: "u2", participants: ["u1"] }),
     session("analysis", { kind: "analysis" }),
     session("archived", { archived_at: "2026-10-05T11:00:00Z" }),
     session("running", { status: "running" }),
   ];
   const shown = (filter: Partial<typeof DEFAULT_FILTER>) => {
-    const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, ...filter }, me: "u1" });
+    const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, ...filter } });
     return [...groups.needsYou, ...groups.running, ...groups.recent].map((row) => row.id).sort();
   };
-  expect(shown({})).toEqual(["analysis", "mine", "running", "theirs"]);
-  expect(shown({ owner: "mine" })).toEqual(["analysis", "mine", "running"]);
+  // The bar holds the person's own, as the server lists them: one they joined among them.
+  expect(shown({})).toEqual(["analysis", "joined", "mine", "running"]);
   expect(shown({ kind: "analysis" })).toEqual(["analysis"]);
   expect(shown({ status: "running" })).toEqual(["running"]);
   expect(shown({ archived: true })).toContain("archived");
@@ -107,7 +107,7 @@ it("leaves support conversations out of every group, and shows them under the pl
     session("composed", { kind: "platform_assistant", title: "Draft the webhook settings" }),
   ];
   const shown = (kind: string) => {
-    const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, kind }, me: "u1" });
+    const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, kind } });
     return [...groups.needsYou, ...groups.running, ...groups.recent].map((row) => row.id).sort();
   };
   expect(shown("")).toEqual(["composed", "work"]);
@@ -124,9 +124,8 @@ it("says each status in words", () => {
   expect(statusWords(session("g", { archived_at: "2026-10-05T11:00:00Z" }))).toBe("Archived");
 });
 
-it("reads a stored filter field by field", () => {
+it("reads a stored filter field by field, and drops one it no longer holds", () => {
   expect(parseFilter({ owner: "mine", status: "idle", kind: "analysis", archived: true })).toEqual({
-    owner: "mine",
     status: "idle",
     kind: "analysis",
     archived: true,
@@ -162,11 +161,12 @@ it("counts a parent's sub-agents at every depth and how many need a person, whic
   expect(treeWords({ count: 1, needsYou: 0 })).toBe("1 sub-agent");
 });
 
-it("raises a toast when a session of the person's, or a sub-agent in a tree of theirs, starts to need them", () => {
+it("raises a toast when a session the person steers, or a sub-agent in a tree they steer, starts to need them", () => {
   const quiet = [
     session("mine", { status: "running" }),
-    session("child", { parent_id: "theirs-root", root_id: "mine", status: "running", created_by: "u9" }),
-    session("theirs", { status: "running", created_by: "u2" }),
+    session("child", { parent_id: "theirs-root", root_id: "mine", status: "running", created_by: "u9", steerer: null }),
+    // Joined, steered by its creator: it asks them, not the person.
+    session("theirs", { status: "running", created_by: "u2", participants: ["u1"], steerer: "u2" }),
   ];
   // The first read takes what already waits as seen: the left bar shows it.
   const first = nextToasts(NO_TOASTS, needingYou([...quiet, session("waiting", { status: "parked", park: park("person", "answer") })], "u1"), null);
@@ -184,6 +184,12 @@ it("raises a toast when a session of the person's, or a sub-agent in a tree of t
   const opened = nextToasts(raised, needingYou(holding, "u1", new Map([["mine", "run_command"]])), "child");
   expect(opened.toasts.map((toast) => toast.id)).toEqual(["mine"]);
   expect(nextToasts(opened, needingYou(quiet, "u1"), null).toasts).toEqual([]);
+});
+
+it("raises the toast for whoever steers: after a hand-off, the new steerer, never the creator", () => {
+  const handed = session("handed", { status: "parked", park: park("person", "approval"), participants: ["u2"], steerer: "u2" });
+  expect([...needingYou([handed], "u1").keys()]).toEqual([]);
+  expect([...needingYou([handed], "u2").keys()]).toEqual(["handed"]);
 });
 
 it("finds, for each child, a session beneath it at any depth that waits on a person", () => {

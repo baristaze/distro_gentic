@@ -77,6 +77,9 @@ const SESSION = {
   created_by: user.id,
   archived_at: null,
   deleted_at: null,
+  visibility: "org_wide",
+  participants: [],
+  steerer: user.id,
 } as AgentSessionView;
 
 /** A param of a screen's address, as a fixture's id. */

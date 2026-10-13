@@ -122,6 +122,17 @@ describe("the provider banner", () => {
     expect(container.querySelector("[data-outage='out']")!.textContent).toMatch(/^Anthropic is not answering\. 1 session waits, and tries again by itself from /);
   });
 
+  it("counts a sub-agent parked on a provider under a root that waits on its children", async () => {
+    const root = { id: "root", parent_id: null, status: "parked", archived_at: null, park: { reason: "children", unlock: "children", retry_at: null, cause: null } };
+    net.parked = [root as unknown as AgentSessionView];
+    const sub = { ...parked("anthropic", null), id: "sub", parent_id: "root", archived_at: null };
+    net.answer = (call) =>
+      call.path.includes("/children?") ? { items: call.path.startsWith("/v1/agent-sessions/root/") ? [sub] : [], next_cursor: null } : answer(call);
+    await mount(routes, "/usage");
+    expect(net.calls.map((call) => call.path)).toContain("/v1/agent-sessions/root/children?limit=200");
+    expect(container.querySelector("[data-outage='out']")!.textContent).toMatch(/^Anthropic is not answering\. 1 session waits/);
+  });
+
   it("sends a missing key to where one is saved", async () => {
     net.parked = [parked("openai:key", null)];
     await mount(routes, "/audit");

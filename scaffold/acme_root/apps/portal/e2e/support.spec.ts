@@ -107,7 +107,7 @@ test("support beside a parked session: the pane folds first, Send stays open whi
   // The chip opens its page in the main area; the dock keeps the conversation.
   await chip.click();
   await expect(owner).toHaveURL(/\/sessions$/);
-  await expect(owner.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
+  await expect(owner.getByRole("heading", { level: 1, name: "Sessions" })).toBeVisible();
   await expect(dock).toHaveAttribute("data-mode", "side");
   await expect(dock).toContainText(ANSWER);
   await shoot(owner, "chip-opened");
@@ -130,7 +130,7 @@ test("support beside a parked session: the pane folds first, Send stays open whi
   await shoot(owner, "dock-sheet");
   await chip.click();
   await expect(dock).toHaveCount(0);
-  await expect(owner.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
+  await expect(owner.getByRole("heading", { level: 1, name: "Sessions" })).toBeVisible();
   await owner.getByRole("button", { name: "Ask support" }).click();
   await expect(dock).toContainText(ANSWER);
 

@@ -119,7 +119,8 @@ export function Shell({ children }: { children: ReactNode }) {
     page,
     actions: [
       { id: "new", label: "New session", keywords: ["start", "home"], run: () => navigate("/") },
-      { id: "all", label: "All sessions", keywords: ["list", "view all"], run: () => navigate("/sessions") },
+      { id: "all", label: "Your sessions", keywords: ["list", "view all", "mine"], run: () => navigate("/sessions") },
+      { id: "org", label: "The org's sessions", keywords: ["explore", "join", "team"], run: () => navigate("/sessions?view=org") },
       { id: "fold", label: vm.folded ? "Open the sidebar" : "Collapse the sidebar", run: toggle },
       { id: "settings", label: "Settings", run: () => navigate("/settings") },
       { id: "shortcuts", label: "Keyboard shortcuts", run: () => setShortcuts(true) },

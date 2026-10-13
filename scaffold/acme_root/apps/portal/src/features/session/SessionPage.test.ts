@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// All sessions and a session's page over a fake transport that answers
+// Sessions and a session's page over a fake transport that answers
 // as the API does: each org's member reads its own org's sessions, and a
 // session another org holds answers 404. The page shows only what the routes
 // return for the member's org, and asks for nothing of a session it was

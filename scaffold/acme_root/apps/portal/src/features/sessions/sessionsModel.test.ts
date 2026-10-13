@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionView } from "@acme/client";
+import { standingOf } from "../session/sessionModel";
 import {
+  amongOf,
   listed,
   listFilterParams,
   NO_PROJECT,
@@ -48,13 +50,34 @@ describe("sessions model", () => {
   });
 
   it("keeps the whole filter in the address bar, and only what narrows the list", () => {
-    const filter = readListFilter(new URLSearchParams("needs=you&owner=mine&agent=analysis&archived=1&q=flaky"));
-    expect(filter).toEqual({ status: "needs_you", owner: "mine", kind: "analysis", archived: true, query: "flaky" });
-    expect(listFilterParams(filter)).toEqual({ status: "needs_you", owner: "mine", agent: "analysis", archived: "1", q: "flaky" });
-    expect(listFilterParams(readListFilter(new URLSearchParams("owner=all")))).toEqual({});
+    const filter = readListFilter(new URLSearchParams("view=org&needs=you&agent=analysis&archived=1&q=flaky"));
+    expect(filter).toEqual({ view: "org", status: "needs_you", kind: "analysis", archived: true, query: "flaky" });
+    expect(listFilterParams(filter)).toEqual({ view: "org", status: "needs_you", agent: "analysis", archived: "1", q: "flaky" });
+    expect(listFilterParams(readListFilter(new URLSearchParams("view=all&owner=mine")))).toEqual({});
   });
 
-  it("narrows the sessions read to whose they are, the agent, the archived, the title's words, and those that need a person", () => {
+  it("asks for the person's own first, and for every session they see in the org's view", () => {
+    expect(readListFilter(new URLSearchParams("")).view).toBe("mine");
+    expect([amongOf("mine"), amongOf("org")]).toEqual(["mine", "visible"]);
+  });
+
+  it("keeps a private session out of the org's view, though the server listed it, as it does for one who may audit", () => {
+    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, parent_id: null, ...over });
+    const read = [
+      one("Mine, private", { created_by: "u1", visibility: "private" }),
+      one("Mine, org-wide", { created_by: "u1", visibility: "org_wide" }),
+      one("Theirs, org-wide", { created_by: "u2", visibility: "org_wide" }),
+      one("Theirs, private", { created_by: "u2", visibility: "private" }),
+      one("Joined, private", { created_by: "u2", visibility: "private", participants: ["u1"] }),
+    ];
+    const ids = (view: "mine" | "org") => listed(read, { view, status: "any", kind: "", archived: false, query: "" }).map((each) => each.id);
+    expect(ids("org")).toEqual(["Mine, org-wide", "Theirs, org-wide"]);
+    expect(ids("mine")).toEqual(read.map((each) => each.id));
+    expect(read.map((each) => standingOf(each, "u1"))).toEqual(["made", "made", "none", "none", "joined"]);
+    expect(sessionRow(read[2]!, "u1")).toMatchObject({ createdBy: "u2", visibility: "org_wide", standing: "none" });
+  });
+
+  it("narrows the sessions read to the agent, the archived, the title's words, and those that need a person", () => {
     const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, ...over });
     const sessions = [
       one("Flaky test", { created_by: "u1", kind: "engineer" }),
@@ -64,9 +87,8 @@ describe("sessions model", () => {
       one("Waits", { status: "parked", park: { reason: "provider", unlock: "provider", retry_at: null, cause: null } }),
     ];
     const ids = (filter: Partial<Parameters<typeof listed>[1]>) =>
-      listed(sessions, { status: "any", owner: "everyone", kind: "", archived: false, query: "", ...filter }, "u1").map((each) => each.id);
+      listed(sessions, { view: "mine", status: "any", kind: "", archived: false, query: "", ...filter }).map((each) => each.id);
     expect(ids({})).toEqual(["Flaky test", "Docs", "Asks", "Waits"]);
-    expect(ids({ owner: "mine" })).toEqual(["Flaky test", "Asks", "Waits"]);
     expect(ids({ kind: "analysis" })).toEqual(["Docs"]);
     expect(ids({ archived: true })).toContain("Old");
     expect(ids({ query: "FLAKY" })).toEqual(["Flaky test"]);
@@ -82,7 +104,7 @@ describe("sessions model", () => {
       one("composed", { title: "Draft the webhook settings", kind: "platform_assistant" }),
     ];
     const ids = (kind: string) =>
-      listed(sessions, { status: "any", owner: "everyone", kind, archived: false, query: "" }, "u1").map((each) => each.id);
+      listed(sessions, { view: "mine", status: "any", kind, archived: false, query: "" }).map((each) => each.id);
     expect(ids("")).toEqual(["work", "composed"]);
     expect(ids("platform_assistant")).toEqual(["support", "theirs", "composed"]);
   });

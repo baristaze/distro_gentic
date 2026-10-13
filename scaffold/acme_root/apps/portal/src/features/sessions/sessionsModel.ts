@@ -1,9 +1,10 @@
-// Pure: the tenant's sessions as All sessions shows them, the filters it
-// offers and keeps in the address bar, and what a new session needs before
-// it may start. No React, no fetch.
-import type { AgentSessionView, ProjectView, SessionStatus, StartSessionRequest } from "@acme/client";
+// Pure: the sessions as Sessions shows them, in its two views (the person's
+// own, and the org's to explore and join), the filters it offers and keeps
+// in the address bar, and what a new session needs before it may start. No
+// React, no fetch.
+import type { AgentSessionView, Among, ProjectView, SessionStatus, StartSessionRequest, Visibility } from "@acme/client";
 import { listedFor } from "../../app/shell/supportModel";
-import { statusLine, type Tone } from "../session/sessionModel";
+import { standingOf, statusLine, type Standing, type Tone } from "../session/sessionModel";
 
 /** A status, or the parked sessions that wait on a person: "Needs you". */
 export type StatusFilter = SessionStatus | "any" | "needs_you";
@@ -28,10 +29,24 @@ export function serverStatus(filter: StatusFilter): SessionStatus | null {
   return filter === "needs_you" ? "parked" : filter;
 }
 
-/** What All sessions shows, as the address bar holds it. */
+/** Sessions' two views: the person's own, the ones they made or take part
+ * in, first; and the org's, the org-wide ones any member may join. */
+export type SessionsView = "mine" | "org";
+
+export const VIEWS: readonly { value: SessionsView; label: string }[] = [
+  { value: "mine", label: "Yours" },
+  { value: "org", label: "The org's" },
+];
+
+/** The list the server is asked for: the person's own, or every one they see. */
+export function amongOf(view: SessionsView): Among {
+  return view === "org" ? "visible" : "mine";
+}
+
+/** What Sessions shows, as the address bar holds it. */
 export interface ListFilter {
   status: StatusFilter;
-  owner: "everyone" | "mine";
+  view: SessionsView;
   /** An agent kind; empty for any. */
   kind: string;
   archived: boolean;
@@ -43,40 +58,56 @@ export interface ListFilter {
 export function readListFilter(params: URLSearchParams): ListFilter {
   return {
     status: params.get("needs") === "you" ? "needs_you" : statusFilter(params.get("status")),
-    owner: params.get("owner") === "mine" ? "mine" : "everyone",
+    view: params.get("view") === "org" ? "org" : "mine",
     kind: params.get("agent") ?? "",
     archived: params.get("archived") === "1",
     query: params.get("q") ?? "",
   };
 }
 
-/** The address bar's part of a filter: only what differs from showing every session. */
+/** The address bar's part of a filter: only what differs from the person's
+ * own sessions in every status. */
 export function listFilterParams(filter: ListFilter): Record<string, string> {
   const params: Record<string, string> = {};
+  if (filter.view === "org") params.view = "org";
   if (filter.status !== "any") params.status = filter.status;
-  if (filter.owner === "mine") params.owner = "mine";
   if (filter.kind) params.agent = filter.kind;
   if (filter.archived) params.archived = "1";
   if (filter.query) params.q = filter.query;
   return params;
 }
 
-/** Whether the filter narrows the list past its status. */
+/** Whether the filter narrows the list past its view and its status. */
 export function narrowed(filter: ListFilter): boolean {
-  return filter.owner === "mine" || filter.kind !== "" || filter.archived || filter.query.trim() !== "";
+  return filter.kind !== "" || filter.archived || filter.query.trim() !== "";
 }
 
-/** The sessions the list shows: the server read them in the status; here
- * they narrow to whose they are, the agent, the archived, and the words of
- * the title, case aside. A support conversation shows only under the
+/** Whether a session shows in the org's view: an org-wide one, open to every
+ * member. A private one never does, not even to one whose role lets them see
+ * it for an audit: its creator keeps it on their own list, and its address
+ * opens it. */
+export function orgWide(session: Pick<AgentSessionView, "visibility">): boolean {
+  return session.visibility === "org_wide";
+}
+
+/** The roots whose tree holds a sub-agent parked on a person. */
+export function treesNeedingYou(beneath: readonly AgentSessionView[]): Set<string> {
+  return new Set(beneath.filter((session) => session.parent_id !== null && session.archived_at === null && session.status === "parked" && session.park?.reason === "person").map((session) => session.root_id));
+}
+
+/** The sessions the list shows: the server read them in the view and the
+ * status; here the org's view keeps the org-wide ones, and each narrows to
+ * the agent, the archived, and the words of the title, case aside. "Needs
+ * you" keeps one parked on a person, or whose tree holds a sub-agent that
+ * is (`asking`, by root). A support conversation shows only under the
  * platform assistant's filter. */
-export function listed(sessions: readonly AgentSessionView[], filter: ListFilter, me: string | null): AgentSessionView[] {
+export function listed(sessions: readonly AgentSessionView[], filter: ListFilter, asking: ReadonlySet<string> = new Set()): AgentSessionView[] {
   const words = filter.query.trim().toLowerCase();
   return sessions.filter(
     (session) =>
-      (filter.status !== "needs_you" || session.park?.reason === "person") &&
+      (filter.view === "mine" || orgWide(session)) &&
+      (filter.status !== "needs_you" || session.park?.reason === "person" || asking.has(session.id)) &&
       (filter.archived || session.archived_at === null) &&
-      (filter.owner === "everyone" || session.created_by === me) &&
       listedFor(session, filter.kind) &&
       (!words || session.title.toLowerCase().includes(words)),
   );
@@ -91,9 +122,12 @@ export interface SessionRow {
   startedAt: string;
   /** A sub-agent names the session that started it. */
   parentId: string | null;
+  createdBy: string;
+  visibility: Visibility;
+  standing: Standing;
 }
 
-export function sessionRow(session: AgentSessionView): SessionRow {
+export function sessionRow(session: AgentSessionView, me: string | null = null): SessionRow {
   const status = statusLine(session);
   return {
     id: session.id,
@@ -103,6 +137,9 @@ export function sessionRow(session: AgentSessionView): SessionRow {
     tone: status.tone,
     startedAt: session.created_at,
     parentId: session.parent_id,
+    createdBy: session.created_by,
+    visibility: session.visibility,
+    standing: standingOf(session, me),
   };
 }
 

@@ -1,7 +1,7 @@
 """What the portal's browser check needs from the stack, run by the check
 itself and by no gate:
 
-    python services/api/tests/portal_check.py script <path> [--scene engineer|support]
+    python services/api/tests/portal_check.py script <path> [--scene engineer|support|sharing]
     python services/api/tests/portal_check.py evidence <slug> <session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
     python services/api/tests/portal_check.py tree <slug> [<root_id>]
@@ -25,7 +25,9 @@ command and each later validation wait for a decision, since a tool's
 output, such as its plan's answer, marks it. With `--scene support` it is
 the platform assistant answering in the support dock: it searches its
 corpus, then answers with a link to a page of the portal and a link to
-another site.
+another site. With `--scene sharing` it is the one turn twice, for the
+sharing check's two sessions; a participant's suggestion wakes no run, since
+only the steerer's message instructs.
 `evidence` records on one session of the org what an executor writes: two
 runs of a check and a validation of one of them. The local stack runs no
 executor, so the check writes the records its evidence screen reads
@@ -293,7 +295,7 @@ def write_script(path: Path, scene: str | None = None) -> None:
         usage=Usage(input=160, output=40),
         model=SONNET,
     )
-    scenes = {"engineer": engineer_scene, "support": support_scene}
+    scenes = {"engineer": engineer_scene, "support": support_scene, "sharing": lambda: [reply] * 2}
     turns: list[Turn] = scenes[scene]() if scene is not None else [reply]
     path.write_bytes(SCRIPT.dump_json({ProviderName.ANTHROPIC: turns}))
 

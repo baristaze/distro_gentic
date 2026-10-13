@@ -1,30 +1,37 @@
-// The calls the org's sessions hold for a person's decision, read whole. A
-// page covers a page of parked sessions, so one may hold no call while a
-// later one does. A call is decided on its session's own page.
-import { useQuery } from "@tanstack/react-query";
-import type { ApprovalPageView } from "@acme/client";
+// The calls the sessions a person sees hold for a decision. Each session's
+// held calls are read on its own route, which shows a sub-agent's as its
+// root is seen, so a call a sub-agent holds is named as its root's are. A
+// call is decided on its session's own page.
+import { useQueries } from "@tanstack/react-query";
+import { useMemo } from "react";
+import type { ApprovalView } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
-export const APPROVALS_PAGE_SIZE = 50;
-
-/** The tool each of these sessions holds for a decision, read only while one
- * holds a call: the list of the sessions is the key, so a session that comes
- * to hold one reads the calls again, and none read none. */
-export function useHeldTools(sessionIds: readonly string[]) {
-  const ids = [...sessionIds].sort();
-  return useQuery({
-    queryKey: [...keys.approvals.all, "held", ...ids],
-    enabled: ids.length > 0,
-    queryFn: async ({ signal }) => {
-      const held = new Map<string, string>();
-      for (let cursor: string | null = null; ; ) {
-        const after: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-        const page: ApprovalPageView = await api.get<ApprovalPageView>(`/v1/approvals?limit=${APPROVALS_PAGE_SIZE}${after}`, { signal });
-        for (const call of page.items) if (!held.has(call.session_id)) held.set(call.session_id, call.tool);
-        if (!page.next_cursor) return held;
-        cursor = page.next_cursor;
-      }
-    },
+const toolsOf = (ids: readonly string[]) => (read: readonly { data?: ApprovalView[] }[]) => {
+  const held = new Map<string, string>();
+  read.forEach((one, index) => {
+    const first = one.data?.[0];
+    if (first) held.set(ids[index]!, first.tool);
   });
+  return held;
+};
+
+/** The tool each of these sessions holds for a decision, read only for the
+ * sessions that hold one, each under the key its own page reads it by, so a
+ * push about one reads it again. */
+export function useHeldTools(sessionIds: readonly string[]) {
+  const ids = [...new Set(sessionIds)].sort();
+  const key = ids.join(" ");
+  // One combine for as long as the ids are the same, so the map is made once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const combine = useMemo(() => toolsOf(ids), [key]);
+  const data = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: keys.agentSessions.read(id, "approvals"),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<ApprovalView[]>(`/v1/agent-sessions/${encodeURIComponent(id)}/approvals`, { signal }),
+    })),
+    combine,
+  });
+  return { data };
 }

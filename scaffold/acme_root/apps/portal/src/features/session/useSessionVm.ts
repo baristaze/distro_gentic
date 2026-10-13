@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, type AgentSessionView } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
+import { personName } from "../../app/recordModel";
 import type { SlotSession } from "../../app/product";
 import { useShellSessions } from "../../app/shell/shellContext";
 import { waitingBeneath } from "../../app/shell/shellModel";
@@ -9,12 +10,12 @@ import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
 import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
-import { useMe, useUser } from "../../queries/tenancy";
+import { useMe, useMemberships, useUser, useUsers } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
 import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
 import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
-import { allowed, composerOf, deliveryLines, heldBy, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
+import { allowed, composerOf, deliveryLines, heldBy, parkLine, pullRequestBadge, sharingOf, splitCommand, statusLine, type Member } from "./sessionModel";
 import { answers, callsOf, handedTo, outline, timeline, type Call, type ChildState } from "./timelineModel";
 
 const NONE: readonly AgentSessionView[] = [];
@@ -112,10 +113,25 @@ export function useSessionVm(id: string) {
     if (ended) void refetchSteps();
   }, [live, refetchSteps]);
 
-  const myId = me.data?.user.id ?? null;
-  const holderId = session.data ? heldBy(session.data, myId) : null;
+  // Who sees it, who takes part, and who steers: names from the member list
+  // read whole, and roles from the memberships, so a lapsed steerer shows.
+  const users = useUsers();
+  const memberships = useMemberships();
+  const meId = me.data?.user.id ?? null;
+  const permissions = me.data?.permissions;
+  const members = useMemo<Member[] | null>(() => {
+    if (users.isPending || !users.data) return null;
+    const roles = new Map((memberships.data ?? []).map((membership) => [membership.user_id, membership.role]));
+    return users.data.map((user) => ({ id: user.id, name: personName(users.data, user.id), role: roles.get(user.id) ?? null }));
+  }, [users.isPending, users.data, memberships.data]);
+  const sharing = useMemo(
+    () => (session.data && permissions ? sharingOf(session.data, meId, permissions, members) : null),
+    [session.data, meId, permissions, members],
+  );
+  const nameOf = useCallback((person: string) => (person === meId ? "You" : personName(users.data, person)), [meId, users.data]);
+  const holderId = session.data ? heldBy(session.data, meId) : null;
   const holder = useUser(holderId);
-  const may = session.data ? allowed(session.data, me.data?.permissions.includes("write") ?? false, myId) : null;
+  const may = session.data ? allowed(session.data, permissions?.includes("write") ?? false, meId, sharing?.takesPart ?? true) : null;
   const fail = useCallback((what: string) => (caught: unknown) => notify(errorMessage(caught, what), { tone: "problem" }), [notify]);
 
   // The pane: kept per session in this browser, its active tab and the call
@@ -210,6 +226,26 @@ export function useSessionVm(id: string) {
   };
   const giveBack = (summary: string) =>
     actions.giveBack.mutate({ summary: summary.trim() }, { onSuccess: () => setCommandKey(null), onError: fail("Control was not given back.") });
+  /** The person takes part from here: their messages reach its agent as suggestions. */
+  const join = () => {
+    if (meId !== null) actions.join.mutate(meId, { onSuccess: () => notify("You joined the session."), onError: fail("You did not join the session.") });
+  };
+  /** Its creator adds a member, who takes part from here. */
+  const add = (person: string) =>
+    actions.join.mutate(person, { onSuccess: () => notify(`${nameOf(person)} takes part now.`), onError: fail("The member was not added.") });
+  /** Its creator switches who sees it. */
+  const share = (visibility: "private" | "org_wide") =>
+    actions.share.mutate(visibility, {
+      onSuccess: () => notify(visibility === "private" ? "The session is private." : "The session is org-wide."),
+      onError: fail("Who sees the session did not change."),
+    });
+  /** Its steerer hands the steer to one who takes part, or, with no one
+   * named, the person takes a lapsed steerer's. */
+  const steer = (to: string | null) =>
+    actions.steer.mutate(to, {
+      onSuccess: () => notify(to === null ? "You steer the session now." : `${nameOf(to)} steers the session now.`),
+      onError: fail(to === null ? "The steer was not taken." : "The steer was not handed over."),
+    });
   const archive = () =>
     actions.archive.mutate(undefined, {
       onSuccess: () => notify("The session is archived. A message brings it back."),
@@ -330,7 +366,10 @@ export function useSessionVm(id: string) {
     gists,
     missing,
     error: missing ? null : session.error,
-    session: record ? { ...sessionRow(record), raw: record, status: statusLine(record) } : null,
+    session: record ? { ...sessionRow(record, meId), raw: record, status: statusLine(record) } : null,
+    sharing,
+    /** The person reading, and a member's name: "You" for them. */
+    people: { me: meId, nameOf },
     park: record?.park ? parkLine(record.park) : null,
     may,
     chat,
@@ -359,7 +398,12 @@ export function useSessionVm(id: string) {
     heldBy: holderId === null ? null : (holder.data?.display_name ?? "Another person"),
     copy,
     copyLink,
+    join,
+    add,
+    share,
+    steer,
     archive,
+    changingSharing: actions.join.isPending || actions.share.isPending || actions.steer.isPending,
     sending: actions.message.isPending,
     invoking: actions.invoke.isPending,
     deciding: actions.decide.isPending,

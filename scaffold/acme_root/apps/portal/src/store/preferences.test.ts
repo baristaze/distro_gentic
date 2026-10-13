@@ -73,7 +73,7 @@ describe("preferences store", () => {
     const state = usePreferencesStore.getState();
     expect(state.sidebarWidth).toBe(SIDEBAR.max);
     expect(state.sidebarFolded).toBe(false);
-    expect(state.sessionFilter).toEqual({ owner: "mine", status: "any", kind: "", archived: false });
+    expect(state.sessionFilter).toEqual({ status: "any", kind: "", archived: false });
     state.setSidebarWidth(10);
     state.toggleSidebar();
     expect(JSON.parse(local.getItem(KEY) as string).state).toMatchObject({ sidebarWidth: SIDEBAR.min, sidebarFolded: true });

@@ -40,10 +40,13 @@ import {
 import { splitPage } from "../../app/shell/supportLinks";
 import { shortTime } from "../sessions/sessionsModel";
 import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type ChildPhase, type Entry, type OutlineMark, type ThoughtEntry } from "./timelineModel";
+import { sharedWords } from "./sessionModel";
 import type { SessionVm } from "./useSessionVm";
 
 /** What the timeline draws from: a session's page, or the support dock. */
-export type TimelineVm = Pick<SessionVm, "chat" | "marks" | "stepsError" | "copy" | "openCall" | "tools" | "slotSession" | "may" | "decide" | "deciding" | "control">;
+export type TimelineVm = Pick<SessionVm, "chat" | "marks" | "stepsError" | "copy" | "openCall" | "tools" | "slotSession" | "may" | "decide" | "deciding" | "control"> &
+  /** Who wrote a message, where more than one person may: a session's page. */
+  Partial<Pick<SessionVm, "people">>;
 
 /** A line's words, a `quoted` run drawn as code. */
 function Gist({ text }: { text: string }) {
@@ -415,12 +418,25 @@ interface Drawn {
   link?: LinkView;
 }
 
-/** A person's message: their words, and the page they sent it from, when
- * the support dock sent it. */
-function PersonRow({ text, at }: { text: string; at: string }) {
-  const { text: words, page } = splitPage(text);
+/** Who wrote a message, over it: another person by name, and a
+ * participant's message as a suggestion, which reaches the agent as data
+ * for its steerer, never as an instruction. */
+function byline(entry: Extract<Entry, { kind: "person" }>, people: TimelineVm["people"]): string | null {
+  const mine = entry.author === null || entry.author === people?.me;
+  const who = entry.author === null || !people ? "a participant" : people.nameOf(entry.author);
+  if (entry.suggestion) return mine ? "Your suggestion" : `Suggestion from ${who}`;
+  return mine || !people ? null : who;
+}
+
+/** A person's message: their words, who wrote it when it was not the
+ * person reading, and the page they sent it from, when the support dock
+ * sent it. */
+function PersonRow({ entry, people }: { entry: Extract<Entry, { kind: "person" }>; people: TimelineVm["people"] }) {
+  const { text: words, page } = splitPage(entry.text);
+  const by = byline(entry, people);
   return (
-    <div className="acme-bubble" title={shortTime(at)}>
+    <div className="acme-bubble" data-suggestion={entry.suggestion || undefined} title={shortTime(entry.at)}>
+      {by ? <span className="acme-bubble-by">{by}</span> : null}
       <Markdown text={words} />
       {page ? <span className="acme-bubble-page">Sent from {page.path}</span> : null}
     </div>
@@ -431,7 +447,14 @@ function EntryRow({ entry, vm, drawn }: { entry: Entry; vm: TimelineVm; drawn: D
   const onOpen: OnOpen = drawn.compact ? null : vm.openCall;
   switch (entry.kind) {
     case "person":
-      return <PersonRow text={entry.text} at={entry.at} />;
+      return <PersonRow entry={entry} people={vm.people} />;
+    case "shared":
+      return (
+        <div className="acme-thin" data-tone="accent">
+          <span>{sharedWords(entry, vm.people?.nameOf ?? (() => "A member"))}</span>
+          <Muted>{shortTime(entry.at)}</Muted>
+        </div>
+      );
     case "note":
       return (
         <section className="acme-tcard" data-card="note" aria-label={entry.label}>

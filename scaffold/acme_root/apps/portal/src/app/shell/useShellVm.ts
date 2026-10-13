@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useHeldTools } from "../../queries/approvals";
-import { useAgentSessions, useParkedSessions } from "../../queries/agentSessions";
+import { useAgentSessions, useParkedSessions, useTrees } from "../../queries/agentSessions";
 import { useMe } from "../../queries/tenancy";
 import { SIDEBAR, usePreferencesStore } from "../../store/preferences";
 import { errorMessage } from "../errorMessage";
@@ -18,16 +18,18 @@ function useMinute(): Date {
   return now;
 }
 
-/** The left bar: the org's newest sessions and every parked one, grouped by
- * what they ask of a person, under the filter the person keeps; the
- * platform's and the product's entries; and the bar's width and fold. A push
- * about a session reads the lists again (the realtime router). */
+/** The left bar: the person's own sessions, the newest and every parked
+ * one, grouped by what they ask of a person, under the filter the person
+ * keeps; the platform's and the product's entries; and the bar's width and
+ * fold. Their own are the ones they made or take part in; the org's are a
+ * view of Sessions. A push about a session reads the lists again (the
+ * realtime router). */
 export function useShellVm() {
   const navigate = useNavigate();
   const slot = useSlot();
   const me = useMe();
-  const newest = useAgentSessions(null);
-  const parked = useParkedSessions();
+  const newest = useAgentSessions("mine", null);
+  const parked = useParkedSessions("mine");
   const filter = usePreferencesStore((s) => s.sessionFilter);
   const setFilter = usePreferencesStore((s) => s.setSessionFilter);
   const width = usePreferencesStore((s) => s.sidebarWidth);
@@ -39,13 +41,17 @@ export function useShellVm() {
   const folds = useMemo(() => ({ folded: new Set(foldedTrees), toggle: toggleTree }), [foldedTrees, toggleTree]);
   const now = useMinute();
 
-  const sessions = useMemo(() => [...(parked.data ?? []), ...(newest.data ?? [])], [parked.data, newest.data]);
+  // The lists hold roots; the sub-agents of the trees that work or wait are
+  // read beneath them, so one that needs a person lifts its tree.
+  const roots = useMemo(() => [...(parked.data ?? []), ...(newest.data ?? [])], [parked.data, newest.data]);
+  const trees = useTrees(roots);
+  const sessions = useMemo(() => [...roots, ...trees], [roots, trees]);
   const deciding = sessions.filter((session) => needsYou(session) && session.park?.unlock === "approval").map((session) => session.id);
   const held = useHeldTools(deciding);
   const meId = me.data?.user.id ?? null;
   const groups = useMemo(
-    () => shellGroups(sessions, { filter, me: meId, held: held.data }),
-    [sessions, filter, meId, held.data],
+    () => shellGroups(sessions, { filter, held: held.data }),
+    [sessions, filter, held.data],
   );
   // The sessions of the person's that need them now, for the toasts.
   const needing = useMemo(() => needingYou(sessions, meId, held.data), [sessions, meId, held.data]);

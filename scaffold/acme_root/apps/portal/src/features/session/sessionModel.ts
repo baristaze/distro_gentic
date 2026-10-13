@@ -7,7 +7,9 @@ import type {
   DeliveryView,
   ExecutionView,
   ParkView,
+  Role,
   SessionModelUsageView,
+  Visibility,
 } from "@acme/client";
 
 export type Tone = "plain" | "accent" | "danger";
@@ -147,7 +149,8 @@ export function usageLine(usage: SessionModelUsageView): string {
 }
 
 /** What a person may do to the session as it stands; a member who may not
- * write may do nothing. Ending the run is offered while one is open,
+ * write may do nothing, and one who takes no part in it sends nothing and
+ * takes no control: they join it first. Ending the run is offered while one is open,
  * whatever its park: a cancel ends any park, a held hand-over too. A
  * hand-over that names its holder is theirs alone to work in and give back
  * (`heldBy`); one that names none, any writer's. */
@@ -170,21 +173,21 @@ export function heldBy(session: Pick<AgentSessionView, "park">, me: string | nul
   return park.holder === me ? null : park.holder;
 }
 
-export function allowed(session: AgentSessionView, mayWrite: boolean, me: string | null): Allowed {
+export function allowed(session: AgentSessionView, mayWrite: boolean, me: string | null, takesPart = true): Allowed {
   const handedOver = session.park?.reason === "handover";
   const paused = session.park?.reason === "pause";
   const open = session.status === "running" || session.status === "parked" || session.status === "pending";
   const none: Allowed = { send: false, pause: false, resume: false, cancel: false, compact: false, takeControl: false, giveBack: false, archive: false };
   if (!mayWrite) return none;
   return {
-    send: !handedOver,
+    send: takesPart && !handedOver,
     // A session reads pending until its first run parks or ends, so a run
     // may hold it while it is pending: a pause parks it at its next step.
     pause: session.status === "running" || session.status === "pending",
     resume: paused,
     cancel: open,
     compact: session.status === "idle",
-    takeControl: !handedOver,
+    takeControl: takesPart && !handedOver,
     giveBack: handedOver && heldBy(session, me) === null,
     archive: session.status === "idle" && !session.archived_at,
   };
@@ -280,4 +283,103 @@ export function pullRequestBadge(delivery: Pick<DeliveryView, "work">): PullRequ
   if (last === undefined) return null;
   const number = /(\d+)\s*$/.exec(last)?.[1];
   return { label: number ? `#${number}` : last, handle: last, more: opened.length - 1 };
+}
+
+/** How a person stands to a session: they made it, they joined it, or
+ * neither, when the org's view offers it to join. */
+export type Standing = "made" | "joined" | "none";
+
+export function standingOf(session: Pick<AgentSessionView, "created_by" | "participants">, me: string | null): Standing {
+  if (me !== null && session.created_by === me) return "made";
+  if (me !== null && session.participants.includes(me)) return "joined";
+  return "none";
+}
+
+/** A member of the org, as the sharing of a session reads them: their
+ * name, and their role once the memberships are read. */
+export interface Member {
+  id: string;
+  name: string;
+  role: Role | null;
+}
+
+export interface Person {
+  id: string;
+  /** "You" for the person reading. */
+  name: string;
+}
+
+/** Who sees a session, who takes part in it, who steers it, and what the
+ * person reading may change of that. */
+export interface Sharing {
+  visibility: Visibility;
+  /** The one whose messages instruct it; null when no person steers it. */
+  steerer: Person | null;
+  steering: boolean;
+  standing: Standing;
+  /** They made it, joined it, or steer it: they may speak in it. */
+  takesPart: boolean;
+  /** Its creator, then its participants. */
+  people: Person[];
+  /** Whom its steerer may hand the steer to: anyone taking part but them. */
+  handTo: Person[];
+  /** Whom its creator may add: the org's members who take no part yet. */
+  addable: Person[];
+  mayJoin: boolean;
+  /** Its creator switches who sees it. */
+  mayShare: boolean;
+  /** One who may reassign a session takes the steer of one whose steerer
+   * lapsed: gone from the org, or left a role that may not write. */
+  mayTakeSteer: boolean;
+}
+
+/** A session's sharing as the person reading it stands to it. A sub-agent
+ * has none of its own: it is seen and steered as its root is. `members` is
+ * null until the member list is read whole, and no steerer counts as lapsed
+ * before then. */
+export function sharingOf(
+  session: AgentSessionView,
+  me: string | null,
+  permissions: readonly string[],
+  members: readonly Member[] | null,
+): Sharing | null {
+  if (session.parent_id !== null) return null;
+  const nameOf = (id: string): Person => ({
+    id,
+    name: id === me ? "You" : (members?.find((member) => member.id === id)?.name ?? "a former member"),
+  });
+  const mayWrite = permissions.includes("write");
+  const steering = me !== null && session.steerer === me;
+  const standing = standingOf(session, me);
+  const takesPart = standing !== "none" || steering;
+  const people = [session.created_by, ...session.participants.filter((id) => id !== session.created_by)].map(nameOf);
+  const held = members?.find((member) => member.id === session.steerer);
+  const lapsed = members !== null && session.steerer !== null && (held === undefined || held.role === "viewer");
+  return {
+    visibility: session.visibility,
+    steerer: session.steerer === null ? null : nameOf(session.steerer),
+    steering,
+    standing,
+    takesPart,
+    people,
+    handTo: mayWrite && steering ? people.filter((person) => person.id !== me) : [],
+    addable:
+      mayWrite && standing === "made" && members !== null
+        ? members.filter((member) => member.id !== session.created_by && !session.participants.includes(member.id)).map((member) => nameOf(member.id))
+        : [],
+    mayJoin: mayWrite && !takesPart && session.visibility === "org_wide",
+    mayShare: mayWrite && standing === "made",
+    mayTakeSteer: mayWrite && permissions.includes("manage_sessions") && !steering && lapsed,
+  };
+}
+
+/** The words a sharing step leaves in the history. */
+export function sharedWords(change: { steerer: string | null; visibility: Visibility | null }, nameOf: (id: string) => string): string {
+  if (change.steerer !== null) {
+    const who = nameOf(change.steerer);
+    return who === "You" ? "You steer it from here" : `${who} steers it from here`;
+  }
+  return change.visibility === "private"
+    ? "Made private: its creator and the people taking part see it"
+    : "Made org-wide: every member of the org sees it and may join";
 }

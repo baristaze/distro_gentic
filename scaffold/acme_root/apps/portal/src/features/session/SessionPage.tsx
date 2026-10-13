@@ -1,8 +1,11 @@
 // One session: its header, its history as a chat with the composer pinned
 // under it, and its right pane of tabs beside them, folded to its rail when
-// the support dock needs the room. A session the member's org does not hold
-// shows nothing of it.
+// the support dock needs the room. The header says who steers it and who
+// sees it; there a member joins it, its creator makes it private or
+// org-wide, and its steerer hands the steer on. A session the member's org
+// does not hold shows nothing of it.
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Lock } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { errorMessage } from "../../app/errorMessage";
 import { usePageCommands, usePaneSplit } from "../../app/shell/shellContext";
@@ -12,6 +15,7 @@ import {
   Card,
   CopyIcon,
   InfoTip,
+  kitIcon,
   Menu,
   MenuItem,
   MoreIcon,
@@ -22,10 +26,12 @@ import {
   PlayIcon,
   Popover,
   PullRequestIcon,
+  Select,
   SendIcon,
   TextArea,
   TextField,
   Tooltip,
+  UsersIcon,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
 import { Pane } from "./Pane";
@@ -34,6 +40,8 @@ import { Timeline } from "./Timeline";
 import { useSessionVm, type SessionVm } from "./useSessionVm";
 
 const back = <Link to="/sessions">← Sessions</Link>;
+
+const LockIcon = kitIcon(Lock);
 
 export function SessionPage() {
   const { sessionId = "" } = useParams();
@@ -121,6 +129,7 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
         </Link>
       ) : null}
       <span className="acme-composer-gap" />
+      {vm.sharing ? <SharingChip vm={vm} /> : null}
       {park?.action === "give_back" && may?.giveBack ? (
         <button type="button" className="acme-chip" onClick={() => vm.openTab("workspace")}>
           <span>Give it back</span>
@@ -174,6 +183,21 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
  * the session runs, Pause sits beside Send and never replaces it. */
 function Composer({ vm }: { vm: SessionVm }) {
   const [draft, setDraft] = useState("");
+  const sharing = vm.sharing;
+  if (sharing?.mayJoin) {
+    return (
+      <div className="acme-session-composer">
+        <div className="acme-composer-join">
+          <Muted>
+            Join this session to take part. {sharing.steerer ? `${sharing.steerer.name} steers it` : "Its steerer steers it"}: your messages reach its agent as suggestions.
+          </Muted>
+          <button type="button" className="acme-chip" onClick={vm.join} disabled={vm.changingSharing}>
+            <span>Join</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!vm.may?.send) {
     return (
       <div className="acme-session-composer">
@@ -181,6 +205,11 @@ function Composer({ vm }: { vm: SessionVm }) {
       </div>
     );
   }
+  // A participant who does not steer suggests: the agent reads it as data.
+  const suggesting = sharing !== null && !sharing.steering && sharing.steerer !== null;
+  const words = suggesting
+    ? { label: "Suggestion", placeholder: `Suggest something to ${sharing.steerer!.name}, who steers it` }
+    : vm.composer;
   const submit = () => {
     if (draft.trim() && !vm.sending) vm.send(draft.trim(), () => setDraft(""));
   };
@@ -196,8 +225,9 @@ function Composer({ vm }: { vm: SessionVm }) {
   return (
     <div className="acme-session-composer">
       <form className="acme-composer" aria-label="Send a message" onSubmit={onSubmit}>
-        <TextArea label={vm.composer.label} hideLabel rows={2} placeholder={vm.composer.placeholder} value={draft} onChange={setDraft} onKeyDown={onKey} />
+        <TextArea label={words.label} hideLabel rows={2} placeholder={words.placeholder} value={draft} onChange={setDraft} onKeyDown={onKey} />
         <div className="acme-composer-bar">
+          {suggesting ? <Muted>{sharing.steerer!.name} steers it: your message reaches the agent as a suggestion.</Muted> : null}
           <span className="acme-composer-gap" />
           {vm.may.pause ? (
             <Tooltip tip="Pause after the current step" side="top">
@@ -246,6 +276,126 @@ function InvokePlaybook({ vm }: { vm: SessionVm }) {
           <span>Invoke</span>
         </button>
       </form>
+    </Popover>
+  );
+}
+
+/** In the header: who steers the session and who sees it. Open, it lists
+ * who takes part, and offers what the person may change: join it, make it
+ * private or org-wide (its creator), hand the steer to one who takes part
+ * (its steerer), or take the steer of one who lapsed (one who may reassign
+ * sessions). */
+function SharingChip({ vm }: { vm: SessionVm }) {
+  const sharing = vm.sharing!;
+  const [to, setTo] = useState("");
+  const [adding, setAdding] = useState("");
+  const [open, setOpen] = useState(0);
+  const priv = sharing.visibility === "private";
+  const steers = sharing.steerer ? (sharing.steering ? "You steer" : `${sharing.steerer.name} steers`) : "No one steers";
+  const done = () => {
+    setTo("");
+    setAdding("");
+    setOpen((count) => count + 1);
+  };
+  const handTo = sharing.handTo.find((person) => person.id === to) ?? null;
+  return (
+    <Popover
+      key={open}
+      label="Who steers and who sees this session"
+      trigger={
+        <>
+          {priv ? <LockIcon size={14} /> : <UsersIcon size={14} />}
+          <span>{steers}</span>
+        </>
+      }
+      triggerTitle={`${steers}. ${priv ? "Private" : "Org-wide"}.`}
+      triggerClassName="acme-chip acme-sharing-chip"
+      align="end"
+      width={320}
+    >
+      <div className="acme-sharing">
+        <p>
+          <strong>{priv ? "Private" : "Org-wide"}</strong>
+          <Muted>{priv ? ": its creator and the people taking part see it." : ": every member of the org sees it and may join."}</Muted>
+        </p>
+        {sharing.mayShare ? (
+          <button type="button" className="acme-chip" disabled={vm.changingSharing} onClick={() => vm.share(priv ? "org_wide" : "private")}>
+            <span>{priv ? "Make it org-wide" : "Make it private"}</span>
+          </button>
+        ) : null}
+        <p>
+          <strong>{steers}</strong>
+          <Muted>: only the steerer's messages instruct the agent. Anyone else taking part suggests.</Muted>
+        </p>
+        <ul className="acme-sharing-people" aria-label="Taking part">
+          {sharing.people.map((person) => (
+            <li key={person.id}>
+              {person.name}
+              {person.id === sharing.steerer?.id ? <Muted> · steers</Muted> : null}
+            </li>
+          ))}
+        </ul>
+        {sharing.addable.length > 0 ? (
+          <div className="acme-sharing-hand">
+            <Select
+              label="Add a member"
+              value={adding}
+              options={[{ value: "", label: "Choose a member" }, ...sharing.addable.map((person) => ({ value: person.id, label: person.name }))]}
+              onChange={setAdding}
+            />
+            <button
+              type="button"
+              className="acme-chip"
+              disabled={adding === "" || vm.changingSharing}
+              onClick={() => {
+                vm.add(adding);
+                setAdding("");
+              }}
+            >
+              <span>Add</span>
+            </button>
+          </div>
+        ) : null}
+        {sharing.handTo.length > 0 ? (
+          <div className="acme-sharing-hand">
+            <Select
+              label="Hand the steer to"
+              value={to}
+              options={[{ value: "", label: "Choose who takes part" }, ...sharing.handTo.map((person) => ({ value: person.id, label: person.name }))]}
+              onChange={setTo}
+            />
+            <button
+              type="button"
+              className="acme-chip"
+              disabled={handTo === null || vm.changingSharing}
+              onClick={() => {
+                if (handTo) vm.steer(handTo.id);
+                done();
+              }}
+            >
+              <span>Hand it over</span>
+            </button>
+          </div>
+        ) : null}
+        {sharing.mayTakeSteer ? (
+          <button
+            type="button"
+            className="acme-chip"
+            disabled={vm.changingSharing}
+            onClick={() => {
+              vm.steer(null);
+              done();
+            }}
+          >
+            <span>Take the steer: {sharing.steerer?.name ?? "its steerer"} no longer holds it</span>
+          </button>
+        ) : null}
+        {sharing.mayJoin ? (
+          <button type="button" className="acme-chip" disabled={vm.changingSharing} onClick={vm.join}>
+            <span>Join</span>
+          </button>
+        ) : null}
+      </div>
     </Popover>
   );
 }

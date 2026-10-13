@@ -15,7 +15,7 @@ person is on, the route it matched, and the parameters it named, as data.
 | Address | What it shows | Parameters |
 | --- | --- | --- |
 | `/` | Home: a box to describe a task, the agent and the project it starts on, and starter prompts |  |
-| `/sessions` | All sessions of the org, filtered by status, by whose, by agent, and by title; `?needs=you` shows the ones waiting on you |  |
+| `/sessions` | Sessions: the person's own first, then the org's org-wide ones to join (`?view=org`), filtered by status, by agent, and by title; `?needs=you` shows the ones waiting on a person |  |
 | `/sessions/:sessionId` | One session: its status and what it waits on, its chat, and a pane of what it did (its steps, workspace, changes, evidence, and sub-agents) | `sessionId`: the session's id |
 | `/automations` | The org's automations, a new one, and the automation principal |  |
 | `/automations/:automationId` | One automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit | `automationId`: the automation's id |
