@@ -52,7 +52,9 @@ class PlatformAgentsManagerInterface(ABC):
         executor offers what it needs, its starter may no longer write, or
         the key no longer holds), refuses the session with that reason
         (`refuse_validation`) and raises `PreconditionFailed`; a refused
-        session runs nothing and raises it again."""
+        session runs nothing and raises it again. Any other error is raised
+        as it is, for the queue to retry; its handler refuses the session
+        on the work's last attempt."""
         ...
 
     @abstractmethod
@@ -71,10 +73,10 @@ class PlatformAgentsManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, reason: str
     ) -> ValidationSession:
         """Platform-internal: the session's check cannot run here, for good,
-        and the session is refused with `reason`, its first characters
-        kept, so its read ends rather than waiting for ever. A session
-        refused already answers as stored; a finished one,
-        `PreconditionFailed`, since its run is recorded."""
+        or its work failed on its last attempt, and the session is refused
+        with `reason`, its first characters kept, so its read ends rather
+        than waiting for ever. A session refused already answers as stored;
+        a finished one, `PreconditionFailed`, since its run is recorded."""
         ...
 
     @abstractmethod

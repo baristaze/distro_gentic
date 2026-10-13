@@ -207,7 +207,8 @@ Readers: `search_knowledge`, `read_knowledge`, `search_corpus`.
 A **validation session** runs one check of a project's policy at a
 delivered commit, on a fresh machine, with no agent. It is `queued`
 while its work waits or runs, then `finished` with the run it recorded,
-or `refused` with the reason the check cannot run here.
+or `refused` with the reason the check cannot run here, or with the
+error its work failed with on its last attempt.
 
 ## The product's own
 

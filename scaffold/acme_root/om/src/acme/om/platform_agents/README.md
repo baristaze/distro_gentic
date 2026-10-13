@@ -201,7 +201,9 @@ calls, and holds its workspace warm for a while after a loop.
   policy no longer declares it, no executor offers what it needs, or its
   starter or their key no longer may run it, refuses the session with
   that reason: it runs nothing, its work fails for good, and its read
-  says `refused` rather than waiting.
+  says `refused` rather than waiting. Work that fails on its last
+  attempt for any other reason refuses the session too, with the
+  error's class, and still fails for good.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 
