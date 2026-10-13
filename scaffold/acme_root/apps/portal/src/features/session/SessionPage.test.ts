@@ -110,6 +110,7 @@ function answer(path: string): unknown {
   if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as MeView;
   if (path.startsWith("/v1/agent-sessions?")) return { items: [held], next_cursor: null };
   if (path.startsWith("/v1/projects?")) return net.projects;
+  if (path === "/v1/users/u2") return { id: "u2", display_name: "Ada", email: "ada@example.test", created_at: at };
   const [, , , id, part] = path.split("?")[0]!.split("/");
   if (id !== held.id) throw new ApiError(404, "not_found", "session not found", "req-1");
   if (!part) return held;
@@ -154,6 +155,7 @@ vi.mock("../../app/api", () => ({
       net.posts.push({ path, body });
       if (path.endsWith("/invocations"))
         return Promise.resolve({ id: "i1", session_id: "sa", playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
+      if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: StepView["command"] }).command }));
       return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
     },
   },
@@ -352,6 +354,33 @@ describe("the org's own session", () => {
     await open("a", "/sessions/sa");
     expect(container.querySelector("form[aria-label='Send a message']")).toBeNull();
     expect(container.querySelector(".acme-session-composer")!.textContent).toBe("A person has control: the agent reads what they did once they give it back.");
+  });
+
+  it("offers End this run beside Give it back while a person has control, and sends the cancel", async () => {
+    net.over = { status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null, holder: "u1" } };
+    await open("a", "/sessions/sa?pane=workspace");
+    const giveBack = pane()!.querySelector<HTMLFormElement>("form[aria-label='Give it back']")!;
+    const buttons = [...giveBack.querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Give it back", "End this run"]);
+    expect(buttons[0]!.parentElement).toBe(buttons[1]!.parentElement);
+    await act(async () => buttons[1]!.click());
+    await settle();
+    expect(net.posts).toEqual([{ path: "/v1/agent-sessions/sa/controls", body: { command: "cancel" } }]);
+  });
+
+  it("shows another member's hand-over as theirs: who holds it and End this run, never Run or Give it back", async () => {
+    net.over = { status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null, holder: "u2" } };
+    await open("a", "/sessions/sa?pane=workspace");
+    const card = pane()!.querySelector<HTMLElement>("section#control")!;
+    expect(card.querySelector("h2")!.textContent).toBe("Ada has control");
+    expect(pane()!.querySelector("form[aria-label='Run a command']")).toBeNull();
+    expect(pane()!.querySelector("form[aria-label='Give it back']")).toBeNull();
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Give it back")).toBe(false);
+    const buttons = [...card.querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["End this run"]);
+    await act(async () => buttons[0]!.click());
+    await settle();
+    expect(net.posts).toEqual([{ path: "/v1/agent-sessions/sa/controls", body: { command: "cancel" } }]);
   });
 
   it("opens Workspace by itself once while it runs; closed, it stays closed", async () => {

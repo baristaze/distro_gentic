@@ -577,6 +577,12 @@ chat message counts as a principal's only when a chat user mapped to a
 platform user addresses it to the agent; everything else relayed from
 chat is data.
 
+A second start leaves an open session as it is: it is another session
+beside it, with its own history. A start sent again under the same key
+answers the session it began ([`agentic_core` A Session Never
+Ends][e-never-ends]). A person who wants the open session to change
+course steers it.
+
 ### Take Control, Give Back
 
 Sometimes a person needs their hands on the work. They **take control**:
@@ -588,6 +594,13 @@ attributed to that person. When they **give it back**, their summary
 becomes a message the agent reads on resume. A remote desktop would give
 the person everything and the platform nothing: no record of what ran,
 by whom, with what result.
+
+The environment is the holder's alone. Only they run commands in it and
+give it back, and every other member sees who holds it. Any member who
+may write can still **end the run** instead: a cancel ends the loop
+`cancelled`, a held hand-over too ([`agentic_core` Taking
+Over][e-takeover]). Wherever the platform offers a person a resume, it
+offers that cancel beside it ([Long-Running Orchestrations][g-lro]).
 
 ### Mirrors
 
@@ -649,7 +662,10 @@ own: a cost cap, a rate, a concurrency, and whether to queue when
 limited. An automation ignores the events its own sessions caused,
 unless it declares otherwise, and a chain of automations stops at a hop
 limit, so an agent's comment cannot start an endless chain. Every firing
-is a recorded run.
+is a recorded run. A firing while a run is open starts another beside
+it, as the automation's limits allow: it starts, queues, or is
+refused. An event delivered again, or a schedule's slot met again,
+answers the run it made.
 
 ### Playbooks and Knowledge
 
@@ -1054,7 +1070,9 @@ tenant adds toolsets of its own to a kind: its connectors
   existing session should continue or a new one should start.
 - A **validation session** runs a delivery's checks with no agent at
   all, on a fresh executor (a workspace nobody used, never the agent's),
-  on the same queue, and writes the same execution record.
+  on the same queue, and writes the same execution record. A second
+  start runs another beside it, and a start sent again under its key
+  answers the one it began.
 - The **platform assistant** helps the people who set up and run their
   part of the platform. It explains the product, citing a corpus. It
   diagnoses live state with tools, never with guesses: why a session is
@@ -1242,6 +1260,7 @@ threat model each deployment writes.
 
 [g]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md
 [g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-work-queue
+[g-lro]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#long-running-orchestrations
 [g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#leases-on-a-resource
 [g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#shape-of-a-worker
 [g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#worker-roles
@@ -1268,6 +1287,8 @@ threat model each deployment writes.
 [e-durable]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#durable-by-default
 [e-streams]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#streams
 [e-steering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#steering
+[e-never-ends]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#a-session-never-ends
+[e-takeover]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#taking-over
 [e-gate]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#done-rules-and-the-result-gate
 [e-who]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#who-is-who
 [e-principal]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#only-a-principal-instructs

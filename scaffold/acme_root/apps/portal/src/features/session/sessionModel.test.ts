@@ -4,6 +4,7 @@ import {
   allowed,
   composerOf,
   deliveryLines,
+  heldBy,
   parkLine,
   pullRequestBadge,
   runRow,
@@ -104,28 +105,41 @@ describe("runs, delivery, and usage", () => {
 
 describe("what a person may do", () => {
   it("lets a member who may not write do nothing", () => {
-    expect(Object.values(allowed({ ...session, status: "running" }, false)).some(Boolean)).toBe(false);
+    expect(Object.values(allowed({ ...session, status: "running" }, false, "u1")).some(Boolean)).toBe(false);
   });
 
-  it("offers pause while it runs, resume while paused, and give back while a person has control", () => {
-    expect(allowed({ ...session, status: "running" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
-    expect(allowed({ ...session, status: "pending" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
-    expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null, cause: null } }, true)).toMatchObject({ resume: true, pause: false });
-    expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null } }, true)).toMatchObject({
+  it("offers pause while it runs, resume while paused, and give back while a person has control, each with the cancel beside it", () => {
+    expect(allowed({ ...session, status: "running" }, true, "u1")).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
+    expect(allowed({ ...session, status: "pending" }, true, "u1")).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
+    expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null, cause: null } }, true, "u1")).toMatchObject({ resume: true, cancel: true, pause: false });
+    expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null } }, true, "u1")).toMatchObject({
       giveBack: true,
+      cancel: true,
       takeControl: false,
       send: false,
     });
-    expect(allowed(session, true)).toMatchObject({ archive: true, compact: true });
+    expect(allowed({ ...session, status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } }, true, "u1")).toMatchObject({ cancel: true });
+    expect(allowed(session, true, "u1")).toMatchObject({ archive: true, compact: true });
+  });
+
+  it("leaves a hand-over its holder names to them alone: another member ends the run, and never works in it or gives it back", () => {
+    const held = (holder: string | null) => ({ ...session, status: "parked" as const, park: { reason: "handover" as const, unlock: "give_back", retry_at: null, cause: null, holder } });
+    expect(heldBy(held("u1"), "u1")).toBeNull();
+    expect(allowed(held("u1"), true, "u1")).toMatchObject({ giveBack: true, cancel: true });
+    expect(heldBy(held("u2"), "u1")).toBe("u2");
+    expect(allowed(held("u2"), true, "u1")).toMatchObject({ giveBack: false, cancel: true, takeControl: false, send: false });
+    // A hand-over that names nobody, such as a person's push, is any writer's.
+    expect(heldBy(held(null), "u1")).toBeNull();
+    expect(allowed(held(null), true, "u1")).toMatchObject({ giveBack: true, cancel: true });
   });
 
   it("lets a person send at any time, running or not, until a person takes control", () => {
     const parked = (reason: "pause" | "handover", unlock: "resume" | "give_back") => ({ ...session, status: "parked" as const, park: { reason, unlock, retry_at: null, cause: null } });
-    expect(allowed({ ...session, status: "running" }, true).send).toBe(true);
-    expect(allowed({ ...session, status: "pending" }, true).send).toBe(true);
-    expect(allowed(parked("pause", "resume"), true).send).toBe(true);
-    expect(allowed(session, true).send).toBe(true);
-    expect(allowed(parked("handover", "give_back"), true).send).toBe(false);
+    expect(allowed({ ...session, status: "running" }, true, "u1").send).toBe(true);
+    expect(allowed({ ...session, status: "pending" }, true, "u1").send).toBe(true);
+    expect(allowed(parked("pause", "resume"), true, "u1").send).toBe(true);
+    expect(allowed(session, true, "u1").send).toBe(true);
+    expect(allowed(parked("handover", "give_back"), true, "u1").send).toBe(false);
   });
 
   it("splits a typed command at spaces and keeps a quoted run whole", () => {
