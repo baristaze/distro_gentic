@@ -316,7 +316,11 @@ class ProductKinds:
     platform's toolsets hold is refused. Each of its agent kinds may name
     its warm grace, how long its workspace stays held after a loop, at
     most the prompt cache's life; one it names none for takes the
-    default (`warm_grace`).
+    default (`warm_grace`). It names, by name and version, the agent kinds
+    of its own whose workspace starts from the environment its session's
+    project names (`environments`), as the platform names its engineer
+    (`platform_agents.kinds.ENVIRONMENT_KINDS`); a pair that is no agent
+    kind of its own is refused.
     Its agent kinds join the platform's catalog, which refuses a version
     declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
@@ -342,6 +346,7 @@ class ProductKinds:
     resources: ProductResources = no_resources
     toolsets: tuple[Toolset, ...] = ()
     graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
+    environments: frozenset[tuple[str, int]] = frozenset()
 
     def __post_init__(self) -> None:
         platform = {toolset.name for toolset in TOOLSETS}
@@ -371,6 +376,13 @@ class ProductKinds:
                 raise ValueError(
                     f"{name}'s warm grace of {grace} runs outside the prompt cache's life "
                     f"of {PROMPT_CACHE_LIFE}"
+                )
+        versions = {(kind.name, kind.version) for kind in self.agents}
+        for name, version in sorted(self.environments):
+            if (name, version) not in versions:
+                raise ValueError(
+                    f"the kinds that take their project's environment name {name} v{version}, "
+                    "which is no agent kind of the product's"
                 )
         for spec in self.work:
             if spec.claimant is None:
@@ -736,9 +748,11 @@ def build_managers(
     reading the managers built here at call time; its work kinds and
     claimant kinds, which the work queue and placement read beside the
     platform's; its executors, which run a check that names their
-    environment; and its resource kinds, which the leases manager reads
-    beside `noop`. A name the platform holds is refused at boot. None adds
-    nothing.
+    environment; its kinds whose workspace starts from their project's
+    environment, which the workspaces read beside the platform's
+    (`ENVIRONMENT_KINDS`); and its resource kinds, which the leases manager
+    reads beside `noop`. A name the platform holds is refused at boot. None
+    adds nothing.
 
     `attached_toolsets` answers the toolsets a session holds beyond its
     kind, a tenant's own: the loop folds them into the session's kind at
@@ -990,7 +1004,7 @@ def build_managers(
         infra.get_secrets(),
         writes,
         held,
-        environments=ENVIRONMENT_KINDS,
+        environments=ENVIRONMENT_KINDS | product.environments,
     )
     notification_storage = storage.get_notification_storage()
     engine_sessions = AgentSessionsManagerImpl(

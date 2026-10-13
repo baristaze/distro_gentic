@@ -32,8 +32,9 @@ model that its workspace has no network and a missing package is named
 in its result. When such a session is created, its pin takes the base
 the environment names in place of its kind's own. A kind that takes
 none, a project that names none, and a session of no project pin what
-they pinned before. A product's kind does not take it yet: the trigger
-is a product shipping a kind whose work installs packages.
+they pinned before. A product names its own kinds that take it the
+same way, by name and version, in its slot
+(`ProductKinds.environments`), and never one of the platform's.
 
 **A session keeps the base it pinned.** The pin is read once. A changed
 environment is another base, keyed by its own hash, so the next session
