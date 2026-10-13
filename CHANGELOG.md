@@ -5,65 +5,60 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.18.0 (2026-10-12)
+## 0.19.0 (2026-10-13)
 
-Every state a person can reach has a known way out. The platform's base
-moves to the engine at v0.17.0: a park names its cause and a route that
-clears it, one person steers a session, a session is the org's or
-private, and a hand-over is its holder's. The platform's own parks on
-money have routes, and a saved key or a fixed price wakes the sessions
-that waited on it. The portal shows End this run beside Give it back,
-and Sessions lists a person's own first and the org's to join. Minor,
-with three reversals named: a mapped member who does not steer comments
-as data, control of another person's hand-over answers `409`, and Run
-and Give it back show to a hand-over's holder alone.
+A product's own kinds start from their project's environment, and a
+fork of a workspace on a customer's host starts from a copy that host
+keeps as the child's. A validation whose work goes to the dead letter
+reads refused, and a host's result lands past a renewal of its own
+claim. The platform's base moves to the engine at v0.18.0: a member
+joins only an org-wide session on their own, a private session's
+participants are the ones its creator adds, and a route removes a
+participant. Minor, with no reversal.
+
+### Fixed
+
+- A validation session whose work fails on its last attempt reads
+  refused, naming the error's class and never its text, where it read
+  `queued` for good. The item still fails for good, with its
+  dead-letter event and its count, and a refusal that cannot be written
+  is logged (#164).
+- A host's result lands when a renewal of its own claim moved the
+  item's version first: still held by that host under the same claim
+  token, it lands on the version the renewal left; settled, or held by
+  another claim, it is refused as before. The host tests pace every
+  poll of a host under its write budget (#166).
+- From the engine's v0.18.0, in the scaffold: a self-join takes an
+  org-wide session only, `manage_sessions` included, and only its
+  creator adds a participant to a private session (#167).
 
 ### Added
 
-- From the engine's v0.17.0, in the scaffold: parks with a cause and a
-  route, one steerer for each session, org-wide or private visibility,
-  and a hand-over that names its holder. Session decorators, trust, and
-  watch take them; the session list keeps its cursor, newest first, and
-  takes `among`; the watch's give-back body is `ControlGiveBackRequest`
-  (#158).
-- Billing parks with a way out: each park on the tenant's money has a
-  route, held to billing's permission, that wakes its sessions and
-  answers the ledger entry it posted: a call's cost approval, a budget's
-  raise for its window, a confirmed payment, and an operator's grant. A
-  saved key wakes the sessions parked on a missing or refused key and
-  tells those who save keys what waits; an own-key account or permission
-  park tells the org's admins once; a price park retries every five
-  minutes and names the operator (ADR 2060) (#161).
-- Sessions: two views, Yours first (`among=mine`: made or joined) and
-  The org's with Join, org-wide only and never a private one, even for a
-  role that audits. A session's header says who steers and who sees it;
-  its panel joins, switches visibility, adds members, hands the steer
-  on, or takes a lapsed one. A participant who does not steer writes a
-  suggestion (#160).
-- The portal shows End this run on a hand-over, beside Give it back and
-  in the header's menu. The spec says what a second start does for a
-  session, a validation session, and an automation's run, and that every
-  resume the platform offers has the cancel beside it (#159).
+- `ProductKinds.environments` names, by name and version, the product's
+  own agent kinds whose workspace starts from the environment its
+  session's project names. The root hands the workspaces the platform's
+  `ENVIRONMENT_KINDS` and the product's together, and a pair that is no
+  agent kind of the product's is refused at boot. ADR 2051 and the
+  agent-kind skill name the field (#163).
+- A spawn that forks a workspace a customer's host holds asks that host,
+  through the relay, to snapshot it at the spawn. The host keeps the
+  copy in the child's folder (`kept_for` on the `snapshot` item), so the
+  parent's erase never reaches it, and the child's first prepare
+  restores it on a host of the pool. The parent keeps no copy. A
+  memory-only parent, no live holder, or a host that takes no snapshot
+  refuses the fork before a slot or a child (ADR 2061) (#165).
+- From the engine's v0.18.0, in the scaffold:
+  `DELETE /v1/agent-sessions/{session_id}/participants/{user_id}`
+  removes a participant. The platform's project, retention, and
+  workspace decorators pass the removal on as they pass an add, and the
+  TypeScript client's schema carries the route (#167).
 
 ### Changed
 
-- Intake: a mapped user instructs only a session they steer; a push
-  parks a session on a hand-over naming no holder, since `take_over` is
-  in person (#158).
-- Lists hold root sessions the caller sees, and sub-agents come through
-  the children route; the left bar holds the person's own sessions, and
-  the toast goes to the steerer (#158, #160). `/v1/approvals` and
-  `list_sessions` include each visible root's sub-agents (#161).
-- A park by a missing or refused key is told by its cause, never as a
-  rate limit (#161).
-- The platform's core migrations take stamps above the engine base's
-  head (#158).
-
-### Removed
-
-- A mapped member who does not steer no longer instructs a session:
-  their message is data. A reversal (#158).
-- Control of another person's hand-over answers `409`. A reversal
-  (#158).
-- Run and Give it back show to a hand-over's holder alone; another
-  member sees who holds it and End this run. A reversal (#159).
+- The tools manager asks the platform for a fork point first, else
+  takes the engine's: `ToolsManagerImpl` takes an optional
+  `fork_points`, and without one every fork point is the engine's, as
+  before (#165).
+- The portal's client says who joins, and its test transport refuses a
+  self-join of a private session as the API does (#167).
+- The lenses cite the engine's lens index at v0.18.0 (#167).
