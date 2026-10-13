@@ -302,8 +302,10 @@ class RelayManagerInterface(ABC):
         """Platform-internal: how the item ended, verified against the hash
         it crossed with before anything reads it, stored under the call's
         key, and its queue row completed. The first settlement wins: a
-        result for an item its lease, a stop, or the sweep settled already
-        is `ItemNotHeld`, and lands nothing."""
+        result for an item its lease, a stop, or the sweep settled already,
+        or one another claim holds now, is `ItemNotHeld`, and lands nothing.
+        A renewal of the same claim that lands meanwhile settles nothing,
+        so the result still lands."""
         ...
 
     @abstractmethod

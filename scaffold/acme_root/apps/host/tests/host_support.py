@@ -336,6 +336,35 @@ async def started_host(
     return host
 
 
+FIRST_PAUSE = 0.01
+LAST_PAUSE = 0.5
+
+
+class Pace:
+    """How a case paces its turns of a host's loop while it waits on a
+    call, as the host paces its own (`HostAgent.turn`): the next turn at
+    once after one that took work, else after a pause that starts at a
+    hundredth of a second and doubles up to half a second. Each claim, each
+    beat, and each renewal of a running item's lease spends one write of
+    the host's credential, from the API's budget of 1200 a minute
+    (`credential_rate_limit_writes`). A turn every hundredth of a second
+    spends it in half a minute. At the cap a host's turns spend at most 240
+    writes a minute, and the renewals of each item it runs 300 here, so a
+    case that waits a minute or more stays under the budget."""
+
+    def __init__(self) -> None:
+        self._pause = FIRST_PAUSE
+
+    async def after(self, took: bool) -> None:
+        """After a turn: none of a wait when it took work, else the pause,
+        which doubles for the next."""
+        if took:
+            self._pause = FIRST_PAUSE
+            return
+        await asyncio.sleep(self._pause)
+        self._pause = min(self._pause * 2, LAST_PAUSE)
+
+
 def docker_runs() -> bool:
     try:
         reply = subprocess.run(["docker", "version"], capture_output=True, timeout=20)

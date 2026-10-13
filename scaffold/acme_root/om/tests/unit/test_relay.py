@@ -11,6 +11,7 @@ whole: a file longer than one carries is refused at once."""
 import asyncio
 import base64
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -60,6 +61,7 @@ from acme.om.relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
 from acme.om.relay.types.exec import (
     REQUESTS,
     ExecCall,
+    ExecItem,
     ExecOutcome,
     ExecOutput,
     ExecProgress,
@@ -396,6 +398,78 @@ async def test_a_repeatable_items_lease_runs_out_and_it_goes_back_to_its_workspa
     again = await host.claim_soon()
     assert again.id == first.id and again.lane == host_lane(wall.holder.host_id)
     await host.finish(again, 0, "ok\n")
+    assert (await waiting).stdout == "ok\n"
+
+
+# A renewal of the lease that lands while its host's result is written
+# costs the result nothing: the result lands on the version the renewal
+# left. A result of a claim the item was taken from still lands nothing.
+
+
+def before_the_result_lands(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch, between: Callable[[UUID], Awaitable[object]]
+) -> list[UUID]:
+    """Runs `between` once, after the first result read its item and before
+    it writes it; answers the items it ran for."""
+    relay = wall.storage.get_relay_storage()
+    write_item = relay.write_item
+    ran: list[UUID] = []
+
+    async def first_between(org_id: UUID, item: ExecItem, expected_version: int) -> ExecItem | None:
+        if item.state is ExecState.DONE and not ran:
+            ran.append(item.id)
+            await between(item.id)
+        return await write_item(org_id, item, expected_version)
+
+    monkeypatch.setattr(relay, "write_item", first_between)
+    return ran
+
+
+async def test_a_renewal_that_lands_while_its_result_is_written_costs_the_result_nothing(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+
+    async def renewed(item_id: UUID) -> None:
+        await wall.managers.relay.extend(request(), wall.holder, item_id)
+
+    ran = before_the_result_lands(wall, monkeypatch, renewed)
+    await host.finish(row, 0, "deployed\n")
+    assert ran == [host.item_id(row)]
+    assert (await waiting).stdout == "deployed\n"
+    _, progress = await item_of(wall, row)
+    assert progress.state is ExecState.DONE
+
+
+async def test_a_result_of_a_claim_its_item_was_taken_from_lands_nothing(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(
+            wall.workspace, command(wall.epoch, "idempotent"), seal=NO_SEAL
+        )
+    )
+    first = await host.claim_soon()
+    await asyncio.sleep(SHORT.total_seconds() * 2)
+    again: list[WorkItem] = []
+
+    async def claimed_again(item_id: UUID) -> None:
+        # Its lease ran out, the sweep requeued it, and its host claimed it
+        # again: the same host, under a claim of its own.
+        await wall.managers.work.requeue_stale(request(), 100)
+        assert await wall.managers.relay.settle_expired(request()) == 1
+        await asyncio.sleep(0.05)  # past the requeue's stagger
+        again.append(await host.claim_soon())
+
+    before_the_result_lands(wall, monkeypatch, claimed_again)
+    with pytest.raises(ItemNotHeld):
+        await host.finish(first, 0, "the first claim's\n")
+    await host.finish(again[0], 0, "ok\n")
     assert (await waiting).stdout == "ok\n"
 
 

@@ -23,7 +23,7 @@ from api_support import seed_request
 from contracts.checks_repository import UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
 from contracts.project_storage import in_project
-from host_support import Stack, directory_host, postgres, stack, started_host
+from host_support import Pace, Stack, directory_host, postgres, stack, started_host
 from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
@@ -164,9 +164,9 @@ async def pumped[T](call: Awaitable[T], hosts: dict[HostAgent, list[UUID]]) -> T
         return took
 
     running = asyncio.ensure_future(call)
+    pace = Pace()
     while not running.done():
-        if not await turn():
-            await asyncio.sleep(0.01)
+        await pace.after(await turn())
     for host in hosts:
         await host.idle()
     while await turn():
