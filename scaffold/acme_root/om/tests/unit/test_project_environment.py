@@ -1,8 +1,9 @@
 """A project's environment as the platform serves it, over the memory roots,
 the twin provider, the twin transport, and the local buckets. A kind that
-takes its project's environment pins the base the environment names when
-its session is created; a kind that does not, and a project that names
-none, pin what they pinned before. The first session builds the base and
+takes its project's environment, the platform's or one a product's slot
+names, pins the base the environment names when its session is created; a
+kind that does not, and a project that names none, pin what they pinned
+before. The first session builds the base and
 the next one starts from it. A changed setup command builds a new base for
 the sessions created after it, and a session already running keeps the
 base it started on. A setup that fails ends the loop with the command and
@@ -35,6 +36,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.platform_agents.kinds import ENGINEER, ENVIRONMENT_KINDS
 from acme.om.projects.types.project import ProjectEnvironment
+from acme.om.root import ProductKinds
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
@@ -46,6 +48,12 @@ environment: the engineer at version 8, here with the assistant's loop on
 the twin."""
 OWN = ASSISTANT.model_copy(update={"isolation": SEALED})
 """A kind that keeps its own base: none."""
+BUILDER = ASSISTANT.model_copy(update={"name": "builder", "version": 2, "isolation": SEALED})
+"""A product's kind its slot names among those that take their project's
+environment."""
+READER = ASSISTANT.model_copy(update={"name": "reader", "isolation": SEALED})
+"""A product's kind its slot does not name."""
+PRODUCT = ProductKinds(agents=(BUILDER, READER), environments=frozenset({("builder", 2)}))
 
 ENVIRONMENT = ProjectEnvironment(
     image="python:3.14-slim",
@@ -122,12 +130,16 @@ class InfraBuilt(InfraLocalImpl):
 class Environments:
     """A tenant whose sessions belong to one project, over the built twin."""
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, product: ProductKinds | None = None) -> None:
         self.setup = Setup()
         self.infra = InfraBuilt(tmp_path, self.setup)
         self.projects = ProjectsTwin(repository=None)
         self.loop: Loop = loop_over(
-            tmp_path, kinds=(TAKES, OWN), infra=self.infra, workspace_projects=self.projects
+            tmp_path,
+            kinds=(TAKES, OWN),
+            infra=self.infra,
+            workspace_projects=self.projects,
+            product_kinds=product,
         )
 
     async def run(self, session_id: UUID) -> LoopOutcome | None:
@@ -197,6 +209,31 @@ async def test_a_kind_that_takes_its_projects_environment_pins_its_base(
     assert await environments.pinned(bare) is None, "its project named none when it was created"
     pinned = await loop.managers.workspaces.get_workspace(loop.owner, takes)
     assert pinned.egress is EgressMode.NONE, "its workspace keeps its kind's egress"
+
+
+async def test_a_products_kind_its_slot_names_pins_its_projects_environment(
+    tmp_path: Path,
+) -> None:
+    """The root reads the product's kinds beside the platform's: the one its
+    slot names pins the environment's base, as the engineer does, and the
+    one it does not keeps its own."""
+    environments = Environments(tmp_path, PRODUCT)
+    environments.projects.environment = ENVIRONMENT.base()
+    builder = await environments.loop.start(BUILDER.name)
+    reader = await environments.loop.start(READER.name)
+    engineer = await environments.loop.start(TAKES.name)
+
+    assert await environments.pinned(builder) == ENVIRONMENT.base()
+    assert await environments.pinned(reader) is None, "its slot does not name it"
+    assert await environments.pinned(engineer) == ENVIRONMENT.base(), "the platform's too"
+
+
+def test_a_slot_names_only_the_products_own_kinds_at_a_version_it_declares() -> None:
+    """A product never makes one of the platform's kinds take it, nor a
+    version of its own it does not declare."""
+    for named in ((ENGINEER, 7), ("builder", 1), ("absent", 1)):
+        with pytest.raises(ValueError, match="no agent kind of the product's"):
+            ProductKinds(agents=(BUILDER,), environments=frozenset({named}))
 
 
 async def test_one_build_serves_the_project_and_the_next_session_runs_no_setup(

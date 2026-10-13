@@ -169,6 +169,10 @@ rebuilt from.
 
 ## How another namespace composes it
 
+- The root names the kinds whose pin takes their project's
+  environment, each by name and version: the platform's
+  (`ENVIRONMENT_KINDS`), and those a product's slot names
+  (`ProductKinds.environments`).
 - The root decorates the engine's sessions manager, so every session is
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.
