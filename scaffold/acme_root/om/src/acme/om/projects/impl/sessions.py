@@ -105,6 +105,11 @@ class AgentSessionsInProjectImpl(AgentSessionsManagerInterface):
     ) -> AgentSession:
         return await self._inner.add_participant(ctx, session_id, user_id)
 
+    async def remove_participant(
+        self, ctx: TenantContext, session_id: UUID, user_id: UUID
+    ) -> AgentSession:
+        return await self._inner.remove_participant(ctx, session_id, user_id)
+
     async def switch_visibility(
         self, ctx: TenantContext, session_id: UUID, visibility: Visibility
     ) -> AgentSession:

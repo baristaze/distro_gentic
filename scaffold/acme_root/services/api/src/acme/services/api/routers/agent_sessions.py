@@ -1,11 +1,12 @@
 """Agent session routes: start a session on a kind, list the ones a
 person takes part in or sees, and a session's children, a page at a time,
-read one, archive, delete, and restore it, join one, switch who sees it,
-hand its steer on, send it a message or a control, decide a tool call it
-waits on, clear the park a person clears, and read its history and its
-artifacts a page at a time. A session's derived reads follow: what it asks
-of a person, the calls it holds for a decision, its bounds, its tool calls,
-and what its model calls used. Each function is one call into the agent
+read one, archive, delete, and restore it, join one or leave it, switch
+who sees it, hand its steer on, send it a message or a control, decide a
+tool call it waits on, clear the park a person clears, and read its
+history and its artifacts a page at a time. A session's derived reads
+follow: what it asks of a person, the calls it holds for a decision, its
+bounds, its tool calls, and what its model calls used. Each function is
+one call into the agent
 sessions service; every create runs under the idempotency record, so a
 retried send is one step. The loop runs in the session runner: a route
 writes what a person said and answers once it is durable. A session the
@@ -176,15 +177,27 @@ async def set_deadline(
 
 
 # Who takes part, who sees it, and who steers it are each set whole by a
-# PUT, so a retry after a lost answer sets the same again and the routes
-# take no Idempotency-Key.
+# PUT or a DELETE, so a retry after a lost answer sets the same again and
+# the routes take no Idempotency-Key.
 @router.put("/{session_id}/participants/{user_id}", response_model=AgentSessionView)
 async def add_participant(
     ctx: Ctx, sessions: AgentSessionsService, session_id: UUID, user_id: UUID
 ) -> AgentSessionView:
-    """`user_id` takes part in the session: the caller joins one they see,
-    and its creator adds anyone. 403 for anyone else."""
+    """`user_id` takes part in the session: any member joins an org-wide
+    one, and its creator adds anyone. A private one is joined only by whom
+    its creator adds and by its steerer: 403 for any other self-join,
+    `manage_sessions` included, and for anyone else's add."""
     return await sessions.add_participant(ctx, session_id, user_id)
+
+
+@router.delete("/{session_id}/participants/{user_id}", response_model=AgentSessionView)
+async def remove_participant(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID, user_id: UUID
+) -> AgentSessionView:
+    """`user_id` takes no part in the session: its creator removes anyone,
+    and a participant leaves on their own. 403 for anyone else, 409 for
+    its steerer until the steer is handed on."""
+    return await sessions.remove_participant(ctx, session_id, user_id)
 
 
 @router.put("/{session_id}/visibility", response_model=AgentSessionView)

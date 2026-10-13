@@ -309,7 +309,7 @@ export function useStartSession() {
   });
 }
 
-/** A member joins a session they see, from a list: they take part from
+/** A member joins an org-wide session, from a list: they take part from
  * then on, and it is on their own list. */
 export function useJoinSession() {
   const queryClient = useQueryClient();
@@ -371,8 +371,8 @@ export function useSessionActions(id: string) {
       mutationFn: (body: Pick<ControlGiveBackRequest, "summary"> & Partial<ControlGiveBackRequest>) => api.post<AgentSessionView>(`${path(id)}/control/give-back`, body),
       onSettled: settled,
     }),
-    /** A person takes part: the caller joins a session they see, and its
-     * creator adds a member. */
+    /** A person takes part: a member joins an org-wide session, and its
+     * creator adds a member, to a private one too. */
     join: useMutation({
       mutationFn: (person: string) => api.request<AgentSessionView>("PUT", `${path(id)}/participants/${encodeURIComponent(person)}`),
       onSettled: listed,
