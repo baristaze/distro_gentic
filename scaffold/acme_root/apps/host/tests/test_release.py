@@ -24,7 +24,7 @@ from uuid import UUID
 
 import pytest
 from contracts.workspaces import ProjectsTwin
-from host_support import Stack, started_host
+from host_support import Pace, Stack, started_host
 from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
@@ -111,9 +111,9 @@ async def pumped[T](host: HostAgent, call: Awaitable[T]) -> T:
     """What `call` answers, while the host claims and runs what it is
     handed, as it does beside the runner."""
     running = asyncio.ensure_future(call)
+    pace = Pace()
     while not running.done():
-        if await host.claim_once() is None:
-            await asyncio.sleep(0.01)
+        await pace.after(await host.claim_once() is not None)
     await host.idle()
     return await running
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from host_support import Stack, directory_host, postgres, stack
+from host_support import Pace, Stack, directory_host, postgres, stack
 from runner_support import TOOLS, answers, assistant, runs
 
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -113,9 +113,9 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     model.add(runs("pwd"))
     model.add(answers("On a host of my pool."))
     running = asyncio.ensure_future(managers.loop.run(owner, session.id))
+    pace = Pace()
     while not running.done():
-        if await host.claim_once() is None:
-            await asyncio.sleep(0.01)
+        await pace.after(await host.claim_once() is not None)
     ended = await running
     assert ended.outcome is LoopOutcome.SUCCEEDED, ended
     page = await managers.steps.get_steps(owner, session.id, 0, 100)

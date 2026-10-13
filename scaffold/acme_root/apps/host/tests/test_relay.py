@@ -26,6 +26,7 @@ from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
 from host_support import (
     DETAIL,
+    Pace,
     Stack,
     Widened,
     container_host,
@@ -212,12 +213,12 @@ async def claims(host: HostAgent, until: asyncio.Future[Any]) -> list[UUID]:
     """The host's loop while the runner waits: the exec items it was
     handed, by the relay's id."""
     handed: list[UUID] = []
+    pace = Pace()
     while not until.done():
         one = await host.tick()
         if one is not None:
             handed.append(ExecPayload.model_validate(one.item.payload).item_id)
-        else:
-            await asyncio.sleep(0.01)
+        await pace.after(one is not None)
     return handed
 
 
@@ -263,9 +264,9 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
     reading = asyncio.ensure_future(
         relayed.runner.read_file(relayed.workspace, "grows.log", 64, offset=5)
     )
+    pace = Pace()
     while not reading.done():
-        if await relayed.host.tick() is None:
-            await asyncio.sleep(0.01)
+        await pace.after(await relayed.host.tick() is not None)
     assert await reading == b"tail"
 
 
@@ -302,9 +303,9 @@ async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_c
         reading = asyncio.ensure_future(
             relayed.runner.read_file(relayed.workspace, "grows.log", 64, offset=offset)
         )
+        pace = Pace()
         while not reading.done():
-            if await relayed.host.tick() is None:
-                await asyncio.sleep(0.01)
+            await pace.after(await relayed.host.tick() is not None)
         assert await reading == rest
     # The read from the start is the item and the answer an earlier release
     # sent: neither names an offset. The read past it is echoed.

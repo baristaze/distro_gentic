@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from host_support import Stack, directory_host, postgres, stack
+from host_support import Pace, Stack, directory_host, postgres, stack
 from runner_support import TOOLS, answers, assistant
 from unit.test_connectors import NoConnection
 
@@ -206,9 +206,9 @@ async def test_a_server_inside_the_wall_is_called_by_its_host_and_never_by_the_p
     model.add(calls("words__lookup", word="cat"))
     model.add(answers("A cat is a unit of language."))
     running = asyncio.ensure_future(managers.loop.run(owner, session.id))
+    pace = Pace()
     while not running.done():
-        if await host.claim_once() is None:
-            await asyncio.sleep(0.01)
+        await pace.after(await host.claim_once() is not None)
     ended = await running
 
     assert ended.end is RunEnd.ENDED and ended.outcome is LoopOutcome.SUCCEEDED, ended

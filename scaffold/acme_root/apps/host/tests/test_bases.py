@@ -22,7 +22,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from host_support import Stack, probes
+from host_support import Pace, Stack, probes
 from test_relay import claims, command, runner_of
 
 from acme.apps.host.agent import HostAgent
@@ -304,9 +304,9 @@ async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keep
     runner = runner_of(api)
     # A checkout's attach brings its bundle in, then runs git over it.
     written = asyncio.ensure_future(runner.write_file(workspace, INCOMING, b"bundle", epoch))
+    pace = Pace()
     while not written.done():
-        if await host.agent.tick() is None:
-            await asyncio.sleep(0.01)
+        await pace.after(await host.agent.tick() is not None)
     await written
     fetched = asyncio.ensure_future(
         runner.run(workspace, command(epoch, "git", "fetch", INCOMING), seal=NO_SEAL)
