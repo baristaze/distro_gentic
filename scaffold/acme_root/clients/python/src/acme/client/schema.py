@@ -403,6 +403,17 @@ class ControlView(BaseModel):
     kind: ControlKind
 
 
+class CostApprovalRequest(BaseModel):
+    """
+    A person's yes to the session's next call past its norm, up to a
+    reference cost in millionths.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    up_to_micros: Annotated[int, Field(gt=0, le=1000000000000000, title='Up To Micros')]
+
+
 class WindowSeconds(RootModel[int]):
     root: Annotated[int, Field(ge=1, title='Window Seconds')]
 
@@ -1723,6 +1734,27 @@ class QuestionView(BaseModel):
     unlock: Annotated[str, Field(title='Unlock')]
 
 
+class CostMicros2(RootModel[int]):
+    root: Annotated[int, Field(gt=0, le=1000000000000000, title='Cost Micros')]
+
+
+class Tokens2(RootModel[int]):
+    root: Annotated[int, Field(gt=0, le=1000000000000000, title='Tokens')]
+
+
+class RaiseRequest(BaseModel):
+    """
+    A raise of a budget for the window open now: reference cost in
+    millionths, native tokens, or both. A unit left out is not raised, and
+    a raise raises one at least.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cost_micros: Annotated[CostMicros2 | None, Field(title='Cost Micros')] = None
+    tokens: Annotated[Tokens2 | None, Field(title='Tokens')] = None
+
+
 class RenameProjectRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -2402,6 +2434,17 @@ class TriggerView(BaseModel):
     every: Annotated[timedelta | None, Field(title='Every')]
     integrations: Annotated[list[str], Field(title='Integrations')]
     kind: TriggerKind
+
+
+class UnitsGrantRequest(BaseModel):
+    """
+    Units the platform grants the tenant for its life, and why.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    reason: Annotated[str, Field(max_length=200, min_length=1, title='Reason')]
+    units: Annotated[int, Field(gt=0, le=1000000000000000, title='Units')]
 
 
 class UpdateIdentityRequest(BaseModel):

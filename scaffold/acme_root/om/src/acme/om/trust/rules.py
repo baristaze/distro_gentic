@@ -1,7 +1,7 @@
 """Pure rules of trust: the four answers of a tool call, read each from its
 own source; where a secret may be resolved, given the session's wall and
-its project; and
-whether an operator's content grant holds. Values in, values out; no
+its project; whether an operator's content grant holds; and which parks a
+saved key clears. Values in, values out; no
 clock, no storage."""
 
 from collections.abc import Mapping, Sequence
@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.transports import SecretUse, SecretVia
+from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.attribution.types.principal import Principal
 from acme.om.steps.types.header import ModelRequestHeader, ToolRequestHeader
 from acme.om.steps.types.step import Step
@@ -119,6 +120,19 @@ def grant_expiry(
     if lifetime <= timedelta(0) or lifetime > bound:
         raise ValueError(f"a content grant lasts more than nothing and at most {bound}")
     return at + lifetime
+
+
+KEY_CAUSES = ("key", ErrorKind.CREDENTIAL.value)
+"""The causes of a provider park a key the tenant saves clears: the org
+held no key to the provider, or the provider did not take the one it held.
+A permission the key lacks, or the account's billing, is fixed at the
+provider, and its park tries again by itself."""
+
+
+def key_unlocks(provider: ProviderName) -> tuple[str, ...]:
+    """The unlocks of the provider parks a key saved to `provider` clears,
+    as the loop writes them: the provider, then the cause."""
+    return tuple(f"{provider.value}:{cause}" for cause in KEY_CAUSES)
 
 
 def used_since(last_used_at: datetime | None, at: datetime, granularity: timedelta) -> bool:

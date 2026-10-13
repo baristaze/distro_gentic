@@ -21,6 +21,8 @@ of thing [Acme is made of](../../../../README.md).
   | A budget a person must raise | Raise the budget | The members who set budgets |
   | The account's funds | Top up | The members who set budgets |
   | A call far above its session's norm | Approve the call | The members who approve such calls |
+  | A key the org holds none of | Save the key | The members who save the org's keys |
+  | The org's own account at a model provider, or a permission its key lacks | Fix it at the provider | The members who manage the org |
   | A question the agent asks its person | Answer it with a message | Its requester, or the members who manage the tenant when the requester holds no place |
   | Any other park on a person | Answer the session | The same people |
 
@@ -28,6 +30,8 @@ of thing [Acme is made of](../../../../README.md).
   each account of theirs an integration holds
   ([intake](../intake/README.md)). A park that clears by itself, at its
   retry time, tells nobody, and so does a price only the operator sets.
+  A fix at a model provider is the one park with a retry time that
+  tells: no try goes through until an admin of the org makes it.
 - **Read** your own notifications, newest first, and **mark one read**.
   Nobody reads or marks another person's.
 
@@ -37,23 +41,26 @@ of thing [Acme is made of](../../../../README.md).
   and nobody who can clear it is left out.
 - **One action, one link.** A notification names the one action that
   clears its park and links to its route in the API: the call's
-  decision, the session's messages, the session's controls, or the
-  budget's amount. Topping up and approving a call past its norm have no
-  route yet: their notifications name the park and carry no link.
+  decision, the session's messages, the session's controls, the
+  budget's amount, a call's approval past its norm, or the provider's
+  key. Topping up and a fix at a model provider are made outside the
+  API: their notifications name the park and carry no link.
 - **A question is quoted, never a link in it.** A question's
   notification quotes it on one line, cut short and escaped. One that
   holds a URL, an image, or an element that loads one is not quoted: the
   person reads it in the session.
 - **Once a park.** A park tells each person once on each channel, however
-  often it is asked.
+  often it is asked. A park that tries again by itself is one park across
+  its tries, until a call is answered or its loop ends.
 - **A channel that is down leaves the list.** A post an integration
   cannot make now is left out; the platform's own list still tells them.
 - **Every row belongs to one org,** and goes with the org.
 
 <!-- agents-only
 The table of parks is `rules.py`. A notification's id is derived from the
-`parked` step that wrote the park, the action, the link, the recipient,
-and the channel (`rules.notification_id`). The session runner calls
+`parked` step that wrote the park (for a park with a retry time, the one
+that wrote its first try, `rules.first_try`), the action, the link, the
+recipient, and the channel (`rules.notification_id`). The session runner calls
 `notify_park` after each run that ends parked (`LoopHandlerImpl`).
 -->
 

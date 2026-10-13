@@ -17,6 +17,7 @@ from acme.infra.root import InfraInterface
 from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.mcp.sdk import McpClientSdkImpl
+from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.automations.root import build_automations
@@ -215,6 +216,7 @@ class AppContainer:
         integrations: IntegrationsInterface | None = None,
         *,
         ports: PlatformPorts | None = None,
+        payments: PaymentProviderInterface | None = None,
     ) -> AppContainer:
         settings = settings or ApiSettings.model_validate(
             {
@@ -225,7 +227,7 @@ class AppContainer:
         )
         # No identity provider unless the test hands one in.
         integrations = integrations or absent_integrations()
-        return cls.over(settings, storage, infra, integrations, ports=ports)
+        return cls.over(settings, storage, infra, integrations, ports=ports, payments=payments)
 
     @classmethod
     def over(
@@ -237,10 +239,12 @@ class AppContainer:
         *,
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
+        payments: PaymentProviderInterface | None = None,
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
         `ports` are the platform's ports the product sets, None each for the
         platform's own: billing's money gate, and the evidence's result gate.
+        `payments` checks a payment a tenant posts; None refuses every one.
         Their `kinds` are the product's: a session starts on one of its agent
         kinds, and the session runner runs its loop with the same kinds,
         since each process's `build` hands its root `PRODUCT_KINDS`. A start
@@ -326,8 +330,10 @@ class AppContainer:
             notifications=build_notifications(storage, managers, integrations, intake),
             matrix=matrix,
             trust=trust.trust,
-            # The ledger the operators read; this process takes no payment.
-            billing=build_billing(storage, managers, PaymentProviderAbsentImpl()),
+            # The ledger the operators read and grant units on, and the
+            # payments a tenant posts, each checked by the provider's
+            # signature: with no provider wired, every one is refused.
+            billing=build_billing(storage, managers, payments or PaymentProviderAbsentImpl()),
             # A person writes and reviews what sessions recall; the runner
             # recalls them. A person publishes the playbooks sessions follow,
             # invokes one into a session, and pins one to a kind.

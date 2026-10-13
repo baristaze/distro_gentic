@@ -22,17 +22,24 @@ from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.rules import (
     ANSWER_QUESTION,
     APPROVES_CALLS,
+    FIXES_AT_PROVIDER,
     NO_ROUTE,
+    SAVES_KEYS,
     SETS_BUDGETS,
     answer_link,
+    approval_link,
     as_budget,
     asked_question,
     budget_link,
     decision_link,
+    first_try,
+    fixed_at_provider,
     held_calls,
     holding,
     holding_permission,
+    key_link,
     message_link,
+    missing_key,
     needs_person,
     notification_id,
     parked_step,
@@ -92,6 +99,10 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         if parked is None:
             # The session moved on from the park this run wrote.
             return ()
+        if park.retry_at is not None:
+            # It tries again by itself, and each try writes it again: it is
+            # told once, at its first try.
+            parked = first_try(history, parked)
         members = await self._members(ctx)
         told: list[Notification] = []
         for ask in await self._asks(ctx, session, park, history, members):
@@ -173,12 +184,37 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             return [
                 Ask(
                     action="approve_call",
-                    link=NO_ROUTE,
+                    link=approval_link(session.id),
                     text=(
                         f"{title}: a call costs far more than the session's others,"
                         " and waits for your approval."
                     ),
                     recipients=holding_permission(members, APPROVES_CALLS),
+                )
+            ]
+        provider = fixed_at_provider(park)
+        if provider is not None:
+            # Fixed at the provider, and nothing tells the platform: the
+            # session tries again by itself, and takes the fix at its next try.
+            return [
+                Ask(
+                    action="fix_at_provider",
+                    link=NO_ROUTE,
+                    text=f"{title} waits: {park.cause}. It tries again by itself.",
+                    recipients=holding_permission(members, FIXES_AT_PROVIDER),
+                )
+            ]
+        provider = missing_key(park)
+        if provider is not None:
+            # The requester cannot clear it: the org's keys are saved by
+            # those who manage it, and its other sessions wait on the same key.
+            why = park.cause or f"the org holds no {provider} key"
+            return [
+                Ask(
+                    action="save_key",
+                    link=key_link(provider),
+                    text=f"{title} waits: {why}.",
+                    recipients=holding_permission(members, SAVES_KEYS),
                 )
             ]
         # A question, and any other park on a person, waits on the person who

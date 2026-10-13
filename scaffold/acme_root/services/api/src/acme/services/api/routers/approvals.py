@@ -1,6 +1,6 @@
 """The tenant's calls held for a person's decision, across its sessions,
-a page of parked sessions at a time. A call is decided on its session's
-own route."""
+a page of the root sessions the caller sees at a time, each with its
+sub-agents. A call is decided on its session's own route."""
 
 from fastapi import APIRouter
 

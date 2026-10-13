@@ -35,12 +35,14 @@ from acme.infra.base import SYSTEM_SCOPE
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
+from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
+from acme.om.billing.rules import LimitKind, notice_of
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.context import Role, TenantContext
@@ -918,6 +920,49 @@ async def test_a_refused_key_parks_only_the_sessions_that_need_it(tmp_path: Path
     secrets = fleet.trust_infra.get_secrets()
     assert await secrets.has(fleet.owner.org_id, key_secret_name(a.id)), "its value is kept"
     assert len(fleet.loop.anthropic.calls) == 1, "the other tenant's call ran on the platform's"
+
+
+async def test_a_key_saved_wakes_the_sessions_that_wait_for_one_and_each_names_who_saves_it(
+    tmp_path: Path,
+) -> None:
+    """The provider refuses the org's key at one session's call, which parks
+    and tries again by itself; the next session finds no live key, and waits
+    with no clock. Each is told by its cause that an admin of the org acts,
+    never as the provider's pace. A key saved wakes both, before either
+    clock, and their next calls go out on it."""
+    fleet = await fleet_over(tmp_path, funding=FundingMode.OWN_KEY)
+    await fleet.trust.trust.save_provider_key(fleet.owner, ProviderName.ANTHROPIC, "sk-a")
+    await fleet.publish()
+    refused, keyless = await fleet.loop.start(), await fleet.loop.start()
+    fleet.on_key("sk-a", ProviderName.ANTHROPIC).add(
+        ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=401)
+    )
+    assert await loop_once(fleet, refused) is RunEnd.PARKED
+    assert await loop_once(fleet, keyless) is RunEnd.PARKED
+    sessions = fleet.loop.managers.agent_sessions
+    parks = [(await sessions.get_session(fleet.owner, s)).park for s in (refused, keyless)]
+    assert all(park is not None for park in parks)
+    waiting, missing = (park for park in parks if park is not None)
+    assert (waiting.unlock, missing.unlock) == ("anthropic:credential", "anthropic:key")
+    assert waiting.retry_at is not None and missing.retry_at is None
+    for park, does in ((waiting, "replaces it"), (missing, "saves one")):
+        told = notice_of(park)
+        assert told.limit is LimitKind.PERSON, "a key is not the provider's pace"
+        assert f"an admin of the org {does}" in told.text
+    assert "tries again on its own" in notice_of(waiting).text
+    assert "waits until then" in notice_of(missing).text
+
+    await fleet.trust.trust.save_provider_key(fleet.owner, ProviderName.ANTHROPIC, "sk-b")
+
+    for session_id in (refused, keyless):
+        session = await sessions.get_session(fleet.owner, session_id)
+        assert (session.status, session.park) == (SessionStatus.PENDING, None)
+    on_b = fleet.on_key("sk-b", ProviderName.ANTHROPIC)
+    on_b.add(reply(said("The total is 12.")), reply(said("The total is 12.")))
+    for session_id in (refused, keyless):
+        resumed = await fleet.loop.loops.run(fleet.owner, session_id)
+        assert (resumed.end, resumed.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED), resumed
+    assert len(on_b.calls) == 2
 
 
 async def test_a_permission_the_key_lacks_parks_only_the_session_that_met_it(

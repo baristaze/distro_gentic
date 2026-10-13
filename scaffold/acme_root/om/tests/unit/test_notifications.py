@@ -22,16 +22,20 @@ from contracts.notification_storage import make_notification
 from contracts.tools import Command
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.integrations.model_providers import ModelProvidersInterface
+from acme.integrations.model_providers.scripted import ScriptedFailure
+from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
-from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
+from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, price_park
 from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.models.credentials import CallClient, CallCredentialsInterface
 from acme.om.notifications.types.notification import PORTAL, Notification
 from acme.om.root import build_managers
 from acme.om.steps.rules import message_step
@@ -290,21 +294,23 @@ async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_request
     notified = await platform.notifications.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
-    assert {(n.action, n.link) for n in notified} == {("approve_call", "")}
+    approval = f"/v1/agent-sessions/{run.session_id}/cost-approval"
+    assert {(n.action, n.link) for n in notified} == {("approve_call", approval)}
     (posted,) = platform.chat.posted
-    assert posted.text == next(n.text for n in notified if n.channel == "chat")
+    assert posted.text == f"{next(n.text for n in notified if n.channel == 'chat')} {approval}"
 
 
 async def test_every_link_a_notification_carries_is_a_route_of_the_api(
     platform: Wired,
 ) -> None:
-    """A park whose action the API serves links to that route; one whose
-    action has no route yet carries no link at all."""
+    """A park whose action the API serves links to that route; topping
+    up, which the payment provider takes, carries no link at all."""
     found = await people(platform)
     requester = found[Role.MEMBER]
     unlocks = {
         ParkReason.PERSON: ("deadline", ANOMALY_UNLOCK),
         ParkReason.BUDGET: (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK, str(new_id())),
+        ParkReason.PROVIDER: ("anthropic:key",),
     }
     notified: list[Notification] = []
     for reason, each in unlocks.items():
@@ -317,9 +323,88 @@ async def test_every_link_a_notification_carries_is_a_route_of_the_api(
         OWN_AMOUNT_UNLOCK,
         "top_up",
         "raise_budget",
+        "save_key",
     }
     assert routed(notified)
-    assert {n.action for n in notified if not n.link} == {"approve_call", "top_up"}
+    assert {n.action for n in notified if not n.link} == {"top_up"}
+
+
+async def test_a_key_the_org_lacks_tells_who_saves_its_keys_why_it_waits(
+    platform: Wired,
+) -> None:
+    """A session that needs a key the org holds none of waits for one, with
+    no clock: the members who save the org's keys are told, its requester
+    not among them, with the route that saves the key and the cause that
+    says who acts."""
+    found = await people(platform)
+    cause = "the org holds no anthropic key: an admin of the org saves one"
+    park = Park(reason=ParkReason.PROVIDER, unlock="anthropic:key", cause=cause)
+    run = await parked_on(platform, found[Role.MEMBER], park)
+
+    notified = await platform.notifications.notify_park(platform.service, run)
+
+    owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
+    assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
+    assert {(n.action, n.link) for n in notified} == {("save_key", "/v1/provider-keys/anthropic")}
+    assert all(n.text.endswith(f"waits: {cause}.") for n in notified)
+    assert routed(notified)
+
+
+class OrgKey(CallCredentialsInterface):
+    """Every call of the loop goes out on a key the org saved, never the
+    platform's."""
+
+    def __init__(self, providers: ModelProvidersInterface) -> None:
+        self._providers = providers
+
+    async def client_for(self, ctx: TenantContext, provider: ProviderName) -> CallClient:
+        return CallClient(credential="org-key", client=self._providers.get(provider))
+
+    async def refused(self, ctx: TenantContext, provider: ProviderName, credential: str) -> None:
+        return None
+
+
+async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries(
+    tmp_path: Path,
+) -> None:
+    """The provider refuses the org's own key for its account's billing:
+    the session parks, and tries again every few minutes by itself. The
+    members who manage the org are told once, at the first try, with the
+    cause that says who acts, and no try after it tells anyone again. Once
+    a call goes through, the next such park is a new one, and is told."""
+    platform = wired(tmp_path, credentials=OrgKey)
+    found = await people(platform)
+    requester = found[Role.MEMBER]
+    session_id = await platform.start(requester)
+    billing = ScriptedFailure(kind=ErrorKind.BILLING, status=402, message="credit balance is low")
+    platform.anthropic.add(billing, billing)
+    first = await run_after(platform, requester, session_id)
+    cause = "anthropic refused the call for its account's billing: an admin of the org settles it"
+    assert first.park is not None and first.park.retry_at is not None
+    assert (first.park.unlock, first.park.cause) == ("anthropic:billing", cause)
+
+    told_first = await platform.notifications.notify_park(platform.service, first)
+    await platform.managers.agent_sessions.wake_session(platform.service, session_id, first.park)
+    tried = await platform.loops.run(requester, session_id)
+    told_again = await platform.notifications.notify_park(platform.service, tried)
+
+    owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
+    assert told(told_first) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
+    assert {(n.action, n.link) for n in told_first} == {("fix_at_provider", "")}
+    assert all(n.text.endswith(f"waits: {cause}. It tries again by itself.") for n in told_first)
+    assert tried.park is not None and tried.park.unlock == "anthropic:billing", tried
+    assert {n.id for n in told_again} == {n.id for n in told_first}, "a try tells nobody again"
+    assert len(platform.chat.posted) == 1
+
+    await platform.managers.agent_sessions.wake_session(platform.service, session_id, tried.park)
+    platform.anthropic.add(reply(said("Settled.")), billing)
+    assert (await platform.loops.run(requester, session_id)).end is RunEnd.ENDED
+    later = await run_after(platform, requester, session_id, "And the next one?")
+    told_later = await platform.notifications.notify_park(platform.service, later)
+
+    assert told(told_later) == told(told_first)
+    assert not {n.id for n in told_later} & {n.id for n in told_first}, "a new park is told"
+    assert len(platform.chat.posted) == 2
 
 
 async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> None:
@@ -328,6 +413,13 @@ async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> Non
     platform.anthropic.add(reply(said("Done.")))
     ended = await run_after(platform, platform.owner, session_id)
     assert await platform.notifications.notify_park(platform.service, ended) == ()
-    retry = Park(reason=ParkReason.BUDGET, unlock="held", retry_at=utcnow())
-    parked = LoopRun(session_id=session_id, epoch=1, end=RunEnd.PARKED, park=retry)
-    assert await platform.notifications.notify_park(platform.service, parked) == ()
+    retries = (
+        Park(reason=ParkReason.BUDGET, unlock="held", retry_at=utcnow()),
+        # A price, and a key the platform's operator fixes, wait for no one
+        # of the tenant's, and try again by themselves.
+        price_park(utcnow()),
+        Park(reason=ParkReason.PROVIDER, unlock="anthropic:credential", retry_at=utcnow()),
+    )
+    for retry in retries:
+        parked = LoopRun(session_id=session_id, epoch=1, end=RunEnd.PARKED, park=retry)
+        assert await platform.notifications.notify_park(platform.service, parked) == ()

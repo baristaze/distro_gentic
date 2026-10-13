@@ -20,6 +20,7 @@ from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import EMPTY_UUID, new_id, utcnow
+from acme.om.billing.rules import ANOMALY_UNLOCK
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.intake.root import build_intake
@@ -41,7 +42,8 @@ ASSISTANT = AgentKind(
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    return build_container(tmp_path, agent_kinds=(ASSISTANT,))
+    # The scripted providers' key probe takes every key, so a key's link saves.
+    return build_container(tmp_path, agent_kinds=(ASSISTANT,), model_providers="scripted")
 
 
 class Tenant:
@@ -247,6 +249,60 @@ async def test_a_budgets_link_answers_who_sets_budgets_alone(
     assert (answered.json()["cost_micros"], answered.json()["version"]) == (5_000_000, 2)
     stale = await follow(client, "PUT", link, {**ajax[Role.OWNER], "If-Match": '"1"'}, **raised)
     assert stale.status_code == 412, stale.text
+
+
+async def test_a_cost_approvals_link_answers_who_approves_calls_alone(
+    client: httpx.AsyncClient, container: AppContainer, ajax: Tenant
+) -> None:
+    """A call far above its session's norm is approved by those who approve
+    such calls, never its requester: the link posts the approval, and the
+    session goes on."""
+    run = await parked(
+        client, container, ajax, Park(reason=ParkReason.PERSON, unlock=ANOMALY_UNLOCK)
+    )
+    notified = await told(container, ajax, run)
+    assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}
+    (link,) = {n.link for n in notified}
+    assert link == f"/v1/agent-sessions/{run.session_id}/cost-approval"
+    approval = {"json": {"up_to_micros": 5_000_000}}
+    for refused in (Role.MEMBER, Role.VIEWER):
+        answered = await follow(client, "POST", link, ajax[refused], **approval)
+        assert answered.status_code == 403, f"{refused}: {answered.text}"
+    crossed = await follow(client, "POST", link, ajax.stranger, **approval)
+    assert crossed.status_code == 404, crossed.text
+    path = f"/v1/agent-sessions/{run.session_id}"
+    assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
+    approved = await follow(client, "POST", link, ajax[Role.ADMIN], **approval)
+    assert approved.status_code == 201, approved.text
+    session = await client.get(path, headers=ajax[Role.MEMBER])
+    assert session.json()["park"] is None, "the approval clears the park"
+
+
+async def test_a_missing_keys_link_answers_who_saves_the_orgs_keys_alone(
+    client: httpx.AsyncClient, container: AppContainer, ajax: Tenant
+) -> None:
+    """A session that needs a key the org holds none of tells those who save
+    the org's keys: the link saves one, and the session goes on. Another
+    tenant's key, saved at the same path, is theirs, and wakes nothing here."""
+    cause = "the org holds no anthropic key: an admin of the org saves one"
+    park = Park(reason=ParkReason.PROVIDER, unlock="anthropic:key", cause=cause)
+    run = await parked(client, container, ajax, park)
+    notified = await told(container, ajax, run)
+    assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}
+    (link,) = {n.link for n in notified}
+    assert link == "/v1/provider-keys/anthropic"
+    key = {"json": {"value": "sk-ant-ajax"}}
+    for refused in (Role.MEMBER, Role.VIEWER):
+        answered = await follow(client, "PUT", link, ajax[refused], **key)
+        assert answered.status_code == 403, f"{refused}: {answered.text}"
+    theirs = await follow(client, "PUT", link, ajax.stranger, json={"value": "sk-ant-bravo"})
+    assert theirs.status_code == 200, theirs.text
+    path = f"/v1/agent-sessions/{run.session_id}"
+    assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
+    saved = await follow(client, "PUT", link, ajax[Role.ADMIN], **key)
+    assert saved.status_code == 200, saved.text
+    session = await client.get(path, headers=ajax[Role.MEMBER])
+    assert session.json()["park"] is None, "the saved key clears the park"
 
 
 async def test_the_automation_principals_grant_answers_who_manages_members_alone(

@@ -16,6 +16,7 @@ from acme.services.api.routers import (
     approvals,
     automations,
     benchmarks,
+    billing,
     budgets,
     claimants,
     connectors,
@@ -99,8 +100,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "trust": (provider_keys.router,),
     # The operators' read of the platform's benchmarks and their trend.
     "benchmarks": (benchmarks.router,),
-    # The operators' read of a tenant's ledger.
-    "billing": (ledgers.router,),
+    # The tenant's writes that clear a park on its money, and the operators'
+    # read of a tenant's ledger and their grant of units.
+    "billing": (billing.router, ledgers.router),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 

@@ -22,6 +22,8 @@ from acme.om.billing.rules import (
     funding_of,
     lines_of,
     norm_of,
+    price_park,
+    priced_out,
     shortfall_park,
     units_of,
 )
@@ -244,10 +246,14 @@ class MoneyGateImpl(MoneyGateInterface):
         """A limit's breaches are the engine's refusal, which parks on the
         budget. Units no bucket covers park on the budget too, as a spend
         limit, naming the funds; the limits come first, since a top-up
-        clears none of them."""
+        clears none of them. A call no price gives a cost parks on the price
+        first, whichever refused it, and tries again: a raise clears none of
+        that, and a price arrives with a release, which tells no session."""
         log.info("turned %s away in org %s", request.purpose, ctx.org_id)
         OUTCOMES.labels(subsystem="billing", outcome="refused").inc()
         if turned.refusal is not None:
+            if priced_out(turned.refusal):
+                raise GateParked(price_park(self._clock()), "no price gives the call a cost")
             return turned.refusal
         assert turned.shortfall is not None
         shortfall = turned.shortfall

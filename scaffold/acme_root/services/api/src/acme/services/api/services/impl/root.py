@@ -36,12 +36,14 @@ from acme.services.api.services import (
 )
 from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
+from acme.services.api.services.billing import BillingServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.automations import AutomationsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
+from acme.services.api.services.impl.billing import BillingServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
@@ -97,6 +99,7 @@ class ServicesImpl(ServicesInterface):
         relay: RelayServiceInterface,
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
+        billing: BillingServiceInterface,
         automations: AutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
@@ -127,6 +130,7 @@ class ServicesImpl(ServicesInterface):
         self._relay = relay
         self._intake = intake
         self._budgets = budgets
+        self._billing = billing
         self._automations = automations
         self._notifications = notifications
         self._watch = watch
@@ -184,6 +188,9 @@ class ServicesImpl(ServicesInterface):
 
     def get_budgets_service(self) -> BudgetsServiceInterface:
         return self._budgets
+
+    def get_billing_service(self) -> BillingServiceInterface:
+        return self._billing
 
     def get_automations_service(self) -> AutomationsServiceInterface:
         return self._automations
@@ -287,6 +294,7 @@ def build_services(
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets, billing),
+        billing=BillingServiceImpl(billing),
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),

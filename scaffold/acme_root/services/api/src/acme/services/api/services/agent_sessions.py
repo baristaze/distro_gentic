@@ -198,8 +198,10 @@ class AgentSessionsServiceInterface(ABC):
     async def get_org_approvals(
         self, ctx: TenantContext, cursor: str | None, limit: int
     ) -> ApprovalPageView:
-        """The calls held for a decision across one page of the parked root
-        sessions the caller sees, newest first."""
+        """The calls held for a decision across one page of the root sessions
+        the caller sees, newest first, in any status, each with every
+        sub-agent under it: a sub-agent's held call is listed to whom its
+        root is visible."""
         ...
 
     @abstractmethod

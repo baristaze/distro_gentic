@@ -21,7 +21,8 @@ class NotificationsManagerInterface(ABC):
         link to the one action where a route serves it, and answers what it
         told. A run that did not
         park, or parked on what clears by itself, tells nobody. Told once a
-        park: asked again, it answers what it told."""
+        park: asked again, it answers what it told, and a park that tries
+        again by itself is one park across its tries."""
         ...
 
     @abstractmethod

@@ -61,9 +61,19 @@ class BillingManagerInterface(ABC):
 
     @abstractmethod
     async def grant_units(
-        self, ctx: OperatorContext, org_id: UUID, units: int, reason: str
+        self,
+        ctx: OperatorContext,
+        org_id: UUID,
+        units: int,
+        reason: str,
+        *,
+        grant_id: UUID | None = None,
     ) -> Grant:
-        """Units the platform grants the tenant, for its life."""
+        """Units the platform grants the tenant, for its life, as an operator
+        who may write grants them. Then the sessions of the org parked on its
+        funds are woken, and each asks its gate again. A grant under an id
+        posted before answers that one. An org that does not exist, or is
+        gone, is `NotFound`, and nothing is granted."""
         ...
 
     @abstractmethod
@@ -86,18 +96,32 @@ class BillingManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def raise_once(self, ctx: TenantContext, budget_id: UUID, amount: Amount) -> WindowRaise:
+    async def raise_once(
+        self,
+        ctx: TenantContext,
+        budget_id: UUID,
+        amount: Amount,
+        *,
+        raise_id: UUID | None = None,
+    ) -> WindowRaise:
         """A one-time raise of a budget for the window open now, and for no
         other: the budget's own amount is unchanged. The sessions parked on
-        a budget are woken."""
+        a budget are woken. A raise under an id posted before answers that
+        one."""
         ...
 
     @abstractmethod
     async def approve_call(
-        self, ctx: TenantContext, session_id: UUID, up_to_micros: int
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        up_to_micros: int,
+        *,
+        approval_id: UUID | None = None,
     ) -> Approval:
         """A person's yes to the next call of a session past its norm, up to
-        a cost; the session parked on it is woken."""
+        a cost; the session parked on it is woken. An approval under an id
+        posted before answers that one."""
         ...
 
     @abstractmethod

@@ -38,7 +38,7 @@ from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface, PullRequestRead
 from acme.integrations.exceptions import ProviderRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.request import MAX_TITLE, Handoff
@@ -861,13 +861,15 @@ class SearchCorpusImpl(NativeToolImpl):
 
 LIST_MAX = 50  # rows one list answers at most
 SESSION_SCAN = 100
-"""The sessions one list_sessions call reads at most, newest first, before
-it filters by park reason and project: the call stays one read of a page and
-at most that many lookups of a project, and its answer says where to read
-on."""
+"""The root sessions one list_sessions call reads at most, newest first,
+each with the sub-agents under it, before it filters by status, park reason,
+and project: the call stays one read of a page, a read of each tree's
+children, and at most a lookup of a project for each session it reads, and
+its answer says where to read on."""
 RUNS_MAX = 20  # an automation's recent runs one read answers at most
 HOSTS_MAX = 20  # a pool's hosts read_wait answers at most
 CHILDREN_MAX = 20  # the sub-agents read_session answers at most
+CHILDREN_PAGE = 100  # the sub-agents of one parent a tree's read takes at a time
 HISTORY_PAGE = 200  # steps one read of a history takes
 
 
@@ -910,6 +912,27 @@ class SessionState(Platform):
     held_calls: tuple[HeldCall, ...] = ()  # when it waits on an approval
     children: tuple[ChildLine, ...] = ()  # when it waits on its sub-agents
     archived: bool
+
+
+async def tree_of(
+    sessions: AgentSessionsManagerInterface, ctx: TenantContext, root: AgentSession
+) -> list[AgentSession]:
+    """A root and every sub-agent under it, each parent before its children,
+    read through the engine's children of each parent, which answers only
+    for a parent the person sees."""
+    tree = [root]
+    index = 0
+    while index < len(tree):
+        parent = tree[index]
+        index += 1
+        after: UUID | None = None
+        while True:
+            page = await sessions.get_children(ctx, parent.id, after, CHILDREN_PAGE)
+            tree.extend(page.items)
+            if not page.has_more or not page.items:
+                break
+            after = page.items[-1].id
+    return tree
 
 
 async def history_of(
@@ -1045,8 +1068,12 @@ class SessionList(Platform):
 
 class ListSessionsImpl(NativeToolImpl):
     """Lists the tenant's sessions, newest first, by status, park reason, and
-    project. One call reads at most a scan's worth of sessions, so a filter
-    that matches few may answer fewer than its limit with a `next`."""
+    project: each root the person sees, then the sub-agents under it, read
+    through the engine's children of each parent, so a sub-agent of a root
+    the person does not see is never listed. One call reads at most a scan's
+    worth of roots, so a filter that matches few may answer fewer than its
+    limit with a `next`. A tree is listed whole: the answer stops before a
+    tree that would pass the limit, unless that tree comes first."""
 
     SPEC = ToolSpec(
         name=kinds.LIST_SESSIONS,
@@ -1077,33 +1104,53 @@ class ListSessionsImpl(NativeToolImpl):
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, SessionsQuery)
-        reason, project_id = call_input.park_reason, call_input.project_id
-        status = SessionStatus.PARKED if reason is not None else call_input.status
-        page = await self._sessions().get_sessions(ctx, status, call_input.before, SESSION_SCAN)
+        # A sub-agent waits under a root in any status, an idle one included,
+        # so the scan reads every root, and the filter reads each session.
+        page = await self._sessions().get_sessions(ctx, None, call_input.before, SESSION_SCAN)
         found: list[SessionLine] = []
-        for session in page.items:
-            if reason is not None and (session.park is None or session.park.reason is not reason):
-                continue
-            if project_id is not None:
-                project = await self._projects().project_of(ctx, session.id)
-                if project is None or project.id != project_id:
-                    continue
-            found.append(
-                SessionLine(
-                    session_id=session.id,
-                    title=session.title,
-                    kind=session.kind,
-                    status=session.status,
-                    park_reason=None if session.park is None else session.park.reason,
-                    started_by=session.created_by,
-                    created_at=session.created_at,
-                )
-            )
-            if len(found) == call_input.limit:
-                more = session.id != page.items[-1].id or page.has_more
-                return SessionList(sessions=tuple(found), next=session.id if more else None)
+        listed: UUID | None = None  # the last root whose tree the answer holds
+        for root in page.items:
+            lines = [
+                line
+                for session in await tree_of(self._sessions(), ctx, root)
+                if (line := await self._line(ctx, session, call_input)) is not None
+            ]
+            if found and len(found) + len(lines) > call_input.limit:
+                return SessionList(sessions=tuple(found), next=listed)
+            found.extend(lines)
+            listed = root.id
+            if len(found) >= call_input.limit:
+                more = root.id != page.items[-1].id or page.has_more
+                return SessionList(sessions=tuple(found), next=root.id if more else None)
         last = page.items[-1].id if page.items and page.has_more else None
         return SessionList(sessions=tuple(found), next=last)
+
+    async def _line(
+        self, ctx: TenantContext, session: AgentSession, query: SessionsQuery
+    ) -> SessionLine | None:
+        """The session's line when it passes the query's filters. A sub-agent
+        marked deleted is read through to its own, and listed on no line."""
+        if session.deleted_at is not None:
+            return None
+        reason = query.park_reason
+        status = SessionStatus.PARKED if reason is not None else query.status
+        if status is not None and session.status is not status:
+            return None
+        if reason is not None and (session.park is None or session.park.reason is not reason):
+            return None
+        if query.project_id is not None:
+            project = await self._projects().project_of(ctx, session.id)
+            if project is None or project.id != query.project_id:
+                return None
+        return SessionLine(
+            session_id=session.id,
+            title=session.title,
+            kind=session.kind,
+            status=session.status,
+            park_reason=None if session.park is None else session.park.reason,
+            started_by=session.created_by,
+            created_at=session.created_at,
+        )
 
 
 class WaitingItem(Platform):

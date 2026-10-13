@@ -16,15 +16,18 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_session_storage import make_session
 from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, Platform, calls, platform_over
 from contracts.project_storage import in_project
+from contracts.step_storage import make_message
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform as Record
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
@@ -41,7 +44,7 @@ from acme.om.platform_agents.kinds import (
 )
 from acme.om.platform_agents.tools import NativeToolImpl
 from acme.om.root import Managers, ProductKinds, build_managers
-from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure
+from acme.om.steps.types.header import LoopOutcome, Park, ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import PolicyLayer
@@ -267,6 +270,46 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_o
     in_it = json.loads(text)
     assert [s["session_id"] for s in in_it["sessions"]] == [str(first)]
     assert in_it["next"] is None
+
+
+async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
+    tmp_path: Path,
+) -> None:
+    """A sub-agent waits for a person under a root that is idle, so the root
+    is on no list of waiting sessions: the list by park reason finds the
+    sub-agent, read through its root's children."""
+    platform = platform_over(tmp_path, kinds=(CLERK,))
+    sessions, steps, owner = (
+        platform.managers.agent_sessions,
+        platform.managers.steps,
+        platform.owner,
+    )
+    root = await sessions.get_session(owner, await platform.start(kinds.ENGINEER))
+    child = await sessions.create_session(owner, make_session(parent=root))
+    asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
+    (message,) = await steps.append_inputs(
+        owner, child.id, [make_message(child.id, principal=asker)]
+    )
+    epoch = await steps.begin_run(owner, child.id)
+    waiting = Park(reason=ParkReason.PERSON, unlock="approval")
+    await sessions.park(owner, child.id, epoch, message.id, waiting)
+    asking = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(asking, "Which sessions wait for a person?")
+    platform.anthropic.add(
+        reply(calls(kinds.LIST_SESSIONS, "use_person", park_reason="person")),
+        reply(said("One waits for a person.")),
+    )
+
+    await platform.managers.loop.run(owner, asking)
+
+    failure, text = await platform.answer(asking, "use_person")
+    page = json.loads(text)
+    assert failure is None
+    assert root.status.value == "idle"
+    assert [(s["session_id"], s["park_reason"]) for s in page["sessions"]] == [
+        (str(child.id), "person")
+    ]
+    assert page["next"] is None
 
 
 # Check: read_wait on a session pinned to an offline host names that host
