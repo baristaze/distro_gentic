@@ -550,12 +550,16 @@ class ExecutorRelayImpl(ExecutorInterface):
         """A snapshot: the live instance this host's provider holds for the
         session, by its labels, taken whole once the broker took back what
         it attached there, scanned for the host's secrets' values, and kept
-        in this host's store. Answered by its reference, its digest, and
-        its size, never its bytes, or by why none was kept."""
+        in this host's store: as the session's own, or, for a fork, as the
+        child's it names (`kept_for`), so no erase of the session's
+        snapshots reaches the child's copy. Answered by its reference, its
+        digest, and its size, never its bytes, or by why none was kept."""
         try:
             spec = IsolationSpec.model_validate(item.payload["spec"])
             session_id = UUID(str(item.payload["session_id"]))
             snapshot_id = UUID(str(item.payload["snapshot"]["id"]))
+            kept_for = item.payload.get("kept_for")
+            owner = session_id if kept_for is None else UUID(str(kept_for))
         except KeyError, TypeError, ValueError, ValidationError:
             await self._answer_snapshot(item.id, refused="the snapshot names no workspace")
             return
@@ -588,7 +592,7 @@ class ExecutorRelayImpl(ExecutorInterface):
                         f"the workspace holds the secret {found!r}, so it is not kept"
                     )
                 reference, digest, size = await self._snapshots.keep(
-                    item.org_id, session_id, snapshot_id, archive
+                    item.org_id, owner, snapshot_id, archive
                 )
             except BaseException:
                 await provider.discard(archive)

@@ -60,13 +60,21 @@ class PlacedWorkspacesInterface(ABC):
 
     @abstractmethod
     async def snapshot_on_host(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        snapshot_id: UUID,
+        *,
+        kept_for: UUID | None = None,
     ) -> UUID:
         """Asks the host that holds the session's workspace to keep a snapshot
-        of it in its own store under `snapshot_id`; the work's id. Its bytes
+        of it in its own store under `snapshot_id`; the work's id. With
+        `kept_for`, a fork's child, the host keeps the copy as that child's,
+        where no erase of the session's snapshots reaches it. Its bytes
         never leave the host: the platform records the reference and the
-        digest the host answers. `SnapshotRefused` when no live host holds
-        the workspace."""
+        digest the host answers, under the session. `SnapshotRefused` when
+        no live host holds the workspace."""
         ...
 
     @abstractmethod

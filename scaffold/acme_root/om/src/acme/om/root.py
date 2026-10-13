@@ -1203,6 +1203,11 @@ def build_managers(
             tool_options.purge_batch,
             utcnow,
         ),
+        # A fork of a workspace a host holds is taken by that host; the pins
+        # are built below, so the edge is bound at call time.
+        fork_points=lambda ctx, request, workspace, epoch: held_to_pins.fork_point(
+            ctx, request, workspace, epoch
+        ),
     )
     # A session inside its tenant's wall finds its workspace on its host,
     # where only the relayed transport reaches. The relay and the hosts are
