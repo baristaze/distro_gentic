@@ -8,6 +8,7 @@ their suites share: a tenant whose members a case names with a role, the
 tenant's service context, and the steps a session holds."""
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
+from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
@@ -45,6 +47,7 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.tools import COMMENT, CommentImpl
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.root import KnowledgeLayer
+from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
@@ -247,11 +250,15 @@ def wired(
     owner: TenantContext | None = None,
     project_required: bool = False,
     actions: ProductActions = no_actions,
+    credentials: Callable[
+        [ModelProvidersInterface], CallCredentialsInterface
+    ] = CallCredentialsPlatformImpl,
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `project_required`
-    is the automations' as a stack outside `local` sets it, and `actions`
-    the product's own kinds of automation action."""
+    is the automations' as a stack outside `local` sets it, `actions` the
+    product's own kinds of automation action, and `credentials` the key
+    each of the loop's calls goes out on, the platform's unless said."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -334,7 +341,7 @@ def wired(
             managers.budgets,
             SessionProjectsBoundImpl(storage.get_project_storage()),
         ),
-        CallCredentialsPlatformImpl(providers),
+        credentials(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
         engine_tools(

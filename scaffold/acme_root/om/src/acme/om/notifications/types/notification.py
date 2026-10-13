@@ -38,8 +38,9 @@ class Ask(Platform):
 
 class Notification(Identifiable, Created):
     """One recipient told on one channel. Its id is derived from the park (the
-    step that wrote it), the action, the recipient, and the channel, so a
-    park tells each of them once. `provenance` is what served
+    step that wrote it, or its first try for a park that tries again by
+    itself), the action, the recipient, and the channel, so a park tells
+    each of them once. `provenance` is what served
     a post on an integration: a twin's post is named a twin's; the portal's
     is the platform's own, and names none. `read_at` is when its recipient
     marked it read; the first mark holds."""

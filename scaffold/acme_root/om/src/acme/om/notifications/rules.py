@@ -2,8 +2,10 @@
 that clears each, its link, and who may take it. Values in, values out.
 
 A park needs a person when nothing clears it by itself: it carries no
-retry time. Each such park asks one action of exactly the people who may
-take it:
+retry time. A park on the org's own account or key at a model provider
+needs one too: it tries again by itself, and no try goes through until
+an admin of the org fixes it there. Each such park asks one action of
+exactly the people who may take it:
 
 - A call held for approval: decide the call; the members whose role the
   tenant's policy lets decide the call's class.
@@ -14,6 +16,10 @@ take it:
 - A key the org holds none of, to a provider its call needs: save one;
   the members who save the org's keys. The text says why it waits, and
   who acts.
+- The org's own account at a model provider, or a permission its key
+  lacks there: fix it at the provider; the members who manage the org.
+  The text says why it waits, and who acts. It is told once, at its
+  first try: the tries after it are the same park.
 - A question the agent asked its person: answer it with a message; its
   requester, or, when they hold no place now, the members who manage the
   tenant. The text quotes the question.
@@ -23,8 +29,9 @@ take it:
 A link names a route the API serves: a call's decision, the session's
 messages, the session's controls, a budget's amount, a call's approval
 past its norm, and a provider's key. Topping up is paid at the payment
-provider, which no route of the API is, so it carries none, and its text
-names the park instead.
+provider, and a fix at a model provider is made there: no route of the
+API is either, so they carry none, and their text names the park
+instead.
 
 A park on a price, or on a key or an account the platform's operator
 fixes, waits for that operator, whom no tenant's member stands in for,
@@ -35,12 +42,14 @@ import json
 from collections.abc import Iterable, Sequence
 from uuid import UUID
 
+from acme.om.agents.loop_rules import fix_cause
 from acme.om.base import derived_id
 from acme.om.billing.rules import FUNDS_UNLOCK
 from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.context import Permission, Role
 from acme.om.steps.types.content import TextBlock
 from acme.om.steps.types.header import (
+    ModelResponseHeader,
     Park,
     ParkedHeader,
     ParkReason,
@@ -67,20 +76,46 @@ SAVES_KEYS = Permission.MANAGE_MEMBERS
 """What saving the org's key to a provider asks, as trust holds it
 (`save_provider_key`)."""
 
+FIXES_AT_PROVIDER = Permission.MANAGE_MEMBERS
+"""Who fixes the org's own account or key at a model provider: the members
+who manage the org, the admins its park's cause names."""
+
 MISSING_KEY = "key"
 """The cause a provider park names when the org holds no key to it."""
+
+FIXED_AT_PROVIDER = frozenset({"billing", "permission"})
+"""The causes of a provider park that only a fix at the provider clears:
+the account's billing, and a permission, a region, or a model the key
+cannot reach. A key the provider refused parks on the missing key at its
+next try, which is told."""
 
 
 def needs_person(park: Park) -> bool:
     """Whether a park waits on a person of the tenant: nothing clears it by
-    itself, and it is not a price only the operator sets."""
-    if park.reason not in NOTIFIED or park.retry_at is not None:
+    itself, or it is a fix an admin of the org makes at a model provider;
+    and it is not a price only the operator sets."""
+    if park.reason not in NOTIFIED:
+        return False
+    if fixed_at_provider(park) is not None:
+        return True
+    if park.retry_at is not None:
         return False
     if park.reason is ParkReason.PERSON:
         return True
     if park.reason is ParkReason.PROVIDER:
         return missing_key(park) is not None
     return as_budget(park.unlock) is not None or park.unlock in (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK)
+
+
+def fixed_at_provider(park: Park) -> str | None:
+    """The model provider at which an admin of the org fixes the org's own
+    account or key, when a provider park waits on one: the loop names the
+    provider, then the cause, and its cause names an admin of the org as
+    who acts, never an operator of the platform."""
+    provider, _, cause = park.unlock.partition(":")
+    if park.reason is not ParkReason.PROVIDER or cause not in FIXED_AT_PROVIDER or not provider:
+        return None
+    return provider if park.cause == fix_cause(provider, cause, tenants=True) else None
 
 
 def missing_key(park: Park) -> str | None:
@@ -156,8 +191,8 @@ def key_link(provider: str) -> str:
 
 NO_ROUTE = ""
 """The link of an action no route of the API serves: topping up the
-account, which the payment provider takes. Such an ask names its park in
-its text."""
+account, which the payment provider takes, and a fix at a model provider,
+made there. Such an ask names its park in its text."""
 
 
 ANSWER_QUESTION = "answer_question"
@@ -240,7 +275,32 @@ def parked_step(history: Sequence[Step], park: Park) -> Step | None:
     return None
 
 
+def first_try(history: Sequence[Step], parked: Step) -> Step:
+    """The step that wrote the first try of the park `parked` wrote again: a
+    park that tries again by itself is written at each try, and is the same
+    park until the session parks on something else, a call is answered, or
+    its loop ends."""
+    header = parked.header
+    assert isinstance(header, ParkedHeader)
+    same = (header.park.reason, header.park.unlock)
+    first = parked
+    for step in reversed(history):
+        earlier = step.header
+        if step.seq >= parked.seq:
+            continue
+        if step.type is StepType.LOOP_ENDED:
+            break
+        if isinstance(earlier, ModelResponseHeader) and not earlier.abandoned:
+            break  # a call was answered
+        if isinstance(earlier, ParkedHeader):
+            if (earlier.park.reason, earlier.park.unlock) != same:
+                break
+            first = step
+    return first
+
+
 def notification_id(parked: Step, action: str, link: str, recipient: UUID, channel: str) -> UUID:
     """One park tells one recipient of one action once on each channel: the
-    step that wrote the park is the park."""
+    step that wrote the park is the park, and for a park that tries again
+    by itself, the step that wrote its first try (`first_try`)."""
     return derived_id(parked.id, parked.created_at, f"notify:{action}:{link}:{recipient}:{channel}")

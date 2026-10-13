@@ -22,6 +22,7 @@ from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.rules import (
     ANSWER_QUESTION,
     APPROVES_CALLS,
+    FIXES_AT_PROVIDER,
     NO_ROUTE,
     SAVES_KEYS,
     SETS_BUDGETS,
@@ -31,6 +32,8 @@ from acme.om.notifications.rules import (
     asked_question,
     budget_link,
     decision_link,
+    first_try,
+    fixed_at_provider,
     held_calls,
     holding,
     holding_permission,
@@ -96,6 +99,10 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         if parked is None:
             # The session moved on from the park this run wrote.
             return ()
+        if park.retry_at is not None:
+            # It tries again by itself, and each try writes it again: it is
+            # told once, at its first try.
+            parked = first_try(history, parked)
         members = await self._members(ctx)
         told: list[Notification] = []
         for ask in await self._asks(ctx, session, park, history, members):
@@ -183,6 +190,18 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                         " and waits for your approval."
                     ),
                     recipients=holding_permission(members, APPROVES_CALLS),
+                )
+            ]
+        provider = fixed_at_provider(park)
+        if provider is not None:
+            # Fixed at the provider, and nothing tells the platform: the
+            # session tries again by itself, and takes the fix at its next try.
+            return [
+                Ask(
+                    action="fix_at_provider",
+                    link=NO_ROUTE,
+                    text=f"{title} waits: {park.cause}. It tries again by itself.",
+                    recipients=holding_permission(members, FIXES_AT_PROVIDER),
                 )
             ]
         provider = missing_key(park)

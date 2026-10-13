@@ -15,6 +15,11 @@ A park on a key the tenant holds none of waits with no clock, and saving
 a key did not wake it. Nobody was told of it. Its notice, like every
 provider park's, said the session tries again on its own.
 
+A park on the tenant's own account at a provider, or on a permission its
+key lacks, tries again every five minutes, and no try goes through until
+an admin of the org fixes it at the provider. Nobody was told of it
+either.
+
 A park on a price waited for an unlock. A price arrives with a release
 of the price table, and nothing tells a parked session that it came.
 
@@ -57,6 +62,14 @@ by themselves.
 no clock, so it notifies the members who manage the org, with the route
 that saves the key. A park the platform's operator fixes tells nobody in
 the tenant.
+
+**A fix at the provider tells the org's admins once.** A park on the
+org's own account, or on a permission its key lacks, notifies the
+members who manage the org at its first try, with its cause and no link:
+the fix is made at the provider. The tries after it are the same park,
+and tell nobody again, until a call is answered or the loop ends. A key
+the provider refused parks on the missing key at its next try, and that
+park tells.
 
 **A price park tries again.** It tries again every five minutes, and its
 cause says an operator prices the model. A limit that refused a call for
