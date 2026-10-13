@@ -37,15 +37,19 @@ powers its profile does not set.
 
 **Principle.** A validation session runs a delivery's checks with no
 agent at all, on a fresh executor (a workspace nobody used, never the
-agent's), on the same queue, and writes the same execution record.
+agent's), on the same queue, and writes the same execution record. A
+second start runs another beside it, and a start sent again under its
+key answers the one it began.
 
 **Source.** The Agents a Platform Ships.
 
 **Look for.** How a validation session runs; the executor it runs on;
-the queue it uses; the records it writes.
+the queue it uses; the records it writes; what a start sent again
+answers.
 
 **Violation.** A validation session that makes a model call; one that
-runs off the work queue, or writes records of another shape. (One run in
+runs off the work queue, or writes records of another shape; a start
+sent again under its key that runs the check a second time. (One run in
 the agent's workspace or on a reused executor is EVD-06.)
 
 **Severity.** medium

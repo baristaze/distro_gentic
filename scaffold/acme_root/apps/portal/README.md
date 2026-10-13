@@ -133,7 +133,12 @@ again. The pace keeps the run open long enough to see it under Running.
 The check signs in as the seeded owner, starts a session on Home, sees it
 under Running and then Recent in the left bar, and reads its chat and, in
 the panel, its evidence. It then signs in a person of another org, who
-finds no row of it and nothing at its address. The records check needs
+finds no row of it and nothing at its address. The hand-over check
+(`e2e/handover.spec.ts`) runs on the same stack, after a restart of the
+runner: the owner lets a session's run end, shares it with the org, and
+takes control, and finds End this run beside Give it back. The seeded
+member sees who holds it and End this run, never Run or Give it back.
+The owner ends the run there, which ends the loop cancelled. The records check needs
 only the API, on the scripted providers, and this dev server: in Settings
 the owner makes a project with a read credential, saves a provider key,
 and creates an API key, and then makes an automation; each is read back

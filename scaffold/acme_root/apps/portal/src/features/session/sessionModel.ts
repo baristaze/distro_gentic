@@ -150,7 +150,10 @@ export function usageLine(usage: SessionModelUsageView): string {
 
 /** What a person may do to the session as it stands; a member who may not
  * write may do nothing, and one who takes no part in it sends nothing and
- * takes no control: they join it first. */
+ * takes no control: they join it first. Ending the run is offered while one is open,
+ * whatever its park: a cancel ends any park, a held hand-over too. A
+ * hand-over that names its holder is theirs alone to work in and give back
+ * (`heldBy`); one that names none, any writer's. */
 export interface Allowed {
   send: boolean;
   pause: boolean;
@@ -162,7 +165,15 @@ export interface Allowed {
   archive: boolean;
 }
 
-export function allowed(session: AgentSessionView, mayWrite: boolean, takesPart = true): Allowed {
+/** Who holds the session's environment when its hand-over names someone
+ * other than `me`; null when nobody does, or `me` does. */
+export function heldBy(session: Pick<AgentSessionView, "park">, me: string | null): string | null {
+  const park = session.park;
+  if (park?.reason !== "handover" || !park.holder) return null;
+  return park.holder === me ? null : park.holder;
+}
+
+export function allowed(session: AgentSessionView, mayWrite: boolean, me: string | null, takesPart = true): Allowed {
   const handedOver = session.park?.reason === "handover";
   const paused = session.park?.reason === "pause";
   const open = session.status === "running" || session.status === "parked" || session.status === "pending";
@@ -174,10 +185,10 @@ export function allowed(session: AgentSessionView, mayWrite: boolean, takesPart 
     // may hold it while it is pending: a pause parks it at its next step.
     pause: session.status === "running" || session.status === "pending",
     resume: paused,
-    cancel: open && !handedOver,
+    cancel: open,
     compact: session.status === "idle",
     takeControl: takesPart && !handedOver,
-    giveBack: handedOver,
+    giveBack: handedOver && heldBy(session, me) === null,
     archive: session.status === "idle" && !session.archived_at,
   };
 }

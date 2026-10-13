@@ -169,9 +169,11 @@ a concurrency, and whether to queue when limited. It ignores the events
 its own sessions caused, unless it declares otherwise, and a chain of
 automations stops at a hop limit, so an agent's comment cannot start an
 endless chain. Every firing is a recorded run, and the run of a
-product's action stays at work until its check says the work ended.
-Autonomy stops exactly where policy says: at an approval, a bound, or a
-limit.
+product's action stays at work until its check says the work ended. A
+firing while a run is open starts another beside it, as the limits
+allow, and an event delivered again, or a schedule's slot met again,
+answers the run it made. Autonomy stops exactly where policy says: at
+an approval, a bound, or a limit.
 
 **Source.** Work In, Results Out, Automations; What Closes a Loop.
 
@@ -183,7 +185,8 @@ the record of each firing.
 concurrency, or one whose limits are not enforced; an automation that
 fires on its own sessions' events without declaring it; a chain with no
 hop count or no limit; a firing with no recorded run; a run of a
-product's action closed before its check says its work ended.
+product's action closed before its check says its work ended; an event
+delivered again, or a slot met again, that makes a second run.
 
 **Severity.** high
 

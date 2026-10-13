@@ -104,16 +104,24 @@ unmapped user, or one not addressed to the agent.
 **Principle.** A person who takes control makes the agent stand down,
 its loop parked on a hand-over, and the session, its workspace, and its
 evidence stay as they are. When the person gives it back, their summary
-becomes a message the agent reads on resume.
+becomes a message the agent reads on resume. The environment is the
+holder's alone: only they run commands in it and give it back, and every
+other member sees who holds it. Any member who may write can still end
+the run, a held hand-over too, and wherever the platform offers a resume
+it offers that cancel beside it.
 
 **Source.** Watching and Steering, Take Control, Give Back.
 
 **Look for.** What taking control does to the loop, the workspace, and
-the evidence; what giving it back hands the agent.
+the evidence; what giving it back hands the agent; who each surface
+lets run a command, give it back, or end the run while a hand-over
+holds.
 
 **Violation.** Taking control that ends or cancels the loop, releases
 the workspace, or resets anything; giving back that resumes the agent
-without the person's summary as a message.
+without the person's summary as a message; a surface that offers
+another member the holder's commands or give-back; a hand-over, or any
+park a person resumes, with no cancel offered beside the resume.
 
 **Severity.** medium
 
