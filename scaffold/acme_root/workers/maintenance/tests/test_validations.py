@@ -2,7 +2,9 @@
 the platform's own lane and handled by the worker's own handler, which
 runs the check on the executor once and finishes the session with the
 record it wrote. A check its project's policy no longer declares fails for
-good, and its session reads refused with the reason."""
+good, and its session reads refused with the reason; a check whose work
+fails on its last attempt reads refused with the error's class, and its
+item still fails for good."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -17,17 +19,27 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.om.base import new_id
 from acme.om.context import TenantContext
 from acme.om.evidence.rules import policy_key
+from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.handler import WorkRefused
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 
 LEASE = timedelta(seconds=30)
 HEAD = "c" * 40
 BASE = "b" * 40
+
+
+class Unmade(ScriptedExecutor):
+    """An executor whose instance is never made: every run fails, on no
+    precondition, as one whose host cannot start an instance does."""
+
+    async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
+        self.requests.append(request)
+        raise ConnectionError("the instance at 10.0.0.7 could not be made")
 
 
 async def started(
@@ -127,3 +139,36 @@ async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: 
     (record,) = (await container.managers.evidence.get_runs(owner, session_id, None, 10)).items
     assert (len(batch.requests), platform.requests) == (1, [])
     assert record.executor == "batch-1"
+
+
+async def test_a_check_whose_work_fails_on_its_last_attempt_reads_refused(
+    tmp_path: Path,
+) -> None:
+    executor = Unmade(capabilities=frozenset())
+    container = WorkerContainer.for_tests(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), ports=PlatformPorts(executor=executor)
+    )
+    owner = await sign_in(container)
+    session_id = await started(container, owner, "unit")
+    loop = build_loop(container)
+    handler = loop._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+    sessions = container.managers.platform_agents
+
+    ctx, item = await claimed(container)
+    assert item.attempts < item.max_attempts
+    with pytest.raises(ConnectionError):
+        await handler.handle(ctx, item)
+    waiting = await sessions.get_validation(owner, session_id)
+    assert waiting.status is ValidationStatus.QUEUED, "an attempt with more to come"
+
+    # The last attempt, settled as the loop settles it.
+    last = item.model_copy(update={"attempts": item.max_attempts})
+    await loop._handle(ctx, last)  # pyright: ignore[reportPrivateUsage]
+
+    refused = await sessions.get_validation(owner, session_id)
+    assert refused.status is ValidationStatus.REFUSED
+    assert refused.refusal == "its check failed on its last attempt: ConnectionError"
+    assert refused.run_id is None
+    failed = await container.managers.work.get_item(owner, item.id)
+    assert failed.status is WorkStatus.FAILED, "the item is still a dead letter"
+    assert len(executor.requests) == 2

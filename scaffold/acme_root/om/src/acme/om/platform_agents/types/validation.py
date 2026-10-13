@@ -4,7 +4,8 @@ and its run is the same execution record an agent's validation writes. The
 session holds which of its project's checks it runs, at which commit and
 from which protected source, the API key its starter started it on, if
 one, and, once the run is recorded, which record it is. A check that
-cannot run here, for good, refuses the session, which then holds why."""
+cannot run here, for good, refuses the session, which then holds why, and
+so does work that fails on its last attempt."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -26,7 +27,7 @@ REFUSAL_MAX = 500
 class ValidationStatus(StrEnum):
     QUEUED = "queued"  # its work waits on the queue, or runs on the executor
     FINISHED = "finished"  # its run is recorded
-    REFUSED = "refused"  # its check cannot run here, and never will: no run
+    REFUSED = "refused"  # its check cannot run here, or its work spent its attempts: no run
 
 
 class ValidationStart(Platform):
@@ -66,7 +67,8 @@ class ValidationSession(Identifiable, Trackable):
     run_id: UUID | None = None
     finished_at: datetime | None = None
     # Why its check cannot run, once the session is refused: the project's
-    # policy no longer declares it, or no executor here offers what it needs.
+    # policy no longer declares it, no executor here offers what it needs, or
+    # the class of the error its work failed with on its last attempt.
     refusal: str | None = Field(default=None, max_length=REFUSAL_MAX)
     # Every write after the create is a compare-and-set on it.
     version: int = Field(default=1, ge=1)
