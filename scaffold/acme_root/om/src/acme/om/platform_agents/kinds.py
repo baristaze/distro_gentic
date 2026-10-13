@@ -424,7 +424,8 @@ ENVIRONMENT_KINDS: frozenset[tuple[str, int]] = frozenset({(ENGINEER, 8)})
 """The platform's kinds, by name and version, whose workspace starts from
 the environment its session's project names: the engineer from version 8.
 A later version that takes it joins here; the versions before it keep
-their own base."""
+their own base. A product names its own beside these, in its slot
+(`root.ProductKinds.environments`)."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
