@@ -778,21 +778,35 @@ class RelayManagerImpl(RelayManagerInterface):
         sealed = await self._seal.seal(
             ctx, item.session_id, item.key, result.output.model_dump_json().encode()
         )
-        now = self._clock()
-        done = _copy(
-            item,
-            now,
-            state=ExecState.DONE,
-            outcome=result.outcome,
-            output=sealed,
-            result_sha256=crossing.sha256,
-            settled_at=now,
-            claim=None,
-            lease_expires_at=None,
-        )
-        written = await self._storage.write_item(host.org_id, done, item.version)
-        if written is None:
-            raise ItemNotHeld(f"exec item {item_id} was settled before its result arrived")
+        token = claimed_row(item).claim_token
+        while True:
+            now = self._clock()
+            done = _copy(
+                item,
+                now,
+                state=ExecState.DONE,
+                outcome=result.outcome,
+                output=sealed,
+                result_sha256=crossing.sha256,
+                settled_at=now,
+                claim=None,
+                lease_expires_at=None,
+            )
+            written = await self._storage.write_item(host.org_id, done, item.version)
+            if written is not None:
+                break
+            # A renewal of this same claim, still landing as the host ends
+            # the item, moves its version and settles nothing: the result
+            # lands on the version it left. Any other write settled the item
+            # or handed it to another claim, and the result lands nothing.
+            moved = await self._storage.read_item(host.org_id, item_id)
+            if (
+                moved is None
+                or not held_by(moved, worker_of(host))
+                or claimed_row(moved).claim_token != token
+            ):
+                raise ItemNotHeld(f"exec item {item_id} was settled before its result arrived")
+            item = moved
         try:
             await self._work.complete(ctx, claimed_row(item))
         except LeaseLost, NotFound:
