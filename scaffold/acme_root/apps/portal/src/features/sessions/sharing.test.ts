@@ -3,8 +3,9 @@
 // sessions and answers as the API does: a person's own list holds the ones
 // they made or take part in; the sessions they see are the org-wide ones and
 // their own, or every one for a role that may reassign sessions; a member
-// joins one they see; only the steerer hands the steer on, to one who takes
-// part; and a message from one who does not steer is a participant's.
+// joins an org-wide one, and a private one's creator adds who takes part;
+// only the steerer hands the steer on, to one who takes part; and a message
+// from one who does not steer is a participant's.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -131,7 +132,10 @@ function write(method: string, path: string, body?: unknown): unknown {
   if (!session || !sees(session, me)) throw refused(404, path);
   const steps = (server.steps[session.id] ??= []);
   if (method === "PUT" && part === "participants") {
-    if (target !== me && session.created_by !== me) throw refused(403, path);
+    // A self-join takes an org-wide session, or a private one its joiner
+    // steers; anyone else's add is its creator's alone.
+    const selfJoin = target === me && (session.visibility === "org_wide" || session.steerer === me);
+    if (session.created_by !== me && !selfJoin) throw refused(403, path);
     const joined = session.participants.includes(target!) ? session : { ...session, participants: [...session.participants, target!] };
     server.sessions[index] = joined;
     return joined;
