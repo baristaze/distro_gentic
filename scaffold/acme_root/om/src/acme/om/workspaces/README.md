@@ -30,7 +30,7 @@ rebuilt from.
   workspace reaches and the methods each takes, or open egress, chosen
   on purpose and recorded with its reason and who chose it.
 - **Where each snapshot of a session lives**, one record per snapshot
-  of a workspace kept by snapshots: the platform's bucket, or the store
+  it keeps, a fork's copy included: the platform's bucket, or the store
   of a host of the session's pool, by its reference, the digest the host
   declared, its size, and the hash its step names. Never its bytes
   ([ADR 2050](../../../../../docs/adr/2050-a-snapshot-lives-on-its-workspaces-side-of-the-wall.md)).
@@ -130,6 +130,12 @@ rebuilt from.
   the wall never restores on the other. A restored tree stands: nothing
   of the branch is brought over it. A person who takes control gets it
   too, before the workspace is handed over.
+- **Fork.** A spawn that forks a workspace a host holds asks that host
+  to snapshot it as it stands, and to keep the copy in its own store as
+  the child's. The child's first prepare restores it on a host of the
+  pool, and the parent keeps nothing of it. A refusal comes before the
+  tree's slot is taken or the child is made
+  ([ADR 2061](../../../../../docs/adr/2061-a-fork-of-a-hosted-workspace-is-taken-by-its-host-and-kept-as-the-childs.md)).
 - **Erase.** A revoked key takes the session's snapshots out of the
   bucket, asks each host that keeps one to erase it, and forgets their
   records.

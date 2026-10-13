@@ -557,7 +557,10 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             raise SnapshotRefused("this process keys no hash, so it records no host's snapshot")
         try:
             await self._snapshots.at_rest(ctx, child_id)
-        except SnapshotRefused:
+        except InfraException as refused:
+            if refused.code != SnapshotRefused.code:
+                raise
+            # Nothing names the copy, so nothing would ever erase it.
             if self._erase_on_host is None:
                 log.error("session %s: no host is asked to erase its copy", child_id)
             else:
