@@ -96,7 +96,7 @@ Graces = Callable[[str], timedelta]
 class HeldWorkspacesSweep:
     """Lets go of each instance this host holds that no run accounts for,
     once a pass finds it so past its session's kind's grace (`graces`), and
-    of each such instance a tenant's host holds when `relay` is given, or a
+    of each such instance a tenant's host holds when `exec_relay` is given, or a
     machine of the cloud pool holds when `cloud` is. When each one may go,
     counted from the pass that first found it so, is held in memory: a
     runner that restarts counts the grace again, so it lets go later, never

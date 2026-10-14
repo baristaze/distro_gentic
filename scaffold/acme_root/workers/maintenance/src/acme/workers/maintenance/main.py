@@ -130,7 +130,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "hosts": managers.hosts.purge_tenant,
             "validation_sessions": managers.platform_agents.purge_tenant,
             # Its exec items with their output, its controls, its bindings.
-            "relay": managers.exec_relay.purge_tenant,
+            "exec_relay": managers.exec_relay.purge_tenant,
             "agent_workspaces": managers.agent_workspaces.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
@@ -194,7 +194,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "stalled_sessions": container.stalled,
             # Each exec item whose host's lease ran out: an unsafe one ends
             # `interrupted`, a repeatable one waits for its host again.
-            "relay": managers.exec_relay.settle_expired,
+            "exec_relay": managers.exec_relay.settle_expired,
             # Each share the release before wrote: the number of its loops
             # at once, carried as the tenant's own cap on its loop lane, once.
             "share_caps": unstaged(

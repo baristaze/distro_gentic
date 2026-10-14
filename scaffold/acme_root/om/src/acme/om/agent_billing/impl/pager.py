@@ -19,7 +19,7 @@ class OperatorPagerLogImpl(OperatorPagerInterface):
             page.expected_micros,
             page.norm_micros,
         )
-        OUTCOMES.labels(subsystem="billing", outcome="paged").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome="paged").inc()
 
     def describe(self) -> str:
         return "pager=log"

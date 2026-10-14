@@ -155,7 +155,7 @@ class MoneyGateImpl(MoneyGateInterface):
         answer = await self._ledger.open_hold(ctx.org_id, hold)
         if isinstance(answer, Turned):
             return self._turned(ctx, request, answer)
-        OUTCOMES.labels(subsystem="billing", outcome="held").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome="held").inc()
         return answer
 
     async def settle(self, ctx: TenantContext, hold_id: UUID, bill: Bill) -> Settlement:
@@ -176,8 +176,8 @@ class MoneyGateImpl(MoneyGateInterface):
                 stored.overshoot.cost_micros,
                 stored.overshoot.tokens,
             )
-            OUTCOMES.labels(subsystem="billing", outcome="overshoot").inc()
-        OUTCOMES.labels(subsystem="billing", outcome=f"settled_{stored.bill.kind}").inc()
+            OUTCOMES.labels(subsystem="agent_billing", outcome="overshoot").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome=f"settled_{stored.bill.kind}").inc()
         return stored
 
     async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
@@ -238,7 +238,7 @@ class MoneyGateImpl(MoneyGateInterface):
             norm_micros=norm_of(recent),
         )
         await self._pager.page(page)
-        OUTCOMES.labels(subsystem="billing", outcome="anomaly").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome="anomaly").inc()
         raise GateParked(
             anomaly_park(),
             f"the call's expected cost, {cost} micros, is far above its session's norm",
@@ -252,7 +252,7 @@ class MoneyGateImpl(MoneyGateInterface):
         first, whichever refused it, and tries again: a raise clears none of
         that, and a price arrives with a release, which tells no session."""
         log.info("turned %s away in org %s", request.purpose, ctx.org_id)
-        OUTCOMES.labels(subsystem="billing", outcome="refused").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome="refused").inc()
         if turned.refusal is not None:
             if priced_out(turned.refusal):
                 raise GateParked(price_park(self._clock()), "no price gives the call a cost")

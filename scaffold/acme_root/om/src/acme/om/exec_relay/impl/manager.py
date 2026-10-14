@@ -236,7 +236,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if await self._asked_of(ctx, session_id, placed.pool.id):
             return False
         await self._ask_prepare(ctx, session_id, placed.pool.id, spec, None)
-        OUTCOMES.labels(subsystem="relay", outcome="prepare_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="prepare_asked").inc()
         return True
 
     async def prepare_refusal(self, ctx: TenantContext, session_id: UUID) -> str | None:
@@ -260,7 +260,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if placed.pool is None:
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host makes it")
         await self._ask_prepare(ctx, instance_id, placed.pool.id, spec, session_id)
-        OUTCOMES.labels(subsystem="relay", outcome="instance_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="instance_asked").inc()
 
     async def ask_purge(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> bool:
         ctx.require(Permission.WRITE)
@@ -277,7 +277,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             spec=spec,
         )
         await self._enqueue_workspace(ctx, instance_id, payload)
-        OUTCOMES.labels(subsystem="relay", outcome="purge_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="purge_asked").inc()
         return True
 
     async def holder(self, ctx: TenantContext, session_id: UUID) -> AgentWorkspaceBinding | None:
@@ -313,7 +313,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             spec=spec,
         )
         await self._enqueue_workspace(ctx, session_id, payload)
-        OUTCOMES.labels(subsystem="relay", outcome="release_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="release_asked").inc()
         return True
 
     async def ask_restore(
@@ -361,7 +361,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             snapshot=snapshot,
         )
         item_id = await self._enqueue_workspace(ctx, session_id, payload)
-        OUTCOMES.labels(subsystem="relay", outcome="restore_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="restore_asked").inc()
         return item_id
 
     async def ask_snapshot(
@@ -386,7 +386,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             kept_for=kept_for,
         )
         item_id = await self._enqueue_workspace(ctx, session_id, payload)
-        OUTCOMES.labels(subsystem="relay", outcome="snapshot_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="snapshot_asked").inc()
         return item_id
 
     async def ask_erase(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
@@ -395,7 +395,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
         )
         await self._enqueue_workspace(ctx, session_id, payload)
-        OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="erase_asked").inc()
 
     async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
         # A purge runs below any principal, so the ask lands as the
@@ -416,7 +416,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             app=AppType.WORKER.value,
         )
         await self._work.enqueue_relayed(org_id, row)
-        OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="erase_asked").inc()
 
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         ctx.require(Permission.READ)
@@ -438,7 +438,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if refused is not None:
             log.info("host %s kept no snapshot: %s", host.host_id, refused)
             await self._work.fail_for_good(ctx, row, refused)
-            OUTCOMES.labels(subsystem="relay", outcome="snapshot_refused").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="snapshot_refused").inc()
             return
         assert self._kept is not None
         kept = HostSnapshot(
@@ -454,7 +454,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
             log.info("workspace item %s: its row was no longer held when it was answered", row.id)
-        OUTCOMES.labels(subsystem="relay", outcome="snapshotted").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="snapshotted").inc()
 
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
@@ -475,7 +475,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # that waits loses it.
             log.warning("host %s lost a snapshot it kept: %s", host.host_id, answer.refused)
             await self._work.fail_for_good(ctx, row, answer.refused)
-            OUTCOMES.labels(subsystem="relay", outcome="restore_lost").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="restore_lost").inc()
             return None
         if answer.refused is not None and answer.unbuilt:
             # Its base failed to build there, as when a setup command
@@ -483,14 +483,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # that waits, and a host builds again after a longer wait.
             log.info("host %s did not build a workspace's base: %s", host.host_id, answer.refused)
             await self._work.fail(ctx, row, answer.refused)
-            OUTCOMES.labels(subsystem="relay", outcome="base_unbuilt").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="base_unbuilt").inc()
             return None
         if answer.refused is not None:
             # Back to the pool's lane after a wait, for a host that can give
             # it; the loop waits on the resource meanwhile.
             log.info("host %s refused to prepare a workspace: %s", host.host_id, answer.refused)
             await self._work.defer(ctx, row, self._options.prepare_retry)
-            OUTCOMES.labels(subsystem="relay", outcome="prepare_refused").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="prepare_refused").inc()
             return None
         assert answer.location is not None  # the answer's own rule
         binding = await self._storage.read_binding(host.org_id, session_id)
@@ -509,7 +509,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
             log.info("workspace item %s: its row was no longer held when it was answered", row.id)
-        OUTCOMES.labels(subsystem="relay", outcome="prepared").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="prepared").inc()
         return binding
 
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
@@ -524,7 +524,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
             log.info("workspace item %s: its row was no longer held when it was answered", row.id)
-        OUTCOMES.labels(subsystem="relay", outcome="released").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="released").inc()
 
     # The runner's side.
 
@@ -582,7 +582,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 raise NotFound(f"exec item {item_id} not found")
             return await self._attach(ctx, met, call)
         await self._enqueue(ctx, item, call.by_person, binding.instance_of or item.session_id)
-        OUTCOMES.labels(subsystem="relay", outcome="sent").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="sent").inc()
         return item
 
     async def watch(
@@ -642,7 +642,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             ended = await self._settle(ctx, item, outcome, revoke=True)
             if ended is not None:
                 answered.append(ended)
-                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+                OUTCOMES.labels(subsystem="exec_relay", outcome="interrupted").inc()
         return answered
 
     async def outcome_of(
@@ -692,14 +692,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # unsafe item never runs twice.
             await self._settle(ctx, item, ExecOutcome(), revoke=True)
             await self._work.fail_for_good(ctx, row, "an unsafe exec item runs once")
-            OUTCOMES.labels(subsystem="relay", outcome="unsafe_reclaimed").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="unsafe_reclaimed").inc()
             return False
         cursor = await self._steps.get_cursor(ctx, item.session_id)
         if stale(item.epoch, cursor.epoch):
             outcome = ExecOutcome(refused=StaleExec.code, refused_status=StaleExec.http_status)
             await self._settle(ctx, item, outcome)
             await self._work.fail_for_good(ctx, row, "a command of a run that lost its session")
-            OUTCOMES.labels(subsystem="relay", outcome="stale").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="stale").inc()
             return False
         now = self._clock()
         started = _copy(
@@ -822,7 +822,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # The result is the record; a row its lease left is the queue's
             # to settle, and a claim of it finds the item done.
             log.info("exec item %s: its row was no longer held when its result landed", item.id)
-        OUTCOMES.labels(subsystem="relay", outcome="done").inc()
+        OUTCOMES.labels(subsystem="exec_relay", outcome="done").inc()
         return written
 
     async def extend(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> datetime:
@@ -866,11 +866,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 if await self._storage.write_item(org_id, back, item.version) is None:
                     continue
                 await self._control(ctx, item, StopKind.REVOKE)
-                OUTCOMES.labels(subsystem="relay", outcome="requeued").inc()
+                OUTCOMES.labels(subsystem="exec_relay", outcome="requeued").inc()
             else:
                 if await self._settle(ctx, item, ExecOutcome(), revoke=True) is None:
                     continue
-                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+                OUTCOMES.labels(subsystem="exec_relay", outcome="interrupted").inc()
             settled += 1
         return settled
 
@@ -896,7 +896,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # The host is told nothing: a revoked host's calls are refused.
             if await self._settle(ctx, item, ExecOutcome(stopped=StopKind.REVOKE)) is not None:
                 settled += 1
-                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+                OUTCOMES.labels(subsystem="exec_relay", outcome="interrupted").inc()
         return settled
 
     async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
@@ -984,7 +984,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             return
         cursor = await self._steps.get_cursor(ctx, session_id)
         if stale(epoch, cursor.epoch):
-            OUTCOMES.labels(subsystem="relay", outcome="stale").inc()
+            OUTCOMES.labels(subsystem="exec_relay", outcome="stale").inc()
             raise StaleExec(
                 f"epoch {epoch} is below session {session_id}'s {cursor.epoch}: "
                 "the run that sent it no longer holds the session"
