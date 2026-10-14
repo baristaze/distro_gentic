@@ -75,9 +75,9 @@ environment is.
   its hosts takes no work (its state, what it advertised, and what waits
   on its lanes): ids, counts, times, and states, never what the tenant
   wrote.
-- **Count the fleet.** The sweep reads, across every tenant, the parked
-  sessions by reason and age, the ready loops by plan tier, and the
-  hosts by state, each by bounded labels alone, for the operator
+- **Count the agent fleet.** The sweep reads, across every tenant, the
+  parked sessions by reason and age, the ready loops by plan tier, and
+  the hosts by state, each by bounded labels alone, for the operator
   dashboard.
 - **Purge.** A tenant deleted past its retention loses its share.
 

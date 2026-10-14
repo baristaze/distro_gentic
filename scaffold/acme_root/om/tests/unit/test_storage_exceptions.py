@@ -317,7 +317,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # tenants, each named with its tenant.
         ("RelayManagerInterface", "bindings"),
         # The platform's gauges, read across every tenant like the queue's.
-        ("PlacementOperatorManagerInterface", "fleet_counts"),
+        ("PlacementOperatorManagerInterface", "agent_fleet_counts"),
         # And the sweep's carry of each share the release before wrote into
         # its tenant's own cap, across tenants, acting for none.
         ("PlacementOperatorManagerInterface", "carry_caps"),

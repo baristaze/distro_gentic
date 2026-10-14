@@ -68,7 +68,7 @@ def test_list_group_and_rule(tmp_path):
     code, out, _ = check(tmp_path, "--list")
     assert code == 0
     assert [line.split()[0] for line in out.splitlines()] == RULES
-    assert check(tmp_path, "--group", "fleet")[0] == 0
+    assert check(tmp_path, "--group", "agent-fleet")[0] == 0
     assert check(tmp_path, "--rule", "PLC-10")[0] == 1
     assert check(tmp_path, "--group", "steps")[0] == 2
     assert check(tmp_path, "--rule", "PLC-01")[0] == 2

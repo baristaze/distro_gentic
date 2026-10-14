@@ -19,16 +19,16 @@ from fastapi import APIRouter, Query
 from pydantic import AwareDatetime
 
 from acme.services.api.gateway.admin import OperatorCtx
-from acme.services.api.gateway.resolve import FleetService
-from acme.services.api.types.agent_sessions import StepPageView
-from acme.services.api.types.common import LIMIT_DEFAULT
-from acme.services.api.types.fleet import (
+from acme.services.api.gateway.resolve import AgentFleetService
+from acme.services.api.types.agent_fleet import (
     HostStandingView,
     SessionStandingView,
     SetShareRequest,
     ShapePageView,
     ShareView,
 )
+from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.levers import LeverReadingView
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.put("/orgs/{org_id}/share", response_model=ShareView)
 async def set_share(
-    admin: OperatorCtx, service: FleetService, org_id: UUID, body: SetShareRequest
+    admin: OperatorCtx, service: AgentFleetService, org_id: UUID, body: SetShareRequest
 ) -> ShareView:
     """Writes the org's fair share, a new version, with an entry in the
     org's stream that names the operator. Its loops enqueued from then on go
@@ -48,7 +48,7 @@ async def set_share(
 
 @router.get("/orgs/{org_id}/sessions/{session_id}/standing", response_model=SessionStandingView)
 async def session_standing(
-    admin: OperatorCtx, service: FleetService, org_id: UUID, session_id: UUID
+    admin: OperatorCtx, service: AgentFleetService, org_id: UUID, session_id: UUID
 ) -> SessionStandingView:
     """Why the session is or is not moving: its park, its loop's lease and
     lane, its place in line, its tenant's share, and where it runs."""
@@ -57,7 +57,7 @@ async def session_standing(
 
 @router.get("/orgs/{org_id}/hosts/{host_id}/standing", response_model=HostStandingView)
 async def host_standing(
-    admin: OperatorCtx, service: FleetService, org_id: UUID, host_id: UUID
+    admin: OperatorCtx, service: AgentFleetService, org_id: UUID, host_id: UUID
 ) -> HostStandingView:
     """Why the host takes no work: what it advertised and the version it
     reads, against the floor and what is ready on its lanes."""
@@ -67,7 +67,7 @@ async def host_standing(
 @router.get("/orgs/{org_id}/sessions/{session_id}/shape", response_model=ShapePageView)
 async def session_shape(
     admin: OperatorCtx,
-    service: FleetService,
+    service: AgentFleetService,
     org_id: UUID,
     session_id: UUID,
     after_seq: Annotated[int, Query(ge=0)] = 0,
@@ -81,7 +81,7 @@ async def session_shape(
 @router.get("/orgs/{org_id}/sessions/{session_id}/content", response_model=StepPageView)
 async def session_content(
     admin: OperatorCtx,
-    service: FleetService,
+    service: AgentFleetService,
     org_id: UUID,
     session_id: UUID,
     after_seq: Annotated[int, Query(ge=0)] = 0,
@@ -96,7 +96,7 @@ async def session_content(
 @router.get("/orgs/{org_id}/levers", response_model=LeverReadingView)
 async def read_levers(
     admin: OperatorCtx,
-    service: FleetService,
+    service: AgentFleetService,
     org_id: UUID,
     since: Annotated[AwareDatetime, Query()],
     until: Annotated[AwareDatetime, Query()],

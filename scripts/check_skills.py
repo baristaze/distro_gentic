@@ -104,7 +104,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
 AGENTS = ROOT / "agents"
 LENSES = ROOT / "lenses"
-GROUP_ROW = re.compile(r"^\|\s*`([a-z]+)`\s*\|")
+GROUP_ROW = re.compile(r"^\|\s*`([a-z]+(?:-[a-z]+)*)`\s*\|")
 """A row of the group table in `lenses/README.md`: its first cell is the group id, in backticks."""
 REVIEW = "distro-review-"
 FULL = "distro-review-full"

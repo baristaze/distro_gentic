@@ -40,7 +40,7 @@ class InfraInterface(ABC):
     @abstractmethod
     def get_streams(self) -> StreamsInterface:
         """The streams read live while they are written, on the shared cache:
-        one process's own over the memory cache, shared by a fleet over
+        one process's own over the memory cache, shared by an agent fleet over
         Valkey."""
         ...
 

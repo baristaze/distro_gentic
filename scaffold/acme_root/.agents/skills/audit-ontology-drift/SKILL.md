@@ -37,12 +37,12 @@ The nature of each layer, which the audit holds every concept to:
 - **The engine**: one agent's loop, made durable, bounded, steerable,
   private, and auditable: steps, sessions, context, models, tools,
   policy, streams, steering, identity, agent kinds, budgets, parking,
-  and privacy. It knows no fleet and no product's domain.
+  and privacy. It knows no agent fleet and no product's domain.
 - **The platform**: a fleet of agents for many tenants, unattended, on
   machines it does not always own, with the loop closed: runners,
   placement, workspace hosts and workspaces, watching and steering,
-  intake and feedback, evidence, trust, money, and models as a fleet
-  decision. It is domain-free: it holds no product's nouns.
+  intake and feedback, evidence, trust, money, and models as an agent
+  fleet decision. It is domain-free: it holds no product's nouns.
 - **The product**: its domain: its nouns, its kinds of work, its
   screens, its integrations, and its choices on top of the platform's
   mechanisms: prices, plans, limits, and default values.
@@ -59,13 +59,13 @@ is a record that waits, and one of a product's own resources that one
 holder uses at a time is a scarce resource. Then, for each part, go up
 the chain from the root and find the lowest layer whose own nouns and
 concepts state it. A part that needs a concept only a higher layer
-has (a model, an agent, a session's loop, a fleet, a host, a product's
-domain) cannot be stated below that layer. The highest of those layers
-is the concept's layer. Another word for a part is the same part: a
-line, a queue, or a wait list in front of a scarce resource is one
-part, an ordered wait, and a lease on that resource fenced by a token
-is another. The guideline's work queue states both, and neither needs
-an agent, so that line and its fenced lease are the guideline's,
+has (a model, an agent, a session's loop, an agent fleet, a host, a
+product's domain) cannot be stated below that layer. The highest of
+those layers is the concept's layer. Another word for a part is the same
+part: a line, a queue, or a wait list in front of a scarce resource is
+one part, an ordered wait, and a lease on that resource fenced by a
+token is another. The guideline's work queue states both, and neither
+needs an agent, so that line and its fenced lease are the guideline's,
 whatever word names the line.
 
 A layer's text is the evidence of its nouns and concepts, never the

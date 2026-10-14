@@ -12,6 +12,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentAutomationsServiceInterface,
     AgentBillingServiceInterface,
+    AgentFleetServiceInterface,
     AgentKnowledgeServiceInterface,
     AgentPlaybooksServiceInterface,
     AgentSessionsServiceInterface,
@@ -21,7 +22,6 @@ from acme.services.api.services import (
     EventsServiceInterface,
     EvidenceServiceInterface,
     FlagsServiceInterface,
-    FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
     LeasesServiceInterface,
@@ -62,8 +62,8 @@ def admin_service(connection: HTTPConnection) -> AdminServiceInterface:
     return services_of(connection).get_admin_service()
 
 
-def fleet_service(connection: HTTPConnection) -> FleetServiceInterface:
-    return services_of(connection).get_fleet_service()
+def agent_fleet_service(connection: HTTPConnection) -> AgentFleetServiceInterface:
+    return services_of(connection).get_agent_fleet_service()
 
 
 def events_service(connection: HTTPConnection) -> EventsServiceInterface:
@@ -185,7 +185,7 @@ WebhooksService = Annotated[WebhooksServiceInterface, Depends(webhooks_service)]
 AgentSessionsService = Annotated[AgentSessionsServiceInterface, Depends(agent_sessions_service)]
 EvidenceService = Annotated[EvidenceServiceInterface, Depends(evidence_service)]
 HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
-FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
+AgentFleetService = Annotated[AgentFleetServiceInterface, Depends(agent_fleet_service)]
 RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
 AgentAutomationsService = Annotated[

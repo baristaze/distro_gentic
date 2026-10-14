@@ -10,7 +10,7 @@ probed, and refused, and its egress. It leaves
 the isolation modes a host advertises and the ceilings its owner sets to
 `placement`, a person's commands in a workspace to `watch`, the
 untrusted mark and the rule of two to `wall`, and the sweep that purges
-an unclaimed instance to `fleet`.
+an unclaimed instance to `agent-fleet`.
 
 ## WSP-01 A workspace is a cache, and an idle session holds no machine
 

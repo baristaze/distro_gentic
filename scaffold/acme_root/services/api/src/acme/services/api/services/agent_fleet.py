@@ -1,4 +1,4 @@
-"""The fleet service: the platform's operator routes, in views. An operator
+"""The agent fleet service: the platform's operator routes, in views. An operator
 writes a tenant's fair share, reads where one of its sessions' work stands
 and what one of its hosts is handed, reads a session's shape, and reads which
 levers its sessions reached before they stalled; opening a session's
@@ -10,18 +10,18 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import OperatorContext
-from acme.services.api.types.agent_sessions import StepPageView
-from acme.services.api.types.fleet import (
+from acme.services.api.types.agent_fleet import (
     HostStandingView,
     SessionStandingView,
     SetShareRequest,
     ShapePageView,
     ShareView,
 )
+from acme.services.api.types.agent_sessions import StepPageView
 from acme.services.api.types.levers import LeverReadingView
 
 
-class FleetServiceInterface(ABC):
+class AgentFleetServiceInterface(ABC):
     @abstractmethod
     async def set_share(
         self, admin: OperatorContext, org_id: UUID, body: SetShareRequest

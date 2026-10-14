@@ -41,7 +41,7 @@ QUEUE_PANELS = {
 """The last row of both dashboards, the Postgres queue's, by title, and the
 field of the sweep's line each one draws; its metric is `acme_<field>`."""
 
-FLEET_PANELS = {
+AGENT_FLEET_PANELS = {
     "Parked sessions by reason and age": "acme_sessions_parked",
     "Ready loops by plan tier": "acme_loops_ready",
     "Hosts by state": "acme_hosts",
@@ -95,20 +95,22 @@ def _cloud_titles() -> list[str]:
 def test_the_cloud_dashboard_carries_every_local_panel_by_title() -> None:
     local = _grafana_titles()
     cloud = _cloud_titles()
-    rows = len(QUEUE_PANELS) + len(FLEET_PANELS)
+    rows = len(QUEUE_PANELS) + len(AGENT_FLEET_PANELS)
     assert len(local) == 5 + rows, (
         "the local dashboard is the five panels an operator asks first, the queue's row, "
         "and the platform's"
     )
     first = [CLOUD_TITLE_FOR.get(title, title) for title in local[:5]]
     assert cloud[:5] == first, "the first cloud widgets are the local panels, in order"
-    assert local[5:] == [*QUEUE_PANELS, *FLEET_PANELS], "the local dashboard ends on both rows"
-    fleet = [CLOUD_TITLE_FOR.get(title, title) for title in FLEET_PANELS]
-    assert cloud[-rows:] == [*QUEUE_PANELS, *fleet], "and so does the cloud's"
+    assert local[5:] == [*QUEUE_PANELS, *AGENT_FLEET_PANELS], (
+        "the local dashboard ends on both rows"
+    )
+    agent_fleet = [CLOUD_TITLE_FOR.get(title, title) for title in AGENT_FLEET_PANELS]
+    assert cloud[-rows:] == [*QUEUE_PANELS, *agent_fleet], "and so does the cloud's"
 
 
 def test_the_cloud_dashboard_adds_the_backing_services_and_the_alarmed_reads() -> None:
-    extra = _cloud_titles()[5 : -(len(QUEUE_PANELS) + len(FLEET_PANELS))]
+    extra = _cloud_titles()[5 : -(len(QUEUE_PANELS) + len(AGENT_FLEET_PANELS))]
     assert extra == [
         "Database CPU and connections",
         "Cache CPU",
@@ -236,7 +238,7 @@ def test_the_platforms_row_draws_each_signal_by_bounded_labels_on_both_dashboard
     panels = {panel["title"]: panel for panel in json.loads(GRAFANA.read_text())["panels"]}
     body = json.loads(re.sub(r"\$\{\w+\}", "null", CLOUD.read_text()))
     widgets = {widget["properties"]["title"]: widget["properties"] for widget in body["widgets"]}
-    for title, metric in FLEET_PANELS.items():
+    for title, metric in AGENT_FLEET_PANELS.items():
         (target,) = panels[title]["targets"]
         assert metric in target["expr"], title
         assert _grafana_labels(target["expr"], target["legendFormat"]) <= BOUNDED_LABELS, title

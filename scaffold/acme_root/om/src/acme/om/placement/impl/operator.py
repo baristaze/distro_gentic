@@ -31,8 +31,8 @@ from acme.om.placement.rules import (
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.types.share import FairShare, ShareStanding, TierShare
 from acme.om.placement.types.standing import (
+    AgentFleetCounts,
     Count,
-    FleetCounts,
     HostStanding,
     LaneLoad,
     LoopStanding,
@@ -258,7 +258,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             ),
         )
 
-    async def fleet_counts(self) -> FleetCounts:
+    async def agent_fleet_counts(self) -> AgentFleetCounts:
         now = self._clock()
         parked = await self._sessions.count_parked(tuple(now - cut for _, cut in PARK_AGES))
         ages = range(len(PARK_AGES) + 1)
@@ -275,7 +275,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             hosts[host_state(seen, at_floor)] += count
         # Every reason and age is a series, zero included, so a park that
         # ends reads as a fall to zero and never as a line that stops.
-        return FleetCounts(
+        return AgentFleetCounts(
             parked=tuple(
                 Count(
                     labels=(reason.value, park_age_label(age)),

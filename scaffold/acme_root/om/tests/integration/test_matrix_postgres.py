@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from contracts.loops import reply, said
-from contracts.matrix import CATCH_ALL, OPUS, SONNET, fleet_over
+from contracts.matrix import CATCH_ALL, OPUS, SONNET, agent_fleet_over
 from integration.test_money_postgres import an_owner, refused
 from sqlalchemy import text
 
@@ -82,39 +82,39 @@ async def test_a_session_resolves_keeps_and_renews_its_fill_through_the_matrix_o
     provider on that model, keeps it across the next publication, and
     switches off it at its next loop once the provider retires it."""
     owner = await an_owner(storage, tmp_path)
-    fleet = await fleet_over(tmp_path, storage=storage, owner=owner)
-    first = await fleet.publish()
-    session_id = await fleet.loop.start()
-    await fleet.loop.say(session_id, "What is the total?")
-    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    agent_fleet = await agent_fleet_over(tmp_path, storage=storage, owner=owner)
+    first = await agent_fleet.publish()
+    session_id = await agent_fleet.loop.start()
+    await agent_fleet.loop.say(session_id, "What is the total?")
+    agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
 
-    ran = await fleet.loop.loops.run(owner, session_id)
+    ran = await agent_fleet.loop.loops.run(owner, session_id)
 
     assert ran.end is RunEnd.ENDED, ran
-    assert [call.model for call in fleet.loop.anthropic.calls] == [SONNET.model]
-    pin = await fleet.matrix.matrix.get_pin(owner, session_id)
+    assert [call.model for call in agent_fleet.loop.anthropic.calls] == [SONNET.model]
+    pin = await agent_fleet.matrix.matrix.get_pin(owner, session_id)
     assert (pin.matrix_version, pin.fill_set_version) == (first.number, 1)
 
-    second = await fleet.publish(
+    second = await agent_fleet.publish(
         (MatrixRow(key=MatrixKey(role=MAIN), fills=(OPUS,)), *CATCH_ALL[1:])
     )
-    await fleet.loop.say(session_id, "And the average?")
-    fleet.loop.anthropic.add(reply(said("The average is 3.")))
-    assert (await fleet.loop.loops.run(owner, session_id)).end is RunEnd.ENDED
-    assert fleet.loop.anthropic.calls[-1].model == SONNET.model, "kept across the publication"
+    await agent_fleet.loop.say(session_id, "And the average?")
+    agent_fleet.loop.anthropic.add(reply(said("The average is 3.")))
+    assert (await agent_fleet.loop.loops.run(owner, session_id)).end is RunEnd.ENDED
+    assert agent_fleet.loop.anthropic.calls[-1].model == SONNET.model, "kept across the publication"
 
-    await fleet.matrix.matrix_operator.retire_model(fleet.admin, ModelRef.of(SONNET))
-    await fleet.loop.say(session_id, "And the median?")
-    fleet.loop.anthropic.add(reply(said("The median is 2."), model=OPUS.model))
-    assert (await fleet.loop.loops.run(owner, session_id)).end is RunEnd.ENDED
+    await agent_fleet.matrix.matrix_operator.retire_model(agent_fleet.admin, ModelRef.of(SONNET))
+    await agent_fleet.loop.say(session_id, "And the median?")
+    agent_fleet.loop.anthropic.add(reply(said("The median is 2."), model=OPUS.model))
+    assert (await agent_fleet.loop.loops.run(owner, session_id)).end is RunEnd.ENDED
 
-    assert fleet.loop.anthropic.calls[-1].model == OPUS.model
+    assert agent_fleet.loop.anthropic.calls[-1].model == OPUS.model
     (switched,) = [
         step.header.fills
-        for step in await fleet.loop.history(session_id)
+        for step in await agent_fleet.loop.history(session_id)
         if isinstance(step.header, SwitchedHeader) and step.header.fills is not None
     ]
     assert (switched.from_fill, switched.to_fill) == (SONNET, OPUS)
     assert switched.reason is SwitchReason.RETIRED
-    pin = await fleet.matrix.matrix.get_pin(owner, session_id)
+    pin = await agent_fleet.matrix.matrix.get_pin(owner, session_id)
     assert (pin.matrix_version, pin.fill_set_version) == (second.number, 2)

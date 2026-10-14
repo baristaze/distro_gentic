@@ -1,20 +1,20 @@
 ---
-name: distro-review-fleet
-description: "Platform review through the Fleet lenses of the distro_gentic spec: The Agents a Platform Ships; Failure at Fleet Scale; Operations. For a change in this area, or as one leg of distro-review-full."
+name: distro-review-agent-fleet
+description: "Platform review through the Agent Fleet lenses of the distro_gentic spec: The Agents a Platform Ships; Failure at Agent Fleet Scale; Operations. For a change in this area, or as one leg of distro-review-full."
 allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git show:*), Bash(git log:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git merge-base:*), Bash(git symbolic-ref:*), Bash(git ls-files:*)
 ---
 
-# distro-review-fleet
+# distro-review-agent-fleet
 
 Judge the code from one perspective only: the lenses in
-`../../lenses/fleet.md`. Other perspectives have their own skills; do
+`../../lenses/agent-fleet.md`. Other perspectives have their own skills; do
 not borrow their rules, and do not flag anything a lens in this file
 does not name. The spec is at `../../distro_gentic_spec.md` when a lens
 needs its source read in full. A path that starts with `../` is read
 from this skill's folder as `realpath` resolves it. If either file is
 missing, stop and say the installation is incomplete.
 
-This pass covers these sections of the spec: The Agents a Platform Ships; Failure at Fleet Scale; Operations.
+This pass covers these sections of the spec: The Agents a Platform Ships; Failure at Agent Fleet Scale; Operations.
 
 A lens that leans on a rule of the engine or of the guideline judges
 the platform's rule only. The engine's own rule is its own review's
@@ -110,7 +110,7 @@ under review. This skill reads and reports.
 ## Output
 
 ```markdown
-# Platform review: Fleet
+# Platform review: Agent Fleet
 
 **Scope.** <what was reviewed, in one line>
 **Lenses.** <n> applied, <p> passed, <f> findings, <u> unverified, <x> not applicable

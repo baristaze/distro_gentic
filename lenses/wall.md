@@ -10,7 +10,7 @@ exfiltration, operator access, storage, retention, and the crossing
 itself. It leaves a host's own credential and what a host holds to
 `placement`, a workspace's stripped environment and its egress to
 `workspaces`, the routing of a comment or a chat message to `intake` and
-`watch`, and the sweep that runs the retention duty to `fleet`.
+`watch`, and the sweep that runs the retention duty to `agent-fleet`.
 
 ## WAL-01 Executor, principal, spender, and actor are four answers
 
@@ -262,7 +262,7 @@ expired, and purges shape past its own lifetime. The audit holds each
 key destruction as the key service reported it, and a tenant with its
 own key service sees the same event in its own logs.
 
-**Source.** Data, Retention, and the Wall; Failure at Fleet Scale.
+**Source.** Data, Retention, and the Wall; Failure at Agent Fleet Scale.
 
 **Look for.** The sweep's retention duty; what the audit records of each
 key destruction, and where that record comes from.

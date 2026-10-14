@@ -6,10 +6,11 @@
 
 The engine never picks a model: an injected resolver turns a session's
 model roles into fills, once, and a switch is a step of the history (ADR
-1005). The platform decides for the whole fleet which model serves which
-job, and changes that decision without a release of code. It also pays
-a provider on a tenant's own key when the tenant holds one, and agent billing
-refuses a call on the platform's key for such a tenant (ADR 2011).
+1005). The platform decides for the whole agent fleet which model serves
+which job, and changes that decision without a release of code. It also
+pays a provider on a tenant's own key when the tenant holds one, and
+agent billing refuses a call on the platform's key for such a tenant
+(ADR 2011).
 
 ## Decision
 

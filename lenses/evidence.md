@@ -8,8 +8,8 @@ provenance, hypotheses and findings, the validation policy and its
 protected checks, the baseline, statistical evidence, the result gate,
 the results contract, and acceptance and benchmarks. It leaves feedback
 that returns after delivery and the twin each integration has to
-`intake`, a validation session's place on the queue to `fleet`, and the
-engine's done rules to the engine.
+`intake`, a validation session's place on the queue to `agent-fleet`,
+and the engine's done rules to the engine.
 
 ## EVD-01 The platform enforces the loop's promises
 

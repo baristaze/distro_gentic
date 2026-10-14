@@ -30,7 +30,7 @@ side, started in `main.py`.
   past their retention, a hold nobody settled, settled through its gate,
   an exec item whose host's lease ran out, and a session pending with no
   loop, whose run it asks for again (`sessions.py`;
-  [ADR 2015](../../docs/adr/2015-the-fleet-recovers-through-the-sweep.md)).
+  [ADR 2015](../../docs/adr/2015-the-agent-fleet-recovers-through-the-sweep.md)).
   A host never runs it: it holds no worker, no manager, and no storage.
 
 `serve` runs the three; `health` asks the running process's `/healthz`.

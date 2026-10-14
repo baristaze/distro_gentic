@@ -87,7 +87,7 @@ class Count(Platform):
     value: int
 
 
-class FleetCounts(Platform):
+class AgentFleetCounts(Platform):
     """The platform's signals across every tenant, each by bounded labels
     alone: the parked sessions by reason and age, the ready loops by plan
     tier, and the hosts by state."""

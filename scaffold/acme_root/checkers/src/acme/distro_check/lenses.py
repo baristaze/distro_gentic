@@ -20,7 +20,7 @@ GROUPS: dict[str, str] = {
     "evidence": "EVD",
     "wall": "WAL",
     "money": "MNY",
-    "fleet": "FLT",
+    "agent-fleet": "FLT",
 }
 """Each lens group and the id prefix of its lenses, in the order of the platform's `lenses/README.md`."""
 

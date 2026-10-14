@@ -32,7 +32,9 @@ TEMPLATE = ROOT / "skills" / "_template" / "review.SKILL.md"
 LENSES = ROOT / "lenses"
 SKILLS = ROOT / "skills"
 CHECK_HELP = "exit 1 when a generated skill is stale; never write"
-TABLE_ROW = re.compile(r"^\|\s*`([a-z]+)`\s*\|\s*`[A-Z]{2,3}`\s*\|\s*`([a-z]+\.md)`\s*\|\s*(.+?)\s*\|\s*$")
+TABLE_ROW = re.compile(
+    r"^\|\s*`([a-z]+(?:-[a-z]+)*)`\s*\|\s*`[A-Z]{2,3}`\s*\|\s*`([a-z]+(?:-[a-z]+)*\.md)`\s*\|\s*(.+?)\s*\|\s*$"
+)
 """A row of the group table: the group id, its prefix, its file, and the sections it covers."""
 
 

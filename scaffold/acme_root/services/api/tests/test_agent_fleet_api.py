@@ -347,14 +347,14 @@ async def test_a_hosts_standing_names_its_state_and_what_its_lanes_hold(
     assert elsewhere.status_code == 404
 
 
-async def test_the_fleet_counts_carry_bounded_labels_alone(
+async def test_the_agent_fleet_counts_carry_bounded_labels_alone(
     client: httpx.AsyncClient, container: AppContainer, owner: dict[str, str]
 ) -> None:
     """Every series the sweep sets is labelled by a reason, an age, a plan
     tier, or a state; a tenant's own lane is one label for every tenant."""
     org_id = await org_of(client, owner)
     await a_session_that_was_told(client, owner)
-    counts = await container.managers.placement_operator.fleet_counts()
+    counts = await container.managers.placement_operator.agent_fleet_counts()
     assert {labels for count in counts.parked for labels in [count.labels]} >= {
         ("budget", "under_1h"),
         ("person", "over_1d"),

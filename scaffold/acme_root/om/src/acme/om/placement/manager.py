@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     # The work queue fixes its payloads by kind, and the payloads of the
     # kinds a host runs are this namespace's, so the work item
     # is named here for the type checker alone.
-    from acme.om.placement.types.standing import FleetCounts, HostStanding, SessionStanding
+    from acme.om.placement.types.standing import AgentFleetCounts, HostStanding, SessionStanding
     from acme.om.work.types.work_item import WorkItem
 
 
@@ -151,7 +151,7 @@ class PlacementOperatorManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def fleet_counts(self) -> FleetCounts:
+    async def agent_fleet_counts(self) -> AgentFleetCounts:
         """Platform-internal: the sweep's read of the platform's signals,
         across every tenant, each by bounded labels alone: the parked
         sessions by park reason and age, the ready loops by plan tier (every

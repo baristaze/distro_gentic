@@ -2,7 +2,7 @@
 maintenance worker's pass carries the platform's duties beside the purges,
 and a session runner's takes back expired leases. A program a customer runs
 inside its own wall, a host, never runs it: it holds no worker, no
-manager, and no storage, so it cannot reach the fleet."""
+manager, and no storage, so it cannot reach the agent fleet."""
 
 import ast
 import tomllib
@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = WorkerLoop.__module__.split(".")[0]
 """The root package every distribution of the scaffold shares."""
 
-FLEET = (f"{PACKAGE}.workers", f"{PACKAGE}.om")
-"""What a program needs to reach the fleet: a worker's loop, or the managers
+AGENT_FLEET = (f"{PACKAGE}.workers", f"{PACKAGE}.om")
+"""What a program needs to reach the agent fleet: a worker's loop, or the managers
 and the storage beneath them."""
 
 INSIDE = (f"{PACKAGE}-client", f"{PACKAGE}-infra", f"{PACKAGE}-integrations")
@@ -69,7 +69,7 @@ def test_the_maintenance_sweep_carries_the_platforms_duties(tmp_path: Path) -> N
 
 def test_a_host_never_runs_the_sweep() -> None:
     """Every program under `apps/`, a host's among them,
-    imports nothing that reaches the fleet and depends on no distribution
+    imports nothing that reaches the agent fleet and depends on no distribution
     that does, the infra it runs its work through and the integrations it
     starts servers through included; and the sweep's loop is built only by
     a cloud worker."""
@@ -78,7 +78,7 @@ def test_a_host_never_runs_the_sweep() -> None:
     assert apps / "host" in programs, "the host is one of them"
     inside = [*programs, ROOT / "infra", ROOT / "integrations"]
     for path in [p for under in inside for p in sources(under)]:
-        reached = {name for name in imported(path) if name.startswith(FLEET)}
+        reached = {name for name in imported(path) if name.startswith(AGENT_FLEET)}
         assert not reached, f"{path.relative_to(ROOT)} imports {sorted(reached)}"
     for program in programs:
         project = tomllib.loads((program / "pyproject.toml").read_text())["project"]

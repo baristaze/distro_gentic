@@ -83,10 +83,10 @@ These are the invariants. Each links the section that states it.
 - [Evidence](#evidence)
 - [Trust](#trust)
 - [Money](#money)
-- [Models Are a Fleet Decision](#models-are-a-fleet-decision)
+- [Models Are an Agent Fleet Decision](#models-are-an-agent-fleet-decision)
 - [The Agents a Platform Ships](#the-agents-a-platform-ships)
 - [Data, Retention, and the Wall](#data-retention-and-the-wall)
-- [Failure at Fleet Scale](#failure-at-fleet-scale)
+- [Failure at Agent Fleet Scale](#failure-at-agent-fleet-scale)
 - [Operations](#operations)
 - [Deviations from the Guideline](#deviations-from-the-guideline)
 - [The Repository](#the-repository)
@@ -1023,7 +1023,7 @@ platform's key.
 > **Principle:** One gate, one ledger, one price source. Rate and spend
 > are different limits, and neither is reported as the other.
 
-## Models Are a Fleet Decision
+## Models Are an Agent Fleet Decision
 
 The platform is the expert on which model serves which task. It answers
 with a **matrix**: for each environment, model size, model role, agent
@@ -1146,7 +1146,7 @@ secrets, model keys, integration credentials, and the history.
 Everything that does cross (enrollment, claims, stream parts, artifacts,
 results) is opened from inside the wall and verified by hash.
 
-## Failure at Fleet Scale
+## Failure at Agent Fleet Scale
 
 When a provider fails, its outage signal turns on and every session
 that meets it parks within a second, naming the provider. When the
@@ -1237,8 +1237,8 @@ story; the rest is its planned shape:
   | `intake` | `INT` | Work In, Results Out |
   | `evidence` | `EVD` | Evidence |
   | `wall` | `WAL` | Trust; Data, Retention, and the Wall |
-  | `money` | `MNY` | Money; Models Are a Fleet Decision |
-  | `fleet` | `FLT` | The Agents a Platform Ships; Failure at Fleet Scale; Operations |
+  | `money` | `MNY` | Money; Models Are an Agent Fleet Decision |
+  | `agent-fleet` | `FLT` | The Agents a Platform Ships; Failure at Agent Fleet Scale; Operations |
 
 - **Skills**, named `distro-*` and following the Agent Skills standard: a
   review per lens group and a full review, `distro-explain`,

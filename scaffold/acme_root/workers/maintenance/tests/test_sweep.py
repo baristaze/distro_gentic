@@ -72,7 +72,7 @@ from acme.om.orchestrations.types.orchestration import (
     OrchestrationStatus,
 )
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.placement.types.standing import Count, FleetCounts
+from acme.om.placement.types.standing import AgentFleetCounts, Count
 from acme.om.privacy.types.session_privacy import SessionKey, SessionPrivacy
 from acme.om.steps.types.header import InputHeader
 from acme.om.steps.types.page import StepCursor
@@ -85,9 +85,9 @@ from acme.om.work.types.work_item import WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.loop import (
     AcrossStep,
+    AgentFleetStep,
     ChoreStep,
     ChoreTenants,
-    FleetStep,
     LoopOptions,
     PurgeStep,
     TallyStep,
@@ -206,7 +206,7 @@ def sweeping(
     outbox: OutboxRelayInterface | None = None,
     across: dict[str, AcrossStep] | None = None,
     tally: TallyStep | None = None,
-    fleet: FleetStep | None = None,
+    agent_fleet: AgentFleetStep | None = None,
     chores: dict[str, ChoreStep] | None = None,
     chore_tenants: ChoreTenants | None = None,
 ) -> WorkerLoop:
@@ -216,7 +216,7 @@ def sweeping(
         purges=purges,
         across=across,
         tally=tally,
-        fleet=fleet,
+        agent_fleet=agent_fleet,
         chores=chores,
         chore_tenants=chore_tenants,
         handlers={},
@@ -1114,23 +1114,25 @@ async def test_a_pass_sets_the_platforms_gauges_whole_by_their_labels(tmp_path: 
     whole from one read: a tier no loop waits on any more leaves the gauge,
     and a read that fails leaves every gauge as it was."""
     container = build_container(tmp_path)
-    reads: list[FleetCounts | Exception] = [
-        FleetCounts(
+    reads: list[AgentFleetCounts | Exception] = [
+        AgentFleetCounts(
             parked=(Count(labels=("provider", "under_1h"), value=4),),
             loops_ready=(Count(labels=("pro",), value=2), Count(labels=("(own)",), value=1)),
             hosts=(Count(labels=("online",), value=3),),
         ),
-        FleetCounts(parked=(), loops_ready=(Count(labels=("standard",), value=5),), hosts=()),
+        AgentFleetCounts(parked=(), loops_ready=(Count(labels=("standard",), value=5),), hosts=()),
         RuntimeError("the database is down"),
     ]
 
-    async def fleet() -> FleetCounts:
+    async def agent_fleet() -> AgentFleetCounts:
         read = reads.pop(0)
         if isinstance(read, Exception):
             raise read
         return read
 
-    loop = sweeping(container, listed(service_contexts(0)), {}, fast_options(), fleet=fleet)
+    loop = sweeping(
+        container, listed(service_contexts(0)), {}, fast_options(), agent_fleet=agent_fleet
+    )
     await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
     sample = REGISTRY.get_sample_value
     assert sample("acme_sessions_parked", {"reason": "provider", "age": "under_1h"}) == 4

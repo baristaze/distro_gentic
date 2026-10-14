@@ -1,11 +1,12 @@
-# ADR 2015: The fleet recovers through the sweep
+# ADR 2015: The agent fleet recovers through the sweep
 
 **Status**: accepted (2026-10-03)
 
 ## Context
 
-The spec's Failure at Fleet Scale has the platform add its duties to the
-guideline's sweep, which every cloud worker runs and no host does.
+The spec's Failure at Agent Fleet Scale has the platform add its duties
+to the guideline's sweep, which every cloud worker runs and no host
+does.
 
 The engine settles a lost call's hold when the session's next run finds
 the call open. A hold whose run died before its request was written, or

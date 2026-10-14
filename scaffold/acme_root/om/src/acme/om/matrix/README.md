@@ -1,8 +1,8 @@
 # The model matrix
 
 Which model does each job of each session, as the platform decides it
-for the whole fleet. This is one of the kinds of thing [Acme is made
-of](../../../../README.md).
+for the whole agent fleet. This is one of the kinds of thing [Acme is
+made of](../../../../README.md).
 
 ## What it holds
 

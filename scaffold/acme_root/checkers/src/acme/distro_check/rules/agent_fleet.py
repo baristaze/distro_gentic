@@ -1,4 +1,4 @@
-"""The fleet group: the operator dashboard's labels are bounded."""
+"""The agent fleet group: the operator dashboard's labels are bounded."""
 
 from __future__ import annotations
 

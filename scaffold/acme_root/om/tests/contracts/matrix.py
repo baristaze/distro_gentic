@@ -126,7 +126,7 @@ def operator() -> OperatorContext:
 
 
 @dataclass
-class Fleet:
+class AgentFleet:
     money: Money
     trust: TrustManagers
     matrix: MatrixManagers
@@ -180,7 +180,7 @@ class Fleet:
         return await operators.publish(self.admin, version.number)
 
 
-async def fleet_over(
+async def agent_fleet_over(
     tmp_path: Path,
     *,
     options: MatrixOptions | None = None,
@@ -190,7 +190,7 @@ async def fleet_over(
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
     kinds: tuple[AgentKind, ...] = (ASSISTANT, DELIVERY),
-) -> Fleet:
+) -> AgentFleet:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner, whose account opens on `funding`; a suite over Postgres
     hands in both. `kinds` go to the loop."""
@@ -230,4 +230,4 @@ async def fleet_over(
     await money.open(
         funding=funding, key_ref=None if funding is FundingMode.PLATFORM else "own-keys"
     )
-    return Fleet(money, trusted, built, layer, operator(), probe, trust_infra, keyed)
+    return AgentFleet(money, trusted, built, layer, operator(), probe, trust_infra, keyed)

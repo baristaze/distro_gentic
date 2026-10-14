@@ -11,9 +11,9 @@ A path that starts with `../` is read from this skill's folder as
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: The Agents a Platform Ships,
 Session Runners, Workspaces and Isolation (Isolation Levels), Models Are
-a Fleet Decision.
-Lenses: `../../lenses/fleet.md`, and `../../lenses/placement.md` for
-where a kind lives.
+an Agent Fleet Decision.
+Lenses: `../../lenses/agent-fleet.md`, and `../../lenses/placement.md`
+for where a kind lives.
 
 ## Input
 

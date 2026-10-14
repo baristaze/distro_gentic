@@ -11,7 +11,7 @@ relay transport that carries a tool call into a customer's wall, and the
 cloud pool's machine per session. It leaves a workspace's isolation and
 egress to `workspaces`, a person's commands on a workspace to `watch`,
 the four identities and how a secret is resolved to `wall`, and the
-sweep's duties to `fleet`.
+sweep's duties to `agent-fleet`.
 
 ## PLC-01 A session becomes work of a kind, claimed where it can run
 

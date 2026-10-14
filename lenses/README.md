@@ -22,8 +22,8 @@ names that rule without restating it.
 | `intake`     | `INT`  | `intake.md`     | Work In, Results Out |
 | `evidence`   | `EVD`  | `evidence.md`   | Evidence |
 | `wall`       | `WAL`  | `wall.md`       | Trust; Data, Retention, and the Wall |
-| `money`      | `MNY`  | `money.md`      | Money; Models Are a Fleet Decision |
-| `fleet`      | `FLT`  | `fleet.md`      | The Agents a Platform Ships; Failure at Fleet Scale; Operations |
+| `money`      | `MNY`  | `money.md`      | Money; Models Are an Agent Fleet Decision |
+| `agent-fleet`      | `FLT`  | `agent-fleet.md`      | The Agents a Platform Ships; Failure at Agent Fleet Scale; Operations |
 
 The groups are the ones the spec plans in The Repository.
 

@@ -11,9 +11,9 @@ A path that starts with `../` is read from this skill's folder as
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Work In, Results Out
 (Agent Automations, Feedback Routing), Money (Metering and Limits),
-Failure at Fleet Scale.
-Lenses: `../../lenses/intake.md`, and `../../lenses/fleet.md` for what
-fires on time.
+Failure at Agent Fleet Scale.
+Lenses: `../../lenses/intake.md`, and `../../lenses/agent-fleet.md` for
+what fires on time.
 
 ## Input
 

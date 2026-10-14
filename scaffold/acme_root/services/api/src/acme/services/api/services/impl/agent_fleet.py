@@ -13,11 +13,9 @@ from acme.om.steps.types.header import (
 )
 from acme.om.trust import TrustOperatorManagerInterface
 from acme.om.trust.types.shape import StepShape
-from acme.services.api.services.fleet import FleetServiceInterface
+from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.impl.agent_sessions import park_view, step_view
-from acme.services.api.types.agent_sessions import StepPageView
-from acme.services.api.types.common import clamp_limit
-from acme.services.api.types.fleet import (
+from acme.services.api.types.agent_fleet import (
     HostStandingView,
     LaneLoadView,
     LoopStandingView,
@@ -27,6 +25,8 @@ from acme.services.api.types.fleet import (
     ShareView,
     StepShapeView,
 )
+from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.common import clamp_limit
 from acme.services.api.types.hosts import AdvertisementView
 from acme.services.api.types.levers import LeverReadingView
 
@@ -51,7 +51,7 @@ def shape_view(shape: StepShape) -> StepShapeView:
     )
 
 
-class FleetServiceImpl(FleetServiceInterface):
+class AgentFleetServiceImpl(AgentFleetServiceInterface):
     def __init__(
         self,
         placement: PlacementOperatorManagerInterface,

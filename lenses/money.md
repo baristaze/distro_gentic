@@ -1,15 +1,15 @@
 # Money
 
-Group id: `money`. Covers Money and Models Are a Fleet Decision of
-`distro_gentic_spec.md`.
+Group id: `money`. Covers Money and Models Are an Agent Fleet Decision
+of `distro_gentic_spec.md`.
 
 This group judges everything behind the engine's budget gate: metering,
 limits and their windows, units, charges, and agent billing, rate and spend
 limits, outages and anomalies, the one ledger and the one price source,
 and the model matrix. It leaves the gate itself, the hold, and usage to
-the engine; the park a provider outage causes across the fleet and the
-hold the sweep settles to `fleet`; and a tenant's provider key as a
-secret to `wall`.
+the engine; the park a provider outage causes across the agent fleet and
+the hold the sweep settles to `agent-fleet`; and a tenant's provider key
+as a secret to `wall`.
 
 ## MNY-01 One aggregation serves every view of usage
 
@@ -237,7 +237,7 @@ before the role's; in one that holds none, it resolves as a role asked
 no size. A version is published only with a row for each size a kind
 asks.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** The matrix's keys and its resolution order; the size a
 question carries for a role its kind asks of; the check for the row that
@@ -261,7 +261,7 @@ a size a kind asks.
 A running session keeps the version it started with until it switches
 explicitly.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** How the matrix is edited and published; which version a
 running session resolves with.
@@ -277,7 +277,7 @@ with the latest version without an explicit switch.
 
 **Principle.** A model enters the matrix only after its price does.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** The check, when a version is published, that every fill
 has a price in the price table.
@@ -295,7 +295,7 @@ or only a default price.
 passes for the model roles it will serve. Benchmarks never gate a code
 change; they gate a matrix release.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** What a fill needs before it is published; where benchmarks
 run as a gate.
@@ -314,7 +314,7 @@ change.
 own keys may override the fill for a model role, among qualified fills
 from providers it holds keys for.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** Where a tenant can set a model or a fill; what an override
 accepts.
@@ -332,7 +332,7 @@ one from a provider the tenant holds no key for.
 **Principle.** A tenant that requires zero data retention, or a region,
 is resolved only to fills that support it, fallbacks included.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** Where the tenant's retention and region requirements
 filter the matrix; the fallback chain.
@@ -349,7 +349,7 @@ zero retention or its region.
 **Principle.** When a provider retires a model, sessions on it
 re-resolve at their next loop, with a `switched` step.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** What becomes of sessions on a retired model, and when.
 

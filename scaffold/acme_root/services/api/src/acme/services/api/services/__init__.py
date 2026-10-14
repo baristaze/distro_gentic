@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
 from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
@@ -16,7 +17,6 @@ from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface
-from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.leases import LeasesServiceInterface
@@ -39,6 +39,7 @@ __all__ = [
     "AdminServiceInterface",
     "AgentAutomationsServiceInterface",
     "AgentBillingServiceInterface",
+    "AgentFleetServiceInterface",
     "AgentKnowledgeServiceInterface",
     "AgentPlaybooksServiceInterface",
     "AgentSessionsServiceInterface",
@@ -48,7 +49,6 @@ __all__ = [
     "EventsServiceInterface",
     "EvidenceServiceInterface",
     "FlagsServiceInterface",
-    "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
     "LeasesServiceInterface",
@@ -102,7 +102,7 @@ class ServicesInterface(ABC):
     def get_hosts_service(self) -> HostsServiceInterface: ...
 
     @abstractmethod
-    def get_fleet_service(self) -> FleetServiceInterface: ...
+    def get_agent_fleet_service(self) -> AgentFleetServiceInterface: ...
 
     @abstractmethod
     def get_relay_service(self) -> RelayServiceInterface: ...

@@ -19,11 +19,11 @@ from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
+    AgentFleetServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
     FlagsServiceInterface,
-    FleetServiceInterface,
     HostsServiceInterface,
     LeasesServiceInterface,
     MediaServiceInterface,
@@ -44,6 +44,7 @@ from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_automations import AgentAutomationsServiceImpl
 from acme.services.api.services.impl.agent_billing import AgentBillingServiceImpl
+from acme.services.api.services.impl.agent_fleet import AgentFleetServiceImpl
 from acme.services.api.services.impl.agent_knowledge import AgentKnowledgeServiceImpl
 from acme.services.api.services.impl.agent_playbooks import AgentPlaybooksServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
@@ -53,7 +54,6 @@ from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.evidence import EvidenceServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
-from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
@@ -95,7 +95,7 @@ class ServicesImpl(ServicesInterface):
         leases: LeasesServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
-        fleet: FleetServiceInterface,
+        agent_fleet: AgentFleetServiceInterface,
         relay: RelayServiceInterface,
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
@@ -126,7 +126,7 @@ class ServicesImpl(ServicesInterface):
         self._leases = leases
         self._agent_sessions = agent_sessions
         self._hosts = hosts
-        self._fleet = fleet
+        self._agent_fleet = agent_fleet
         self._relay = relay
         self._intake = intake
         self._budgets = budgets
@@ -177,8 +177,8 @@ class ServicesImpl(ServicesInterface):
     def get_hosts_service(self) -> HostsServiceInterface:
         return self._hosts
 
-    def get_fleet_service(self) -> FleetServiceInterface:
-        return self._fleet
+    def get_agent_fleet_service(self) -> AgentFleetServiceInterface:
+        return self._agent_fleet
 
     def get_relay_service(self) -> RelayServiceInterface:
         return self._relay
@@ -290,7 +290,7 @@ def build_services(
             project_required=project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
-        fleet=FleetServiceImpl(managers.placement_operator, trust_operator, levers),
+        agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets, agent_billing),

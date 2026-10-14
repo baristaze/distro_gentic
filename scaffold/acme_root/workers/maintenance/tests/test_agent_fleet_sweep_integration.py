@@ -72,7 +72,7 @@ async def container(tmp_path: Path) -> AsyncIterator[WorkerContainer]:
         keys_backend="memory",
         sentry_dsn=None,
         otel_endpoint=None,
-        worker_id="fleet-integration",
+        worker_id="agent-fleet-integration",
     )
     settings.refuse_remote()
     built = WorkerContainer.build(settings)
@@ -130,7 +130,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     (message,) = await managers.steps.append_inputs(owner, session.id, [a_message(session.id)])
     # The loop's item on a lane of this test's own, claimed by a runner that
     # then dies: its lease runs out with nobody to renew it.
-    lane, now = f"loop:fleet-{new_id().hex[-8:]}", utcnow()
+    lane, now = f"loop:agent_fleet-{new_id().hex[-8:]}", utcnow()
     item = WorkItem(
         id=new_id(),
         created_at=now,

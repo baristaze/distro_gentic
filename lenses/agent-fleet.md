@@ -1,13 +1,13 @@
-# Fleet
+# Agent Fleet
 
-Group id: `fleet`. Covers The Agents a Platform Ships, Failure at Fleet
-Scale, and Operations of `distro_gentic_spec.md`.
+Group id: `agent-fleet`. Covers The Agents a Platform Ships, Failure at
+Agent Fleet Scale, and Operations of `distro_gentic_spec.md`.
 
-This group judges the agents a platform ships, what the fleet does when
-things fail, and how the platform is operated: the shipped kinds, the
-platform assistant, the reviewer, and the operator, a provider outage at
-scale, the sweep and its duties, operational skills, the dashboard, and
-the telemetry round trip.
+This group judges the agents a platform ships, what the agent fleet does
+when things fail, and how the platform is operated: the shipped kinds,
+the platform assistant, the reviewer, and the operator, a provider
+outage at scale, the sweep and its duties, operational skills, the
+dashboard, and the telemetry round trip.
 It leaves the outage signal itself to `money`, each sweep duty's own rule
 to the lens that states it (FLT-08 names them), and how an agent kind is
 defined to the engine.
@@ -127,7 +127,7 @@ every session that meets it parks within a second, naming the provider.
 When the signal's retry time passes, the parked sessions are woken,
 staggered.
 
-**Source.** Failure at Fleet Scale.
+**Source.** Failure at Agent Fleet Scale.
 
 **Look for.** What a session does when it meets an outage signal; how
 the parked sessions are woken when the retry time passes.
@@ -147,7 +147,7 @@ through the guideline's sweep, which every cloud worker runs; hosts, not
 worker roles, never run it. A runner's beat is a signal, never a
 trigger.
 
-**Source.** Failure at Fleet Scale.
+**Source.** Failure at Agent Fleet Scale.
 
 **Look for.** Which processes run the sweep; what a runner's beat
 causes.
@@ -168,7 +168,7 @@ settles; an approval past its expiry is asked again; a session with a
 pending input and no queued loop is woken; and expired content's keys
 are revoked and expired shape purged.
 
-**Source.** Failure at Fleet Scale.
+**Source.** Failure at Agent Fleet Scale.
 
 **Look for.** The sweep's duties, and the query behind each.
 
@@ -185,7 +185,7 @@ PLC-20, WSP-01, FLT-10, WAL-12.)
 **Principle.** A loop whose lease expired is requeued, and its next run
 takes a new writer epoch.
 
-**Source.** Failure at Fleet Scale.
+**Source.** Failure at Agent Fleet Scale.
 
 **Look for.** The sweep's requeue of an expired loop; where the next run
 takes its epoch.
@@ -203,7 +203,7 @@ epoch, or writes before it takes a new one.
 provider, else at its full amount, and is released only when the
 provider provably did not bill.
 
-**Source.** Failure at Fleet Scale.
+**Source.** Failure at Agent Fleet Scale.
 
 **Look for.** What the sweep does with an open hold nobody settled.
 
