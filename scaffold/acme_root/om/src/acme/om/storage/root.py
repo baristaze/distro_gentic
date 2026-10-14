@@ -2,34 +2,35 @@
 
 from abc import ABC, abstractmethod
 
+from acme.om.agent_automations.storage import AgentAutomationStorageInterface
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
+from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
+from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
-from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
-from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
-from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
-from acme.om.projects.storage import ProjectStorageInterface
-from acme.om.relay.storage import RelayStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
@@ -37,7 +38,6 @@ from acme.om.tools.storage import ToolStorageInterface
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.work.storage import WorkStorageInterface
-from acme.om.workspaces.storage import WorkspaceStorageInterface
 
 
 class StorageInterface(ABC):
@@ -81,7 +81,7 @@ class StorageInterface(ABC):
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
 
     @abstractmethod
-    def get_project_storage(self) -> ProjectStorageInterface: ...
+    def get_agent_project_storage(self) -> AgentProjectStorageInterface: ...
 
     @abstractmethod
     def get_retention_storage(self) -> RetentionStorageInterface: ...
@@ -93,10 +93,10 @@ class StorageInterface(ABC):
     def get_ledger_storage(self) -> LedgerStorageInterface: ...
 
     @abstractmethod
-    def get_account_storage(self) -> AccountStorageInterface: ...
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface: ...
 
     @abstractmethod
-    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface: ...
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface: ...
 
     @abstractmethod
     def get_fill_set_storage(self) -> FillSetStorageInterface: ...
@@ -126,16 +126,16 @@ class StorageInterface(ABC):
     def get_intake_storage(self) -> IntakeStorageInterface: ...
 
     @abstractmethod
-    def get_notification_storage(self) -> NotificationStorageInterface: ...
+    def get_park_alert_storage(self) -> ParkAlertStorageInterface: ...
 
     @abstractmethod
-    def get_automation_storage(self) -> AutomationStorageInterface: ...
+    def get_agent_automation_storage(self) -> AgentAutomationStorageInterface: ...
 
     @abstractmethod
-    def get_playbook_storage(self) -> PlaybookStorageInterface: ...
+    def get_agent_playbook_storage(self) -> AgentPlaybookStorageInterface: ...
 
     @abstractmethod
-    def get_knowledge_storage(self) -> KnowledgeStorageInterface: ...
+    def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface: ...
 
     @abstractmethod
     def get_connector_storage(self) -> ConnectorStorageInterface: ...
@@ -147,10 +147,10 @@ class StorageInterface(ABC):
     def get_benchmark_storage(self) -> BenchmarkStorageInterface: ...
 
     @abstractmethod
-    def get_relay_storage(self) -> RelayStorageInterface: ...
+    def get_exec_relay_storage(self) -> ExecRelayStorageInterface: ...
 
     @abstractmethod
-    def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
+    def get_agent_workspace_storage(self) -> AgentWorkspaceStorageInterface: ...
 
     @abstractmethod
     def get_matrix_storage(self) -> MatrixStorageInterface: ...

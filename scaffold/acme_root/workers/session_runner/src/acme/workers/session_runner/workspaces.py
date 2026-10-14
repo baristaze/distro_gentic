@@ -29,9 +29,9 @@ and may come back, so its instance is released like any other.
 A session pinned to its tenant's hosts keeps its instance on the host
 that prepared it, which no runner holds, and which a loop's end leaves
 warm. So each pass also reads every workspace a host holds, by the
-relay's bindings, and holds it to the same proofs. One no run accounts
+exec relay's bindings, and holds it to the same proofs. One no run accounts
 for past the grace is let go the same way, from here: its checkout's work
-is pushed to a snapshot ref through the relay, by the platform's git and
+is pushed to a snapshot ref through the exec relay, by the platform's git and
 with no credential in the workspace, and only then is its host asked,
 as `workspace` work on its lane, to let the instance go and keep its
 files. Its work is not pushed again when a snapshot taken after the
@@ -60,15 +60,17 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.rules import snapshot_at
 from acme.om.agents.loop_rules import kept_snapshot
 from acme.om.base import EMPTY_UUID, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.types.exec import AgentWorkspaceBinding
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
-from acme.om.relay.manager import RelayManagerInterface
-from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
 from acme.om.steps.types.step import Step
@@ -76,8 +78,6 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.manager import WorkspacesManagerInterface
-from acme.om.workspaces.rules import snapshot_at
 
 log = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ Graces = Callable[[str], timedelta]
 class HeldWorkspacesSweep:
     """Lets go of each instance this host holds that no run accounts for,
     once a pass finds it so past its session's kind's grace (`graces`), and
-    of each such instance a tenant's host holds when `relay` is given, or a
+    of each such instance a tenant's host holds when `exec_relay` is given, or a
     machine of the cloud pool holds when `cloud` is. When each one may go,
     counted from the pass that first found it so, is held in memory: a
     runner that restarts counts the grace again, so it lets go later, never
@@ -106,26 +106,26 @@ class HeldWorkspacesSweep:
         self,
         provider: WorkspaceProviderInterface,
         tools: ToolsManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         sessions: AgentSessionsManagerInterface,
         steps: StepsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
         graces: Graces,
         clock: Callable[[], datetime] = utcnow,
-        relay: RelayManagerInterface | None = None,
+        exec_relay: ExecRelayManagerInterface | None = None,
         cloud: CloudPoolManagerInterface | None = None,
     ) -> None:
         self._provider = provider
         self._tools = tools
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._sessions = sessions
         self._steps = steps
         self._work = work
         self._tenancy = tenancy
         self._graces = graces
         self._clock = clock
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._cloud = cloud
         # Each instance no run accounted for at a pass, and when it may go:
         # its grace past the pass that first found it so.
@@ -176,14 +176,14 @@ class HeldWorkspacesSweep:
                 )
         return let_go
 
-    async def _hosted(self) -> list[tuple[UUID, WorkspaceBinding]]:
+    async def _hosted(self) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         """Every workspace a tenant's host holds, by its binding, a page at a
         time; none when this sweep reaches no host."""
-        if self._relay is None:
+        if self._exec_relay is None:
             return []
-        found: list[tuple[UUID, WorkspaceBinding]] = []
+        found: list[tuple[UUID, AgentWorkspaceBinding]] = []
         after: UUID | None = None
-        while page := await self._relay.bindings(after):
+        while page := await self._exec_relay.bindings(after):
             found.extend(page)
             after = page[-1][1].id
         return found
@@ -219,7 +219,7 @@ class HeldWorkspacesSweep:
         elif cursor.head in (self._refused.get(instance.id), self._unkept.get(instance.id)):
             return False
         else:
-            pinned = await self._workspaces.get_workspace(ctx, instance.id)
+            pinned = await self._agent_workspaces.get_workspace(ctx, instance.id)
             if await self._unsnapshotted(ctx, instance.id, pinned.durability, cursor.head):
                 return False
             workspace = Workspace(
@@ -242,13 +242,13 @@ class HeldWorkspacesSweep:
         return True
 
     async def _let_go_hosted(
-        self, rctx: RequestContext, org_id: UUID, binding: WorkspaceBinding, now: datetime
+        self, rctx: RequestContext, org_id: UUID, binding: AgentWorkspaceBinding, now: datetime
     ) -> bool:
         """Asks the host that holds one session's workspace to let its
         instance go when no run accounts for it past the grace, once its
         work is pushed; False when it stays. A failed push raises, and it
         stays."""
-        assert self._relay is not None
+        assert self._exec_relay is not None
         session_id = binding.session_id
         deleted = await self._tenancy.tenant_deleted(rctx, org_id)
         if deleted is None:
@@ -278,22 +278,22 @@ class HeldWorkspacesSweep:
             return False
         if cursor.head in (self._refused.get(session_id), self._unkept.get(session_id)):
             return False
-        holder = await self._relay.holder(ctx, session_id)
+        holder = await self._exec_relay.holder(ctx, session_id)
         if holder is None:
             # Nothing reaches its host now, the snapshot included: a later
             # pass finds it online.
             return False
-        pinned = await self._workspaces.get_workspace(ctx, session_id)
+        pinned = await self._agent_workspaces.get_workspace(ctx, session_id)
         if await self._unsnapshotted(ctx, session_id, pinned.durability, cursor.head):
             return False
         workspace = Workspace(
             id=session_id, org_id=org_id, spec=pinned.spec(), location=holder.location
         )
         if not await self._kept(ctx, session_id, cursor.head, pinned.snapshot_ref):
-            # Kept first, through the relay: a push that does not land
+            # Kept first, through the exec relay: a push that does not land
             # raises, and the instance and its work stay.
             try:
-                await self._workspaces.detach(ctx, workspace, cursor.epoch)
+                await self._agent_workspaces.detach(ctx, workspace, cursor.epoch)
             except REFUSED as refused:
                 self._refuse(ctx, session_id, cursor.head, refused)
                 return False
@@ -302,7 +302,7 @@ class HeldWorkspacesSweep:
             # with it, and the session's next loop starts another.
             await self._cloud.release(ctx, session_id)
         else:
-            await self._relay.ask_release(ctx, session_id, workspace.spec)
+            await self._exec_relay.ask_release(ctx, session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",
             session_id,

@@ -2,7 +2,7 @@
 # machine serves one session, and is that session's wall. Its egress is
 # closed at the machine's network, by the security group its start names, to
 # what the session's spec asks; the host holds it no further.
-projects = "all"
+agent_projects = "all"
 min_isolation = "vm"
 egress = "open"
 readable = ["/"]

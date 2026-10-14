@@ -1,8 +1,8 @@
 """An agent's edit to a protected path is refused: a tool that changes
 files reports the paths it changes as its target, the policy of the
-session's project says whether one is protected, and the platform's
+session's agent project says whether one is protected, and the platform's
 ceiling denies the call whatever the kind's defaults and the tenant's layer
-allow. The engineer's own `write_file` and `edit_file` refuse it at the
+allow. The software engineer's own `write_file` and `edit_file` refuse it at the
 call."""
 
 from datetime import timedelta
@@ -45,7 +45,7 @@ class Written(Platform):
 
 class WriteFile(ToolInterface):
     """Writes one file of a session's work product. Whether the path is
-    protected is read from the policy of the session's project, never from
+    protected is read from the policy of the session's agent project, never from
     the input."""
 
     def __init__(self, evidence: EvidenceManagerInterface, session_id: UUID) -> None:
@@ -167,7 +167,7 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
         ("edit_file", {"start_line": 1, "end_line": 1, "new_text": "b"}),
     ],
 )
-async def test_the_engineers_change_to_a_protected_path_is_refused_at_the_call(
+async def test_the_software_engineers_change_to_a_protected_path_is_refused_at_the_call(
     tool: str, change: dict[str, object], tmp_path: Path
 ) -> None:
     org = make_org()
@@ -177,10 +177,10 @@ async def test_the_engineers_change_to_a_protected_path_is_refused_at_the_call(
     ctx = context(Role.SERVICE, org)
     impls = {"write_file": WriteFileImpl, "edit_file": EditFileImpl}
     registry = registry_of(impls[tool](lambda: evidence.manager))
-    # A session of `checkout`, whose policy protects `tests/`, and one of a
-    # project that declares no policy.
+    # A session of `checkout`, whose policy protects `tests/`, and one of an
+    # agent project that declares no policy.
     elsewhere = new_id()
-    evidence.projects.sessions[elsewhere] = new_id()
+    evidence.agent_projects.sessions[elsewhere] = new_id()
     for session_id, refused in ((new_id(), True), (elsewhere, False)):
         workspace = Workspace.absent(ctx.org_id, session_id)
         call = await put_call(

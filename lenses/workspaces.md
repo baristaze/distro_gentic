@@ -10,7 +10,7 @@ probed, and refused, and its egress. It leaves
 the isolation modes a host advertises and the ceilings its owner sets to
 `placement`, a person's commands in a workspace to `watch`, the
 untrusted mark and the rule of two to `wall`, and the sweep that purges
-an unclaimed instance to `fleet`.
+an unclaimed instance to `agent-fleet`.
 
 ## WSP-01 A workspace is a cache, and an idle session holds no machine
 
@@ -188,11 +188,11 @@ control plane, instead of by the owner on the host.
 
 ## WSP-09 Egress is an allowlist of destinations and methods
 
-**Principle.** A workspace's egress opens outward only, to a per-project
-allowlist that names destinations and methods: source control, through a
-credential scoped to the session's branch; package registries,
-read-only, through a vetting mirror; and the platform's endpoints. Open
-egress is an explicit policy choice, recorded.
+**Principle.** A workspace's egress opens outward only, to a
+per-agent-project allowlist that names destinations and methods: source
+control, through a credential scoped to the session's branch; package
+registries, read-only, through a vetting mirror; and the platform's
+endpoints. Open egress is an explicit policy choice, recorded.
 
 **Source.** Workspaces and Isolation, Egress.
 
@@ -236,7 +236,7 @@ such as an image in a comment or a mirror.
 **Source.** Workspaces and Isolation, Egress.
 
 **Look for.** Every surface that renders agent output (the portal, the
-comments the agent writes, mirrors, notifications), and how each renders
+comments the agent writes, mirrors, park alerts), and how each renders
 an image or a link.
 
 **Violation.** A Markdown image, a link preview, an unfurl, or a proxy
@@ -280,13 +280,13 @@ remain.
 ## WSP-13 A session kept by snapshots gets one, or waits, never a cache
 
 **Principle.** An agent kind says `cache`, the default, or `snapshot`,
-and a project narrows it to a cache on purpose. A session that keeps no
-content at rest is refused a kind kept by snapshots when it is created.
-A host advertises snapshots at a level only when its probe showed it can
-keep one there; a session kept by snapshots and pinned to a pool with no
-such host waits on the resource, and says why. The next loop starts from
-the latest snapshot, and the restored tree stands. An instance no
-snapshot holds as it stands is never let go.
+and an agent project narrows it to a cache on purpose. A session that
+keeps no content at rest is refused a kind kept by snapshots when it is
+created. A host advertises snapshots at a level only when its probe
+showed it can keep one there; a session kept by snapshots and pinned to
+a pool with no such host waits on the resource, and says why. The next
+loop starts from the latest snapshot, and the restored tree stands. An
+instance no snapshot holds as it stands is never let go.
 
 **Source.** Workspaces and Isolation, A Snapshot Is Durable State.
 
@@ -304,34 +304,34 @@ replaces; an instance no snapshot holds let go.
 
 **Check.** review
 
-## WSP-14 A project's environment is built once, where it runs, and sealed
+## WSP-14 An agent project's workspace base is built once, where it runs, sealed
 
-**Principle.** A project names its environment: an image, the commands
-that set it up, and the package registries the setup reaches. A kind
-that takes it pins it with its session, which keeps it: a changed
-environment is built anew for later sessions. It is built once where
+**Principle.** An agent project names its workspace base: an image, the
+commands that set it up, and the registries the setup reaches.
+A kind that takes it pins it with its session, which keeps it: a
+changed one is built anew for later sessions. It is built once where
 its workspaces run: by the runner's provider into the platform's store,
-or by the host into its own, inside the wall. Its setup runs the
-project's commands alone, with no model, no secret, no platform
-credential, and nothing of the tenant's records. A workspace on it
+or by the host into its own, inside the wall. Its setup runs those
+commands alone, with no model, no secret, no platform credential, and
+nothing of the tenant's records. A workspace on it
 keeps its kind's egress; a validation runs on a new instance of it with
 none. A failed setup keeps nothing and names its command and exit code.
 
-**Source.** Workspaces and Isolation, A Project's Environment.
+**Source.** Workspaces and Isolation, An Agent Project's Workspace Base.
 
-**Look for.** Where a session's pin reads its project's environment and
-which kinds take it; the setup's environment, its egress, and the
-owner's ceilings it is held to on a host; where a built environment is
-kept and read back; the base and the egress of the instance a
+**Look for.** Where a session's pin reads its agent project's workspace
+base and which kinds take it; the setup's environment, its egress, and
+the owner's ceilings it is held to on a host; where a built workspace
+base is kept and read back; the base and the egress of the instance a
 validation's checks run on; what a failed setup leaves and what the run
 that waits on it says.
 
-**Violation.** A session whose environment changes under it; a setup
-given a secret, a platform credential, a tenant's record, or a model's
-words; a workspace on an environment with its setup's egress; an
-environment built on one side of the wall and served on the other; a
-half-built environment served; the checks of a session on an
-environment run on another image, in its workspace, or with egress; a
+**Violation.** A session whose workspace base changes under it; a
+setup given a secret, a platform credential, a tenant's record, or a
+model's words; a workspace on a workspace base with its setup's egress;
+a workspace base built on one side of the wall and served on the other;
+a half-built workspace base served; the checks of a session on a
+workspace base run on another image, in its workspace, or with egress; a
 failed setup that waits or ends with no command named.
 
 **Severity.** high

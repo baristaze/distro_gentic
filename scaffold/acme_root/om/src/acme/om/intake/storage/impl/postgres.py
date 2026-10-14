@@ -6,13 +6,13 @@ from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.base import EMPTY_UUID
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.intake.storage.tables.account_links import AccountLinks
+from acme.om.intake.storage.tables.identity_links import IdentityLinks
 from acme.om.intake.storage.tables.installations import Installations
 from acme.om.intake.storage.tables.platform_acts import PlatformActs
 from acme.om.intake.storage.tables.work_bindings import WorkBindings
 from acme.om.intake.types.link import (
-    AccountLink,
     HandleKind,
+    IdentityLink,
     Installation,
     PlatformAct,
     WorkBinding,
@@ -55,17 +55,17 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             return (await session.execute(stmt)).scalar_one_or_none()
 
-    async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
+    async def create_link(self, org_id: UUID, link: IdentityLink) -> IdentityLink:
         # One link an account: the unique index decides, and a second link
         # of the same account answers the first.
         stmt = (
-            insert(AccountLinks)
-            .values(**to_values(link, AccountLinks), org_id=org_id)
+            insert(IdentityLinks)
+            .values(**to_values(link, IdentityLinks), org_id=org_id)
             .on_conflict_do_nothing(
                 index_elements=[
-                    AccountLinks.org_id,
-                    AccountLinks.integration,
-                    AccountLinks.external_id,
+                    IdentityLinks.org_id,
+                    IdentityLinks.integration,
+                    IdentityLinks.external_id,
                 ]
             )
         )
@@ -74,37 +74,37 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             await session.commit()
         held = await self.read_link(org_id, link.integration, link.external_id)
         if held is None:
-            raise RuntimeError(f"account link {link.id} is not readable after its write")
+            raise RuntimeError(f"identity link {link.id} is not readable after its write")
         return held
 
     async def read_link(
         self, org_id: UUID, integration: str, external_id: str
-    ) -> AccountLink | None:
-        stmt = select(AccountLinks).where(
-            AccountLinks.org_id == org_id,
-            AccountLinks.integration == integration,
-            AccountLinks.external_id == external_id,
+    ) -> IdentityLink | None:
+        stmt = select(IdentityLinks).where(
+            IdentityLinks.org_id == org_id,
+            IdentityLinks.integration == integration,
+            IdentityLinks.external_id == external_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
-            return None if row is None else to_model(row, AccountLink)
+            return None if row is None else to_model(row, IdentityLink)
 
-    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[IdentityLink]:
         stmt = (
-            select(AccountLinks)
-            .where(AccountLinks.org_id == org_id, AccountLinks.user_id == user_id)
-            .order_by(AccountLinks.integration, AccountLinks.external_id)
+            select(IdentityLinks)
+            .where(IdentityLinks.org_id == org_id, IdentityLinks.user_id == user_id)
+            .order_by(IdentityLinks.integration, IdentityLinks.external_id)
             .limit(limit)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()
-            return [to_model(row, AccountLink) for row in rows]
+            return [to_model(row, IdentityLink) for row in rows]
 
     async def delete_link(self, org_id: UUID, integration: str, external_id: str) -> bool:
-        stmt = delete(AccountLinks).where(
-            AccountLinks.org_id == org_id,
-            AccountLinks.integration == integration,
-            AccountLinks.external_id == external_id,
+        stmt = delete(IdentityLinks).where(
+            IdentityLinks.org_id == org_id,
+            IdentityLinks.integration == integration,
+            IdentityLinks.external_id == external_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             gone = deleted(await session.execute(stmt))
@@ -112,10 +112,10 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             return gone > 0
 
     async def delete_user_links(self, org_id: UUID, user_id: UUID, ids: Sequence[UUID]) -> int:
-        stmt = delete(AccountLinks).where(
-            AccountLinks.org_id == org_id,
-            AccountLinks.user_id == user_id,
-            AccountLinks.id.in_(ids),
+        stmt = delete(IdentityLinks).where(
+            IdentityLinks.org_id == org_id,
+            IdentityLinks.user_id == user_id,
+            IdentityLinks.id.in_(ids),
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             gone = deleted(await session.execute(stmt))
@@ -196,7 +196,7 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0
-        for table in (Installations, AccountLinks, WorkBindings, PlatformActs):
+        for table in (Installations, IdentityLinks, WorkBindings, PlatformActs):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 gone += deleted(await session.execute(stmt))

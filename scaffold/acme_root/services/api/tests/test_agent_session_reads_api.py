@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.agent_session_storage import make_session
 from contracts.evidence_storage import make_record, make_validation
 from contracts.intake_storage import make_binding
@@ -31,12 +31,12 @@ from contracts.step_storage import (
 
 from acme.integrations.model_providers.types import Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Hold, HoldRequest
@@ -82,7 +82,7 @@ async def start(client: httpx.AsyncClient, headers: dict[str, str], title: str) 
     answered = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
-        json={"kind": "assistant", "title": title, "project_id": PROJECT_ID},
+        json={"kind": "assistant", "title": title, "agent_project_id": AGENT_PROJECT_ID},
     )
     assert answered.status_code == 201, answered.text
     return answered.json()
@@ -542,16 +542,16 @@ async def test_a_sessions_delivery_is_its_branch_its_bound_work_and_its_accepted
     path = f"/v1/agent-sessions/{session['id']}"
     ctx = await context_of(container, owner)
     sid = UUID(session["id"])
-    workspace = await container.managers.workspaces.get_workspace(ctx, sid)
+    workspace = await container.managers.agent_workspaces.get_workspace(ctx, sid)
     intake = container.storage.get_intake_storage()
     await intake.create_binding(ctx.org_id, make_binding("acme/checkout#12", sid))
     untouched = await start(client, owner, "nothing yet")
 
-    delivery = await client.get(f"{path}/delivery", headers=owner)
-    nothing = await client.get(f"/v1/agent-sessions/{untouched['id']}/delivery", headers=owner)
+    work_product = await client.get(f"{path}/work-product", headers=owner)
+    nothing = await client.get(f"/v1/agent-sessions/{untouched['id']}/work-product", headers=owner)
 
-    assert delivery.status_code == 200, delivery.text
-    body = delivery.json()
+    assert work_product.status_code == 200, work_product.text
+    body = work_product.json()
     assert (body["branch"], body["branch_seen"]) == (workspace.branch, False)
     assert [(w["kind"], w["handle"]) for w in body["work"]] == [
         (HandleKind.PULL_REQUEST.value, "acme/checkout#12")
@@ -572,7 +572,7 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         new_id(),
         new_id(),
         Principal(kind=PrincipalKind.PERSON, id=ctx.user_id),
-        project_id=None,
+        agent_project_id=None,
     )
     keys = {BudgetScopeKind.TENANT: str(ctx.org_id), BudgetScopeKind.PERSON: str(new_id())}
     budgets = [
@@ -592,10 +592,14 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         )
         for kind, key in keys.items()
     ]
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    await billing.open_account(
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
+    await agent_billing.open_spend_account(
         ctx,
-        AccountRequest(funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"),
+        SpendAccountRequest(
+            funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
+        ),
     )
     request = HoldRequest(
         spender_id=ctx.user_id,
@@ -646,7 +650,7 @@ async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_
         "/usage",
         "/executions",
         "/validations",
-        "/delivery",
+        "/work-product",
     ]
     writes = [("POST", "/archive"), ("POST", "/restore"), ("DELETE", "")]
 

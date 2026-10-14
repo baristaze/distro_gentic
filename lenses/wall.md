@@ -10,7 +10,7 @@ exfiltration, operator access, storage, retention, and the crossing
 itself. It leaves a host's own credential and what a host holds to
 `placement`, a workspace's stripped environment and its egress to
 `workspaces`, the routing of a comment or a chat message to `intake` and
-`watch`, and the sweep that runs the retention duty to `fleet`.
+`watch`, and the sweep that runs the retention duty to `agent-fleet`.
 
 ## WAL-01 Executor, principal, spender, and actor are four answers
 
@@ -81,8 +81,8 @@ as the chat integration or its bot.
 message relayed by an integration reaches the agent quoted and labelled,
 never as an instruction: the engine renders it so, and the platform sets
 its origin. A principal speaks only through the portal, the CLI, the
-API, an automation, or a mapped user addressing the agent in chat or on
-its work.
+API, an agent automation, or a mapped user addressing the agent in chat
+or on its work.
 
 **Source.** Trust, Untrusted by Default.
 
@@ -91,7 +91,7 @@ every path by which text reaches the agent as a principal's.
 
 **Violation.** Relayed text with no origin, or with a principal's
 origin; a principal's message by any path but the portal, the CLI, the
-API, an automation, or a mapped user addressing the agent.
+API, an agent automation, or a mapped user addressing the agent.
 
 **Severity.** high
 
@@ -99,12 +99,12 @@ API, an automation, or a mapped user addressing the agent.
 
 ## WAL-05 A secret is resolved where it is used
 
-**Principle.** An environment secret is declared by name on a project,
-with the variable a command sees and a scope. The platform stores names
-only. Where it can, the executor brokers the secret outside the
-workspace; otherwise the machine that executes the call resolves it from
-its own store, short-lived and scoped, injects it into that one process,
-redacts it everywhere, and audits its use by name.
+**Principle.** An environment secret is declared by name on an agent
+project, with the variable a command sees and a scope. The platform
+stores names only. Where it can, the executor brokers the secret outside
+the workspace; otherwise the machine that executes the call resolves it
+from its own store, short-lived and scoped, injects it into that one
+process, redacts it everywhere, and audits its use by name.
 
 **Source.** Trust, Secrets by Placement.
 
@@ -235,19 +235,19 @@ revoke.
 ## WAL-11 Retention is a snapshot that tightening reaches and loosening never
 
 **Principle.** Retention policy is declared per tenant and narrowed per
-project: the content's lifetime, the shape's lifetime, the storage mode,
-zero retention, and region. A session takes a snapshot of the policy
-when it is created. Tightening reaches existing sessions at the next
-sweep; loosening never reaches back.
+agent project: the content's lifetime, the shape's lifetime, the storage
+mode, zero retention, and region. A session takes a snapshot of the
+policy when it is created. Tightening reaches existing sessions at the
+next sweep; loosening never reaches back.
 
 **Source.** Data, Retention, and the Wall.
 
-**Look for.** The retention policy's fields, and where a project narrows
-them; the session's snapshot; what a policy change does to existing
-sessions.
+**Look for.** The retention policy's fields, and where an agent project
+narrows them; the session's snapshot; what a policy change does to
+existing sessions.
 
-**Violation.** A project setting that widens its tenant's policy; a
-session with no snapshot, or one that reads the live policy; a
+**Violation.** An agent project setting that widens its tenant's policy;
+a session with no snapshot, or one that reads the live policy; a
 tightening existing sessions never get; a loosening applied to existing
 sessions.
 
@@ -262,7 +262,7 @@ expired, and purges shape past its own lifetime. The audit holds each
 key destruction as the key service reported it, and a tenant with its
 own key service sees the same event in its own logs.
 
-**Source.** Data, Retention, and the Wall; Failure at Fleet Scale.
+**Source.** Data, Retention, and the Wall; Failure at Agent Fleet Scale.
 
 **Look for.** The sweep's retention duty; what the audit records of each
 key destruction, and where that record comes from.

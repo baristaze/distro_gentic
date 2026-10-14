@@ -24,9 +24,9 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.retention.impl.agent_projects import SessionAgentProjectNullImpl
 from acme.om.retention.impl.keys import KeyServiceLocalImpl, TenantKeysImpl
 from acme.om.retention.impl.manager import KEY_DESTROYED, RetentionManagerImpl, RetentionOptions
-from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.retention.types.policy import RetentionPolicy
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.pg_base import LoginSessions, set_scope
@@ -91,7 +91,7 @@ def sweeper(
         managers.tenancy,
         managers.events,
         managers.outbox,
-        SessionProjectNullImpl(),
+        SessionAgentProjectNullImpl(),
         RetentionOptions(),
         clock=clock,
     )
@@ -186,7 +186,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     (snapshot,) = await rows(
         pg_sessions,
         DatabaseRole.CORE,
-        "SELECT content_expired_at, destruction::text AS destruction FROM core.session_retention"
+        "SELECT content_expired_at, destruction::text AS destruction FROM core.agent_session_retention"
         " WHERE org_id = :org AND session_id = :session",
         org,
         session=session,

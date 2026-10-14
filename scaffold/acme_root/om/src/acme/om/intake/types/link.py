@@ -21,7 +21,7 @@ class Installation(Identifiable, Created):
     created_by: UUID
 
 
-class AccountLink(Identifiable, Created):
+class IdentityLink(Identifiable, Created):
     """An account in an integration's system, mapped to a user of the
     tenant. Only a mapped user may instruct a session from outside, or
     approve a call from chat. One link an account in a tenant."""

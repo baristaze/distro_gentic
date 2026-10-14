@@ -4,9 +4,10 @@
 
 ## Context
 
-The platform's spec, Automations: an automation has limits of its own,
-and each run it starts is held to `run_cap_micros` of its cost cap
-([ADR 2017](2017-a-schedule-fires-once-a-slot-and-an-automations-principal-is-a-grant.md)).
+The platform's spec, AgentAutomations: an agent automation has limits of
+its own, and each run it starts is held to `run_cap_micros` of its cost
+cap ([ADR
+2017](2017-a-schedule-fires-once-a-slot-and-an-agent-automations-principal-is-a-grant.md)).
 A start holds its run with a `LIFE` budget on the new session's tree,
 made before the brief wakes it. That tree is the run's alone, so the
 budget binds nothing else.
@@ -23,10 +24,10 @@ spends under no cap of the run's at all.
 ## Decision
 
 **A message to a standing session is refused while it is enabled.**
-Written enabled, the automation is `ValidationFailed`, with the reason.
-Stored enabled, each firing is a run refused for its action: it reserves
-nothing and sends nothing. A disabled one saves, so its writer can
-always turn it off.
+Written enabled, the agent automation is `ValidationFailed`, with the
+reason. Stored enabled, each firing is a run refused for its action: it
+reserves nothing and sends nothing. A disabled one saves, so its writer
+can always turn it off.
 
 **It acts once the engine's budget can end with a run.** That takes a
 budget that ends: one closed with its run, or one with an end time.

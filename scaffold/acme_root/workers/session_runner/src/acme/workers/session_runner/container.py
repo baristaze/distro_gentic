@@ -1,6 +1,6 @@
 """The runner boots the way every process does: settings, storage, infra,
 the integrations (the model providers), and the managers, with the
-product's agent kinds and tools, and the automations the platform
+product's agent kinds and tools, and the agent automations the platform
 assistant reads. The claim loop holds the container directly.
 
 The runner holds no purge login: it runs what a model asks for, and the
@@ -15,31 +15,32 @@ from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
+from acme.om.agent_billing.root import build_money_gate, refuse_open_money
+from acme.om.agent_knowledge.root import AgentKnowledgeLayer
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import new_id
-from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import ConnectorsLayer
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
+from acme.om.exec_relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
-from acme.om.notifications.manager import NotificationsManagerInterface
-from acme.om.notifications.root import build_notifications
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.relay.impl.placement import PlacementRelayedImpl
-from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -50,7 +51,6 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.workers.maintenance.container import cloud_pool_options
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
@@ -87,7 +87,7 @@ class RunnerContainer:
         self.intake: IntakeManagerInterface = build_intake(
             storage, managers, integrations=integrations
         )
-        self.notifications: NotificationsManagerInterface = build_notifications(
+        self.park_alerts: ParkAlertsManagerInterface = build_park_alerts(
             storage, managers, integrations, self.intake
         )
 
@@ -151,7 +151,7 @@ class RunnerContainer:
         model call. Each call, its checkout's included, travels as exec
         work to that host, its executor.
 
-        Every model call passes billing's money gate, which asks who pays
+        Every model call passes agent billing's money gate, which asks who pays
         before it holds, and its fills come from the model matrix, whose
         version and the tenant's plan tier its spend and tokens count
         under; a tenant on its own keys calls on them, through trust.
@@ -169,7 +169,7 @@ class RunnerContainer:
             PlacementHostsImpl(
                 storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
             ),
-            storage.get_relay_storage(),
+            storage.get_exec_relay_storage(),
         )
         trust = TrustLayer(
             storage,
@@ -184,13 +184,13 @@ class RunnerContainer:
             clients=lambda: trust.managers.provider_clients,
             kinds=ports.kinds.agents,
         )
-        playbooks = PlaybooksLayer(storage)
-        knowledge = KnowledgeLayer(storage)
+        agent_playbooks = AgentPlaybooksLayer(storage)
+        agent_knowledge = AgentKnowledgeLayer(storage)
 
         def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-            # The wall and the audit first, then the session's playbook gates,
-            # then the knowledge a session recalls as its first loop starts.
-            return knowledge.tools(playbooks.tools(trust.tools(inner)))
+            # The wall and the audit first, then the session's agent playbook gates,
+            # then the agent knowledge a session recalls as its first loop starts.
+            return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
 
         async def members(
             rctx: RequestContext, org_id: UUID, principal: Principal
@@ -201,12 +201,12 @@ class RunnerContainer:
         built: list[Managers] = []
         held: list[RunnerContainer] = []
         # The tools through which a session acts as the platform's account
-        # record each act with intake, and the engineer's pull request binds
+        # record each act with intake, and the software engineer's pull request binds
         # its work there; the container builds it below.
         acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
-        # The automations the platform assistant reads, built below over the
+        # The agent automations the platform assistant reads, built below over the
         # managers, as the API and the maintenance worker build them.
-        automations: list[AutomationsManagerInterface] = []
+        agent_automations: list[AgentAutomationsManagerInterface] = []
 
         def stage() -> RequestContext:
             """The request stage each relayed operation runs under, minted
@@ -222,16 +222,16 @@ class RunnerContainer:
             infra,
             McpClientSdkImpl(),
             placement=placement,
-            host=TransportRelayImpl(lambda: built[0].relay, stage).call_mcp,
+            host=TransportRelayImpl(lambda: built[0].exec_relay, stage).call_mcp,
             options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
         )
 
         def placed(direct: TransportInterface) -> TransportInterface:
-            # The relay is the managers', built below on this transport, so
+            # The exec relay is the managers', built below on this transport, so
             # the edge is bound at call time.
-            relayed = TransportRelayImpl(lambda: built[0].relay, stage)
+            relayed = TransportRelayImpl(lambda: built[0].exec_relay, stage)
             # A session on a machine of the cloud pool runs its calls on that
-            # machine's host, through the relay too.
+            # machine's host, through the exec relay too.
             return TransportPlacedImpl(
                 direct, relayed, placement, lambda spec: built[0].cloud_pool.runs(spec)
             )
@@ -249,46 +249,48 @@ class RunnerContainer:
             attachment_reader=attachment_reader,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
-            knowledge=knowledge.manager,
-            automations=lambda: automations[0],
+            agent_knowledge=agent_knowledge.manager,
+            agent_automations=lambda: agent_automations[0],
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
             executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
-            session_projects=ports.session_projects,
-            workspace_projects=ports.workspace_projects,
+            agent_session_projects=ports.agent_session_projects,
+            workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
             models_layer=matrix.layer,
             tools_layer=layers,
             # A spawn and a hand-off make sessions here, each with its kind's
-            # manual.
-            agents_layer=playbooks.agents,
+            # kind manual.
+            agents_layer=agent_playbooks.agents,
             transport_layer=placed,
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
             cloud_pool_stage=stage,
-            # A call of a session the tenant's automation principal started
+            # A call of a session the tenant's agent automation principal started
             # runs on that principal's grant; every other on a member's place.
-            principal_context=automation_principals(storage.get_automation_storage(), members),
+            principal_context=agent_automation_principals(
+                storage.get_agent_automation_storage(), members
+            ),
             stream_sink=stream,
             attached_toolsets=connectors.attached,
         )
         built.append(managers)
-        automations.append(
-            build_automations(
+        agent_automations.append(
+            build_agent_automations(
                 storage,
                 managers,
-                project_required=settings.environment != LOCAL,
+                agent_project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
-                playbooks=lambda: playbooks.build(managers),
+                agent_playbooks=lambda: agent_playbooks.build(managers),
             )
         )
         refuse_open_money(settings.environment, managers)
         trust.build(managers)
         matrix.build(managers)
-        playbooks.build(managers)
-        knowledge.build(managers)
+        agent_playbooks.build(managers)
+        agent_knowledge.build(managers)
         connectors.build(managers)
         container = cls(
             settings, storage, infra, integrations, managers, stream, placing, ports.kinds

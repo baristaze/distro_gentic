@@ -1,10 +1,10 @@
 """An environment secret, as the platform knows it: by name, never by
-value. It is declared on a project, with the variable a command sees,
+value. It is declared on an agent project, with the variable a command sees,
 the scope the credential is minted for, and the store that holds its
 value: the platform's, in its cloud, or the store of the machine that
 executes the call, inside a customer's wall. The value lives only in
 that store; the platform keeps the declaration. A name is one owner's:
-each project declares its own secret of a name, and keeps its own value.
+each agent project declares its own secret of a name, and keeps its own value.
 A product declares secrets on an owner kind of its own, which the owner
 kinds' registry holds (`trust.owners`)."""
 
@@ -26,8 +26,8 @@ OWNER_KIND = r"^[a-z][a-z0-9_]{0,31}$"
 """A secret owner kind's name, as the owner kinds' registry holds it
 (`trust.owners`)."""
 
-PROJECT = "project"
-"""The platform's owner kind: a project, whose secrets reach its own
+AGENT_PROJECT = "agent_project"
+"""The platform's owner kind: an agent project, whose secrets reach its own
 sessions alone."""
 
 
@@ -54,6 +54,6 @@ class SecretDeclaration(Identifiable, Trackable):
 
 def kept_as(declaration: SecretDeclaration) -> str:
     """The name the tenant's store keeps a declared secret's value under:
-    under its owner, so each project keeps its own value of one name, apart
-    from the tenant's own and from every other project's."""
+    under its owner, so each agent project keeps its own value of one name, apart
+    from the tenant's own and from every other agent project's."""
     return f"{declaration.owner_kind}-{declaration.owner_id.hex}-{declaration.name}"

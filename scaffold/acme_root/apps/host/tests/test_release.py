@@ -3,7 +3,7 @@ instance stays on the host that prepared it, its work uncommitted in it,
 and no run lets it go. The runner's sweep and a host of the pool share one
 memory storage root, as the platform's processes share one database. Once
 no loop item accounts for the instance past the grace, the sweep pushes
-its work to a snapshot ref through the relay, which the host runs, and
+its work to a snapshot ref through the exec relay, which the host runs, and
 only then asks the host to let it go, which it does through its own
 provider. A live loop's instance is kept, a push that does not land lets
 nothing go, and an instance whose tenant or session the platform holds no
@@ -23,7 +23,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.workspaces import ProjectsTwin
+from contracts.agent_workspaces import AgentProjectsTwin
 from host_support import Pace, Stack, started_host
 from runner_support import TOOLS, assistant
 
@@ -41,6 +41,8 @@ from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om import root as platform_root
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
@@ -52,8 +54,6 @@ from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -89,7 +89,7 @@ def git(where: Path, *args: str) -> str:
 
 @pytest.fixture
 def remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The project's repository on disk, its default branch seeded, and the
+    """The agent project's repository on disk, its default branch seeded, and the
     reader the runner's root builds allowed to read a path, as a deployed
     one is not."""
     monkeypatch.setattr(
@@ -100,7 +100,7 @@ def remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     remote, seed = tmp_path / "remote.git", tmp_path / "seed"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
-    (seed / "README.md").write_text("the project\n")
+    (seed / "README.md").write_text("the agent project\n")
     git(seed, "add", "README.md")
     git(seed, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "1")
     git(seed, "push", "-q", str(remote), "main")
@@ -153,7 +153,7 @@ class Placed:
     owner: TenantContext
     host: HostAgent
     provider: WorkspaceHostImpl
-    projects: ProjectsTwin
+    agent_projects: AgentProjectsTwin
     remote: Path
     clock: Clock
     sweep: HeldWorkspacesSweep
@@ -189,7 +189,9 @@ class Placed:
 
     async def notices(self) -> int:
         return len(
-            (await self.managers.workspaces.get_workspace(self.owner, self.session_id)).notices
+            (
+                await self.managers.agent_workspaces.get_workspace(self.owner, self.session_id)
+            ).notices
         )
 
     async def release(self) -> WorkItem | None:
@@ -209,7 +211,7 @@ async def placed(
     holding work, and the sweep over it. `grace` is the kind's warm grace;
     None takes the default."""
     assert GIT is not None
-    projects = ProjectsTwin(repository=str(remote))
+    agent_projects = AgentProjectsTwin(repository=str(remote))
     forge = IntegrationTwinImpl("forge", writes=True)
     runner = RunnerContainer.over(
         SETTINGS,
@@ -221,7 +223,7 @@ async def placed(
             {"forge": forge},
         ),
         ports=PlatformPorts(
-            workspace_projects=projects,
+            workspace_agent_projects=agent_projects,
             kinds=ProductKinds(
                 agents=(KIND,),
                 tools=lambda _managers: TOOLS,
@@ -258,7 +260,7 @@ async def placed(
         pool.id,
         api.settings(tmp_path / "host" / "home", None),
         Ceilings(
-            projects=None,
+            agent_projects=None,
             min_isolation=IsolationMode.directory,
             egress=None,
             readable=(str(root),),
@@ -271,14 +273,14 @@ async def placed(
     sweep = HeldWorkspacesSweep(
         runner.infra.get_workspaces(),
         managers.tools,
-        managers.workspaces,
+        managers.agent_workspaces,
         managers.agent_sessions,
         managers.steps,
         managers.work,
         managers.tenancy,
         runner.kinds.warm_grace,
         clock=clock,
-        relay=managers.relay,
+        exec_relay=managers.exec_relay,
     )
     # A run takes the session, its host makes the workspace, and the run's
     # tool call leaves work in it uncommitted.
@@ -302,7 +304,7 @@ async def placed(
         owner=owner,
         host=host,
         provider=provider,
-        projects=projects,
+        agent_projects=agent_projects,
         remote=remote,
         clock=clock,
         sweep=sweep,
@@ -331,7 +333,7 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
     )
     await api.container.managers.hosts.place_session(owner, unrun.id, run.pool_id)
     there = await provider.prepare(owner.org_id, unrun.id, KIND.isolation)
-    await managers.relay.bind_workspace(
+    await managers.exec_relay.bind_workspace(
         owner, unrun.id, UUID(host.credential.claimant_id), there.location
     )
 
@@ -342,11 +344,11 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
     await managers.work.fail_for_good(owner, run.item, "its runner died")
     assert await run.passes() == 0, "the grace begins"
     assert await run.passes(GRACE - timedelta(seconds=1)) == 0
-    run.projects.repository = str(tmp_path / "gone.git")
+    run.agent_projects.repository = str(tmp_path / "gone.git")
     assert await run.passes(timedelta(seconds=1)) == 0, "a push that does not land lets nothing go"
     assert killed in await run.held()
     assert await run.release() is None
-    run.projects.repository = str(remote)
+    run.agent_projects.repository = str(remote)
     assert await run.passes() == 1
     await run.answers()  # the release, on this host's lane
 
@@ -497,7 +499,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
 ) -> None:
     run = await placed(api, tmp_path, remote)
     managers, owner = run.managers, run.owner
-    detach = managers.workspaces.detach
+    detach = managers.agent_workspaces.detach
     pushes: list[int] = []
 
     async def refused(ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
@@ -506,7 +508,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
         pushes.append(epoch)
         raise NotAuthorized("no installation of the forge this tenant connected holds it")
 
-    monkeypatch.setattr(managers.workspaces, "detach", refused)
+    monkeypatch.setattr(managers.agent_workspaces, "detach", refused)
     await managers.work.fail_for_good(owner, run.item, "its runner died")
     assert await run.passes() == 0
     assert await run.passes(GRACE) == 0, "the push was refused: nothing is let go"
@@ -521,7 +523,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
     step = changed_step(new_id(), utcnow(), run.session_id, new_id())
     await managers.steps.append_steps(owner, run.session_id, epoch, [step])
     await managers.work.fail_for_good(owner, item, "its runner died")
-    monkeypatch.setattr(managers.workspaces, "detach", detach)
+    monkeypatch.setattr(managers.agent_workspaces, "detach", detach)
     assert await run.passes() == 1, "the next pass pushes it, and asks for the release"
     await run.answers()
     assert len(run.refs()) == 1 and await run.release() is not None

@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.histories import History
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -66,7 +66,7 @@ class Org:
         made = await self.client.post(
             "/v1/agent-sessions",
             headers=created(self.headers[by]),
-            json={"kind": kind, "title": "the dropped order", "project_id": PROJECT_ID},
+            json={"kind": kind, "title": "the dropped order", "agent_project_id": AGENT_PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]

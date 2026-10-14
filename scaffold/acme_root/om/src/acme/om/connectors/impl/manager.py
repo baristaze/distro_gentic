@@ -6,6 +6,7 @@ from pydantic import Field, SecretStr
 
 from acme.infra.secrets import SecretsInterface
 from acme.integrations.mcp import McpClientInterface, McpHttp
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.connectors.impl.addresses import Resolve, refused_now, resolve
@@ -33,7 +34,6 @@ from acme.om.intake.rules import in_person
 from acme.om.levers.types.lever import LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.mcp import LIST_TIMEOUT, definition_of
 from acme.om.tools.types.mcp import McpToolDefinition
@@ -68,7 +68,7 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         client: McpClientInterface,
         secrets: SecretsInterface,
         kinds: AgentKindCatalog,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: ConnectorsOptions,
@@ -81,7 +81,7 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         self._client = client
         self._secrets = secrets
         self._kinds = kinds
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._tenancy = tenancy
         self._relay = relay
         self._options = options
@@ -214,27 +214,27 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
                 raise ValidationFailed(
                     f"{attachment.kind} names a toolset {connector.name} at version {kind.version}"
                 )
-        if attachment.project_id is not None and not await self._projects.holds(
-            ctx, attachment.project_id
+        if attachment.agent_project_id is not None and not await self._agent_projects.holds(
+            ctx, attachment.agent_project_id
         ):
-            raise NotFound(f"project {attachment.project_id} not found")
+            raise NotFound(f"agent project {attachment.agent_project_id} not found")
         kept = tuple(
             each
             for each in connector.attachments
-            if (each.kind, each.project_id) != (attachment.kind, attachment.project_id)
+            if (each.kind, each.agent_project_id) != (attachment.kind, attachment.agent_project_id)
         )
         updated = self._next(ctx, connector, attachments=(*kept, attachment))
         return await self._update(ctx, updated)
 
     async def detach(
-        self, ctx: TenantContext, connector_id: UUID, kind: str, project_id: UUID | None
+        self, ctx: TenantContext, connector_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> Connector:
         ctx.require(Permission.MANAGE_MEMBERS)
         connector = await self._connector(ctx, connector_id)
         kept = tuple(
             each
             for each in connector.attachments
-            if (each.kind, each.project_id) != (kind, project_id)
+            if (each.kind, each.agent_project_id) != (kind, agent_project_id)
         )
         if len(kept) == len(connector.attachments):
             raise NotFound(f"{connector.name} is not attached to {kind} there")

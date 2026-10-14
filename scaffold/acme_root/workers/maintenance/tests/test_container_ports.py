@@ -1,5 +1,5 @@
 """The worker's composition settles the holds nobody settled through
-billing's money gate, on its ledger, and outside `local` it refuses every
+agent billing's money gate, on its ledger, and outside `local` it refuses every
 port that would ship a gate open, naming what is missing."""
 
 import re
@@ -9,7 +9,7 @@ import pytest
 from contracts.ports import open_ports
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.billing.gate import MoneyGateInterface
+from acme.om.agent_billing.gate import MoneyGateInterface
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.workers.maintenance.container import WorkerContainer
@@ -26,7 +26,7 @@ def test_the_worker_sweeps_the_money_gates_holds_on_its_ledger(tmp_path: Path) -
     assert isinstance(container.managers.budget_gate, MoneyGateInterface)
     holds = container.holds
     assert holds._gate is container.managers.budget_gate  # pyright: ignore[reportPrivateUsage]
-    assert holds._ledger is storage.get_money_ledger_storage()  # pyright: ignore[reportPrivateUsage]
+    assert holds._ledger is storage.get_spend_ledger_storage()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_the_worker_outside_local_refuses_every_port_that_ships_a_gate_open(

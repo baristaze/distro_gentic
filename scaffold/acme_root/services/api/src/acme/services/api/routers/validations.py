@@ -1,8 +1,8 @@
-"""Validation sessions: one check of a project's policy, run on a fresh
+"""Validation sessions: one check of an agent project's policy, run on a fresh
 executor with no agent, started at a delivered commit under an
 Idempotency-Key, and read with its verdict once its run is recorded. A
 member who may write starts one; any member reads one. Another tenant's
-session, or its project, answers as one that never existed."""
+session, or its agent project, answers as one that never existed."""
 
 from uuid import UUID
 
@@ -21,7 +21,7 @@ async def start_validation(
     ctx: Ctx, validations: ValidationsService, body: StartValidationRequest, idem: Idem
 ) -> Response:
     """A session queued for the platform's worker, which runs its check once.
-    404 when the tenant holds no validation policy for the project; 422
+    404 when the tenant holds no validation policy for the agent project; 422
     when the policy declares no such check."""
     return await idem.run(
         201, lambda attempt: validations.start_validation(ctx, body, attempt.target_id)

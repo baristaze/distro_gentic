@@ -1,6 +1,6 @@
 """The worker classes every tool a session can name, as the API and the
-session runner do, since intake, an automation, and a message check a
-session's tools here: a linked member's comment on the engineer's pull
+session runner do, since intake, an agent automation, and a message check a
+session's tools here: a linked member's comment on the software engineer's pull
 request wakes it as their message, and a kind that names the runner's
 `comment` starts."""
 
@@ -28,7 +28,7 @@ from acme.om.intake.types.event import Arrival, Author, AuthorKind, FeedbackEven
 from acme.om.intake.types.link import HandleKind
 from acme.om.intake.types.route import Effect
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
-from acme.om.platform_agents.kinds import ENGINEER
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
@@ -76,7 +76,7 @@ def comment(external_id: str) -> FeedbackEvent:
     )
 
 
-async def test_a_linked_members_comment_on_the_engineers_pull_request_wakes_it(
+async def test_a_linked_members_comment_on_the_software_engineers_pull_request_wakes_it(
     tmp_path: Path,
 ) -> None:
     container = WorkerContainer.for_tests(
@@ -86,7 +86,7 @@ async def test_a_linked_members_comment_on_the_engineers_pull_request_wakes_it(
     )
     owner = await sign_in(container)
     session = await container.managers.agents.start_session(
-        owner, Start(id=new_id(), kind=ENGINEER, title="the total")
+        owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER, title="the total")
     )
     await container.intake.bind_work(owner, session.id, HandleKind.PULL_REQUEST, PR)
     await container.intake.link_account(owner, "forge", "U-ANN", owner.user_id)

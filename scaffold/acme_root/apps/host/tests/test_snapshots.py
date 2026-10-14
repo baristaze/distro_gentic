@@ -35,7 +35,7 @@ from host_support import Stack, probes
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
-from acme.apps.host.relay import ExecutorRelayImpl
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.buckets import Buckets
@@ -53,6 +53,7 @@ from acme.infra.workspaces import (
     WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.om.agents.loop_rules import changed_step
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -63,8 +64,8 @@ from acme.om.context import (
     TenantContext,
     build_context,
 )
+from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts.impl.manager import HostsOptions
-from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.root import ProductKinds
 from acme.om.steps.types.header import HASH_SCHEME, ParkReason, WorkspaceSnapshot
 from acme.om.tenancy.rules import permissions_of
@@ -76,7 +77,6 @@ from acme.om.watch.impl.manager import TAKEN
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 KEPT = IsolationSpec(
@@ -135,7 +135,7 @@ async def a_host(
     pool_token = await api.token(pool_id)
     host = HostAgent(
         replace(api.settings(where / "home", None), enrollment_token=pool_token),
-        Ceilings(projects=None, min_isolation=HostMode.container, egress=frozenset()),
+        Ceilings(agent_projects=None, min_isolation=HostMode.container, egress=frozenset()),
         checks,
         api.client,
         executor,
@@ -158,9 +158,9 @@ async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
 
 
 async def prepared(api: Stack, host: HostAgent, session_id: UUID) -> None:
-    assert await api.container.managers.relay.ask_prepare(api.owner, session_id, KEPT)
+    assert await api.container.managers.exec_relay.ask_prepare(api.owner, session_id, KEPT)
     await claimed(host)
-    assert await api.container.managers.relay.binding_of(api.owner, session_id) is not None
+    assert await api.container.managers.exec_relay.binding_of(api.owner, session_id) is not None
 
 
 # Check 3: inside a customer's wall, a snapshot stays in its host's store.
@@ -177,12 +177,12 @@ async def test_a_hosts_snapshot_stays_in_its_store_and_the_platform_records_its_
     twin.files[session_id] = b"what the loop wrote, and the packages it installed"
     snapshot_id = new_id()
 
-    item_id = await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    item_id = await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
 
     assert item_id is not None
-    assert (await managers.relay.workspace_work(api.owner, item_id)).status is WorkStatus.DONE
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    assert (await managers.exec_relay.workspace_work(api.owner, item_id)).status is WorkStatus.DONE
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None and record.on_host
     assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
     kept = twin.files[session_id]
@@ -209,29 +209,29 @@ async def test_a_restore_travels_with_its_prepare_and_altered_bytes_lose_it(
     await prepared(api, host, session_id)
     twin.files[session_id] = b"as the run left it"
     snapshot_id = new_id()
-    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None
     restore = HostSnapshot(
         id=record.id, reference=record.reference, digest=record.digest, size=record.size
     )
     twin.files[session_id] = b"written since"
 
-    restored = await managers.relay.ask_restore(api.owner, session_id, KEPT, restore)
+    restored = await managers.exec_relay.ask_restore(api.owner, session_id, KEPT, restore)
     await claimed(host)
 
-    assert (await managers.relay.workspace_work(api.owner, restored)).status is WorkStatus.DONE
+    assert (await managers.exec_relay.workspace_work(api.owner, restored)).status is WorkStatus.DONE
     assert twin.files[session_id] == b"as the run left it", "replaced whole from the store"
 
     (store / record.reference).write_bytes(b"altered in the store")
-    lost = await managers.relay.ask_restore(api.owner, session_id, KEPT, restore)
+    lost = await managers.exec_relay.ask_restore(api.owner, session_id, KEPT, restore)
     await claimed(host)
 
-    row = await managers.relay.workspace_work(api.owner, lost)
+    row = await managers.exec_relay.workspace_work(api.owner, lost)
     assert row.status is WorkStatus.FAILED and "does not match" in (row.last_error or "")
     assert twin.files[session_id] == b"as the run left it", "nothing started from it"
-    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.exec_relay, lambda: managers.hosts)
     assert await placed.refusal_of(api.owner, lost) == row.last_error
 
 
@@ -246,14 +246,14 @@ async def test_a_snapshot_that_holds_a_hosts_secret_is_refused_and_nothing_is_ke
     twin.files[session_id] = f"export TOKEN={SECRET}".encode()
     snapshot_id = new_id()
 
-    item_id = await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    item_id = await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
 
     assert item_id is not None
-    row = await managers.relay.workspace_work(api.owner, item_id)
+    row = await managers.exec_relay.workspace_work(api.owner, item_id)
     assert row.status is WorkStatus.FAILED and "SERVICE_TOKEN" in (row.last_error or "")
     assert SECRET not in (row.last_error or "")
-    assert await managers.workspaces.kept_snapshot(api.owner, snapshot_id) is None
+    assert await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id) is None
     assert not (store / str(api.owner.org_id) / str(session_id)).exists()
 
 
@@ -266,7 +266,7 @@ async def test_a_revoked_key_asks_the_host_to_erase_its_copies_and_the_records_g
     host, twin, store = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     twin.files[session_id] = b"a day's work"
-    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, new_id())
+    await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, new_id())
     await claimed(host)
     assert (store / str(api.owner.org_id) / str(session_id)).is_dir()
 
@@ -274,7 +274,7 @@ async def test_a_revoked_key_asks_the_host_to_erase_its_copies_and_the_records_g
     await claimed(host)
 
     assert not (store / str(api.owner.org_id) / str(session_id)).exists(), "erased on the host"
-    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    assert await managers.agent_workspaces.kept_snapshots(api.owner, session_id) == ()
 
 
 async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase(
@@ -290,12 +290,12 @@ async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase
     twin.files[parent] = b"as the spawn took it"
     taken_id = new_id()
 
-    await managers.relay.ask_snapshot(api.owner, parent, KEPT, taken_id, kept_for=child)
+    await managers.exec_relay.ask_snapshot(api.owner, parent, KEPT, taken_id, kept_for=child)
     await claimed(host)
-    await managers.relay.ask_snapshot(api.owner, parent, KEPT, new_id())  # the parent's own
+    await managers.exec_relay.ask_snapshot(api.owner, parent, KEPT, new_id())  # the parent's own
     await claimed(host)
 
-    taken = await managers.workspaces.kept_snapshot(api.owner, taken_id)
+    taken = await managers.agent_workspaces.kept_snapshot(api.owner, taken_id)
     assert taken is not None and taken.session_id == parent, "the take is the parent's answer"
     copy = store / taken.reference
     assert copy.is_relative_to(store / org / str(child)), "kept as the child's"
@@ -306,7 +306,7 @@ async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase
 
     assert not (store / org / str(parent)).exists(), "the parent's own are erased"
     assert copy.read_bytes() == b"as the spawn took it", "the child's copy outlives them"
-    await managers.relay.ask_erase(api.owner, child, UUID(host.credential.claimant_id))
+    await managers.exec_relay.ask_erase(api.owner, child, UUID(host.credential.claimant_id))
     await claimed(host)
     assert not copy.exists(), "the child's erase takes it"
 
@@ -321,7 +321,7 @@ async def test_a_kept_session_on_a_pool_with_no_probed_host_waits_and_is_never_a
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
     host, twin, _ = await a_host(api, pool.id, tmp_path, probed=False)
-    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.exec_relay, lambda: managers.hosts)
 
     with pytest.raises(IsolationRefused) as waits:
         await placed.held_on_host(api.owner, session_id, KEPT)
@@ -331,9 +331,9 @@ async def test_a_kept_session_on_a_pool_with_no_probed_host_waits_and_is_never_a
     assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
 
     # Asked anyway, the host refuses it: nothing is made as a cache.
-    assert await managers.relay.ask_prepare(api.owner, session_id, KEPT)
+    assert await managers.exec_relay.ask_prepare(api.owner, session_id, KEPT)
     await claimed(host)
-    assert await managers.relay.binding_of(api.owner, session_id) is None
+    assert await managers.exec_relay.binding_of(api.owner, session_id) is None
     assert twin.live == set()
 
 
@@ -372,14 +372,14 @@ async def test_taking_control_of_a_released_kept_workspace_restores_its_latest_s
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     twin.files[session_id] = b"the tree and the tool the run installed"
     snapshot_id = new_id()
-    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None
     epoch = await managers.steps.begin_run(api.owner, session_id)
     taken = WorkspaceSnapshot(
@@ -422,9 +422,9 @@ async def kept_on(
     managers = api.container.managers
     twin.files[session_id] = files
     snapshot_id = new_id()
-    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None and record.on_host
     return record
 
@@ -454,7 +454,7 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     record = await kept_on(api, host, twin, session_id, b"the snapshot")
@@ -503,7 +503,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     record = await kept_on(api, host, twin, session_id, b"the snapshot")
@@ -516,14 +516,14 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     sweep = HeldWorkspacesSweep(
         api.container.infra.get_workspaces(),
         managers.tools,
-        managers.workspaces,
+        managers.agent_workspaces,
         managers.agent_sessions,
         managers.steps,
         managers.work,
         managers.tenancy,
         ProductKinds().warm_grace,
         clock=lambda: now[0],
-        relay=managers.relay,
+        exec_relay=managers.exec_relay,
     )
     stage = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
 
@@ -551,16 +551,16 @@ async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_
     # While the host that kept it is live, one whose store lacks it hands
     # the restore back for another host.
     fork = await a_pinned_session(api, pool.id)
-    waiting = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    waiting = await managers.exec_relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
     await claimed(other)
-    row = await managers.relay.workspace_work(api.owner, waiting)
+    row = await managers.exec_relay.workspace_work(api.owner, waiting)
     assert row.status is WorkStatus.QUEUED, "another host may still restore it"
 
     # Once that host is revoked, no live host keeps it: the restore is lost,
     # and the run that waits parks for a person.
     await managers.hosts.revoke_host(api.owner, UUID(keeper.credential.claimant_id))
     placed = PlacedWorkspacesRelayedImpl(
-        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(seconds=5)
+        lambda: managers.exec_relay, lambda: managers.hosts, restore_wait=timedelta(seconds=5)
     )
     restoring = asyncio.ensure_future(
         placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
@@ -595,7 +595,9 @@ async def test_a_restore_waits_for_its_offline_holder_and_the_host_that_restores
     await offline(api, holder)
     holder_twin.files[session_id] = b"written since"
     placed = PlacedWorkspacesRelayedImpl(
-        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(milliseconds=200)
+        lambda: managers.exec_relay,
+        lambda: managers.hosts,
+        restore_wait=timedelta(milliseconds=200),
     )
     restoring = asyncio.ensure_future(
         placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
@@ -607,17 +609,17 @@ async def test_a_restore_waits_for_its_offline_holder_and_the_host_that_restores
     assert session_id not in other_twin.live
     await claimed(holder)  # back online, it restores its own
     assert holder_twin.files[session_id] == b"the snapshot"
-    binding = await managers.relay.binding_of(api.owner, session_id)
+    binding = await managers.exec_relay.binding_of(api.owner, session_id)
     assert binding is not None and binding.host_id == holder_id
 
     # A restore another host makes binds the workspace to it, whatever host
     # was bound meanwhile.
     fork = await a_pinned_session(api, pool.id)
-    asked = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
-    await managers.relay.bind_workspace(api.owner, fork, holder_id, "elsewhere")
+    asked = await managers.exec_relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    await managers.exec_relay.bind_workspace(api.owner, fork, holder_id, "elsewhere")
     await claimed(other)
-    assert (await managers.relay.workspace_work(api.owner, asked)).status is WorkStatus.DONE
-    binding = await managers.relay.binding_of(api.owner, fork)
+    assert (await managers.exec_relay.workspace_work(api.owner, asked)).status is WorkStatus.DONE
+    binding = await managers.exec_relay.binding_of(api.owner, fork)
     assert binding is not None and binding.host_id == other_id
     assert fork in other_twin.live and other_twin.files[fork] == b"the snapshot"
 
@@ -635,7 +637,7 @@ async def test_a_sessions_purge_asks_each_host_that_keeps_its_snapshots_to_erase
     assert kept.is_dir()
 
     await managers.tools.purge_workspace(api.owner.org_id, session_id)
-    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    assert await managers.agent_workspaces.kept_snapshots(api.owner, session_id) == ()
     await claimed(host)
 
     assert not kept.exists(), "erased on the host, with no key revoked"

@@ -23,10 +23,10 @@ import typer
 from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
+from acme.apps.host.exec_relay import HOST_MODES, ExecutorRelayImpl
 from acme.apps.host.machine import machine_probes
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
-from acme.apps.host.relay import HOST_MODES, ExecutorRelayImpl
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled

@@ -15,15 +15,15 @@ of](../../../../README.md).
   the executor is what this namespace adds.
 - **Secret declaration**: a secret by name, never by value. It names the
   variable a command sees, the scope the credential is made for, the
-  owner it is declared on (a project, or an owner of a product's kind),
-  and the store that holds its value: the platform's own, in its cloud,
-  or the store of the machine that runs the call, inside a customer's
-  wall. A name is its owner's: each project declares its own secret of a
-  name, and the platform's store keeps each owner's value under that
-  owner.
+  owner it is declared on (an agent project, or an owner of a product's
+  kind), and the store that holds its value: the platform's own, in its
+  cloud, or the store of the machine that runs the call, inside a
+  customer's wall. A name is its owner's: each agent project declares
+  its own secret of a name, and the platform's store keeps each owner's
+  value under that owner.
 - **Secret owner kinds**: one registry (`owners.py`) of what a secret is
   declared on, each kind with which owner a session is placed on. The
-  project registers first; a product's kinds follow it.
+  agent project registers first; a product's kinds follow it.
 - **Provider key**: a tenant's own key to a model provider, by
   reference. The record says who added it, when, and when it was last
   used. The value sits in the secret store under the reference, and in
@@ -77,10 +77,10 @@ of](../../../../README.md).
 - **A secret is resolved where it is used.** A cloud secret never
   reaches a customer's host. A secret held inside the wall never crosses
   into the cloud. A secret never declared is a cloud secret.
-- **A project's secret reaches its own sessions alone.** A session reads
-  a name as its project declares it, and never as another project does.
-  A secret of a product's owner kind reaches only the sessions placed on
-  its owner, the same way.
+- **An agent project's secret reaches its own sessions alone.** A
+  session reads a name as its agent project declares it, and never as
+  another agent project does. A secret of a product's owner kind reaches
+  only the sessions placed on its owner, the same way.
 - **A rotated key is never served,** and neither is a refused one.
 - **The tenant sees its key, never its value.**
 - **`read` never opens content**, and neither does `write`. Only a

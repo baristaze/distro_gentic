@@ -4,15 +4,16 @@
 
 ## Context
 
-A session of a kind that takes its project's environment pins that
-environment as its base and works on it
-([ADR 2051](2051-a-projects-environment-is-built-once-where-its-workspaces-run.md)).
+A session of a kind that takes its agent project's workspace base pins
+that workspace base as its base and works on it
+([ADR
+2051](2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
 The fresh executor ran its checks elsewhere: in the cloud, on an
-instance of the executor's own image
-([ADR 2024](2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
+instance of the executor's own image ([ADR
+2024](2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
 Nothing the setup installed was there, so a check that imports it
-failed, and the result gate refused a success the work earned. A
-project names an environment because its work needs it, and its checks
+failed, and the result gate refused a success the work earned. An agent
+project names a workspace base because its work needs it, and its checks
 need it too.
 
 ## Decision

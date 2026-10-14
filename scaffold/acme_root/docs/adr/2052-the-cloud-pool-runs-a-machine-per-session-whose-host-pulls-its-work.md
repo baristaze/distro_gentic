@@ -13,7 +13,7 @@ machines it needs: an interface that starts, stops, snapshots, and
 destroys a machine by name, on Lima locally
 ([ADR 1029](1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)).
 A host inside a tenant's wall already prepares a workspace, runs its
-calls, and answers them through the relay, and a session kept by
+calls, and answers them through the exec relay, and a session kept by
 snapshots already keeps them on its workspace's side of the wall
 ([ADR 2050](2050-a-snapshot-lives-on-its-workspaces-side-of-the-wall.md)).
 
@@ -24,8 +24,8 @@ pinned isolation is a VM runs on a machine of the cloud pool, when the
 pool runs machines here: one machine per session, started through the
 machines interface. The machine runs the same host program a tenant
 installs, from the pool's image (`deployment/machines/`), with Docker
-inside. The runner reaches it through the relay, as it reaches any host:
-the host pulls, and the platform never calls into the machine. Its
+inside. The runner reaches it through the exec relay, as it reaches any
+host: the host pulls, and the platform never calls into the machine. Its
 commands hold the machine whole, its root through Docker: the machine is
 the session's wall.
 
@@ -122,12 +122,13 @@ with its machine.
   is the platform's cloud account: the environment then calls the
   module, gives the runner and the sweep `ACME_MACHINES_BACKEND=ec2` and
   its outputs, and their task roles its policy.
-- A session of the pool whose project names an environment is refused
-  for good. The trigger is a cloud project with an environment: the pool
-  then builds the base on a machine and keeps its disk under the tenant.
+- A session of the pool whose agent project names a workspace base is
+  refused for good. The trigger is a cloud agent project with a
+  workspace base: the pool then builds the base on a machine and keeps
+  its disk under the tenant.
 - A machine's host holds no tenant's secret, so a cloud session's
-  environment secret is missing there. The trigger is a cloud project
-  that declares one.
+  environment secret is missing there. The trigger is a cloud agent
+  project that declares one.
 - A machine of a session kept by snapshots whose run died before its end
   keeps running until a run's end snapshots it, or the session is purged.
 - A machine the sweep stopped keeps its disk until its session's next

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Home's composer over a fake transport: Send starts a session on the agent
-// and the project the chips show, sends it the prompt, and opens it; where a
-// project is required and the org has none, it says why and sends nothing;
+// and the agent project the chips show, sends it the prompt, and opens it; where a
+// an agent project is required and the org has none, it says why and sends nothing;
 // a member who may not write starts nothing.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,13 +11,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { MeView } from "@acme/client";
 import { EMPTY_PRODUCT, type PortalProduct } from "../../app/product";
 import { SlotProvider } from "../../app/slot";
-import { NO_PROJECT } from "../sessions/sessionsModel";
+import { NO_AGENT_PROJECT } from "../sessions/sessionsModel";
 import { HomePage } from "./HomePage";
 
 const net = vi.hoisted(() => ({
   environment: "local",
   permissions: ["read", "write"] as string[],
-  projects: [] as { id: string; name: string }[],
+  agentProjects: [] as { id: string; name: string }[],
   posts: [] as { path: string; body: unknown }[],
 }));
 
@@ -27,7 +27,7 @@ vi.mock("../../app/api", () => ({
       if (path === "/v1/me") {
         return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user: { id: "u1" }, org: { id: "o1" } } as unknown as MeView);
       }
-      if (path.startsWith("/v1/projects?")) return Promise.resolve(net.projects);
+      if (path.startsWith("/v1/agent-projects?")) return Promise.resolve(net.agentProjects);
       return Promise.reject(new Error(`no read for ${path}`));
     },
     post: (path: string, body?: unknown) => {
@@ -44,7 +44,7 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   agents: [
-    { kind: "engineer", label: "Engineer", about: "Changes code." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code." },
     { kind: "platform_assistant", label: "Platform assistant", about: "Answers how the platform works." },
   ],
   examples: { composer: 'Describe a task, e.g. "Fix the failing test"', starters: ["Add a test for leap years", "b", "c"] },
@@ -76,7 +76,7 @@ async function open() {
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
-  Object.assign(net, { environment: "local", permissions: ["read", "write"], projects: [], posts: [] });
+  Object.assign(net, { environment: "local", permissions: ["read", "write"], agentProjects: [], posts: [] });
 });
 
 const box = () => container.querySelector<HTMLTextAreaElement>("textarea")!;
@@ -92,45 +92,45 @@ async function type(text: string) {
 it("shows the slot's example in the box, its first agent on the chip, and its starter prompts", async () => {
   await open();
   expect(box().placeholder).toBe('Describe a task, e.g. "Fix the failing test"');
-  expect(button("Agent").textContent).toContain("Engineer");
-  expect(button("Project").textContent).toContain("No project");
+  expect(button("Agent").textContent).toContain("Software engineer");
+  expect(button("Agent project").textContent).toContain("No agent project");
   const starters = [...container.querySelectorAll("ul[aria-label='Starter prompts'] button")];
   expect(starters.map((each) => each.textContent)).toEqual(["Add a test for leap years", "b", "c"]);
   await act(async () => (starters[0] as HTMLButtonElement).click());
   expect(box().value).toBe("Add a test for leap years");
 });
 
-it("starts the agent and the project the chips show, sends the prompt, and opens the session", async () => {
+it("starts the agent and the agent project the chips show, sends the prompt, and opens the session", async () => {
   net.environment = "staging";
-  net.projects = [
+  net.agentProjects = [
     { id: "p1", name: "Docs" },
     { id: "p2", name: "Site" },
   ];
   await open();
-  expect(button("Project").textContent).toContain("Docs");
+  expect(button("Agent project").textContent).toContain("Docs");
   await act(async () => button("Agent").click());
   await act(async () => choice("Platform assistant").click());
-  await act(async () => button("Project").click());
+  await act(async () => button("Agent project").click());
   await act(async () => choice("Site").click());
   await type("Tidy the docs\nKeep the voice plain.");
   await act(async () => box().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true })));
   await settle();
   expect(net.posts).toEqual([
-    { path: "/v1/agent-sessions", body: { title: "Tidy the docs", kind: "platform_assistant", project_id: "p2" } },
+    { path: "/v1/agent-sessions", body: { title: "Tidy the docs", kind: "platform_assistant", agent_project_id: "p2" } },
     { path: "/v1/agent-sessions/s1/messages", body: { text: "Tidy the docs\nKeep the voice plain." } },
   ]);
   expect(router.state.location.pathname).toBe("/sessions/s1");
 });
 
-it("with no project to choose where one is required, says why it cannot start and sends nothing", async () => {
+it("with no agent project to choose where one is required, says why it cannot start and sends nothing", async () => {
   net.environment = "staging";
   await open();
-  expect(container.textContent).toContain(NO_PROJECT);
+  expect(container.textContent).toContain(NO_AGENT_PROJECT);
   await type("Tidy the docs");
   await act(async () => button("Send").click());
   await settle();
   expect(net.posts).toEqual([]);
-  expect(container.textContent).toContain(NO_PROJECT);
+  expect(container.textContent).toContain(NO_AGENT_PROJECT);
 });
 
 it("asks for a prompt before it starts anything", async () => {

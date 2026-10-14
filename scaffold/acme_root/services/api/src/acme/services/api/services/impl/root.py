@@ -5,79 +5,79 @@ from datetime import timedelta
 
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.billing import BillingManagerInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_billing import AgentBillingManagerInterface
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
+from acme.om.agent_playbooks import AgentPlaybooksManagerInterface
 from acme.om.connectors import ConnectorsManagerInterface
 from acme.om.intake import IntakeManagerInterface
-from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
-from acme.om.notifications import NotificationsManagerInterface
-from acme.om.playbooks import PlaybooksManagerInterface
+from acme.om.park_alerts import ParkAlertsManagerInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
+    AgentFleetServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
+    ExecRelayServiceInterface,
     FlagsServiceInterface,
-    FleetServiceInterface,
     HostsServiceInterface,
     LeasesServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
-    RelayServiceInterface,
     ServicesInterface,
     TenancyServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
-from acme.services.api.services.automations import AutomationsServiceInterface
+from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
+from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
+from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
+from acme.services.api.services.agent_projects import AgentProjectsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
-from acme.services.api.services.billing import BillingServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
+from acme.services.api.services.impl.agent_automations import AgentAutomationsServiceImpl
+from acme.services.api.services.impl.agent_billing import AgentBillingServiceImpl
+from acme.services.api.services.impl.agent_fleet import AgentFleetServiceImpl
+from acme.services.api.services.impl.agent_knowledge import AgentKnowledgeServiceImpl
+from acme.services.api.services.impl.agent_playbooks import AgentPlaybooksServiceImpl
+from acme.services.api.services.impl.agent_projects import AgentProjectsServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
-from acme.services.api.services.impl.automations import AutomationsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
-from acme.services.api.services.impl.billing import BillingServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.evidence import EvidenceServiceImpl
+from acme.services.api.services.impl.exec_relay import ExecRelayServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
-from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
-from acme.services.api.services.impl.knowledge import KnowledgeServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
-from acme.services.api.services.impl.ledgers import LedgersServiceImpl
 from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
-from acme.services.api.services.impl.notifications import NotificationsServiceImpl
-from acme.services.api.services.impl.playbooks import PlaybooksServiceImpl
-from acme.services.api.services.impl.projects import ProjectsServiceImpl
+from acme.services.api.services.impl.park_alerts import ParkAlertsServiceImpl
 from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
-from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.retention import RetentionServiceImpl
+from acme.services.api.services.impl.spend_ledgers import SpendLedgersServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.tools import ToolsServiceImpl
 from acme.services.api.services.impl.validations import ValidationsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
-from acme.services.api.services.knowledge import KnowledgeServiceInterface
-from acme.services.api.services.ledgers import LedgersServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
-from acme.services.api.services.notifications import NotificationsServiceInterface
-from acme.services.api.services.playbooks import PlaybooksServiceInterface
-from acme.services.api.services.projects import ProjectsServiceInterface
+from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
+from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
 from acme.services.api.services.validations import ValidationsServiceInterface
 
@@ -95,22 +95,22 @@ class ServicesImpl(ServicesInterface):
         leases: LeasesServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
-        fleet: FleetServiceInterface,
-        relay: RelayServiceInterface,
+        agent_fleet: AgentFleetServiceInterface,
+        exec_relay: ExecRelayServiceInterface,
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
-        billing: BillingServiceInterface,
-        automations: AutomationsServiceInterface,
-        notifications: NotificationsServiceInterface,
+        agent_billing: AgentBillingServiceInterface,
+        agent_automations: AgentAutomationsServiceInterface,
+        park_alerts: ParkAlertsServiceInterface,
         watch: WatchServiceInterface,
         matrix: MatrixServiceInterface,
         provider_keys: ProviderKeysServiceInterface,
         benchmarks: BenchmarksServiceInterface,
-        ledgers: LedgersServiceInterface,
+        spend_ledgers: SpendLedgersServiceInterface,
         evidence: EvidenceServiceInterface,
-        projects: ProjectsServiceInterface,
-        knowledge: KnowledgeServiceInterface,
-        playbooks: PlaybooksServiceInterface,
+        agent_projects: AgentProjectsServiceInterface,
+        agent_knowledge: AgentKnowledgeServiceInterface,
+        agent_playbooks: AgentPlaybooksServiceInterface,
         connectors: ConnectorsServiceInterface,
         tools: ToolsServiceInterface,
         retention: RetentionServiceInterface,
@@ -126,22 +126,22 @@ class ServicesImpl(ServicesInterface):
         self._leases = leases
         self._agent_sessions = agent_sessions
         self._hosts = hosts
-        self._fleet = fleet
-        self._relay = relay
+        self._agent_fleet = agent_fleet
+        self._exec_relay = exec_relay
         self._intake = intake
         self._budgets = budgets
-        self._billing = billing
-        self._automations = automations
-        self._notifications = notifications
+        self._agent_billing = agent_billing
+        self._agent_automations = agent_automations
+        self._park_alerts = park_alerts
         self._watch = watch
         self._matrix = matrix
         self._provider_keys = provider_keys
         self._benchmarks = benchmarks
-        self._ledgers = ledgers
+        self._spend_ledgers = spend_ledgers
         self._evidence = evidence
-        self._projects = projects
-        self._knowledge = knowledge
-        self._playbooks = playbooks
+        self._agent_projects = agent_projects
+        self._agent_knowledge = agent_knowledge
+        self._agent_playbooks = agent_playbooks
         self._connectors = connectors
         self._tools = tools
         self._retention = retention
@@ -177,11 +177,11 @@ class ServicesImpl(ServicesInterface):
     def get_hosts_service(self) -> HostsServiceInterface:
         return self._hosts
 
-    def get_fleet_service(self) -> FleetServiceInterface:
-        return self._fleet
+    def get_agent_fleet_service(self) -> AgentFleetServiceInterface:
+        return self._agent_fleet
 
-    def get_relay_service(self) -> RelayServiceInterface:
-        return self._relay
+    def get_exec_relay_service(self) -> ExecRelayServiceInterface:
+        return self._exec_relay
 
     def get_intake_service(self) -> IntakeServiceInterface:
         return self._intake
@@ -189,14 +189,14 @@ class ServicesImpl(ServicesInterface):
     def get_budgets_service(self) -> BudgetsServiceInterface:
         return self._budgets
 
-    def get_billing_service(self) -> BillingServiceInterface:
-        return self._billing
+    def get_agent_billing_service(self) -> AgentBillingServiceInterface:
+        return self._agent_billing
 
-    def get_automations_service(self) -> AutomationsServiceInterface:
-        return self._automations
+    def get_agent_automations_service(self) -> AgentAutomationsServiceInterface:
+        return self._agent_automations
 
-    def get_notifications_service(self) -> NotificationsServiceInterface:
-        return self._notifications
+    def get_park_alerts_service(self) -> ParkAlertsServiceInterface:
+        return self._park_alerts
 
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
@@ -210,23 +210,23 @@ class ServicesImpl(ServicesInterface):
     def get_benchmarks_service(self) -> BenchmarksServiceInterface:
         return self._benchmarks
 
-    def get_ledgers_service(self) -> LedgersServiceInterface:
-        return self._ledgers
+    def get_spend_ledgers_service(self) -> SpendLedgersServiceInterface:
+        return self._spend_ledgers
 
     def get_evidence_service(self) -> EvidenceServiceInterface:
         return self._evidence
 
-    def get_projects_service(self) -> ProjectsServiceInterface:
-        return self._projects
+    def get_agent_projects_service(self) -> AgentProjectsServiceInterface:
+        return self._agent_projects
 
-    def get_knowledge_service(self) -> KnowledgeServiceInterface:
-        return self._knowledge
+    def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface:
+        return self._agent_knowledge
 
     def get_connectors_service(self) -> ConnectorsServiceInterface:
         return self._connectors
 
-    def get_playbooks_service(self) -> PlaybooksServiceInterface:
-        return self._playbooks
+    def get_agent_playbooks_service(self) -> AgentPlaybooksServiceInterface:
+        return self._agent_playbooks
 
     def get_tools_service(self) -> ToolsServiceInterface:
         return self._tools
@@ -246,15 +246,15 @@ def build_services(
     watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
     *,
-    project_required: bool,
+    agent_project_required: bool,
     intake: IntakeManagerInterface,
-    automations: AutomationsManagerInterface,
-    notifications: NotificationsManagerInterface,
+    agent_automations: AgentAutomationsManagerInterface,
+    park_alerts: ParkAlertsManagerInterface,
     matrix: MatrixManagers,
     trust: TrustManagerInterface,
-    billing: BillingManagerInterface,
-    knowledge: KnowledgeManagerInterface,
-    playbooks: PlaybooksManagerInterface,
+    agent_billing: AgentBillingManagerInterface,
+    agent_knowledge: AgentKnowledgeManagerInterface,
+    agent_playbooks: AgentPlaybooksManagerInterface,
     levers: LeversManagerInterface,
     connectors: ConnectorsManagerInterface,
 ) -> ServicesInterface:
@@ -286,32 +286,32 @@ def build_services(
             managers.attribution,
             managers.loop,
             managers.windows,
-            managers.projects,
-            project_required=project_required,
+            managers.agent_projects,
+            agent_project_required=agent_project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
-        fleet=FleetServiceImpl(managers.placement_operator, trust_operator, levers),
-        relay=RelayServiceImpl(managers.relay, infra.get_topics()),
+        agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
+        exec_relay=ExecRelayServiceImpl(managers.exec_relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
-        budgets=BudgetsServiceImpl(managers.budgets, billing),
-        billing=BillingServiceImpl(billing),
-        automations=AutomationsServiceImpl(automations),
-        notifications=NotificationsServiceImpl(notifications),
+        budgets=BudgetsServiceImpl(managers.budgets, agent_billing),
+        agent_billing=AgentBillingServiceImpl(agent_billing),
+        agent_automations=AgentAutomationsServiceImpl(agent_automations),
+        park_alerts=ParkAlertsServiceImpl(park_alerts),
         watch=WatchServiceImpl(watch),
         matrix=MatrixServiceImpl(matrix.matrix, matrix.matrix_operator),
         provider_keys=ProviderKeysServiceImpl(trust),
         benchmarks=BenchmarksServiceImpl(managers.benchmarks),
-        ledgers=LedgersServiceImpl(billing),
+        spend_ledgers=SpendLedgersServiceImpl(agent_billing),
         evidence=EvidenceServiceImpl(
             managers.agent_sessions,
             managers.evidence,
-            managers.workspaces,
+            managers.agent_workspaces,
             managers.steps,
             intake,
         ),
-        projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
-        knowledge=KnowledgeServiceImpl(knowledge),
-        playbooks=PlaybooksServiceImpl(playbooks),
+        agent_projects=AgentProjectsServiceImpl(managers.agent_projects, managers.agent_workspaces),
+        agent_knowledge=AgentKnowledgeServiceImpl(agent_knowledge),
+        agent_playbooks=AgentPlaybooksServiceImpl(agent_playbooks),
         connectors=ConnectorsServiceImpl(connectors),
         tools=ToolsServiceImpl(managers.tools),
         retention=RetentionServiceImpl(managers.retention),

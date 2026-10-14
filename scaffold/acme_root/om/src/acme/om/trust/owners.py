@@ -1,7 +1,7 @@
 """What a secret is declared on, as a registry. A secret owner kind names
-the owners of that kind (a project, or a product's own), whether one is the
+the owners of that kind (an agent project, or a product's own), whether one is the
 tenant's, and which one a session is placed on: the one placement whose
-sessions reach a secret declared on it. The platform's project registers
+sessions reach a secret declared on it. The platform's agent project registers
 here as a product's owner kind does at its roots
 (`root.PlatformPorts.kinds`), and a secret is resolved through every kind
 alike."""
@@ -12,9 +12,9 @@ from collections.abc import Iterable, Iterator, Mapping
 from types import MappingProxyType
 from uuid import UUID
 
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.context import TenantContext
-from acme.om.projects.policies import SessionProjectsInterface
-from acme.om.trust.types.secret import OWNER_KIND, PROJECT
+from acme.om.trust.types.secret import AGENT_PROJECT, OWNER_KIND
 
 
 class SecretOwnerInterface(ABC):
@@ -36,27 +36,27 @@ class SecretOwnerInterface(ABC):
         ...
 
 
-class ProjectOwnerImpl(SecretOwnerInterface):
-    """The platform's owner kind: a project, whose secrets reach its own
+class AgentProjectOwnerImpl(SecretOwnerInterface):
+    """The platform's owner kind: an agent project, whose secrets reach its own
     sessions alone."""
 
-    kind = PROJECT
+    kind = AGENT_PROJECT
 
-    def __init__(self, projects: SessionProjectsInterface) -> None:
-        self._projects = projects
+    def __init__(self, agent_projects: SessionAgentProjectsInterface) -> None:
+        self._agent_projects = agent_projects
 
     async def holds(self, ctx: TenantContext, owner_id: UUID) -> bool:
-        return await self._projects.holds(ctx, owner_id)
+        return await self._agent_projects.holds(ctx, owner_id)
 
     async def owner_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return await self._projects.project_of(ctx, session_id)
+        return await self._agent_projects.agent_project_of(ctx, session_id)
 
 
 class SecretOwners:
     """The owner kinds a process knows, each once, in the order a session's
-    secret is resolved through them: the platform's project first. A kind
-    registered twice is refused, so a product never takes over a
-    project's secrets."""
+    secret is resolved through them: the platform's agent project first. A kind
+    registered twice is refused, so a product never takes over an
+    agent project's secrets."""
 
     def __init__(self, owners: Iterable[SecretOwnerInterface]) -> None:
         found: dict[str, SecretOwnerInterface] = {}

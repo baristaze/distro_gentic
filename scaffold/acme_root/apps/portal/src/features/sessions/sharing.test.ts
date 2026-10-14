@@ -44,7 +44,7 @@ function sessionOf(id: string, by: string, visibility: AgentSessionView["visibil
     id,
     root_id: id,
     parent_id: null,
-    kind: "engineer",
+    kind: "software_engineer",
     kind_version: 1,
     title: id,
     status: "idle",
@@ -115,7 +115,7 @@ function read(path: string): unknown {
   if (!session || !sees(session, me)) throw refused(404, path);
   if (!part) return session;
   if (part === "steps") return { has_more: false, items: (server.steps[session.id] ?? []).filter((one) => one.seq > Number(new URLSearchParams(query).get("after_seq"))) };
-  if (part === "delivery") return { branch: null, branch_seen: false, project_id: null, report: null, work: [] };
+  if (part === "work-product") return { branch: null, branch_seen: false, agent_project_id: null, report: null, work: [] };
   if (part === "children" || part === "executions") return { items: [], next_cursor: null };
   if (part === "tool-calls") return { has_more: false, items: [] };
   if (part === "approvals" || part === "validations") return [];

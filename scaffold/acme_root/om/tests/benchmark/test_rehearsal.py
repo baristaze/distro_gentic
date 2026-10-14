@@ -30,7 +30,7 @@ from acme.om.storage.settings import MigrationSettings
 pytestmark = pytest.mark.benchmark
 
 PAIRS = 2
-"""Trials of each arm: candidate, baseline, baseline, candidate."""
+"""Trials of each contender: candidate, baseline, baseline, candidate."""
 
 
 @pytest.fixture

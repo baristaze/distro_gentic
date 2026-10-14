@@ -14,7 +14,7 @@ import type {
   CommandProgressView,
   CommandRequest,
   DecisionRequest,
-  DeliveryView,
+  WorkProductView,
   ExecutionPageView,
   ControlGiveBackRequest,
   HandRunView,
@@ -286,7 +286,7 @@ export const useQuestions = (id: string, enabled = true) => useRead<QuestionView
 export const useApprovals = (id: string, enabled = true) => useRead<ApprovalView[]>(id, "approvals", "approvals", enabled);
 export const useBounds = (id: string, enabled = true) => useRead<BoundsView>(id, "bounds", "bounds", enabled);
 export const useUsage = (id: string, enabled = true) => useRead<SessionModelUsageView>(id, "usage", "usage", enabled);
-export const useDelivery = (id: string, enabled = true) => useRead<DeliveryView>(id, "delivery", "delivery", enabled);
+export const useWorkProduct = (id: string, enabled = true) => useRead<WorkProductView>(id, "work_product", "work-product", enabled);
 export const useValidations = (id: string, enabled = true) =>
   useRead<ValidationView[]>(id, "validations", "validations", enabled);
 
@@ -397,11 +397,11 @@ export function useSessionActions(id: string) {
       mutationFn: () => api.post<AgentSessionView>(`${path(id)}/restore`),
       onSettled: listed,
     }),
-    /** A playbook's latest version brought into the session: its brief
+    /** An agent playbook's latest version brought into the session: its brief
      * arrives as the person's message, and its gates hold from now on. */
     invoke: useMutation({
       mutationFn: (name: string) =>
-        api.post<InvocationView>(`/v1/playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
+        api.post<InvocationView>(`/v1/agent-playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
           idempotencyKey: crypto.randomUUID(),
         }),
       onSettled: settled,

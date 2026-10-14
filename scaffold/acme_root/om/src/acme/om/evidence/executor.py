@@ -3,7 +3,7 @@ workspace. It takes the delivered commit, overlays the checks, fixtures,
 and runner from the protected source, runs them under an environment it
 sets, and writes and hashes the results. A root wires the platform's;
 the null of a root that wired none refuses every run, loudly. A product
-registers an executor of its own for an environment of its own, beside
+registers an executor of its own, under a name of its own, beside
 the platform's (`Executors`); what any of them writes is held to the same
 rules before it is kept, and the result gate reads it as it reads the
 platform's."""
@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from acme.om.context import TenantContext
-from acme.om.evidence.types.contract import PLATFORM_ENVIRONMENT, Offer
+from acme.om.evidence.types.contract import PLATFORM_EXECUTOR, Offer
 from acme.om.evidence.types.record import NAME
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 
@@ -38,27 +38,27 @@ class ExecutorInterface(ABC):
 
 
 class Executors:
-    """The executors a process holds, one per validation environment: the
-    platform's under `PLATFORM_ENVIRONMENT`, and each a product registered
-    at its root under a name of its own. A product never takes over the
-    platform's environment."""
+    """The executors a process holds, each by the name a check's `executor`
+    gives: the platform's under `PLATFORM_EXECUTOR`, and each a product
+    registered at its root under a name of its own. A product never takes
+    over the platform's name."""
 
     def __init__(
         self, platform: ExecutorInterface, others: Mapping[str, ExecutorInterface] | None = None
     ) -> None:
-        found: dict[str, ExecutorInterface] = {PLATFORM_ENVIRONMENT: platform}
-        for environment, executor in (others or {}).items():
-            if environment in found:
-                raise ValueError(f"the {environment} environment is registered twice")
-            if not re.match(NAME, environment):
-                raise ValueError(f"an environment is named in lower case, never {environment!r}")
-            found[environment] = executor
+        found: dict[str, ExecutorInterface] = {PLATFORM_EXECUTOR: platform}
+        for name, executor in (others or {}).items():
+            if name in found:
+                raise ValueError(f"the {name} executor is registered twice")
+            if not re.match(NAME, name):
+                raise ValueError(f"an executor is named in lower case, never {name!r}")
+            found[name] = executor
         self._executors: Mapping[str, ExecutorInterface] = MappingProxyType(found)
 
-    def get(self, environment: str) -> ExecutorInterface | None:
-        """The executor of that environment; None for one nobody registered."""
-        return self._executors.get(environment)
+    def get(self, name: str) -> ExecutorInterface | None:
+        """The executor of that name; None for one nobody registered."""
+        return self._executors.get(name)
 
     @property
     def platform(self) -> ExecutorInterface:
-        return self._executors[PLATFORM_ENVIRONMENT]
+        return self._executors[PLATFORM_EXECUTOR]

@@ -1,8 +1,8 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, automations, playbooks, knowledge, and notifications
+with the intake, agent automations, agent playbooks, agent knowledge, and park alerts
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
-the playbooks layer, and the knowledge layer, and each manager built over
+the agent playbooks layer, and the agent knowledge layer, and each manager built over
 the engine's. What
 their suites share: a tenant whose members a case names with a role, the
 tenant's service context, and the steps a session holds."""
@@ -22,6 +22,13 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_automations.manager import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
+from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
+from acme.om.agent_knowledge.root import AgentKnowledgeLayer
+from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -29,8 +36,6 @@ from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.automations.manager import AutomationsManagerInterface
-from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import (
     AppContext,
@@ -45,15 +50,10 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.knowledge.manager import KnowledgeManagerInterface
-from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
-from acme.om.notifications.manager import NotificationsManagerInterface
-from acme.om.notifications.root import build_notifications
-from acme.om.playbooks.manager import PlaybooksManagerInterface
-from acme.om.playbooks.root import PlaybooksLayer
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -118,7 +118,7 @@ KINDS = (STEADY, ACTING, ASKING, DELEGATING)
 class Members:
     """The adopter's transition: each person a case names holds a member's
     place with the role it gives, read live, as an agent's call or an
-    automation's firing reads it; anyone else holds none."""
+    agent automation's firing reads it; anyone else holds none."""
 
     org_id: UUID
     roles: dict[UUID, Role] = field(default_factory=dict[UUID, Role])
@@ -148,15 +148,15 @@ class Wired:
     clock: Clock
     members: Members
     principals: PrincipalContext
-    """The root's transition: the tenant's automation principal by its
+    """The root's transition: the tenant's agent automation principal by its
     grant, and everyone else as `members` answers."""
     owner: TenantContext
     service: TenantContext
     intake: IntakeManagerInterface
-    automations: AutomationsManagerInterface
-    playbooks: PlaybooksManagerInterface
-    knowledge: KnowledgeManagerInterface
-    notifications: NotificationsManagerInterface
+    agent_automations: AgentAutomationsManagerInterface
+    agent_playbooks: AgentPlaybooksManagerInterface
+    agent_knowledge: AgentKnowledgeManagerInterface
+    park_alerts: ParkAlertsManagerInterface
     chat: IntegrationTwinImpl
     forge: IntegrationTwinImpl
     storage: StorageInterface
@@ -248,16 +248,16 @@ def wired(
     *,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
-    project_required: bool = False,
+    agent_project_required: bool = False,
     actions: ProductActions = no_actions,
     credentials: Callable[
         [ModelProvidersInterface], CallCredentialsInterface
     ] = CallCredentialsPlatformImpl,
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
-    tenant's owner; a suite over Postgres hands in both. `project_required`
-    is the automations' as a stack outside `local` sets it, `actions` the
-    product's own kinds of automation action, and `credentials` the key
+    tenant's owner; a suite over Postgres hands in both. `agent_project_required`
+    is the agent automations' as a stack outside `local` sets it, `actions` the
+    product's own kinds of agent automation action, and `credentials` the key
     each of the loop's calls goes out on, the platform's unless said."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
@@ -276,7 +276,7 @@ def wired(
     )
     members = Members(org_id=owner.org_id)
     members.roles[owner.user_id] = Role.OWNER
-    principals = automation_principals(storage.get_automation_storage(), members)
+    principals = agent_automation_principals(storage.get_agent_automation_storage(), members)
     service = build_context(
         RequestContext(request_id=new_id(), app=WORKER),
         user_id=EMPTY_UUID,
@@ -303,11 +303,11 @@ def wired(
         probe=KeyProbeTwinImpl(refused=frozenset()),
         clock=clock,
     )
-    playbooks = PlaybooksLayer(storage, clock=clock)
-    knowledge = KnowledgeLayer(storage, clock=clock)
+    agent_playbooks = AgentPlaybooksLayer(storage, clock=clock)
+    agent_knowledge = AgentKnowledgeLayer(storage, clock=clock)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        return knowledge.tools(playbooks.tools(trust.tools(inner)))
+        return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
 
     managers = build_managers(
         storage,
@@ -317,7 +317,7 @@ def wired(
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
-        agents_layer=playbooks.agents,
+        agents_layer=agent_playbooks.agents,
     )
     trust.build(managers)
 
@@ -339,7 +339,7 @@ def wired(
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         credentials(providers),
         infra.get_outages(),
@@ -370,18 +370,18 @@ def wired(
         owner=owner,
         service=service,
         intake=intake,
-        automations=build_automations(
+        agent_automations=build_agent_automations(
             storage,
             managers,
-            project_required=project_required,
+            agent_project_required=agent_project_required,
             principal_context=members,
             clock=clock,
             actions=actions,
-            playbooks=lambda: playbooks.build(managers),
+            agent_playbooks=lambda: agent_playbooks.build(managers),
         ),
-        playbooks=playbooks.build(managers),
-        knowledge=knowledge.build(managers),
-        notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
+        agent_playbooks=agent_playbooks.build(managers),
+        agent_knowledge=agent_knowledge.build(managers),
+        park_alerts=build_park_alerts(storage, managers, integrations, intake, clock=clock),
         chat=chat,
         forge=forge,
         storage=storage,

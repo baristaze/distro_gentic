@@ -2,7 +2,7 @@
 and the tools a product's slot names, and a slot that names a tool it may
 not call is refused at start; a reader refuses an input it does not
 declare before it reads anything; a list of sessions filters by park
-reason and project and says where to read on; read_wait names the offline
+reason and agent project and says where to read on; read_wait names the offline
 host that holds a session's workspace; and the object model names every
 park reason the engine has and every unlock it writes, each with its
 cause, who may clear it, and the reader that shows it."""
@@ -16,11 +16,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_session
 from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, Platform, calls, platform_over
-from contracts.project_storage import in_project
 from contracts.step_storage import make_message
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -110,7 +110,7 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
 
     session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
     assert session.kind_version == PLATFORM_ASSISTANT_KIND.version == 2
-    readers = {*ASSISTANT_READERS, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE}
+    readers = {*ASSISTANT_READERS, kinds.SEARCH_AGENT_KNOWLEDGE, kinds.READ_AGENT_KNOWLEDGE}
     assert readers <= set(session.tools)
     assert "read_tally" in session.tools
     # The product's tool joins the current version alone: a session still on
@@ -119,9 +119,11 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
     assert PLATFORM_ASSISTANT_V1 in joined
     assert "read_tally" not in PLATFORM_ASSISTANT_V1.tools
     # A kind of the product's own never gains it.
-    engineer_id = await platform.start(kinds.ENGINEER)
-    engineer = await platform.managers.agent_sessions.get_session(platform.owner, engineer_id)
-    assert "read_tally" not in engineer.tools
+    software_engineer_id = await platform.start(kinds.SOFTWARE_ENGINEER)
+    software_engineer = await platform.managers.agent_sessions.get_session(
+        platform.owner, software_engineer_id
+    )
+    assert "read_tally" not in software_engineer.tools
 
 
 @pytest.mark.parametrize(
@@ -171,13 +173,17 @@ async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path
     malformed = {
         "bad_id": calls(kinds.READ_SESSION, "bad_id", session_id="not-a-session"),
         "no_id": calls(kinds.READ_WAIT, "no_id"),
-        "extra": calls(kinds.READ_PROJECT, "extra", project_id=str(new_id()), org_id="x"),
+        "extra": calls(
+            kinds.READ_AGENT_PROJECT, "extra", agent_project_id=str(new_id()), org_id="x"
+        ),
         "zero": calls(kinds.LIST_SESSIONS, "zero", limit=0),
-        "huge": calls(kinds.LIST_PROJECTS, "huge", limit=10_000),
+        "huge": calls(kinds.LIST_AGENT_PROJECTS, "huge", limit=10_000),
         "status": calls(kinds.LIST_SESSIONS, "status", status="stuck"),
         "reason": calls(kinds.LIST_SESSIONS, "reason", park_reason="person", status="idle"),
-        "cursor": calls(kinds.LIST_AUTOMATIONS, "cursor", after="page-2"),
-        "runs": calls(kinds.READ_AUTOMATION, "runs", automation_id=str(new_id()), runs=500),
+        "cursor": calls(kinds.LIST_AGENT_AUTOMATIONS, "cursor", after="page-2"),
+        "runs": calls(
+            kinds.READ_AGENT_AUTOMATION, "runs", agent_automation_id=str(new_id()), runs=500
+        ),
     }
     platform.anthropic.add(
         reply(said("Let me read."), *malformed.values()),
@@ -194,7 +200,7 @@ async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path
         assert failure is ToolFailure.INVALID_INPUT, use_id
 
 
-# A list of sessions filters by park reason and by project.
+# A list of sessions filters by park reason and by agent project.
 
 CLERK = AgentKind(
     name="clerk",
@@ -221,15 +227,15 @@ async def held_session(platform: Platform) -> UUID:
     return session.id
 
 
-async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_on(
+async def test_a_list_of_sessions_filters_by_park_reason_and_agent_project_and_reads_on(
     tmp_path: Path,
 ) -> None:
     platform = platform_over(tmp_path, kinds=(CLERK,))
     first = await held_session(platform)
     second = await held_session(platform)
-    idle = await platform.start(kinds.ENGINEER)
-    projects = platform.storage.get_project_storage()
-    project_id = await in_project(projects, platform.owner.org_id, first, idle)
+    idle = await platform.start(kinds.SOFTWARE_ENGINEER)
+    agent_projects = platform.storage.get_agent_project_storage()
+    agent_project_id = await in_agent_project(agent_projects, platform.owner.org_id, first, idle)
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Which sessions wait for a person?")
     platform.anthropic.add(
@@ -237,7 +243,10 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_o
             calls(kinds.LIST_SESSIONS, "use_person", park_reason="person", limit=1),
             calls(kinds.LIST_SESSIONS, "use_idle", status="idle"),
             calls(
-                kinds.LIST_SESSIONS, "use_project", park_reason="person", project_id=str(project_id)
+                kinds.LIST_SESSIONS,
+                "use_agent_project",
+                park_reason="person",
+                agent_project_id=str(agent_project_id),
             ),
         ),
         reply(said("Two wait for a person.")),
@@ -265,8 +274,8 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_o
     _, text = await platform.answer(asking, "use_idle")
     listed = {s["session_id"] for s in json.loads(text)["sessions"]}
     assert str(idle) in listed and str(first) not in listed
-    # Of the two that wait, only the first is in the project.
-    _, text = await platform.answer(asking, "use_project")
+    # Of the two that wait, only the first is in the agent project.
+    _, text = await platform.answer(asking, "use_agent_project")
     in_it = json.loads(text)
     assert [s["session_id"] for s in in_it["sessions"]] == [str(first)]
     assert in_it["next"] is None
@@ -284,7 +293,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
         platform.managers.steps,
         platform.owner,
     )
-    root = await sessions.get_session(owner, await platform.start(kinds.ENGINEER))
+    root = await sessions.get_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
     child = await sessions.create_session(owner, make_session(parent=root))
     asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     (message,) = await steps.append_inputs(
@@ -346,9 +355,9 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
     silent_since = now - 2 * HostsOptions().online_window
     holder = await a_host(platform, pool.id, "host-1", silent_since)
     await a_host(platform, pool.id, "host-2", now)
-    pinned = await platform.start(kinds.ENGINEER)
+    pinned = await platform.start(kinds.SOFTWARE_ENGINEER)
     await hosts.place_session(platform.owner, pinned, pool.id)
-    await platform.managers.relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
+    await platform.managers.exec_relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Why has my session not started?")
     platform.anthropic.add(

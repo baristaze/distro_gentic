@@ -139,7 +139,7 @@ def a_validation(
         id=new_id(),
         created_at=utcnow().replace(hour=0, minute=0) + timedelta(minutes=minute),
         session_id=new_id(),
-        project="checkout",
+        agent_project="checkout",
         purpose=purpose,
         version=version,
         source=source,
@@ -217,7 +217,7 @@ def collected(data: bytes) -> Any:
         data,
         executor="executor-1",
         session_id=new_id(),
-        project="checkout",
+        agent_project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
         now=utcnow(),
@@ -233,11 +233,11 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
     first, second = collected(data)
     assert first.provenance is Provenance.TWIN and first.outcome is RunOutcome.PASSED
     assert second.outcome is RunOutcome.FAILED and second.cases.failed == 1
-    assert first.executor == "executor-1" and first.environment.toolchain == {"python": "3.14"}
+    assert first.executor == "executor-1" and first.run_image.toolchain == {"python": "3.14"}
     collector = Collector(
         executor="executor-1",
         session_id=new_id(),
-        project="checkout",
+        agent_project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
         now=at,
@@ -281,7 +281,7 @@ MARKERS = ("hidden_payments_suite", "tests/hidden/test_drop.py", "test_drop_at_p
 def clean() -> dict[Surface, dict[str, str]]:
     return {
         Surface.PROMPT: {"system": "Investigate why the export drops the record."},
-        Surface.KNOWLEDGE: {"staging": "The staging database is reset weekly."},
+        Surface.AGENT_KNOWLEDGE: {"staging": "The staging database is reset weekly."},
         Surface.TOOL_SOURCE: {"run_tests": "def run(): subprocess.run(['pytest', 'tests'])"},
         Surface.EVIDENCE: {"run-1": "unit passed 41 of 41 cases"},
         Surface.PULL_REQUEST: {"body": "Retry the charge once before the refund."},

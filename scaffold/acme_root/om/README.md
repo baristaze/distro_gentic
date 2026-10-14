@@ -98,13 +98,13 @@ and says which budgets are in the way and when each resets. A refused
 loop waits, never fails, until the budget is raised or resets. After
 the call, the hold is settled at what the call really cost.
 
-## Billing
+## Agent billing
 
-An **account** says who pays for an org's agents: the platform's key,
-billed to the org, or the org's own key. Every hold, settlement, and
-**charge** is an entry of one **ledger**, written once. A call on the
-platform's key is paid from **buckets** in a fixed order: the plan's
-included units, granted units, prepaid **credits**, and a line of credit.
+A **spend account** says who pays for an org's agents: the platform's
+key, billed to the org, or the org's own key. Every hold, settlement,
+and **charge** is an entry of one **spend ledger**, written once. A call
+on the platform's key is paid from **buckets** in a fixed order: the
+unit plan's included units, granted units, prepaid **credits**, and a line of credit.
 A credit counts only once the payment provider confirms it. A limit's
 day and week follow the org's time zone, and its month the billing
 period.
@@ -161,15 +161,15 @@ session's history.
 ## Evidence
 
 A **run** is one execution of one check, written once: the version it
-ran against, the environment, who ran it, its outcome, and what served
+ran against, the run image, who ran it, its outcome, and what served
 each thing it relied on: the real thing, a **twin**, a test **double**, or
 nothing. A **hypothesis** and a **finding** link the runs that show them.
 
-A **validation policy** is a project's say over what counts as done: the
-checks a change must pass, and the **protected** paths no agent may
-change. A **validation** runs those checks on a fresh executor, apart
-from the agent, at the version delivered; the **result gate** counts a
-success only on its runs.
+A **validation policy** is an agent project's say over what counts as
+done: the checks a change must pass, and the **protected** paths no
+agent may change. A **validation** runs those checks on a fresh
+executor, apart from the agent, at the version delivered; the **result
+gate** counts a success only on its runs.
 
 ## Where work runs
 
@@ -209,26 +209,27 @@ session that claims one.
 
 ## The agents the platform ships
 
-The platform ships six kinds of agent. The **engineer** takes an
-objective to a validated, reviewable change in a workspace of its own.
-**Analysis** reads what a run produced and turns it into findings. The
-**planner** turns findings into tasks, and hands new work to an
-engineer. The **platform assistant** answers the people who set up and
-run their part of the platform: it explains the product from its
+The platform ships six kinds of agent. The **software engineer** takes
+an objective to a validated, reviewable change in a workspace of its
+own. **Analysis** reads what a run produced and turns it into findings.
+The **planner** turns findings into tasks, and hands new work to an
+software engineer. The **platform assistant** answers the people who set
+up and run their part of the platform: it explains the product from its
 documentation and cites it, reads the tenant's sessions and what they
-wait on, its projects, and its automations, drafts the tool policy for a
-person to apply, and hands engineering work to an engineer. It acts on a person's own permissions, and it has no
+wait on, its agent projects, and its agent automations, drafts the tool
+policy for a person to apply, and hands engineering work to a software
+engineer. It acts on a person's own permissions, and it has no
 workspace, no repository, and no shell. The **reviewer** reads a pull
 request through the forge, its files at its head and its checks, and
 answers with findings, each with a file, a line, and a grade; it changes
-nothing, and a person approves each comment it posts. The **operator**
-reads the tenant's sessions and what they wait on, its hosts and what
-they offer, and its budgets' spend, on a person's own permissions, and
-acts on none of them.
+nothing, and a person approves each comment it posts. The **ops
+analyst** reads the tenant's sessions and what they wait on, its hosts
+and what they offer, and its budgets' spend, on a person's own
+permissions, and acts on none of them.
 
 A kind whose toolsets include starting sub-agents is a lead: it starts
-the others, such as an engineer on a change and the reviewer on its pull
-request, and answers with their reports.
+the others, such as a software engineer on a change and the reviewer on
+its pull request, and answers with their reports.
 
 Nothing chooses an agent for a message: a person chooses by choosing
 the session they type in.
@@ -246,7 +247,7 @@ leaves uncommitted is pushed beside the branch before the machine goes.
 
 A session's **isolation** is fixed when the session is made, and every
 workspace it gets is held to it: a host that cannot give it says no, and
-the session waits rather than run on less. Its **egress** is its
+the session waits rather than run on less. Its **egress** is its agent
 project's allowlist: the places its workspace may reach and what it may
 do there, or open egress, chosen on purpose and recorded with why. No
 workspace ever reaches the platform's own machines.
@@ -302,13 +303,13 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
-- A project names its org and binds one repository. A session started
-  under a project belongs to it, of its own org, from before it exists
-  and never moved; a session it spawns or hands work to belongs to the
-  same. The API's start names the session's project, and outside
-  `local` refuses a session that names none. An automation's start names
-  its project too, and outside `local` one that names none starts
-  nothing.
+- An agent project names its org and binds one repository. A session
+  started under an agent project belongs to it, of its own org, from
+  before it exists and never moved; a session it spawns or hands work to
+  belongs to the same. The API's start names the session's agent
+  project, and outside `local` refuses a session that names none. An
+  agent automation's start names its agent project too, and outside
+  `local` one that names none starts nothing.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.
@@ -322,7 +323,7 @@ arrive twice, so the second copy gets the first one's answer.
   where it stopped.
 - A run, a validation, a hypothesis, and a finding belong to one session
   and name its org; they go when the session is purged. A validation
-  policy names its org and its project, one each.
+  policy names its org and its agent project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
 - A pool, its tokens, its hosts, their credentials, and a session's
@@ -338,7 +339,7 @@ arrive twice, so the second copy gets the first one's answer.
 - A validation session names its org, and its work is a queue item
   that names the session.
 - A session's workspace names its org and its session, one each, and an
-  egress allowlist its org and its project, one each.
+  egress allowlist its org and its agent project, one each.
 - The matrix and what its operators record of a model are the
   platform's, no org's. A session's pin to a version, and an org's own
   choice of fill, name their org, and go with it.
@@ -352,10 +353,10 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
-- [Projects](src/acme/om/projects/README.md)
+- [Agent projects](src/acme/om/agent_projects/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
-- [Billing](src/acme/om/billing/README.md)
+- [Agent billing](src/acme/om/agent_billing/README.md)
 - [Models](src/acme/om/models/README.md)
 - [The model matrix](src/acme/om/matrix/README.md)
 - [Windows](src/acme/om/windows/README.md)
@@ -365,17 +366,17 @@ arrive twice, so the second copy gets the first one's answer.
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
-- [Relay](src/acme/om/relay/README.md)
+- [Exec relay](src/acme/om/exec_relay/README.md)
 - [The cloud pool](src/acme/om/cloud_pool/README.md)
 - [Intake](src/acme/om/intake/README.md)
-- [Automations](src/acme/om/automations/README.md)
-- [Playbooks](src/acme/om/playbooks/README.md)
-- [Knowledge](src/acme/om/knowledge/README.md)
+- [Agent automations](src/acme/om/agent_automations/README.md)
+- [Agent playbooks](src/acme/om/agent_playbooks/README.md)
+- [Agent knowledge](src/acme/om/agent_knowledge/README.md)
 - [Levers](src/acme/om/levers/README.md)
 - [Connectors](src/acme/om/connectors/README.md)
-- [Notifications](src/acme/om/notifications/README.md)
+- [Park alerts](src/acme/om/park_alerts/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
-- [Workspaces](src/acme/om/workspaces/README.md)
+- [Agent workspaces](src/acme/om/agent_workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

@@ -1,8 +1,8 @@
 """Validation sessions over the API, as a CI job asks for one: a member who
-may write starts one for a check its project's policy declares, at a
+may write starts one for a check its agent project's policy declares, at a
 delivered head with its checks from a base, under an Idempotency-Key, and
 reads its verdict once the platform's worker has run it. A viewer starts
-none; another tenant starts nothing on the project and reads nothing of the
+none; another tenant starts nothing on the agent project and reads nothing of the
 session; a check the policy does not declare is refused before anything is
 queued. A run passes only at the grade the policy asks of its check: on a
 double, or with a dependency that was not there, it never does. A check
@@ -46,7 +46,7 @@ from acme.services.api.container import AppContainer
 URL = "/v1/validation-sessions"
 HEAD = "c" * 40
 BASE = "b" * 40
-PROJECT = {"name": "the weekly reports", "repository": {"host": "github.com", "path": "o/r"}}
+AGENT_PROJECT = {"name": "the weekly reports", "repository": {"host": "github.com", "path": "o/r"}}
 LEASE = timedelta(seconds=30)
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 
@@ -65,7 +65,7 @@ def container(tmp_path: Path, executor: ScriptedExecutor) -> AppContainer:
 class Tenant:
     org_id: UUID
     owner: Headers
-    project_id: UUID
+    agent_project_id: UUID
     ctx: TenantContext
 
 
@@ -76,7 +76,7 @@ async def tenant(
     grade: Grade = Grade.TWIN,
     rate: RateRule | None = None,
 ) -> Tenant:
-    """A tenant with its owner signed in, and a project whose policy, which
+    """A tenant with its owner signed in, and an agent project whose policy, which
     its owner declares, holds the check `unit`, required at a twin for one
     kind of change and at `grade` (under `rate`, when set) for another."""
     email = f"owner@{slug}.test"
@@ -84,18 +84,18 @@ async def tenant(
         seed_request(), slug.title(), slug, email, slug.title()
     )
     owner = await sign_in_as(client, email, org.id)
-    made = await client.post("/v1/projects", headers=owner, json=PROJECT)
+    made = await client.post("/v1/agent-projects", headers=owner, json=AGENT_PROJECT)
     assert made.status_code == 201, made.text
-    project_id = UUID(made.json()["id"])
-    policy = make_policy(policy_key(project_id))
+    agent_project_id = UUID(made.json()["id"])
+    policy = make_policy(policy_key(agent_project_id))
     graded = Requirement(check="unit", grade=grade, paths=("docs/**",), rate=rate)
     policy = policy.model_copy(update={"requirements": (*policy.requirements, graded)})
     await container.managers.evidence.write_policy(ctx, policy)
-    return Tenant(org.id, owner, project_id, ctx)
+    return Tenant(org.id, owner, agent_project_id, ctx)
 
 
-def start_of(project_id: UUID, check: str = "unit", head: str = HEAD) -> dict[str, str]:
-    return {"project_id": str(project_id), "check": check, "head": head, "base": BASE}
+def start_of(agent_project_id: UUID, check: str = "unit", head: str = HEAD) -> dict[str, str]:
+    return {"agent_project_id": str(agent_project_id), "check": check, "head": head, "base": BASE}
 
 
 async def worker_runs(container: AppContainer) -> int:
@@ -151,13 +151,13 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
     member = await person(client, container, ajax.org_id, Role.MEMBER)
     keyed = {**member, "Idempotency-Key": "ci-run-1"}
 
-    started = await client.post(URL, headers=keyed, json=start_of(ajax.project_id))
-    again = await client.post(URL, headers=keyed, json=start_of(ajax.project_id))
+    started = await client.post(URL, headers=keyed, json=start_of(ajax.agent_project_id))
+    again = await client.post(URL, headers=keyed, json=start_of(ajax.agent_project_id))
 
     assert started.status_code == 201, started.text
     session = started.json()
-    assert (session["project_id"], session["check"], session["head"], session["base"]) == (
-        str(ajax.project_id),
+    assert (session["agent_project_id"], session["check"], session["head"], session["base"]) == (
+        str(ajax.agent_project_id),
         "unit",
         HEAD,
         BASE,
@@ -186,7 +186,7 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
     failing = await client.post(
         URL,
         headers={**member, "Idempotency-Key": "ci-run-2"},
-        json=start_of(ajax.project_id, head="d" * 40),
+        json=start_of(ajax.agent_project_id, head="d" * 40),
     )
     assert failing.status_code == 201, failing.text
     assert await worker_runs(container) == 1
@@ -218,12 +218,12 @@ async def test_a_session_started_on_a_key_runs_at_the_keys_role_while_it_holds(
     starter = (await client.get("/v1/me", headers=admin)).json()["user"]["id"]
 
     on_key = await client.post(
-        URL, headers={**key, "Idempotency-Key": "on-key"}, json=start_of(ajax.project_id)
+        URL, headers={**key, "Idempotency-Key": "on-key"}, json=start_of(ajax.agent_project_id)
     )
     in_person = await client.post(
         URL,
         headers={**admin, "Idempotency-Key": "in-person"},
-        json=start_of(ajax.project_id, head="d" * 40),
+        json=start_of(ajax.agent_project_id, head="d" * 40),
     )
     assert on_key.status_code == 201, on_key.text
     assert in_person.status_code == 201, in_person.text
@@ -260,7 +260,7 @@ async def test_a_session_whose_key_is_revoked_before_its_run_reads_refused(
     started = await client.post(
         URL,
         headers={"Authorization": f"Bearer {minted.json()['key']}"},
-        json=start_of(ajax.project_id),
+        json=start_of(ajax.agent_project_id),
     )
     assert started.status_code == 201, started.text
     revoked = await client.delete(f"/v1/api-keys/{key_id}", headers=admin)
@@ -301,7 +301,7 @@ async def test_a_passing_run_passes_only_at_the_grade_its_check_asks(
 ) -> None:
     ajax = await tenant(client, container, "ajax", grade)
     executor.provenance = served
-    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.agent_project_id))
     assert started.status_code == 201, started.text
     assert await worker_runs(container) == 1
 
@@ -353,7 +353,7 @@ async def test_a_rated_check_runs_its_trials_and_never_passes_on_one(
         return await scripted(ctx, ran)
 
     monkeypatch.setattr(executor, "run", run)
-    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.agent_project_id))
     assert started.status_code == 201, started.text
     assert await worker_runs(container) == 1
 
@@ -369,7 +369,7 @@ async def test_a_rated_check_runs_its_trials_and_never_passes_on_one(
 
 
 # Check 2: a member without the write permission starts nothing, and a
-# member of another tenant starts nothing on the project and reads nothing.
+# member of another tenant starts nothing on the agent project and reads nothing.
 
 
 async def test_a_viewer_starts_none_and_another_tenant_starts_and_reads_nothing(
@@ -380,22 +380,24 @@ async def test_a_viewer_starts_none_and_another_tenant_starts_and_reads_nothing(
     viewer = await person(client, container, ajax.org_id, Role.VIEWER)
 
     refused(
-        await client.post(URL, headers=viewer, json=start_of(ajax.project_id)),
+        await client.post(URL, headers=viewer, json=start_of(ajax.agent_project_id)),
         403,
         "not_authorized",
     )
-    # Ajax's project has no policy in beta's tenant: answered as a project
+    # Ajax's agent project has no policy in beta's tenant: answered as an agent project
     # nobody holds is.
-    crossed = await client.post(URL, headers=beta.owner, json=start_of(ajax.project_id))
+    crossed = await client.post(URL, headers=beta.owner, json=start_of(ajax.agent_project_id))
     unknown = await client.post(URL, headers=beta.owner, json=start_of(new_id()))
     refused(crossed, 404, "not_found")
     refused(unknown, 404, "not_found")
-    undeclared = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id, "lint"))
+    undeclared = await client.post(
+        URL, headers=ajax.owner, json=start_of(ajax.agent_project_id, "lint")
+    )
     refused(undeclared, 422, "validation_failed")
     assert await worker_runs(container) == 0, "nothing refused was queued"
     assert executor.requests == []
 
-    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.agent_project_id))
     assert started.status_code == 201, started.text
     session_id = started.json()["id"]
     assert await worker_runs(container) == 1
@@ -428,10 +430,10 @@ async def test_a_session_the_worker_refuses_for_good_reads_refused_with_its_reas
     reason: str,
 ) -> None:
     ajax = await tenant(client, container, "ajax")
-    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.agent_project_id))
     assert started.status_code == 201, started.text
     evidence = container.managers.evidence
-    policy = await evidence.get_policy(ajax.ctx, policy_key(ajax.project_id))
+    policy = await evidence.get_policy(ajax.ctx, policy_key(ajax.agent_project_id))
     checks = tuple(each.model_copy(update=change) for each in policy.checks)
     await evidence.write_policy(
         ajax.ctx, policy.model_copy(update={"checks": checks, "requirements": ()})

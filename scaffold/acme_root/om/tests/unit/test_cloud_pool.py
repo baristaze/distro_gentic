@@ -44,12 +44,13 @@ from acme.infra.workspaces import (
     WorkspaceBase,
     WorkspaceLost,
 )
+from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.exceptions import MachineUnbound
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
 from acme.om.cloud_pool.rules import snapshots_of
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
-from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import InvalidCredential
 from acme.om.hosts.types.credential import IssuedCredential
@@ -60,7 +61,6 @@ from acme.om.hosts.types.pool import HostPool
 from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import hash_token
-from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 PREFIX = "acme-vm-"
 IMAGE = "acme-vm-image"
@@ -223,7 +223,7 @@ class Pool:
         assert isinstance(loaded, dict)
         return cast(dict[str, Any], loaded)
 
-    async def rows(self) -> list[PoolMachine]:
+    async def rows(self) -> list[PoolVm]:
         return await self.storage.read_machines(100)
 
     async def host_comes(self, session_id: UUID | None = None) -> UUID:
@@ -461,14 +461,14 @@ async def test_the_sweep_lets_go_of_a_dead_start_a_gone_session_and_an_orphan_an
     await pool.prepare(ctx, alive)
     await pool.prepare(ctx, gone)
     pool.gone.add(gone)
-    dead = PoolMachine(
+    dead = PoolVm(
         id=new_id(),
         created_at=pool.now - timedelta(minutes=20),
         name=f"{PREFIX}pdead0000000000000",
         egress_open=True,
     )
     await pool.storage.create_machine(dead)
-    hostless = PoolMachine(
+    hostless = PoolVm(
         id=new_id(),
         created_at=pool.now - timedelta(minutes=30),
         name=f"{PREFIX}phostless00000000",
@@ -597,7 +597,7 @@ async def test_a_warm_machine_claimed_after_standing_long_waits_for_its_host_fro
     swept: list[int] = []
     real = pool.manager._enrolled  # pyright: ignore[reportPrivateUsage]
 
-    async def swept_before_the_host(session_id: UUID, machine: PoolMachine) -> PoolMachine:
+    async def swept_before_the_host(session_id: UUID, machine: PoolVm) -> PoolVm:
         swept.append(await pool.manager.sweep(stage()))
         return await real(session_id, machine)
 
@@ -637,14 +637,14 @@ async def test_a_deleted_tenants_machine_goes_at_the_next_sweep(tmp_path: Path) 
         cloud_pool_stage=stage,
     )
     orgs, rows = storage.get_tenancy_storage(), storage.get_cloud_pool_storage()
-    held: dict[str, PoolMachine] = {}
+    held: dict[str, PoolVm] = {}
     deleted = make_org("Deleted")
     for org in (deleted, make_org("Kept")):
         await orgs.write_org(org.id, org)
         session = make_session()
         await storage.get_agent_session_storage().create_session(org.id, session, ())
         now = utcnow()
-        held[org.name] = PoolMachine(
+        held[org.name] = PoolVm(
             id=new_id(),
             created_at=now,
             name=f"{PREFIX}p{org.name.lower()}",

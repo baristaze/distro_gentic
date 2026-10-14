@@ -13,7 +13,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type AutomationView, type KnowledgeView, type MeView, type ProjectView } from "@acme/client";
+import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type AgentProjectView } from "@acme/client";
 import { useSessionStore } from "../store/session";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
@@ -26,22 +26,22 @@ const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at
 const ME = { app: "portal", role: "owner", permissions: ["read", "write", "manage_members", "manage_keys"], user, org } as unknown as MeView;
 const page = <T>(items: T[]) => ({ items, next_cursor: null });
 
-const PROJECT: ProjectView = {
+const AGENT_PROJECT: AgentProjectView = {
   id: "p1",
   name: "Storefront",
   repository: { host: "github.com", path: "your-org/storefront" },
   workspace_snapshots: true,
-  environment: null,
+  workspace_base: null,
   created_at: at,
   created_by: user.id,
   updated_at: at,
   updated_by: user.id,
 };
-const AUTOMATION: AutomationView = {
+const AGENT_AUTOMATION: AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "engineer", title: "Update dependencies", project_id: null, session_id: null, params: {}, playbook: null },
+  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -50,8 +50,8 @@ const AUTOMATION: AutomationView = {
   created_by: user.id,
   updated_at: at,
   updated_by: user.id,
-} as AutomationView;
-const ENTRY: KnowledgeView = {
+} as AgentAutomationView;
+const ENTRY: AgentKnowledgeView = {
   id: "k1",
   title: "How we name migrations",
   trigger: ["migration"],
@@ -63,12 +63,12 @@ const ENTRY: KnowledgeView = {
   version: 1,
   created_at: at,
   updated_at: at,
-} as KnowledgeView;
+} as AgentKnowledgeView;
 const SESSION = {
   id: "s1",
   root_id: "s1",
   parent_id: null,
-  kind: "engineer",
+  kind: "software_engineer",
   kind_version: 1,
   title: "Fix the failing date test",
   status: "idle",
@@ -83,7 +83,7 @@ const SESSION = {
 } as AgentSessionView;
 
 /** A param of a screen's address, as a fixture's id. */
-const PARAMS: Record<string, string> = { sessionId: "s1", automationId: "a1", entryId: "k1", projectId: "p1" };
+const PARAMS: Record<string, string> = { sessionId: "s1", agentAutomationId: "a1", entryId: "k1", agentProjectId: "p1" };
 
 function answer(path: string): unknown {
   const [bare = "", query = ""] = path.split("?");
@@ -95,12 +95,12 @@ function answer(path: string): unknown {
   if (bare === "/v1/invitations" || bare === "/v1/api-keys" || bare === "/v1/usage" || bare === "/v1/approvals") return page([]);
   if (bare === "/v1/media/usage") return { bytes: 0, files: 0 };
   if (bare === "/v1/agent-sessions") return query.includes("status=parked") ? page([]) : page([SESSION]);
-  if (bare === "/v1/knowledge") return query.includes("status=reviewed") ? [ENTRY] : [];
-  if (bare === "/v1/knowledge/k1") return ENTRY;
-  if (bare === "/v1/projects") return [PROJECT];
-  if (bare === "/v1/projects/p1") return PROJECT;
-  if (bare === "/v1/automations") return [AUTOMATION];
-  if (bare === "/v1/automations/a1") return AUTOMATION;
+  if (bare === "/v1/agent-knowledge") return query.includes("status=reviewed") ? [ENTRY] : [];
+  if (bare === "/v1/agent-knowledge/k1") return ENTRY;
+  if (bare === "/v1/agent-projects") return [AGENT_PROJECT];
+  if (bare === "/v1/agent-projects/p1") return AGENT_PROJECT;
+  if (bare === "/v1/agent-automations") return [AGENT_AUTOMATION];
+  if (bare === "/v1/agent-automations/a1") return AGENT_AUTOMATION;
   if (bare === "/v1/provider-keys" || bare === "/v1/matrix/options" || bare === "/v1/matrix/choices" || bare === "/v1/events/recent") return [];
   if (bare.startsWith("/v1/agent-sessions/s1")) {
     const part = bare.split("/")[4];
@@ -110,7 +110,7 @@ function answer(path: string): unknown {
     if (part === "validations") return [];
     if (part === "usage") return { calls: 0, input: 0, output: 0, thinking: 0, cache_read: 0, cache_write: 0, fills: [] };
   }
-  // A playbook not yet published, the principal not yet granted, and every
+  // An agent playbook not yet published, the principal not yet granted, and every
   // other read: not found, as the API says it.
   throw new ApiError(404, "not_found", `nothing at ${path}`, "req-1");
 }
@@ -175,7 +175,7 @@ async function fieldsOf(address: string): Promise<{ title: string; fields: { nam
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   await act(async () => root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
   await settle();
-  for (const opens of ["Delete this organization", "Delete my account", "Edit the automation", "Edit the entry"]) {
+  for (const opens of ["Delete this organization", "Delete my account", "Edit the agent automation", "Edit the entry"]) {
     const button = [...container.querySelectorAll("button")].find((each) => each.textContent === opens);
     if (button) await act(async () => button.click());
   }
@@ -198,18 +198,18 @@ it("mounts every platform screen, and finds no text field on any without a water
   }
   expect(bare).toEqual([]);
   // The record forms did open: a screen that drew none would pass for nothing.
-  expect(seen.get("/settings/projects")).toEqual(expect.arrayContaining(["Name", "Repository"]));
-  expect(seen.get("/settings/projects/p1")).toEqual(expect.arrayContaining(["User", "Password or token"]));
+  expect(seen.get("/settings/agent-projects")).toEqual(expect.arrayContaining(["Name", "Repository"]));
+  expect(seen.get("/settings/agent-projects/p1")).toEqual(expect.arrayContaining(["User", "Password or token"]));
   expect(seen.get("/settings/models")).toEqual(expect.arrayContaining(["New key to Anthropic", "New key to OpenAI"]));
-  expect(seen.get("/settings/playbooks")).toEqual(expect.arrayContaining(["Playbook name", "Description", "Steps (Markdown)", "Gates, one a line"]));
+  expect(seen.get("/settings/agent-playbooks")).toEqual(expect.arrayContaining(["Agent playbook name", "Description", "Steps (Markdown)", "Gates, one a line"]));
   expect(seen.get("/settings/members")).toContain("Invite by email");
   expect(seen.get("/settings/api-keys")).toContain("New key name");
   expect(seen.get("/settings/profile")).toEqual(expect.arrayContaining(["Name", `Type your email, ${user.email}, to confirm`]));
   expect(seen.get("/settings/general")).toContain(`Type the organization's name, ${org.name}, to confirm`);
-  expect(seen.get("/automations")).toEqual(expect.arrayContaining(["Name", "Session title", "Brief", "Cost cap a run"]));
-  expect(seen.get("/automations/a1")).toContain("Brief");
-  expect(seen.get("/knowledge")).toEqual(expect.arrayContaining(["Title", "Recalled by"]));
-  expect(seen.get("/knowledge/k1")).toContain("Recalled by");
+  expect(seen.get("/agent-automations")).toEqual(expect.arrayContaining(["Name", "Session title", "Brief", "Cost cap a run"]));
+  expect(seen.get("/agent-automations/a1")).toContain("Brief");
+  expect(seen.get("/agent-knowledge")).toEqual(expect.arrayContaining(["Title", "Recalled by"]));
+  expect(seen.get("/agent-knowledge/k1")).toContain("Recalled by");
   expect(seen.get("/")).toContain("Prompt");
   expect(seen.get("/sessions")).toContain("Filter by title");
   expect(seen.get("/sessions/s1")).toContain("Message");

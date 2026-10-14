@@ -1,5 +1,5 @@
 // Home: one box and three starter prompts. Under the box, the agent chip
-// (the slot's first is the default), the project chip, and Send (Cmd-Enter).
+// (the slot's first is the default), the agent project chip, and Send (Cmd-Enter).
 // Send starts the session, sends it the prompt, and opens it.
 import type { FormEvent, KeyboardEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
@@ -12,7 +12,7 @@ import {
   MenuItemRadio,
   MenuText,
   Muted,
-  ProjectIcon,
+  AgentProjectIcon,
   SendIcon,
   TextArea,
   Tooltip,
@@ -39,7 +39,7 @@ function Composer({ initialPrompt }: { initialPrompt: string }) {
     event.preventDefault();
     vm.submit();
   };
-  const projectLabel = vm.project?.name ?? (vm.required ? "Choose a project" : "No project");
+  const agentProjectLabel = vm.agentProject?.name ?? (vm.required ? "Choose an agent project" : "No agent project");
   return (
     <div className="acme-app">
       <main className="acme-home">
@@ -86,30 +86,30 @@ function Composer({ initialPrompt }: { initialPrompt: string }) {
             </Menu>
             {vm.agent ? <InfoTip label={`About ${vm.agent.label}`}>{vm.agent.about}</InfoTip> : null}
             <Menu
-              label="Projects"
-              triggerLabel={`Project: ${projectLabel}`}
+              label="Agent projects"
+              triggerLabel={`Agent project: ${agentProjectLabel}`}
               triggerClassName="acme-chip"
               minWidth={240}
               disabled={!vm.mayWrite}
               trigger={
                 <>
-                  <ProjectIcon />
-                  <span>{projectLabel}</span>
+                  <AgentProjectIcon />
+                  <span>{agentProjectLabel}</span>
                   <ChevronIcon />
                 </>
               }
             >
               {vm.required ? null : (
-                <MenuItemRadio checked={vm.project === null} onSelect={() => vm.setProjectId("")}>
-                  No project
+                <MenuItemRadio checked={vm.agentProject === null} onSelect={() => vm.setAgentProjectId("")}>
+                  No agent project
                 </MenuItemRadio>
               )}
-              {vm.projects.map((project) => (
-                <MenuItemRadio key={project.id} checked={project.id === vm.project?.id} onSelect={() => vm.setProjectId(project.id)}>
-                  {project.name}
+              {vm.agentProjects.map((agentProject) => (
+                <MenuItemRadio key={agentProject.id} checked={agentProject.id === vm.agentProject?.id} onSelect={() => vm.setAgentProjectId(agentProject.id)}>
+                  {agentProject.name}
                 </MenuItemRadio>
               ))}
-              {vm.projects.length === 0 && vm.required ? <MenuText>No project yet</MenuText> : null}
+              {vm.agentProjects.length === 0 && vm.required ? <MenuText>No agent project yet</MenuText> : null}
             </Menu>
             <span className="acme-composer-gap" />
             <Tooltip tip="Send" shortcut="⌘↵" side="top">
@@ -122,7 +122,7 @@ function Composer({ initialPrompt }: { initialPrompt: string }) {
         {vm.problem ? (
           <ErrorText>
             {vm.problem}{" "}
-            {vm.required && vm.projects.length === 0 ? <Link to="/settings/projects">Add a project</Link> : null}
+            {vm.required && vm.agentProjects.length === 0 ? <Link to="/settings/agent-projects">Add an agent project</Link> : null}
           </ErrorText>
         ) : null}
         {vm.ready && !vm.mayWrite ? <Muted>You can read this org&apos;s sessions. Starting one needs the write permission.</Muted> : null}

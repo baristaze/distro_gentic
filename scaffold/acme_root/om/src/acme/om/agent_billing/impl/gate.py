@@ -1,0 +1,431 @@
+import logging
+from collections.abc import Callable
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import ValidationError
+
+from acme.infra.observability import OUTCOMES
+from acme.integrations.model_providers.calls import ModelCall
+from acme.integrations.model_providers.types import Usage
+from acme.om.agent_billing.gate import MoneyGateInterface
+from acme.om.agent_billing.pager import AnomalyPage, OperatorPagerInterface
+from acme.om.agent_billing.prices import PriceBookInterface
+from acme.om.agent_billing.rules import (
+    AnomalyGuard,
+    anomaly_park,
+    charge_of,
+    far_above,
+    funding_of,
+    lines_of,
+    norm_of,
+    price_park,
+    priced_out,
+    shortfall_park,
+    units_of,
+)
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.types.spend_account import SpendAccount
+from acme.om.agent_billing.types.spend_ledger import Approval, FundedHold, PricedAt, Turned
+from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
+from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.attribution.types.principal import Principal
+from acme.om.base import Platform, new_id, utcnow
+from acme.om.budgets import BudgetsManagerInterface
+from acme.om.budgets.rules import call_exposure, job_exposure, settlement_of, usage_spend
+from acme.om.budgets.storage import BudgetStorageInterface
+from acme.om.budgets.types.amount import Spend
+from acme.om.budgets.types.breach import Refusal
+from acme.om.budgets.types.hold import (
+    Bill,
+    Billed,
+    BillUnknown,
+    Hold,
+    HoldRequest,
+    NotBilled,
+    NotBilledProof,
+    Settlement,
+)
+from acme.om.budgets.types.usage import CallLabels, CallSite
+from acme.om.context import Permission, TenantContext
+from acme.om.exceptions import (
+    BudgetRefused,
+    GateParked,
+    NotFound,
+    SpenderUnknown,
+    ValidationFailed,
+)
+from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.windows.gate import CallGateInterface
+from acme.om.windows.impl.gate import (
+    UNLABELLED,
+    PinnedVersion,
+    PlanTierOf,
+    SpendLabels,
+    count_settled,
+    record_settled,
+    scopes_of,
+    spend_labels,
+)
+from acme.om.windows.rules import call_shape
+
+log = logging.getLogger(__name__)
+
+
+class MoneyGateOptions(Platform):
+    max_lines: int = 32  # budgets one call may be charged to, at most
+    guard: AnomalyGuard = AnomalyGuard()
+
+
+class MoneyGateImpl(MoneyGateInterface):
+    """The engine's gate with the platform behind it. Who pays is read
+    first, and a call nobody can be named to pay for spends nothing. Each
+    limit counts in its window as the tenant counts it, the anomaly guard
+    asks the session's norm, and the ledger holds the worst case on the
+    limits and draws it on the buckets in one transaction."""
+
+    def __init__(
+        self,
+        budgets: BudgetStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
+        ledger: SpendLedgerStorageInterface,
+        pager: OperatorPagerInterface,
+        unit_plans: UnitPlanCatalog,
+        spend_units: SpendUnitScale,
+        options: MoneyGateOptions,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
+        self._budgets = budgets
+        self._spend_accounts = spend_accounts
+        self._ledger = ledger
+        self._pager = pager
+        self._unit_plans = unit_plans
+        self._spend_units = spend_units
+        self._options = options
+        self._clock = clock
+
+    async def authorize(self, ctx: TenantContext, request: HoldRequest) -> Hold | Refusal:
+        answer = await self.authorize_priced(ctx, request, None)
+        return answer if isinstance(answer, Refusal) else answer.hold
+
+    async def authorize_priced(
+        self,
+        ctx: TenantContext,
+        request: HoldRequest,
+        priced: PricedAt | None,
+        *,
+        credential: str | None = None,
+        deadline: datetime | None = None,
+    ) -> FundedHold | Refusal:
+        ctx.require(Permission.WRITE)
+        if request.spender_id is None:
+            raise SpenderUnknown("the engine cannot tell who pays for this call; nothing is spent")
+        now = self._clock()
+        spend_account = await self._spend_account(ctx)
+        funding = funding_of(
+            spend_account, self._unit_plans, self._spend_units, now, carried=credential
+        )
+        assert spend_account is not None
+        bound = self._options.max_lines
+        found = await self._budgets.read_budgets_for(ctx.org_id, request.scopes, bound + 1)
+        if len(found) > bound:
+            # A line the gate does not read is spend outside it: refuse.
+            raise ValidationFailed(f"more than {bound} budgets bind this call")
+        # A job's worst case is its declared rate to its deadline, which its
+        # budgets bound: no model call's norm judges it.
+        approval = None if deadline is not None else await self._guard(ctx, request)
+        hold = FundedHold(
+            hold=Hold(
+                id=new_id(),
+                created_at=now,
+                spender_id=request.spender_id,
+                session_id=request.session_id,
+                purpose=request.purpose,
+                exposure=request.exposure,
+                own=request.own,
+                lines=lines_of(found, spend_account, now),
+            ),
+            funding=funding,
+            units=units_of(request.exposure.cost_micros, funding.micros_per_unit),
+            priced=priced,
+            approval_id=approval,
+            deadline=deadline,
+        )
+        answer = await self._ledger.open_hold(ctx.org_id, hold)
+        if isinstance(answer, Turned):
+            return self._turned(ctx, request, answer)
+        OUTCOMES.labels(subsystem="agent_billing", outcome="held").inc()
+        return answer
+
+    async def settle(self, ctx: TenantContext, hold_id: UUID, bill: Bill) -> Settlement:
+        ctx.require(Permission.WRITE)
+        hold = await self.read_hold(ctx, hold_id)
+        now = self._clock()
+        settlement = settlement_of(hold.hold, bill, new_id(), now)
+        charge = charge_of(hold, settlement, new_id(), now)
+        stored, _ = await self._ledger.close_hold(ctx.org_id, settlement, charge)
+        if stored.id != settlement.id:
+            return stored  # closed already: the first settlement counts
+        if stored.overshoot is not None:
+            # Counted and charged in full, never absorbed.
+            log.error(
+                "hold %s in org %s settled past its worst case by %s micros and %d tokens",
+                hold.id,
+                ctx.org_id,
+                stored.overshoot.cost_micros,
+                stored.overshoot.tokens,
+            )
+            OUTCOMES.labels(subsystem="agent_billing", outcome="overshoot").inc()
+        OUTCOMES.labels(subsystem="agent_billing", outcome=f"settled_{stored.bill.kind}").inc()
+        return stored
+
+    async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
+        hold = await self._ledger.read_hold(ctx.org_id, hold_id)
+        if hold is None:
+            raise NotFound(f"hold {hold_id} not found")
+        return hold
+
+    async def _spend_account(self, ctx: TenantContext) -> SpendAccount | None:
+        """The tenant's spend account. One this process cannot read is no answer to
+        who pays: nothing is spent, and nothing falls back to the platform's
+        key."""
+        try:
+            return await self._spend_accounts.read_spend_account(ctx.org_id)
+        except (ValidationFailed, ValidationError) as unread:
+            log.error("the spend account of org %s cannot be read: %s", ctx.org_id, unread)
+            raise SpenderUnknown(
+                "the tenant's spend account cannot be read; nothing is spent"
+            ) from unread
+
+    async def _guard(self, ctx: TenantContext, request: HoldRequest) -> UUID | None:
+        """The anomaly guard, before anything is held: a call whose expected
+        cost is far above its session's norm pages the operator and parks
+        for a person, unless a person approved it. Returns the approval it
+        rides on, if any. The norm is the session's model calls': a job's
+        hold is no call, and counts in it not at all."""
+        if request.session_id is None:
+            return None
+        guard = self._options.guard
+        entries = await self._ledger.read_entries(
+            ctx.org_id, session_id=request.session_id, limit=guard.recent + 1
+        )
+        recent: list[int] = []
+        used: set[UUID] = set()
+        approval: Approval | None = None
+        for entry in entries:  # newest first
+            if isinstance(entry, Approval):
+                approval = approval or entry
+            elif isinstance(entry, FundedHold):
+                if entry.approval_id is not None:
+                    used.add(entry.approval_id)
+                    continue
+                if entry.deadline is not None:
+                    continue
+                cost_of = entry.hold.exposure.cost_micros
+                if cost_of is not None and len(recent) < guard.recent:
+                    recent.append(cost_of)
+        cost = request.exposure.cost_micros
+        if not far_above(cost, recent, guard):
+            return None
+        assert cost is not None
+        if approval is not None and approval.id not in used and cost <= approval.up_to_micros:
+            return approval.id
+        page = AnomalyPage(
+            org_id=ctx.org_id,
+            session_id=request.session_id,
+            expected_micros=cost,
+            norm_micros=norm_of(recent),
+        )
+        await self._pager.page(page)
+        OUTCOMES.labels(subsystem="agent_billing", outcome="anomaly").inc()
+        raise GateParked(
+            anomaly_park(),
+            f"the call's expected cost, {cost} micros, is far above its session's norm",
+        )
+
+    def _turned(self, ctx: TenantContext, request: HoldRequest, turned: Turned) -> Refusal:
+        """A limit's breaches are the engine's refusal, which parks on the
+        budget. Units no bucket covers park on the budget too, as a spend
+        limit, naming the funds; the limits come first, since a top-up
+        clears none of them. A call no price gives a cost parks on the price
+        first, whichever refused it, and tries again: a raise clears none of
+        that, and a price arrives with a release, which tells no session."""
+        log.info("turned %s away in org %s", request.purpose, ctx.org_id)
+        OUTCOMES.labels(subsystem="agent_billing", outcome="refused").inc()
+        if turned.refusal is not None:
+            if priced_out(turned.refusal):
+                raise GateParked(price_park(self._clock()), "no price gives the call a cost")
+            return turned.refusal
+        assert turned.shortfall is not None
+        shortfall = turned.shortfall
+        held = (
+            " until other calls' open holds settle" if shortfall.short <= shortfall.reserved else ""
+        )
+        raise GateParked(
+            shortfall_park(shortfall, self._clock()),
+            f"no bucket covers {shortfall.short} units of the call{held}",
+        )
+
+
+class MoneyCallGateImpl(CallGateInterface):
+    """The face the windows and the loop read, over the money gate. A model
+    call's worst case is priced from the price table in force and held with
+    the row it was read from, on every scope the call serves: the agent project
+    `agent_projects` reads of its session among them. Its usage is billed from
+    that same row, after the next version is read and in another process
+    too. Every settled call counts its tokens and its spend under the
+    matrix version `version` reads of its session at the hold, and the unit plan
+    tier `tier` reads; a settle in another process counts them under
+    `none`. A billed model call leaves its usage record through `budgets`,
+    as the budgets' gate does (`windows.impl.gate.record_settled`). A
+    spending job is held on the same scopes at its rate until its
+    deadline (`budgets.rules.job_exposure`), with no row of the price
+    table, and billed at the cost its runner reported, else whole; a job
+    refused before any work began releases its hold. Its hold names that
+    deadline and lives to it, and no session's norm judges it."""
+
+    def __init__(
+        self,
+        gate: MoneyGateInterface,
+        prices: PriceBookInterface,
+        sessions: AgentSessionsManagerInterface,
+        budgets: BudgetsManagerInterface,
+        agent_projects: SessionAgentProjectsInterface,
+        *,
+        version: PinnedVersion | None = None,
+        tier: PlanTierOf | None = None,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
+        self._gate = gate
+        self._prices = prices
+        self._sessions = sessions
+        self._budgets = budgets
+        self._agent_projects = agent_projects
+        self._version = version
+        self._tier = tier
+        self._clock = clock
+        self._labels: dict[UUID, tuple[SpendLabels, CallLabels]] = {}
+
+    async def authorize(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spender: Principal,
+        role: ModelRole,
+        fill: Fill,
+        call: ModelCall,
+        *,
+        credential: str,
+    ) -> UUID:
+        session = await self._sessions.get_session(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        spend = await spend_labels(self._version, self._tier, ctx, session_id)
+        priced = PricedAt(
+            version=self._prices.version, provider=fill.provider.value, model=fill.model
+        )
+        price = self._prices.price_at(priced.version, priced.provider, priced.model)
+        request = HoldRequest(
+            spender_id=spender.id,
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
+            ),
+            exposure=call_exposure(call_shape(call, fill), price),
+            session_id=session_id,
+            purpose=role,
+        )
+        answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
+        if isinstance(answer, Refusal):
+            raise BudgetRefused(answer)
+        self._labels[answer.id] = (
+            spend,
+            CallLabels(
+                session_id=session_id,
+                tree_id=session.root_id,
+                agent_kind=session.kind,
+                kind_version=session.kind_version,
+                role=role,
+                provider=fill.provider.value,
+                model=fill.model,
+            ),
+        )
+        return answer.id
+
+    async def settle(
+        self,
+        ctx: TenantContext,
+        hold_id: UUID,
+        usage: Usage | None,
+        *,
+        billed: bool,
+        site: CallSite | None,
+        partial: Usage | None = None,
+    ) -> None:
+        bill: Bill
+        if not billed:
+            bill = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
+        elif usage is None:
+            bill = BillUnknown()
+        else:
+            hold = await self._gate.read_hold(ctx, hold_id)
+            price = None
+            if hold.priced is not None:
+                version, provider, model = (
+                    hold.priced.version,
+                    hold.priced.provider,
+                    hold.priced.model,
+                )
+                price = self._prices.price_at(version, provider, model)
+            bill = Billed(usage=usage_spend(usage, price))
+        spend, labels = self._labels.pop(hold_id, (UNLABELLED, None))
+        settlement = await self._gate.settle(ctx, hold_id, bill)
+        count_settled(spend, usage if billed else None, settlement)
+        await record_settled(
+            self._budgets,
+            ctx,
+            hold_id,
+            labels,
+            bill,
+            settlement,
+            usage,
+            partial=partial,
+            site=site,
+            at=self._clock(),
+        )
+
+    async def authorize_job(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spender: Principal,
+        tool: str,
+        rate_micros_per_hour: int,
+        deadline: datetime,
+    ) -> UUID:
+        session = await self._sessions.get_session(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        request = HoldRequest(
+            spender_id=spender.id,
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
+            ),
+            exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
+            session_id=session_id,
+            purpose=tool,
+        )
+        answer = await self._gate.authorize_priced(ctx, request, None, deadline=deadline)
+        if isinstance(answer, Refusal):
+            raise BudgetRefused(answer)
+        return answer.id
+
+    async def settle_job(
+        self, ctx: TenantContext, hold_id: UUID, cost_micros: int | None, *, started: bool
+    ) -> None:
+        bill: Bill
+        if not started:
+            bill = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
+        elif cost_micros is None:
+            bill = BillUnknown()
+        else:
+            bill = Billed(usage=Spend(cost_micros=cost_micros, tokens=0))
+        await self._gate.settle(ctx, hold_id, bill)

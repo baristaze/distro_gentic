@@ -1,4 +1,4 @@
-"""A benchmark keeps every trial of a scenario, each arm pinned to the
+"""A benchmark keeps every trial of a scenario, each contender pinned to the
 agent kind, its version, and the fill set that produced it, with the
 verdict that judged it, its score, and its cost; candidate and baseline
 trials interleave on one executor; and a candidate that scores under its
@@ -10,7 +10,7 @@ from contracts.benchmark_storage import BASELINE, CANDIDATE, make_trials, operat
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.benchmarks.rules import interleaving_refusal, qualifications, schedule
 from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
-from acme.om.benchmarks.types.benchmark import Arm, BenchmarkTrials
+from acme.om.benchmarks.types.benchmark import BenchmarkTrials, Contender
 from acme.om.context import OperatorRole
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 
@@ -39,7 +39,7 @@ async def test_a_run_is_stored_with_its_fill_set_kind_version_score_and_cost(
     assert stored == recorded
     assert (stored.candidate, stored.baseline) == (CANDIDATE, BASELINE)
     assert stored.candidate.fills[0].fill.model == "claude-opus-5-5"
-    assert (stored.candidate.kind, stored.candidate.kind_version) == ("engineer", 2)
+    assert (stored.candidate.kind, stored.candidate.kind_version) == ("software_engineer", 2)
     assert (stored.candidate_result.score, stored.candidate_result.passed) == (0.5, 1)
     assert stored.candidate_result.cost_micros == stored.baseline_result.cost_micros == 500_000
     # Every trial is preserved, each with the whole verdict that judged it.
@@ -98,16 +98,21 @@ async def test_a_run_that_changed_the_kind_beside_the_model_qualifies_nothing(
             assert qualifications(await benchmarks.record(admin, run), RUN) == ()
 
 
-# The arms interleave on one executor.
+# The contenders interleave on one executor.
 
 
 def test_the_schedule_interleaves_the_arms() -> None:
-    assert schedule(2) == (Arm.CANDIDATE, Arm.BASELINE, Arm.BASELINE, Arm.CANDIDATE)
+    assert schedule(2) == (
+        Contender.CANDIDATE,
+        Contender.BASELINE,
+        Contender.BASELINE,
+        Contender.CANDIDATE,
+    )
     assert interleaving_refusal(make_trials([WHOLE] * 6, [WHOLE] * 6).trials) is None
 
 
-BLOCKS = (Arm.CANDIDATE, Arm.CANDIDATE, Arm.BASELINE, Arm.BASELINE)
-UNEVEN = (Arm.CANDIDATE, Arm.BASELINE, Arm.CANDIDATE, Arm.CANDIDATE)
+BLOCKS = (Contender.CANDIDATE, Contender.CANDIDATE, Contender.BASELINE, Contender.BASELINE)
+UNEVEN = (Contender.CANDIDATE, Contender.BASELINE, Contender.CANDIDATE, Contender.CANDIDATE)
 
 
 @pytest.mark.parametrize(
@@ -116,7 +121,7 @@ UNEVEN = (Arm.CANDIDATE, Arm.BASELINE, Arm.CANDIDATE, Arm.CANDIDATE)
         (make_trials([WHOLE] * 2, [WHOLE] * 2, order=BLOCKS), "in blocks, not interleaved"),
         (make_trials([WHOLE] * 3, [WHOLE], order=UNEVEN), "different counts"),
         (
-            make_trials([WHOLE] * 2, [], order=(Arm.CANDIDATE, Arm.CANDIDATE)),
+            make_trials([WHOLE] * 2, [], order=(Contender.CANDIDATE, Contender.CANDIDATE)),
             "both the candidate and the baseline",
         ),
     ],

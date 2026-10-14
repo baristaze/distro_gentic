@@ -16,7 +16,7 @@ class Validations(IdentifiableMixin, CreatedMixin, Base):
     __org_id_index__ = False
     __table_args__ = (Index("ix_validations_org_id_session_id_id", "org_id", "session_id", "id"),)
     session_id: Mapped[UUID]
-    project: Mapped[str]
+    agent_project: Mapped[str]
     purpose: Mapped[str]
     version: Mapped[str]
     source: Mapped[str]

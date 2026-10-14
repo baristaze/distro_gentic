@@ -11,21 +11,21 @@ uv run acme orgs                    # * marks the session's org
 uv run acme switch fabrikam         # the old session ends
 uv run acme upload spec.pdf         # --type, --json
 uv run acme session list --status parked   # the org's sessions, one a line
-uv run acme session start assistant "the dropped object" --project <id>   # local: optional
+uv run acme session start assistant "the dropped object" --agent-project <id>   # local: optional
 uv run acme session say <id> "Why does the export time out?"
 uv run acme session control <id> pause     # resume, cancel, compact, unlock
 uv run acme session control <id> interrupt --call <seq>   # stops the one call it names
 uv run acme session decide <id> <seq> --approve
 uv run acme session steps <id> --follow    # until the loop stops
-uv run acme project create "the reports" github.com/octo/reports
-uv run acme project credential <id> --username reader   # the token is asked for, never echoed
-uv run acme project list
-uv run acme automation create triage.json   # the automation as the API takes it
-uv run acme automation list
-uv run acme playbook invoke <session-id> release-check   # its brief as your message
-uv run acme playbook pin engineer release-check --project <id>   # the kind's manual
-uv run acme playbook pins
-uv run acme playbook unpin engineer --project <id>
+uv run acme agent-project create "the reports" github.com/octo/reports
+uv run acme agent-project credential <id> --username reader   # the token is asked for, never echoed
+uv run acme agent-project list
+uv run acme agent-automation create triage.json   # the agent automation as the API takes it
+uv run acme agent-automation list
+uv run acme agent-playbook invoke <session-id> release-check   # its brief as your message
+uv run acme agent-playbook pin software_engineer release-check --agent-project <id>   # the kind manual
+uv run acme agent-playbook pins
+uv run acme agent-playbook unpin software_engineer --agent-project <id>
 uv run acme listen                  # who did what to which record
 uv run acme logout
 ```

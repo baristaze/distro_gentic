@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.evidence import DeliveryView, ExecutionPageView, ValidationView
+from acme.services.api.types.evidence import ExecutionPageView, ValidationView, WorkProductView
 
 
 class EvidenceServiceInterface(ABC):
@@ -25,4 +25,4 @@ class EvidenceServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_delivery(self, ctx: TenantContext, session_id: UUID) -> DeliveryView: ...
+    async def get_work_product(self, ctx: TenantContext, session_id: UUID) -> WorkProductView: ...

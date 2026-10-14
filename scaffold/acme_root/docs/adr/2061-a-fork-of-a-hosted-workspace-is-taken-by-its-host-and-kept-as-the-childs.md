@@ -21,19 +21,19 @@ The fork reuses that path.
 ## Decision
 
 **The host takes it at the spawn.** A spawn that forks a workspace a
-host holds asks that host for a `snapshot`, through the relay, as a run's
-end does. The host takes back what its broker attached, takes the live
-instance whole, scans it for the tenant's secrets, and keeps it in its
-own store. The engine's tools ask the platform for a fork point first,
-and take the workspace through their own provider only when the
+host holds asks that host for a `snapshot`, through the exec relay, as a
+run's end does. The host takes back what its broker attached, takes the
+live instance whole, scans it for the tenant's secrets, and keeps it in
+its own store. The engine's tools ask the platform for a fork point
+first, and take the workspace through their own provider only when the
 platform answers none.
 
 **Kept as the child's.** The snapshot item names the child it is kept
 for. The child's id is the spawning call's, so it is known before the
 child is made. The host keeps the copy in the child's place in its
-store, where no erase of the parent's snapshots reaches it. The relay
-records the host's answer under the parent, since the child does not
-exist yet. Once the child is made, its copy is recorded as its own:
+store, where no erase of the parent's snapshots reaches it. The exec
+relay records the host's answer under the parent, since the child does
+not exist yet. Once the child is made, its copy is recorded as its own:
 where the host keeps it, and its digest keyed by the child. The child's
 restore names that record, and its first prepare restores the copy on a
 host of the pool whose store keeps it, as any restore does.

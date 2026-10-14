@@ -129,12 +129,12 @@ WORK_KINDS: tuple[WorkKindSpec, ...] = (
     # person's account manages members.
     _own(WorkKind.MEMBER_LEFT, Permission.MANAGE_MEMBERS),
     # A park asks for the first and a raised budget for the second, each
-    # relayed from its own commit; the handlers append a control and project
+    # relayed from its own commit; the handlers append a control and agent project
     # the status, which WRITE covers.
     _own(WorkKind.WAKE_SESSION, Permission.WRITE),
     _own(WorkKind.WAKE_SESSIONS, Permission.WRITE),
     # A write that wakes a session asks for it, relayed from its own commit;
-    # the run appends steps and projects the status, which WRITE covers, and
+    # the run appends steps and agent projects the status, which WRITE covers, and
     # each tool call asks its principal's own permissions again. Its lane is
     # its tenant's fair share, which placement answers.
     _own(WorkKind.LOOP, Permission.WRITE),

@@ -1,7 +1,7 @@
 """What the portal's browser check needs from the stack, run by the check
 itself and by no gate:
 
-    python services/api/tests/portal_check.py script <path> [--scene engineer|support|sharing]
+    python services/api/tests/portal_check.py script <path> [--scene software_engineer|support|sharing]
     python services/api/tests/portal_check.py evidence <slug> <session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
     python services/api/tests/portal_check.py tree <slug> [<root_id>]
@@ -9,7 +9,7 @@ itself and by no gate:
 
 `script` writes the scripted provider's script: one turn that answers in
 Markdown and calls nothing, so a session runs its loop offline and the
-same way every time. With `--scene engineer` it is the engineer's scene
+same way every time. With `--scene software_engineer` it is the software engineer's scene
 instead: it thinks, takes its baseline, and plans; it starts two
 analysis sub-agents in one answer and waits on them, the first reading
 the parser and the second searching for its callers, each then
@@ -19,7 +19,7 @@ forge's twin, asks its person, validates, and submits its result. The
 runner runs one loop at a time, so the sub-agents take their turns after
 their parent parks, in the order it started them. A message after that, such as a
 person's giving back, gets a reply that validates the head again and
-submits the result again, since an engineer's loop ends only on its
+submits the result again, since a software engineer's loop ends only on its
 result. Its baseline runs before anything marks the session. Each
 command and each later validation wait for a decision, since a tool's
 output, such as its plan's answer, marks it. With `--scene support` it is
@@ -31,11 +31,11 @@ only the steerer's message instructs.
 `evidence` records on one session of the org what an executor writes: two
 runs of a check and a validation of one of them. The local stack runs no
 executor, so the check writes the records its evidence screen reads
-through the om, under the org's owner. `scene` makes what the engineer's
+through the om, under the org's owner. `scene` makes what the software engineer's
 scene runs on: the org's first repository as a bare one under `<root>`
 (`portal_stack.py` clones from there), holding a parser whose test fails,
-and the validation policy of the org's first project. `tree` starts the
-scene's engineer for the org's owner and writes its tree straight through
+and the validation policy of the org's first agent project. `tree` starts the
+scene's software engineer for the org's owner and writes its tree straight through
 storage, for what the scene does not reach, a sub-agent that asks its
 person: one answer that starts
 two, each in a slot its tree's bounds hold, and a park on them; the first
@@ -46,7 +46,7 @@ again, it takes the answer and ends. Each beat reports to the root, as the
 engine does, and no step it writes asks for a run. `host` stands in for the host that holds the session's
 workspace, which the local stack runs none of: it enrolls a host in a
 pool of the org's, places the session there and binds its workspace to
-a clone of the scene's repository at the branch the engineer pushed,
+a clone of the scene's repository at the branch the software engineer pushed,
 prints `ready`, then claims the first command a person sends over the
 API's host routes at `<api>`, runs it there, settles it, and takes the
 session back off the pool."""
@@ -72,7 +72,7 @@ ANSWER = (
 
 SONNET = "claude-sonnet-5-5"
 
-# The tree `tree` writes: what its person asks the engineer, the engineer's
+# The tree `tree` writes: what its person asks the software engineer, the software engineer's
 # answer that starts two sub-agents, and each sub-agent's title and
 # objective.
 TREE_ASK = "Read every date in the app day first"
@@ -140,7 +140,7 @@ WRONG = '    month, day, year = text.split("/")\n'
 RIGHT = '    day, month, year = text.split("/")\n'
 COMMITS = (
     "python3 tests/test_dates.py"
-    " && git -c user.name=Engineer -c user.email=engineer@example.test"
+    " && git -c user.name=SoftwareEngineer -c user.email=software_engineer@example.test"
     " commit -qam 'Read a date day first'"
 )
 
@@ -173,8 +173,8 @@ BOTH = (
 )
 
 
-def engineer_scene() -> list[Any]:
-    """The engineer's turns, in order (see the module's docstring)."""
+def software_engineer_scene() -> list[Any]:
+    """The software engineer's turns, in order (see the module's docstring)."""
     from acme.integrations.model_providers.calls import ModelReply
     from acme.integrations.model_providers.content import TextBlock, ThinkingBlock, ToolUseBlock
     from acme.integrations.model_providers.types import StopReason, Usage
@@ -295,7 +295,11 @@ def write_script(path: Path, scene: str | None = None) -> None:
         usage=Usage(input=160, output=40),
         model=SONNET,
     )
-    scenes = {"engineer": engineer_scene, "support": support_scene, "sharing": lambda: [reply] * 2}
+    scenes = {
+        "software_engineer": software_engineer_scene,
+        "support": support_scene,
+        "sharing": lambda: [reply] * 2,
+    }
     turns: list[Turn] = scenes[scene]() if scene is not None else [reply]
     path.write_bytes(SCRIPT.dump_json({ProviderName.ANTHROPIC: turns}))
 
@@ -359,10 +363,12 @@ async def prepare_scene(root: Path, slug: str) -> None:
         owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
-        projects = await container.managers.projects.list_projects(owner, None, 10)
-        if not projects:
-            raise SystemExit(f"org {slug} has no project")
-        policy = make_policy(policy_key(projects[0].id))
+        agent_projects = await container.managers.agent_projects.list_agent_projects(
+            owner, None, 10
+        )
+        if not agent_projects:
+            raise SystemExit(f"org {slug} has no agent project")
+        policy = make_policy(policy_key(agent_projects[0].id))
         await container.managers.evidence.write_policy(owner, policy)
     finally:
         await container.close()
@@ -485,7 +491,7 @@ async def write_tree(slug: str) -> None:
     from acme.om.attribution.types.authority import AuthorityMode
     from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
     from acme.om.base import new_id, utcnow
-    from acme.om.platform_agents.kinds import ANALYSIS, ENGINEER
+    from acme.om.platform_agents.kinds import ANALYSIS, SOFTWARE_ENGINEER
     from acme.om.steps.types.content import Content, TextBlock
     from acme.om.steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
     from acme.om.steps.types.step import Actor, Origin, Step, StepType
@@ -498,9 +504,9 @@ async def write_tree(slug: str) -> None:
         # The tree began a minute ago: its sessions and their steps alike.
         began = utcnow() - timedelta(minutes=1)
 
-        # The root: the scene's engineer, whose tree holds ten sub-agents.
+        # The root: the scene's software engineer, whose tree holds ten sub-agents.
         root = await managers.agents.start_session(
-            owner, Start(id=new_id(), kind=ENGINEER, title=TREE_ASK)
+            owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER, title=TREE_ASK)
         )
         told = story(root, person, began)
         ids = [new_id() for _ in CHILDREN]
@@ -684,7 +690,7 @@ async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> No
             host = enrolled.json()
             await hosts.place_session(owner, session_id, pool.id)
             work = checkout(root, slug, root / "hands" / str(session_id))
-            await container.managers.relay.bind_workspace(
+            await container.managers.exec_relay.bind_workspace(
                 owner, session_id, UUID(host["host_id"]), str(work)
             )
             print("ready", flush=True)
@@ -718,7 +724,7 @@ async def run_one(client: Any, headers: dict[str, str], work: Path) -> None:
     import base64
     import hashlib
 
-    from acme.om.relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+    from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 
     for _ in range(240):
         claimed = await client.post(

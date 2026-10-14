@@ -21,10 +21,14 @@ import truststore
 
 from acme.client.types import (
     AdvertisementBody,
+    AgentAutomationRequest,
+    AgentAutomationView,
+    AgentKnowledgeStatus,
+    AgentKnowledgeView,
+    AgentPlaybookView,
+    AgentProjectView,
     AgentSessionPageView,
     AgentSessionView,
-    AutomationRequest,
-    AutomationView,
     ClaimantClaimView,
     ClaimantWorkView,
     ClaimView,
@@ -50,8 +54,6 @@ from acme.client.types import (
     IssuedSessionView,
     IssuedTicketView,
     IssuedUploadView,
-    KnowledgeStatus,
-    KnowledgeView,
     LeasePageView,
     LeaseRequestView,
     LeaseView,
@@ -70,9 +72,7 @@ from acme.client.types import (
     OutputStream,
     PinView,
     PlatformSizeView,
-    PlaybookView,
     PreparedView,
-    ProjectView,
     PublishRequest,
     Role,
     SessionControl,
@@ -820,147 +820,155 @@ class ApiClient:
             raise ApiError(fetched.status_code, "download_refused", fetched.text[:200], None)
         return fetched.content
 
-    # A tenant's configuration: its projects and the credential each one's
-    # repository is read with, its automations, what its sessions recall and
+    # A tenant's configuration: its agent projects and the credential each one's
+    # repository is read with, its agent automations, what its sessions recall and
     # follow, and its layer of tool policy.
 
-    async def create_project(
+    async def create_agent_project(
         self, name: str, host: str, path: str, *, idempotency_key: str | None = None
-    ) -> ProjectView:
-        """A project bound to the repository at `host`/`path`, which never
+    ) -> AgentProjectView:
+        """An agent project bound to the repository at `host`/`path`, which never
         moves. An owner's or an admin's. Always under an idempotency key."""
         made = await self.request(
             "POST",
-            "/v1/projects",
+            "/v1/agent-projects",
             json={"name": name, "repository": {"host": host, "path": path}},
             idempotency_key=idempotency_key or str(uuid4()),
         )
-        return ProjectView.model_validate(made)
+        return AgentProjectView.model_validate(made)
 
-    async def projects(
+    async def agent_projects(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
-    ) -> list[ProjectView]:
+    ) -> list[AgentProjectView]:
         params: dict[str, Any] = {"limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/projects", params=params)
-        return [ProjectView.model_validate(project) for project in found]
+        found = await self.request("GET", "/v1/agent-projects", params=params)
+        return [AgentProjectView.model_validate(agent_project) for agent_project in found]
 
-    async def project(self, project_id: UUID) -> ProjectView:
-        return ProjectView.model_validate(await self.request("GET", f"/v1/projects/{project_id}"))
+    async def agent_project(self, agent_project_id: UUID) -> AgentProjectView:
+        return AgentProjectView.model_validate(
+            await self.request("GET", f"/v1/agent-projects/{agent_project_id}")
+        )
 
-    async def rename_project(self, project_id: UUID, name: str) -> ProjectView:
-        renamed = await self.request("PATCH", f"/v1/projects/{project_id}", json={"name": name})
-        return ProjectView.model_validate(renamed)
+    async def rename_agent_project(self, agent_project_id: UUID, name: str) -> AgentProjectView:
+        renamed = await self.request(
+            "PATCH", f"/v1/agent-projects/{agent_project_id}", json={"name": name}
+        )
+        return AgentProjectView.model_validate(renamed)
 
-    async def remove_project(self, project_id: UUID) -> ProjectView:
-        """Refused with `project_in_use` while a session belongs to it."""
-        removed = await self.request("DELETE", f"/v1/projects/{project_id}")
-        return ProjectView.model_validate(removed)
+    async def remove_agent_project(self, agent_project_id: UUID) -> AgentProjectView:
+        """Refused with `agent_project_in_use` while a session belongs to it."""
+        removed = await self.request("DELETE", f"/v1/agent-projects/{agent_project_id}")
+        return AgentProjectView.model_validate(removed)
 
     async def put_fetch_credential(
-        self, project_id: UUID, username: str, password: str
+        self, agent_project_id: UUID, username: str, password: str
     ) -> FetchCredentialView:
-        """A read-only credential of the project's repository. The answer
+        """A read-only credential of the agent project's repository. The answer
         says who gave it when; nothing ever reads it back."""
         given = await self.request(
             "PUT",
-            f"/v1/projects/{project_id}/credential",
+            f"/v1/agent-projects/{agent_project_id}/credential",
             json={"username": username, "password": password},
         )
         return FetchCredentialView.model_validate(given)
 
-    async def create_automation(
-        self, automation: AutomationRequest, *, idempotency_key: str | None = None
-    ) -> AutomationView:
+    async def create_agent_automation(
+        self, agent_automation: AgentAutomationRequest, *, idempotency_key: str | None = None
+    ) -> AgentAutomationView:
         """Made in person; it runs as its maker unless it says otherwise.
         Always under an idempotency key."""
         made = await self.request(
             "POST",
-            "/v1/automations",
-            json=automation.model_dump(mode="json", exclude_unset=True),
+            "/v1/agent-automations",
+            json=agent_automation.model_dump(mode="json", exclude_unset=True),
             idempotency_key=idempotency_key or str(uuid4()),
         )
-        return AutomationView.model_validate(made)
+        return AgentAutomationView.model_validate(made)
 
-    async def automations(
+    async def agent_automations(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
-    ) -> list[AutomationView]:
+    ) -> list[AgentAutomationView]:
         params: dict[str, Any] = {"limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/automations", params=params)
-        return [AutomationView.model_validate(automation) for automation in found]
+        found = await self.request("GET", "/v1/agent-automations", params=params)
+        return [AgentAutomationView.model_validate(agent_automation) for agent_automation in found]
 
-    async def automation(self, automation_id: UUID) -> AutomationView:
-        read = await self.request("GET", f"/v1/automations/{automation_id}")
-        return AutomationView.model_validate(read)
+    async def agent_automation(self, agent_automation_id: UUID) -> AgentAutomationView:
+        read = await self.request("GET", f"/v1/agent-automations/{agent_automation_id}")
+        return AgentAutomationView.model_validate(read)
 
-    async def update_automation(
-        self, automation_id: UUID, automation: AutomationRequest
-    ) -> AutomationView:
-        """The automation whole, as edited; one that runs as its creator is
-        edited by its creator alone, and one that runs as the automation
+    async def update_agent_automation(
+        self, agent_automation_id: UUID, agent_automation: AgentAutomationRequest
+    ) -> AgentAutomationView:
+        """The agent automation whole, as edited; one that runs as its creator is
+        edited by its creator alone, and one that runs as the agent automation
         principal takes its editor as its creator."""
         edited = await self.request(
             "PUT",
-            f"/v1/automations/{automation_id}",
-            json=automation.model_dump(mode="json", exclude_unset=True),
+            f"/v1/agent-automations/{agent_automation_id}",
+            json=agent_automation.model_dump(mode="json", exclude_unset=True),
         )
-        return AutomationView.model_validate(edited)
+        return AgentAutomationView.model_validate(edited)
 
-    async def knowledge(
+    async def agent_knowledge(
         self,
-        status: KnowledgeStatus = KnowledgeStatus.reviewed,
+        status: AgentKnowledgeStatus = AgentKnowledgeStatus.reviewed,
         *,
         after: UUID | None = None,
         limit: int = LIMIT_MAX,
-    ) -> list[KnowledgeView]:
+    ) -> list[AgentKnowledgeView]:
         """The entries in a state; the suggestions are what waits on a review."""
         params: dict[str, Any] = {"status": status.value, "limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/knowledge", params=params)
-        return [KnowledgeView.model_validate(entry) for entry in found]
+        found = await self.request("GET", "/v1/agent-knowledge", params=params)
+        return [AgentKnowledgeView.model_validate(entry) for entry in found]
 
-    async def knowledge_entry(self, entry_id: UUID) -> KnowledgeView:
-        read = await self.request("GET", f"/v1/knowledge/{entry_id}")
-        return KnowledgeView.model_validate(read)
+    async def agent_knowledge_entry(self, entry_id: UUID) -> AgentKnowledgeView:
+        read = await self.request("GET", f"/v1/agent-knowledge/{entry_id}")
+        return AgentKnowledgeView.model_validate(read)
 
-    async def write_knowledge(self, title: str, trigger: list[str], text: str) -> KnowledgeView:
+    async def write_agent_knowledge(
+        self, title: str, trigger: list[str], text: str
+    ) -> AgentKnowledgeView:
         written = await self.request(
-            "POST", "/v1/knowledge", json={"title": title, "trigger": trigger, "text": text}
+            "POST", "/v1/agent-knowledge", json={"title": title, "trigger": trigger, "text": text}
         )
-        return KnowledgeView.model_validate(written)
+        return AgentKnowledgeView.model_validate(written)
 
-    async def edit_knowledge(
+    async def edit_agent_knowledge(
         self, entry_id: UUID, title: str, trigger: list[str], text: str, *, version: int
-    ) -> KnowledgeView:
+    ) -> AgentKnowledgeView:
         """The edit, on the version read; `precondition_failed` when it moved."""
         edited = await self.request(
             "PUT",
-            f"/v1/knowledge/{entry_id}",
+            f"/v1/agent-knowledge/{entry_id}",
             json={"title": title, "trigger": trigger, "text": text},
             if_match=version,
         )
-        return KnowledgeView.model_validate(edited)
+        return AgentKnowledgeView.model_validate(edited)
 
-    async def review_knowledge(self, entry_id: UUID, *, keep: bool) -> KnowledgeView:
+    async def review_agent_knowledge(self, entry_id: UUID, *, keep: bool) -> AgentKnowledgeView:
         reviewed = await self.request(
-            "POST", f"/v1/knowledge/{entry_id}/review", json={"keep": keep}
+            "POST", f"/v1/agent-knowledge/{entry_id}/review", json={"keep": keep}
         )
-        return KnowledgeView.model_validate(reviewed)
+        return AgentKnowledgeView.model_validate(reviewed)
 
-    async def playbook(self, name: str) -> PlaybookView:
+    async def agent_playbook(self, name: str) -> AgentPlaybookView:
         """The latest version of the name."""
-        return PlaybookView.model_validate(await self.request("GET", f"/v1/playbooks/{name}"))
+        return AgentPlaybookView.model_validate(
+            await self.request("GET", f"/v1/agent-playbooks/{name}")
+        )
 
-    async def publish_playbook(self, draft: PublishRequest) -> PlaybookView:
+    async def publish_agent_playbook(self, draft: PublishRequest) -> AgentPlaybookView:
         """The next version of the draft's name, published in person."""
         published = await self.request(
-            "POST", "/v1/playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
+            "POST", "/v1/agent-playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
         )
-        return PlaybookView.model_validate(published)
+        return AgentPlaybookView.model_validate(published)
 
     async def connectors(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
@@ -1023,29 +1031,29 @@ class ApiClient:
         connector_id: UUID,
         kind: str,
         *,
-        project_id: UUID | None = None,
+        agent_project_id: UUID | None = None,
         deferred: bool = True,
     ) -> ConnectorView:
         body: dict[str, Any] = {"kind": kind, "deferred": deferred}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         attached = await self.request(
             "POST", f"/v1/connectors/{connector_id}/attachments", json=body
         )
         return ConnectorView.model_validate(attached)
 
     async def detach_connector(
-        self, connector_id: UUID, kind: str, *, project_id: UUID | None = None
+        self, connector_id: UUID, kind: str, *, agent_project_id: UUID | None = None
     ) -> ConnectorView:
         params: dict[str, Any] = {"kind": kind}
-        if project_id is not None:
-            params["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            params["agent_project_id"] = str(agent_project_id)
         detached = await self.request(
             "DELETE", f"/v1/connectors/{connector_id}/attachments", params=params
         )
         return ConnectorView.model_validate(detached)
 
-    async def invoke_playbook(
+    async def invoke_agent_playbook(
         self, name: str, session_id: UUID, *, idempotency_key: str | None = None
     ) -> InvocationView:
         """The name's latest version brought into the session, in person: its
@@ -1053,35 +1061,40 @@ class ApiClient:
         message. Invoked again, the same invocation."""
         invoked = await self.request(
             "POST",
-            f"/v1/playbooks/{name}/invocations",
+            f"/v1/agent-playbooks/{name}/invocations",
             json={"session_id": str(session_id)},
             idempotency_key=idempotency_key or str(uuid4()),
         )
         return InvocationView.model_validate(invoked)
 
-    async def playbook_pins(self) -> list[PinView]:
-        """The tenant's pins, by kind, the tenant's before a project's."""
+    async def agent_playbook_pins(self) -> list[PinView]:
+        """The tenant's pins, by kind, the tenant's before an agent project's."""
         return [
-            PinView.model_validate(pin) for pin in await self.request("GET", "/v1/playbook-pins")
+            PinView.model_validate(pin)
+            for pin in await self.request("GET", "/v1/agent-playbook-pins")
         ]
 
-    async def pin_playbook(
-        self, kind: str, name: str, *, project_id: UUID | None = None
+    async def pin_agent_playbook(
+        self, kind: str, name: str, *, agent_project_id: UUID | None = None
     ) -> PinView:
-        """The name's latest version pinned to the kind as its manual, for the
-        tenant, or for one project; each session of the kind made from now
+        """The name's latest version pinned to the kind as its kind manual, for the
+        tenant, or for one agent project; each session of the kind made from now
         on holds it, and one made before keeps its own."""
         body: dict[str, Any] = {"kind": kind, "name": name}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
-        return PinView.model_validate(await self.request("PUT", "/v1/playbook-pins", json=body))
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
+        return PinView.model_validate(
+            await self.request("PUT", "/v1/agent-playbook-pins", json=body)
+        )
 
-    async def unpin_playbook(self, kind: str, *, project_id: UUID | None = None) -> PinView:
-        """The kind's pin for the tenant, or for one project, taken away."""
+    async def unpin_agent_playbook(
+        self, kind: str, *, agent_project_id: UUID | None = None
+    ) -> PinView:
+        """The kind's pin for the tenant, or for one agent project, taken away."""
         params: dict[str, Any] = {"kind": kind}
-        if project_id is not None:
-            params["project_id"] = str(project_id)
-        unpinned = await self.request("DELETE", "/v1/playbook-pins", params=params)
+        if agent_project_id is not None:
+            params["agent_project_id"] = str(agent_project_id)
+        unpinned = await self.request("DELETE", "/v1/agent-playbook-pins", params=params)
         return PinView.model_validate(unpinned)
 
     async def tool_policy(self) -> ToolPolicyView:
@@ -1106,15 +1119,15 @@ class ApiClient:
         kind: str,
         title: str,
         *,
-        project_id: UUID | None = None,
+        agent_project_id: UUID | None = None,
         idempotency_key: str | None = None,
     ) -> AgentSessionView:
         """A session on the latest version of `kind`, idle until a message
-        wakes it, in `project_id`: a stack outside a local one refuses a
+        wakes it, in `agent_project_id`: a stack outside a local one refuses a
         session in none. Always under an idempotency key."""
         body: dict[str, object] = {"kind": kind, "title": title}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         started = await self.request(
             "POST",
             "/v1/agent-sessions",
@@ -1550,7 +1563,7 @@ class ApiClient:
     async def admin_levers(
         self, org_id: UUID, since: datetime, until: datetime
     ) -> LeverReadingView:
-        """The playbooks and knowledge the org's sessions created in `[since,
+        """The agent playbooks and agent knowledge the org's sessions created in `[since,
         until)` reached, ranked by how much more often the sessions that
         reached them stalled; a read under `read`."""
         body = await self.request(

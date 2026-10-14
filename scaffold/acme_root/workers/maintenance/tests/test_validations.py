@@ -1,7 +1,7 @@
 """A validation session as the worker runs it: its item is claimed from
 the platform's own lane and handled by the worker's own handler, which
 runs the check on the executor once and finishes the session with the
-record it wrote. A check its project's policy no longer declares fails for
+record it wrote. A check its agent project's policy no longer declares fails for
 good, and its session reads refused with the reason; a check whose work
 fails on its last attempt reads refused with the error's class, and its
 item still fails for good."""
@@ -43,19 +43,19 @@ class Unmade(ScriptedExecutor):
 
 
 async def started(
-    container: WorkerContainer, ctx: TenantContext, check: str, environment: str | None = None
+    container: WorkerContainer, ctx: TenantContext, check: str, executor: str | None = None
 ) -> UUID:
-    project_id = new_id()
-    policy = make_policy(policy_key(project_id))
-    if environment is not None:
-        moved = tuple(
-            each.model_copy(update={"environment": environment}) for each in policy.checks
-        )
+    agent_project_id = new_id()
+    policy = make_policy(policy_key(agent_project_id))
+    if executor is not None:
+        moved = tuple(each.model_copy(update={"executor": executor}) for each in policy.checks)
         policy = policy.model_copy(update={"checks": moved})
     await container.managers.evidence.write_policy(ctx, policy)
     session = await container.managers.platform_agents.start_validation(
         ctx,
-        ValidationStart(id=new_id(), project_id=project_id, check_name=check, head=HEAD, base=BASE),
+        ValidationStart(
+            id=new_id(), agent_project_id=agent_project_id, check_name=check, head=HEAD, base=BASE
+        ),
     )
     return session.id
 
@@ -102,7 +102,7 @@ async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Pa
     # The policy renames the check after the session started.
     session = await container.managers.platform_agents.get_validation(owner, session_id)
     evidence = container.managers.evidence
-    policy = await evidence.get_policy(owner, policy_key(session.project_id))
+    policy = await evidence.get_policy(owner, policy_key(session.agent_project_id))
     renamed = tuple(each.model_copy(update={"name": "lint"}) for each in policy.checks)
     await evidence.write_policy(
         owner, policy.model_copy(update={"checks": renamed, "requirements": ()})
@@ -117,11 +117,11 @@ async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Pa
 
     refused = await container.managers.platform_agents.get_validation(owner, session_id)
     assert refused.status is ValidationStatus.REFUSED
-    assert refused.refusal == f"the project {session.project_id} declares no check unit"
+    assert refused.refusal == f"the agent project {session.agent_project_id} declares no check unit"
     assert executor.requests == []
 
 
-async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: Path) -> None:
+async def test_a_check_naming_a_products_executor_runs_on_it(tmp_path: Path) -> None:
     platform, batch = (
         ScriptedExecutor(capabilities=frozenset()),
         ScriptedExecutor(name="batch-1", capabilities=frozenset()),
@@ -131,7 +131,7 @@ async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: 
         StorageMemoryImpl(), InfraLocalImpl(tmp_path), ports=ports
     )
     owner = await sign_in(container)
-    session_id = await started(container, owner, "unit", environment="batch")
+    session_id = await started(container, owner, "unit", executor="batch")
     handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)

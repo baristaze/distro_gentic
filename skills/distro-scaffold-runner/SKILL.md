@@ -11,7 +11,7 @@ A path that starts with `../` is read from this skill's folder as
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Sessions Are Work (Kinds of
 Work, Fair Share), Session Runners, Placement and Workspace Hosts
-(Placement, The Relay Transport).
+(Placement, The Exec Relay Transport).
 Lenses: `../../lenses/placement.md`.
 
 ## Input
@@ -78,7 +78,7 @@ None.
    leave them at the platform's.
 4. A runner never runs inside the sandbox it drives, and holds no host
    credential: a loop placed in a customer's wall reaches its host
-   through the relay, from any runner of its lane.
+   through the exec relay, from any runner of its lane.
 5. The tests:
    - a tenant whose share names `<tier>`, or gives it a lane of its own,
      has its loops put in `<lane>`, and a runner of `<lane>` claims them

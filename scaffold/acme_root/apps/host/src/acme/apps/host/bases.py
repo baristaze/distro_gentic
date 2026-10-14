@@ -1,5 +1,5 @@
-"""A workspace's base as a host builds and keeps it: the image a project's
-environment names and its setup, built once on this host and kept in the
+"""A workspace's base as a host builds and keeps it: the image an agent project's
+workspace base names and its setup, built once on this host and kept in the
 host's own store, inside its owner's wall, as its snapshots are. Nothing of
 it reaches the platform: a prepare on a base starts the workspace from the
 store's copy.

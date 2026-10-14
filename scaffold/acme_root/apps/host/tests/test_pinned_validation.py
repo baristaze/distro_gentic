@@ -1,9 +1,9 @@
-"""A delivery of a session pinned to a host pool, validated as the platform
+"""A work product of a session pinned to a host pool, validated as the platform
 validates any: the runner's root, as it boots, and hosts of the tenant's
 pools, each the host's own agent against the API in process. The checks
 run on a host of the session's pool, in an instance made for the run alone
 under an id of its own, never in the session's workspace and never on the
-platform's machines. Its results stream is read back through the relay and
+platform's machines. Its results stream is read back through the exec relay and
 hashed, the gate confirms the success it shows, and the instance goes with
 its files and its records once the run ends, whatever ended it. A host of
 another pool of the tenant, or of another tenant, is handed nothing.
@@ -20,9 +20,9 @@ from uuid import UUID
 
 import pytest
 from api_support import seed_request
+from contracts.agent_project_storage import in_agent_project
 from contracts.checks_repository import UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
-from contracts.project_storage import in_project
 from host_support import Pace, Stack, directory_host, postgres, stack, started_host
 from runner_support import TOOLS, assistant
 
@@ -39,6 +39,7 @@ from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om import root as platform_root
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id
@@ -48,13 +49,12 @@ from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
+from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
-from acme.om.relay.rules import READ_BYTES
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -136,7 +136,7 @@ async def pool_host(api: Stack, pool_id: UUID, where: Path) -> Hosted:
         pool_id,
         replace(api.settings(where / "home", None), name="host-a"),
         Ceilings(
-            projects=None,
+            agent_projects=None,
             min_isolation=IsolationMode.directory,
             egress=None,
             readable=(str(root),),
@@ -177,7 +177,7 @@ async def pumped[T](call: Awaitable[T], hosts: dict[HostAgent, list[UUID]]) -> T
 
 @dataclass
 class Runner:
-    """The runner's root, the project's repository its projects bind, and
+    """The runner's root, the agent project's repository its agent projects bind, and
     the work product its sessions deliver to."""
 
     container: RunnerContainer
@@ -188,7 +188,7 @@ class Runner:
 def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
     """The runner's root over `storage`, as it boots outside `local`: its
     executor is the platform's fresh one, which reaches a pinned session's
-    pool through the relay."""
+    pool through the exec relay."""
     where.mkdir()
     repository, work = Repository(where), WorkProductMemoryImpl()
     container = RunnerContainer.over(
@@ -197,7 +197,7 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
         api.container.infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
         ports=PlatformPorts(
-            workspace_projects=OnDisk(repository),
+            workspace_agent_projects=OnDisk(repository),
             work_product=work,
             kinds=ProductKinds(agents=(KIND,), tools=lambda _managers: TOOLS),
         ),
@@ -208,7 +208,7 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
 async def delivered(
     run: Runner, api: Stack, pool_id: UUID, check: CheckDeclaration = UNIT
 ) -> tuple[UUID, str]:
-    """A session of the tenant pinned to the pool, in a project whose policy
+    """A session of the tenant pinned to the pool, in an agent project whose policy
     runs `check` from the base, and the head it delivered, whose cart the
     base's fixture passes."""
     container, repository = run.container, run.repository
@@ -218,8 +218,10 @@ async def delivered(
         owner, Start(id=new_id(), kind=KIND.name, title="Fix the cart's total")
     )
     await api.container.managers.hosts.place_session(owner, session.id, pool_id)
-    project_id = await in_project(container.storage.get_project_storage(), owner.org_id, session.id)
-    policy = make_policy(policy_key(project_id))
+    agent_project_id = await in_agent_project(
+        container.storage.get_agent_project_storage(), owner.org_id, session.id
+    )
+    policy = make_policy(policy_key(agent_project_id))
     await managers.evidence.write_policy(
         owner,
         ValidationPolicy.model_validate(
@@ -230,8 +232,8 @@ async def delivered(
     run.work.deliver(
         owner.org_id,
         session.id,
-        Delivery(
-            project=policy.project,
+        WorkProduct(
+            agent_project=policy.agent_project,
             base=repository.base,
             head=head,
             dirty=False,
@@ -252,7 +254,7 @@ def gone(path: Path | str) -> bool:
 
 @pytest.fixture(autouse=True)
 def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The reader the runner's root builds, allowed to read the project's
+    """The reader the runner's root builds, allowed to read the agent project's
     repository from a path, as a deployed one is not."""
     monkeypatch.setattr(
         platform_root,
@@ -261,7 +263,7 @@ def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-# Check 1: a pinned project's delivery is validated on a host of its pool,
+# Check 1: a pinned agent project's work product is validated on a host of its pool,
 # in an instance nobody used, the record hashes to its results, and the
 # gate confirms it.
 
@@ -277,7 +279,7 @@ async def over_postgres(tmp_path: Path) -> AsyncIterator[tuple[Stack, Runner]]:
 
 
 @pytest.mark.integration
-async def test_a_pinned_projects_delivery_is_validated_on_its_pools_host_and_the_gate_confirms_it(
+async def test_a_pinned_agent_projects_delivery_is_validated_on_its_pools_host_and_the_gate_confirms_it(
     over_postgres: tuple[Stack, Runner], tmp_path: Path
 ) -> None:
     api, run = over_postgres
@@ -363,7 +365,7 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     assert gone(location), "the instance's files went with it"
     assert await host.provider.held_instances() == []
     assert gone(host.transport.records / instance.hex), "and its records"
-    assert await managers.relay.binding_of(owner, instance) is None
+    assert await managers.exec_relay.binding_of(owner, instance) is None
     purge = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
     assert purge is not None and purge.status is WorkStatus.DONE
     assert WorkspacePayload.model_validate(purge.payload).operation is WorkspaceOperation.PURGE

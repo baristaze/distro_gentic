@@ -35,7 +35,7 @@ class BudgetScopeKind(StrEnum):
 
 class BudgetScope(Platform):
     """One scope a call is charged to: its kind and the key the platform
-    gives it, such as a session's id or a project's."""
+    gives it, such as a session's id or an agent project's."""
 
     kind: BudgetScopeKind
     key: Stored = Field(min_length=1, max_length=MAX_KEY)

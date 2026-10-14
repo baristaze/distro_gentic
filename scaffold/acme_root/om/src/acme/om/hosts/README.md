@@ -84,8 +84,8 @@ enrolls and calls the same way, as a kind of its own
 Trust's `PlacementInterface` (inside the wall, and the executor of a
 session's next call) is answered here, by `impl/placement.PlacementHostsImpl`,
 which the session runner wires. A pinned session's call is refused
-(`PinnedToHosts`, a `NotAuthorized` the loop answers as denied) until the
-relay names the host that holds its workspace. The
+(`PinnedToHosts`, a `NotAuthorized` the loop answers as denied) until
+the exec relay names the host that holds its workspace. The
 manager methods a host calls take `RequestContext` and a `HostIdentity`
 that only `authenticate` builds, at the gateway (`gateway/hosts.py`); a
 product's claimant's take a `ClaimantIdentity` that only

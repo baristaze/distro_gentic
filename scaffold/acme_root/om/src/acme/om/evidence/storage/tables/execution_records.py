@@ -24,13 +24,13 @@ class ExecutionRecords(IdentifiableMixin, CreatedMixin, Base):
         Index("ix_execution_records_org_id_validation_id", "org_id", "validation_id"),
     )
     session_id: Mapped[UUID]
-    project: Mapped[str]
+    agent_project: Mapped[str]
     purpose: Mapped[str]
     step_id: Mapped[UUID | None]
     validation_id: Mapped[UUID | None]
     version: Mapped[str]
     dirty: Mapped[bool]
-    environment: Mapped[dict[str, Any]]
+    run_image: Mapped[dict[str, Any]]
     host: Mapped[str]
     isolation: Mapped[str]
     executor: Mapped[str]

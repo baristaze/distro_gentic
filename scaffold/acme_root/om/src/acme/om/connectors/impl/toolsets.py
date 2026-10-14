@@ -19,6 +19,7 @@ from acme.infra.base import FrozenMapping, thaw_mapping
 from acme.infra.secrets import SecretsInterface
 from acme.infra.workspaces import Workspace
 from acme.integrations.mcp import McpAnswer, McpClientInterface
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.attached import Attached, AttachedToolsetsInterface
 from acme.om.agents.types.kind import AgentKindCatalog
@@ -28,16 +29,15 @@ from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.rules import cloud_server, pinned, still_reviewed, toolset_of
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.connectors.types.connector import (
+    AgentSessionConnectors,
     Connector,
     ConnectorPlace,
     ConnectorTool,
     PinnedConnector,
-    SessionConnectors,
 )
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
-from acme.om.projects.policies import SessionProjectsInterface
-from acme.om.relay.types.exec import McpRequest
+from acme.om.exec_relay.types.exec import McpRequest
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.mcp import McpCall, McpServers, secret_use
 from acme.om.tools.tool import ToolInterface, ToolRuntime
@@ -57,7 +57,7 @@ it."""
 
 class HostCall(Protocol):
     """Reaches a tool of a server the host that holds `workspace` runs, as
-    `exec` work keyed by the call: the runner's relay transport."""
+    `exec` work keyed by the call: the runner's exec relay transport."""
 
     def __call__(
         self,
@@ -110,7 +110,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         self,
         storage: ConnectorStorageInterface,
         kinds: AgentKindCatalog,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         placement: PlacementInterface,
         client: McpClientInterface,
         secrets: SecretsInterface,
@@ -124,7 +124,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         self._storage = storage
         self._tool_of = tool_of
         self._kinds = kinds
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._placement = placement
         self._client = client
         self._secrets = secrets
@@ -145,11 +145,11 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
             tools.extend(self._tool(connector, tool) for tool in connector.tools)
         return Attached(held=tuple(held), deferred=tuple(deferred), tools=tuple(tools))
 
-    async def _pin(self, ctx: TenantContext, session: AgentSession) -> SessionConnectors:
+    async def _pin(self, ctx: TenantContext, session: AgentSession) -> AgentSessionConnectors:
         """What the session holds of its tenant's connectors, written once:
         a run that pinned first wins, and every run after reads it."""
         root = session.root_id
-        project_id = await self._projects.project_of(ctx, root)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, root)
         inside = await self._placement.inside_wall(ctx.org_id, root)
         parent = (
             None
@@ -164,13 +164,13 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
             if connector.name not in taken
             and not {tool.name for tool in connector.tools} & set(kind.tools)
         ]
-        pin = SessionConnectors(
+        pin = AgentSessionConnectors(
             id=session.id,
             created_at=self._clock(),
             connectors=pinned(
                 connectors,
                 session.kind,
-                project_id,
+                agent_project_id,
                 inside_wall=inside,
                 parent=parent,
                 child=session.parent_id is not None,

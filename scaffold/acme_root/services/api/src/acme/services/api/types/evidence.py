@@ -1,4 +1,4 @@
-"""The wire types of a session's evidence and its delivery: each run of a
+"""The wire types of a session's evidence and its work product: each run of a
 check it recorded or the executor ran for it, each validation, and what it
 delivered (its branch, its pull requests, and the result it submitted).
 A run's parameters, its toolchain, and its artifacts stay in the record;
@@ -31,7 +31,7 @@ class ExecutionView(View):
     purpose: RunPurpose
     step_id: UUID | None
     validation_id: UUID | None
-    project: str
+    agent_project: str
     version: str
     dirty: bool
     image: str
@@ -64,7 +64,7 @@ class ValidationView(View):
     id: UUID
     created_at: datetime
     purpose: RunPurpose
-    project: str
+    agent_project: str
     version: str
     source: str
     executor: str
@@ -92,13 +92,13 @@ class ReportView(View):
     verified: bool
 
 
-class DeliveryView(View):
-    """What a session delivered: its project, its branch and whether the
+class WorkProductView(View):
+    """What a session delivered: its agent project, its branch and whether the
     remote has held it, the pull requests and branches bound to it, and its
     latest accepted result. A session that never had a workspace has no
     branch."""
 
-    project_id: UUID | None
+    agent_project_id: UUID | None
     branch: str | None
     branch_seen: bool
     work: list[WorkHandleView]

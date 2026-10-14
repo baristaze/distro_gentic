@@ -4,7 +4,7 @@ fresh executor, and the session finishes with the execution record that run
 wrote (`PlatformAgentsManagerInterface.run_validation`).
 
 It is idempotent: a finished session runs nothing, and a run the evidence
-kept is never run again. A check its project cannot run, such as one its
+kept is never run again. A check its agent project cannot run, such as one its
 policy no longer declares, or one its starter may no longer run, fails for
 good, and its session reads refused with the reason. Anything else, such as
 an instance that could not be made, is tried again; on the item's last

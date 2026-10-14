@@ -9,11 +9,11 @@ does not always own.
 
 - It **defines** an agent as an [agent
   kind](#the-agents-a-platform-ships): its toolsets, the model size
-  each of its roles asks, the bounds it runs in, and a manual a tenant
-  may pin to it. The kinds it ships are templates a product copies. A
-  tenant shapes them with [playbooks and
-  knowledge](#playbooks-and-knowledge) and [connectors](#connectors),
-  each read for what would mislead an agent before a person publishes
+  each of its roles asks, the bounds it runs in, and a kind manual a
+  tenant may pin to it. The kinds it ships are templates a product
+  copies. A tenant shapes them with [agent playbooks and
+  agent knowledge](#agent-playbooks-and-agent-knowledge) and
+  [connectors](#connectors), each read for what would mislead an agent before a person publishes
   it.
 - It **runs** each agent as a [session on the work
   queue](#sessions-are-work), and it **closes the loop**: work arrives
@@ -83,10 +83,10 @@ These are the invariants. Each links the section that states it.
 - [Evidence](#evidence)
 - [Trust](#trust)
 - [Money](#money)
-- [Models Are a Fleet Decision](#models-are-a-fleet-decision)
+- [Models Are an Agent Fleet Decision](#models-are-an-agent-fleet-decision)
 - [The Agents a Platform Ships](#the-agents-a-platform-ships)
 - [Data, Retention, and the Wall](#data-retention-and-the-wall)
-- [Failure at Fleet Scale](#failure-at-fleet-scale)
+- [Failure at Agent Fleet Scale](#failure-at-agent-fleet-scale)
 - [Operations](#operations)
 - [Deviations from the Guideline](#deviations-from-the-guideline)
 - [The Repository](#the-repository)
@@ -96,7 +96,7 @@ These are the invariants. Each links the section that states it.
 ## The Running Example
 
 > A team files a ticket: *"The checkout service sometimes drops a
-> request under load. Investigate and fix it."* An automation turns it
+> request under load. Investigate and fix it."* An agent automation turns it
 > into a session pinned to the team's host pool, because its builds and
 > devices must stay there. The agent's loop runs in the platform's cloud;
 > its tool calls run on a workspace host in that pool. At 2 a.m. a model
@@ -124,8 +124,8 @@ A platform claims a closed loop only if it keeps seven promises:
 2. **A baseline comes first,** recorded before a change, so "fixed" has
    something to be compared with.
 3. **Work completes through one gate,** which refuses a success unless
-   the project's validation passed at the exact version delivered, with
-   the runs behind each claim cited.
+   the agent project's validation passed at the exact version delivered,
+   with the runs behind each claim cited.
 4. **Failed and inconclusive are first-class.** A failure with an
    evidence-backed explanation is a result; a success without validation
    is not.
@@ -149,13 +149,13 @@ flowchart LR
         Ext[Trackers, chat,<br/>source control]
     end
     subgraph Cloud [The platform's cloud]
-        CP[Control plane:<br/>gateway, sessions, intake,<br/>automations, policy, approvals]
-        CW[Control workers:<br/>intake, automations]
+        CP[Control plane:<br/>gateway, sessions, intake,<br/>agent automations, policy, approvals]
+        CW[Control workers:<br/>intake, agent automations]
         Q[(Work queue)]
         SR[Session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
         Rec[(Steps, records,<br/>artifacts)]
-        Money[Metering, limits,<br/>billing, model matrix]
+        Money[Metering, limits,<br/>agent billing, model matrix]
     end
     subgraph Wall [Inside a customer's wall]
         WH[Workspace host:<br/>runs tool calls]
@@ -177,10 +177,10 @@ flowchart LR
 
 | Plane | Parts | Where it runs |
 |---|---|---|
-| **Control** | The gateway, sessions, intake and routing, automations, policy, approvals, realtime; the control workers | The platform's cloud |
+| **Control** | The gateway, sessions, intake and routing, agent automations, policy, approvals, realtime; the control workers | The platform's cloud |
 | **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
-| **Records and money** | Steps, execution records, artifacts; metering, limits, billing, the model matrix | The platform's cloud |
+| **Records and money** | Steps, execution records, artifacts; metering, limits, agent billing, the model matrix | The platform's cloud |
 
 Every connection that crosses a customer's wall is opened from inside
 it.
@@ -199,7 +199,7 @@ several kinds of work, and each must run where its environment is:
 | `loop`: run or resume a session's loop | Any session runner | The loop lanes |
 | `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
-| Platform work: intake, automations | Control workers | Their own lanes |
+| Platform work: intake, agent automations | Control workers | Their own lanes |
 
 A lane is the guideline's work-item lane, so every kind is one queue
 with one shape. A runner claims from the queue directly; a host
@@ -250,9 +250,10 @@ later, rarely share a machine.
   Default][e-durable]).
 
 A runner chooses the transport by the session's placement: a **direct
-transport** to a cloud workspace, or a **relay transport** to a host
-inside a customer's wall ([The Relay Transport](#the-relay-transport)).
-The engine sees one transport interface either way.
+transport** to a cloud workspace, or an **exec relay transport** to a
+host inside a customer's wall ([The Exec Relay
+Transport](#the-exec-relay-transport)). The engine sees one transport
+interface either way.
 
 > **Principle:** The brain runs in the platform, and a lost claim stops
 > a runner's writes, whatever its clock says.
@@ -306,10 +307,10 @@ in.
 - **Pinned claims.** A host is handed only the work pinned to its pool,
   filtered by its identity, never by what it asks for.
 - **Owner's ceilings.** A host enforces limits its owner sets and the
-  platform cannot raise: the projects it serves, its minimum isolation,
-  its egress, the paths it lets a result read, whether it accepts
-  people's commands, and the MCP servers it starts, each named whole
-  ([Connectors](#connectors)). A compromised control plane still
+  platform cannot raise: the agent projects it serves, its minimum
+  isolation, its egress, the paths it lets a result read, whether it
+  accepts people's commands, and the MCP servers it starts, each named
+  whole ([Connectors](#connectors)). A compromised control plane still
   cannot widen what a host does.
 - **What it holds.** No database credential, no model key, no history:
   its own credential, its local secret store (keyed by tenant first, as
@@ -330,8 +331,9 @@ A session of the platform's cloud whose workspace is a VM runs on a
 machine of its own, from the **cloud pool**: one virtual machine per
 session, which boots the pool's image, named by the id its cloud gives
 it, and runs the same host program a customer installs, with a
-container engine inside. The runner reaches it through the relay, as it
-reaches any host: the machine pulls, and the platform never calls in.
+container engine inside. The runner reaches it through the exec relay,
+as it reaches any host: the machine pulls, and the platform never calls
+in.
 
 - **Its own credential, for one session.** The pool hands each machine,
   as it starts, a one-use key, and its host trades the key once for a
@@ -361,7 +363,7 @@ reaches any host: the machine pulls, and the platform never calls in.
   revocation, since a machine left running is money. A revocation the
   API takes reaches no machine, so the sweep destroys its disks.
 
-### The Relay Transport
+### The Exec Relay Transport
 
 A tool call into a customer's wall travels as `exec` work:
 
@@ -421,7 +423,7 @@ artifacts ([`agentic_core` Workspace Snapshots][e-snapshots]). The
 workspace itself stays a cache.
 
 - **Who chooses.** An agent kind says `cache`, the default, or
-  `snapshot`. A project narrows it: one that keeps its sessions'
+  `snapshot`. An agent project narrows it: one that keeps its sessions'
   workspaces as caches makes each of them a cache. A session that keeps
   no content at rest keeps no snapshot, so a kind kept by snapshots is
   refused for it when it is created.
@@ -458,44 +460,46 @@ workspace itself stays a cache.
   from the object store and from each host's store that keeps one, and
   their records go with them.
 
-### A Project's Environment
+### An Agent Project's Workspace Base
 
 `optional`
 
-An engineer works with no network, so it cannot install what its work
-needs, and open egress would make every command after its first tool
-result wait for a person. A project names its **environment** instead:
-an image, the commands that set it up, and the package registries the
-setup reaches. The platform builds it once and keeps it as a snapshot,
-and each session of the project starts from it, sealed. The engine
-calls it a base ([`agentic_core` Workspace Snapshots][e-snapshots]).
+A software engineer works with no network, so it cannot install what its
+work needs, and open egress would make every command after its first
+tool result wait for a person. An agent project names its **workspace
+base** instead: an image, the commands that set it up, and the package
+registries the setup reaches. The platform builds it once and keeps it
+as a snapshot, and each session of the agent project starts from it,
+sealed. It is the engine's base ([`agentic_core` Workspace
+Snapshots][e-snapshots]), as an agent project names it.
 
-- **Who chooses.** The project, set by whoever writes the tenant's
-  configuration. An agent kind takes its project's environment only
-  from a version that says so, as the platform's engineer does. A kind
-  that takes none, and a project that names none, work as before.
-- **Pinned with the session.** A session pins the environment its
-  project names when it is created, and keeps it. A changed environment
-  is another one, built again for the sessions created after it. A
-  session already running keeps the one it started on.
+- **Who chooses.** The agent project, set by whoever writes the tenant's
+  configuration. An agent kind takes its agent project's workspace base
+  only from a version that says so, as the platform's software engineer
+  does. A kind that takes none, and an agent project that names none,
+  work as before.
+- **Pinned with the session.** A session pins the workspace base its
+  agent project names when it is created, and keeps it. A changed
+  workspace base is another one, built again for the sessions created
+  after it. A session already running keeps the one it started on.
 - **Built where its workspaces run.** In the cloud, the runner's
   provider builds it and keeps it in the platform's object store, under
   the tenant. On a customer's host, that host builds it and keeps it in
   its own store, inside the wall, as it keeps a snapshot. One build
-  serves the project on each side, and the hosts of a pool share one
-  when they share a store.
+  serves the agent project on each side, and the hosts of a pool share
+  one when they share a store.
 - **The setup reaches registries, the workspace nothing.** A setup that
-  names a registry runs with open egress, the project's recorded
-  choice, and one that names none reaches nothing. A workspace on the
-  environment keeps its kind's egress; the engineer's is none. A host
+  names a registry runs with open egress, the agent project's recorded
+  choice, and one that names none reaches nothing. A workspace on it
+  keeps its kind's egress; the software engineer's is none. A host
   whose owner closed egress refuses a setup that reaches out.
 - **Its checks run on it.** A validation of a session's work runs on a
-  new instance of the environment the session pinned, never on its
+  new instance of the workspace base the session pinned, never on its
   workspace, and with no egress: the checks find what the setup
   installed, and reach nothing.
-- **No agent, no secret.** The setup runs the project's commands alone:
-  no model, no secret, no platform credential, and nothing of the
-  tenant's records. An environment whose snapshot holds a secret's
+- **No agent, no secret.** The setup runs the agent project's commands
+  alone: no model, no secret, no platform credential, and nothing of the
+  tenant's records. A workspace base whose snapshot holds a secret's
   value is not kept.
 - **A failed setup keeps nothing.** In the cloud, the loop ends with the
   failing command and its exit code. On a host, it waits on the
@@ -534,12 +538,12 @@ runs one session at a time, unless its owner says otherwise.
 
 ### Egress
 
-A workspace's egress opens outward only, to a per-project allowlist that
-names destinations and methods: source control, through a credential
-scoped to the session's branch; package registries, read-only,
-through a vetting mirror; the platform's endpoints. Open egress is an
-explicit policy choice, recorded. A workspace never reaches the
-platform's internal network or a cloud metadata endpoint. No surface
+A workspace's egress opens outward only, to a per-agent-project
+allowlist that names destinations and methods: source control, through a
+credential scoped to the session's branch; package registries,
+read-only, through a vetting mirror; the platform's endpoints. Open
+egress is an explicit policy choice, recorded. A workspace never reaches
+the platform's internal network or a cloud metadata endpoint. No surface
 renders a URL from agent output as a fetch, such as an image in a
 comment or a mirror.
 
@@ -650,69 +654,70 @@ guideline's own benchmark does: integrations as twins, the model on real
 providers. The platform carries provenance one step further, into
 evidence ([Execution Records](#execution-records)).
 
-### Automations
+### Agent Automations
 
-**Automations** turn events into bounded work. A trigger, an event with
-filters or a schedule, leads to an action: start a session, or message a
-standing session (a CI triage session, say). A message action is refused
-while its automation is enabled, until a run's cap can end with its run,
-since a standing session outlives the run. A product adds actions of
-its own, each with a check that says when the work it started ended, so
-its run stays at work until then. A product's action may also refuse the
-person who writes the automation, or the principal it is set to run as,
-so one its firings would refuse is never saved, and that person hears
-why when they can fix it. An automation runs as its
-creator or as the tenant's automation principal, and has limits of its
-own: a cost cap, a rate, a concurrency, and whether to queue when
-limited. An automation ignores the events its own sessions caused,
-unless it declares otherwise, and a chain of automations stops at a hop
-limit, so an agent's comment cannot start an endless chain. Every firing
-is a recorded run. A firing while a run is open starts another beside
-it, as the automation's limits allow: it starts, queues, or is
-refused. An event delivered again, or a schedule's slot met again,
-answers the run it made.
+**Agent automations** turn events into bounded work. A trigger, an event
+with filters or a schedule, leads to an action: start a session, or
+message a standing session (a CI triage session, say). A message action
+is refused while its agent automation is enabled, until a run's cap can
+end with its run, since a standing session outlives the run. A product
+adds actions of its own, each with a check that says when the work it
+started ended, so its run stays at work until then. A product's action
+may also refuse the person who writes the agent automation, or the
+principal it is set to run as, so one its firings would refuse is never
+saved, and that person hears why when they can fix it. An agent
+automation runs as its creator or as the tenant's agent automation
+principal, and has limits of its own: a cost cap, a rate, a concurrency,
+and whether to queue when limited. An agent automation ignores the
+events its own sessions caused, unless it declares otherwise, and a
+chain of agent automations stops at a hop limit, so an agent's comment
+cannot start an endless chain. Every firing is a recorded run. A firing
+while a run is open starts another beside it, as the agent automation's
+limits allow: it starts, queues, or is refused. An event delivered
+again, or a schedule's slot met again, answers the run it made.
 
-### Playbooks and Knowledge
+### Agent Playbooks and Agent Knowledge
 
-**Playbooks** are a team's procedures as versioned, executable briefs:
-what is needed, the steps, the safety requirements, the approval gates,
-the success measures, and what is forbidden. They follow the [Agent
-Skills](https://agentskills.io/specification) format, with their gates
+**Agent playbooks** are a team's procedures as versioned, executable
+briefs: what is needed, the steps, the safety requirements, the approval
+gates, the success measures, and what is forbidden. They follow the
+[Agent Skills](https://agentskills.io/specification) format, with their gates
 in a namespaced metadata extension, so a brief runs in any agent that
-reads the standard. Only a person publishes a playbook. A principal
-invokes one into a session they may instruct, from the API, the command
-line, or the session's page, and an automation's start invokes one into
-the session it starts. Its brief arrives as that principal's message,
-and its gates compile into the session's policy, where they can only
-narrow it.
+reads the standard. Only a person publishes an agent playbook. A
+principal invokes one into a session they may instruct, from the API,
+the command line, or the session's page, and an agent automation's start
+invokes one into the session it starts. Its brief arrives as that
+principal's message, and its gates compile into the session's policy,
+where they can only narrow it.
 
-A person who manages the tenant may also pin a playbook to an [agent
-kind][e-kinds], for the tenant or for one project, as the kind's
-**manual**: the standing instructions of every session of that kind.
-It is one noun, invoked as a procedure or pinned as a manual. Each
-session of the kind made after the pin, a sub-agent and a hand-over
-among them, pins the manual's brief as its [standing text][e-rendering]:
-whole in the system layer of every request, before and after every
-compaction, and cached with the kind's prompts. Its gates narrow the
-session's policy as an invoked playbook's do. A pin names one version,
-and a session keeps the manual it was made with: a later pin reaches
-only the sessions made after it. A brief longer than the standing text
-holds is refused when it is pinned.
+A person who manages the tenant may also pin an agent playbook to an
+[agent kind][e-kinds], for the tenant or for one agent project, as the kind's
+**kind manual**: the standing instructions of every session of that
+kind. It is one noun, invoked as a procedure or pinned as a kind manual.
+Each session of the kind made after the pin, a sub-agent and a hand-over
+among them, pins the kind manual's brief as its [standing
+text][e-rendering]: whole in the system layer of every request, before
+and after every compaction, and cached with the kind's prompts. Its
+gates narrow the session's policy as an invoked agent playbook's do. A
+pin names one version, and a session keeps the kind manual it was made
+with: a later pin reaches only the sessions made after it. A brief
+longer than the standing text holds is refused when it is pinned.
 
-**Knowledge** is recalled into a session when its trigger matches, so a
-new session does not rediscover its environment. It renders as data. An
-agent may suggest knowledge, and a person reviews it before any session
-recalls it, so one session cannot plant instructions for the next.
+**Agent knowledge** is recalled into a session when its trigger matches,
+so a new session does not rediscover its environment. It renders as
+data. An agent may suggest agent knowledge, and a person reviews it
+before any session recalls it, so one session cannot plant instructions
+for the next.
 
-A playbook and a reviewed entry are a tenant's **levers**: texts written
-for people that an agent then follows. A lever is read as a person
-publishes it, by checks that call no model, for what makes an agent
-spin: a phrase repeated until it looks load-bearing, a must and a
+An agent playbook and a reviewed entry are a tenant's **levers**: texts
+written for people that an agent then follows. A lever is read as a
+person publishes it, by checks that call no model, for what makes an
+agent spin: a phrase repeated until it looks load-bearing, a must and a
 must-not on one subject, a tool no kind it reaches holds, a retry with
 no stopping condition, a brief longer than a session holds whole. A
 finding advises and never refuses the publish; it is kept with the
 version it read. Afterwards, an operator reads which levers the
-sessions that stalled reached, the manual each was made with among
+sessions that stalled reached, the kind manual each was made with among
 them, against the sessions that did not reach them, from the steps'
 headers alone. The same checks read a connector's tool
 descriptions as a person reviews them ([Connectors](#connectors)).
@@ -725,7 +730,7 @@ A **connector** is a tenant's own MCP server, which its agents take as
 a toolset ([`agentic_core` Agent Kinds][e-kinds]): a tracker, a wiki, a
 cloud's read API. A person who manages the tenant connects one, reviews
 the tools of it a session may call, and attaches it to a kind, for one
-project or for every session. A session of that kind holds it as a
+agent project or for every session. A session of that kind holds it as a
 toolset, deferred until its agent loads it unless it is attached
 otherwise.
 
@@ -751,14 +756,14 @@ otherwise.
 
 What a server answers is data, quoted as any tool's output.
 
-### Notifications
+### Park Alerts
 
 A park that needs a person notifies whoever can clear it (the requester,
 eligible approvers, a budget's owner) on their channels, with a link to
 the one action that clears it.
 
 > **Principle:** Only some feedback wakes the agent, and only a principal
-> instructs it. A playbook narrows policy; knowledge a person has not
+> instructs it. An agent playbook narrows policy; agent knowledge a person has not
 > reviewed is never recalled.
 
 ## Evidence
@@ -771,7 +776,7 @@ product does what was asked, at the version delivered.
 `core`
 
 Every execution is a record: the version it ran against, whether the
-tree had uncommitted changes, the environment (an image digest, the
+tree had uncommitted changes, the run image (an image digest, the
 toolchain), the host and isolation it ran under, the check and its
 version, its parameters, metrics, timing, outcome, and its artifacts,
 each with a hash and a provenance. Every dependency an execution relied
@@ -782,12 +787,12 @@ to the runs that support or refute it.
 
 ### Validation Policy and Protected Checks
 
-Each project declares a **validation policy**: which checks must pass, at
-what grade, for which kinds of change, for a success to count. The
-checks, their fixtures, the policy itself, and every path that changes
-how tests are found or how the runtime starts are **protected**, by
-pattern: the agent cannot edit them, and a change that touches one voids
-validation.
+Each agent project declares a **validation policy**: which checks must
+pass, at what grade, for which kinds of change, for a success to count.
+The checks, their fixtures, the policy itself, and every path that
+changes how tests are found or how the runtime starts are **protected**,
+by pattern: the agent cannot edit them, and a change that touches one
+voids validation.
 
 Validation never runs in the agent's workspace. It runs on a fresh
 executor, from the delivered commit, with the checks, fixtures, and
@@ -831,10 +836,10 @@ the uncertainties, and the runs each claim cites. It refuses a success
 that changed the work product unless a baseline came first and the
 validation policy passed at the committed head, with a clean tree, on
 results its executor wrote. A baseline comes first when it ran at the
-delivery's base before its head was validated; acceptance holds the same
-rule, and a session whose base moves takes one again. A run counts only
-at the version of its check the policy declares now, so a policy that
-changes a check asks for the head to be validated again. A run that
+work product's base before its head was validated; acceptance holds the
+same rule, and a session whose base moves takes one again. A run counts
+only at the version of its check the policy declares now, so a policy
+that changes a check asks for the head to be validated again. A run that
 validated nothing gets no exemption; it is inconclusive.
 
 ### The Results Contract
@@ -852,9 +857,9 @@ collector serves every place a check can run.
 its root cause. A hidden suite must pass beside the visible one, and the
 result is judged by behavior, so any valid fix passes. Editing the
 checks or the system under test is forbidden and checked. No surface the
-agent reads (prompts, knowledge, tool sources, evidence, pull requests)
-mentions the hidden suite, and a scanner checks every one. The harness
-judges the chain of evidence (a failing baseline, the runs, the
+agent reads (prompts, agent knowledge, tool sources, evidence, pull
+requests) mentions the hidden suite, and a scanner checks every one. The
+harness judges the chain of evidence (a failing baseline, the runs, the
 hypotheses resolved, a clean validation, a cited report), never the
 presence of files.
 
@@ -880,9 +885,9 @@ and keeps four apart. Confusing any two is a defect.
 | Identity | What it is | Example |
 |---|---|---|
 | **Executor** | A machine's credential | A workspace host's key |
-| **Principal** | On whose behalf, and with what authority | The person who asked; an automation's creator; a service principal the tenant granted |
+| **Principal** | On whose behalf, and with what authority | The person who asked; an agent automation's creator; a service principal the tenant granted |
 | **Spender** | Who pays for a model call | The author of the latest principal input the model received |
-| **Actor** | Who acted | The engineer agent in one session; a person; the engine |
+| **Actor** | Who acted | The software engineer agent in one session; a person; the engine |
 
 An audit entry shows all four, so "which agent did this, for whom, paid
 by whom, on which machine" has four answers. The agent holds no
@@ -903,14 +908,14 @@ Instructs][e-principal]). A comment,
 an issue, a chat message relayed by an integration reaches the agent
 quoted and labelled, never as an instruction: the engine renders it so,
 and the platform sets its origin. A principal speaks only through the
-portal, the CLI, the API, an automation, or a mapped user addressing the
-agent in chat or on its work.
+portal, the CLI, the API, an agent automation, or a mapped user
+addressing the agent in chat or on its work.
 
 ### Secrets by Placement
 
 `core`
 
-An environment secret is declared by name on a project, with the
+An environment secret is declared by name on an agent project, with the
 variable a command sees and a scope. The platform stores names
 only. Where it can, the executor brokers the secret outside the
 workspace; otherwise the machine that executes the call resolves it from
@@ -966,22 +971,23 @@ supplies everything behind the gate.
 **Metering** collects the engine's usage records, one per model call or
 spending job, and one aggregation serves every view of them: a
 dashboard, a list, a cap. **Limits** are budgets over a scope (person,
-project, team, tenant) and a window (hour, day, week, month, or custom).
-Days and weeks follow the tenant's time zone, months follow the billing
-period, and a change of time zone never manufactures budget. A limit
-counts settled spend plus open holds, and a one-time raise applies to the
-current window only.
+agent project, team, tenant) and a window (hour, day, week, month, or
+custom). Days and weeks follow the tenant's time zone, months follow the
+billing period, and a change of time zone never manufactures budget. A
+limit counts settled spend plus open holds, and a one-time raise applies
+to the current window only.
 
-### Units, Charges, and Billing
+### Spend Units, Charges, and Agent Billing
 
-Beside native usage and reference cost, the platform defines an
-**abstract unit**: a token unit weighted by cost, so a plan can include
+Beside native usage and reference cost, the platform defines a
+**spend unit**: a token unit weighted by cost, so a unit plan can include
 usage across models and providers without promising dollars or a token
 count. The weights are the platform's to publish. The **charge** is what
 a tenant is billed.
 
-**Billing** keeps accounts, versioned plans, and an append-only ledger. A
-hold draws on buckets in a fixed order: the plan's included units,
+**Agent billing** keeps spend accounts, versioned unit plans, and an
+append-only spend ledger. A hold draws on buckets in a fixed order: the
+unit plan's included units,
 granted units, prepaid credits, and an enterprise line of credit.
 Prepaid and postpaid differ in which bucket pays, never in the path a
 call takes. Credits count only after the payment provider's signed
@@ -1020,7 +1026,7 @@ platform's key.
 > **Principle:** One gate, one ledger, one price source. Rate and spend
 > are different limits, and neither is reported as the other.
 
-## Models Are a Fleet Decision
+## Models Are an Agent Fleet Decision
 
 The platform is the expert on which model serves which task. It answers
 with a **matrix**: for each environment, model size, model role, agent
@@ -1066,14 +1072,15 @@ kinds the same way, as data, and the models and the rhythm follow. A
 tenant adds toolsets of its own to a kind: its connectors
 ([Connectors](#connectors)).
 
-- The **engineer** takes an objective to a validated, reviewable change.
-  Its workspace has no network and starts from its project's
-  environment ([A Project's Environment](#a-projects-environment)).
+- The **software engineer** takes an objective to a validated,
+  reviewable change. Its workspace has no network and starts from its
+  agent project's workspace base ([An Agent Project's Workspace
+  Base](#an-agent-projects-workspace-base)).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
   existing session should continue or a new one should start.
-- A **validation session** runs a delivery's checks with no agent at
+- A **validation session** runs a work product's checks with no agent at
   all, on a fresh executor (a workspace nobody used, never the agent's),
   on the same queue, and writes the same execution record. A second
   start runs another beside it, and a start sent again under its key
@@ -1084,7 +1091,7 @@ tenant adds toolsets of its own to a kind: its connectors
   queued, what a host offers against what the queue needs. It drafts
   configuration, validates it against the tenant's real records, and
   shows the difference from what is live; a person applies it. It hands
-  engineering work to an engineer session with a self-contained
+  engineering work to a software engineer session with a self-contained
   objective, then steps back. Its authority is delegated, and it has no
   workspace, repository, or shell.
 - The **reviewer** reads a pull request through the forge's
@@ -1096,26 +1103,26 @@ tenant adds toolsets of its own to a kind: its connectors
   forge's integration, where its kind's policy allows: a person approves
   each comment. It asks the largest model size of its own turns, since a
   review is worth the defects it finds.
-- The **operator** reads the tenant's operations on its person's own
+- The **ops analyst** reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, each loop's place on
   the work queue, its hosts and what they offer, and its budgets and
   what they spent. Every tool it holds reads, so it changes nothing. A
   fix it finds leaves as a self-contained objective, which a person
-  hands to an engineer.
+  hands to a software engineer.
 
 A role of roles is a kind like any other: a lead, whose toolsets include
 starting the others as sub-agents. A lead that takes a change through
-review starts an engineer on it, then a reviewer on the pull request the
-engineer opened, and answers with both reports. A child holds no tool
-its lead may not call, each call passes its own kind's policy and the
-lead's, and each spends from its own share, so the lead adds no power
-and no noun.
+review starts a software engineer on it, then a reviewer on the pull
+request the software engineer opened, and answers with both reports. A
+child holds no tool its lead may not call, each call passes its own
+kind's policy and the lead's, and each spends from its own share, so the
+lead adds no power and no noun.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never
 leaks by default, and the words a customer reads and the words the team
 works from are the same text. There is no router between the assistant
-and the engineer: a person chooses by choosing where to type.
+and the software engineer: a person chooses by choosing where to type.
 
 ## Data, Retention, and the Wall
 
@@ -1126,11 +1133,11 @@ What is stored where is a decision, never an accident.
   History][e-history]). Step content is sealed under a
   key per session, and the keys live in a key service the tenant can
   revoke; a tenant may bring its own key service.
-- **Retention policy** is declared per tenant and narrowed per project:
-  the content's lifetime, the shape's lifetime, the storage mode, zero
-  retention, and region. A session takes a snapshot of the policy when it
-  is created. Tightening reaches existing sessions at the next sweep;
-  loosening never reaches back.
+- **Retention policy** is declared per tenant and narrowed per agent
+  project: the content's lifetime, the shape's lifetime, the storage
+  mode, zero retention, and region. A session takes a snapshot of the
+  policy when it is created. Tightening reaches existing sessions at the
+  next sweep; loosening never reaches back.
 - **Enforcement and proof.** The sweep revokes the keys of sessions whose
   content has expired, and purges shape past its own lifetime. The audit
   holds each key destruction as the key service reported it, and a
@@ -1143,7 +1150,7 @@ secrets, model keys, integration credentials, and the history.
 Everything that does cross (enrollment, claims, stream parts, artifacts,
 results) is opened from inside the wall and verified by hash.
 
-## Failure at Fleet Scale
+## Failure at Agent Fleet Scale
 
 When a provider fails, its outage signal turns on and every session
 that meets it parks within a second, naming the provider. When the
@@ -1157,9 +1164,9 @@ to the sweep:
 
 - a loop whose lease expired is requeued, and its next run takes a new
   writer epoch;
-- an `exec` item whose lease expired follows [The Relay
-  Transport](#the-relay-transport): requeued by effect, or completed
-  `interrupted`;
+- an `exec` item whose lease expired follows [The Exec Relay
+  Transport](#the-exec-relay-transport): requeued by effect, or
+  completed `interrupted`;
 - a workspace instance nobody claims is purged;
 - a hold nobody settled settles at usage retrieved from the provider,
   else at its full amount, and is released only when the provider
@@ -1185,7 +1192,7 @@ provider calls and credentials:
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
-| `audit-agent-levers` | supporter | Which playbooks and knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
+| `audit-agent-levers` | supporter | Which agent playbooks and agent knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
 | `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
 
 The gates hold the layers consistent with each other. They cannot say
@@ -1234,15 +1241,15 @@ story; the rest is its planned shape:
   | `intake` | `INT` | Work In, Results Out |
   | `evidence` | `EVD` | Evidence |
   | `wall` | `WAL` | Trust; Data, Retention, and the Wall |
-  | `money` | `MNY` | Money; Models Are a Fleet Decision |
-  | `fleet` | `FLT` | The Agents a Platform Ships; Failure at Fleet Scale; Operations |
+  | `money` | `MNY` | Money; Models Are an Agent Fleet Decision |
+  | `agent-fleet` | `FLT` | The Agents a Platform Ships; Failure at Agent Fleet Scale; Operations |
 
 - **Skills**, named `distro-*` and following the Agent Skills standard: a
   review per lens group and a full review, `distro-explain`,
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
   platform, and scaffolds for a session runner, a workspace host, a
   workspace provider, an integration with its twin, an agent kind, an
-  automation trigger, and a product's own kind of work.
+  agent automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of
   [Operations](#operations) in its `.agents/skills/`.
 
@@ -1253,11 +1260,11 @@ merges it ([Upgrade a copy of the scaffold][g-adopting]).
 
 ## What This Spec Does Not Cover
 
-The wire protocols of the relay, the control stream, and the live read;
-the technology of the stream service; default values (grace periods,
-lease lengths, fairness weights, hop limits, anomaly thresholds), which
-belong to each system; the console's screens; the price table; and the
-threat model each deployment writes.
+The wire protocols of the exec relay, the control stream, and the live
+read; the technology of the stream service; default values (grace
+periods, lease lengths, fairness weights, hop limits, anomaly
+thresholds), which belong to each system; the console's screens; the
+price table; and the threat model each deployment writes.
 
 ## Next: Rodeo
 

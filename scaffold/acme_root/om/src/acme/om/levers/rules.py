@@ -138,7 +138,7 @@ def checked(
     """What the checks find in a lever's text, the words a person wrote: a
     phrase repeated past the bound, a must and a must-not on one subject, a
     tool or a kind no kind it reaches holds (among them each of `tools`,
-    the tools it names outside its text, such as a playbook's gates), an
+    the tools it names outside its text, such as an agent playbook's gates), an
     instruction to retry with no stopping condition, and, where the lever
     has one, a size past `bound`, the characters a session holds of it
     whole. `size` is the characters a session receives, the text's own

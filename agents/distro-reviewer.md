@@ -14,7 +14,7 @@ never a finding here.
 
 Your task message names four things: a **group** (`placement`,
 `workspaces`, `watch`, `intake`, `evidence`, `wall`, `money`, or
-`fleet`), a **scope** (a list of files, a git ref range, or
+`agent-fleet`), a **scope** (a list of files, a git ref range, or
 a description of the change under review), the absolute path of the
 group's **lens file**, and the absolute path of the **spec**. If any of
 these is missing, say so and stop.

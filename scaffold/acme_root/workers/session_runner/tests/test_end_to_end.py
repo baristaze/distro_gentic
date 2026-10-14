@@ -10,12 +10,12 @@ runner takes the loop under a new epoch once the lease runs out, the lost
 run can append nothing more, and the call it left open is settled by its
 effect.
 
-A project's environment runs on real Docker and the stack's object store:
-the first engineer session builds its base, whose setup installs a package
+An agent project's workspace base runs on real Docker and the stack's object store:
+the first software engineer session builds its base, whose setup installs a package
 from a registry on this host, and the next starts from the same base with
 no setup run, and imports the package with no egress.
 
-Every case runs in the first project `make seed` writes, its repository a
+Every case runs in the first agent project `make seed` writes, its repository a
 bare one on this host, and one session there meets every gate on its way
 to a success: its claim, its money, its audit, its result, and its seal.
 
@@ -66,12 +66,13 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode
+from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
+from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.loop_rules import ended_step
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import FundingMode
-from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import TenantContext
@@ -91,7 +92,6 @@ from acme.om.tools.impl.bases import base_key
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.types.source import RepositoryBinding
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
 from acme.services.api.seed import CONTENT_LIFETIME, first_repository, seed_platform
@@ -120,7 +120,7 @@ MCP_PORT = int(os.environ.get("E2E_MCP_PORT", "8391"))
 MCP_TOKEN = "tok-e2e-47c1a0f95d3b"
 
 REPOSITORY = first_repository("ajax")
-"""The repository the seeded org's first project binds."""
+"""The repository the seeded org's first agent project binds."""
 
 
 def free_port() -> int:
@@ -165,11 +165,11 @@ class Stack:
     repositories: Path
     runners: list[Runner] = field(default_factory=lambda: [])
 
-    def repository(self, project_id: UUID) -> RepositoryBinding:
-        """The seeded project's binding as the runner clones it: from the
+    def repository(self, agent_project_id: UUID) -> RepositoryBinding:
+        """The seeded agent project's binding as the runner clones it: from the
         bare repository on this host."""
         url = f"file://{self.repositories}/{REPOSITORY.host}/{REPOSITORY.path}.git"
-        return RepositoryBinding(project_id=project_id, repository=url)
+        return RepositoryBinding(agent_project_id=agent_project_id, repository=url)
 
     def runner(self, name: str, script: list[Turn] | None = None, **env: str) -> Runner:
         """A runner process over the stack. With `script`, the scripted model
@@ -327,20 +327,20 @@ async def a_stack(tmp_path: Path, kinds: tuple[AgentKind, ...]) -> AsyncIterator
 class Person:
     ctx: TenantContext
     headers: dict[str, str]
-    project_id: UUID
+    agent_project_id: UUID
 
 
 async def owner_of(stack: Stack) -> Person:
     """The owner of an org seeded as `make seed` seeds one: its account on a
-    plan, its first project, its retention policy, and the published matrix,
+    plan, its first agent project, its retention policy, and the published matrix,
     so a session's calls pass the money gate and resolve by the matrix."""
     ctx, org = await stack.container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     seeded = await seed_platform(stack.container.storage, stack.container.managers, ctx, E2E_KINDS)
     headers = await sign_in_as(stack.client, "ann@example.test", org.id)
-    assert seeded.project is not None
-    return Person(ctx, headers, seeded.project.id)
+    assert seeded.agent_project is not None
+    return Person(ctx, headers, seeded.agent_project.id)
 
 
 def created(headers: dict[str, str]) -> dict[str, str]:
@@ -354,7 +354,7 @@ async def started(stack: Stack, person: Person, kind: str = "assistant") -> str:
         json={
             "kind": kind,
             "title": "the slow export",
-            "project_id": str(person.project_id),
+            "agent_project_id": str(person.agent_project_id),
         },
     )
     assert answered.status_code == 201, answered.text
@@ -558,7 +558,7 @@ async def test_a_tenants_server_is_connected_reviewed_attached_and_called_by_a_s
     attached = await stack.client.post(
         f"/v1/connectors/{connector_id}/attachments",
         headers=headers,
-        json={"kind": "assistant", "project_id": str(person.project_id)},
+        json={"kind": "assistant", "agent_project_id": str(person.agent_project_id)},
     )
     assert attached.status_code == 200, attached.text
     stack.runner(
@@ -663,23 +663,23 @@ FIXES_THE_REPORT = (
     "sh",
     "-c",
     "echo 'total = sum(rows)' >> src/report.py"
-    " && git -c user.name=Engineer -c user.email=engineer@example.test commit -qam 'Add the total'"
+    " && git -c user.name=SoftwareEngineer -c user.email=software_engineer@example.test commit -qam 'Add the total'"
     " && git push -q origin HEAD",
 )
-"""The engineer's change: committed, and pushed to its session's branch."""
+"""The software engineer's change: committed, and pushed to its session's branch."""
 
 
-async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success(
+async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_success(
     stack: Stack,
 ) -> None:
     person = await owner_of(stack)
-    project = policy_key(person.project_id)
-    await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
+    agent_project = policy_key(person.agent_project_id)
+    await stack.container.managers.evidence.write_policy(person.ctx, make_policy(agent_project))
     runner = stack.runner(
         "runner-gates",
         [validates(baseline=True), runs(*FIXES_THE_REPORT), validates(), submits("succeeded")],
     )
-    session_id = await started(stack, person, "engineer")
+    session_id = await started(stack, person, "software_engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
     # The baseline runs before anything marks the session, and its answer
@@ -712,7 +712,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     found["claim"] = f"lane {item.lane}, {item.status.value} after {item.attempts} attempt(s)"
 
     # Each model call was held and settled through the money gate.
-    ledger = storage.get_money_ledger_storage()
+    ledger = storage.get_spend_ledger_storage()
     holds = await ledger.read_entries(org_id, session_id=sid, kind=EntryKind.HOLD, limit=10)
     assert len(holds) == 4, "one hold for each of the four model calls"
     bills: list[str] = []
@@ -722,7 +722,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
         (settlement,) = [entry for entry in entries if isinstance(entry, Settlement)]
         bills.append(settlement.bill.kind)
     assert bills == ["billed"] * 4
-    plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
+    plans = {held.funding.unit_plan.id for held in holds if isinstance(held, FundedHold)}
     found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
 
     # Its spend counts under the matrix version it ran on and its plan tier.
@@ -748,7 +748,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     ]
     command = next(audit for audit in audits if audit.tool == "run_command")
     assert command.executor.label == "runner-gates"
-    assert command.actor.agent is not None and command.actor.agent.kind == "engineer"
+    assert command.actor.agent is not None and command.actor.agent.kind == "software_engineer"
     found["audit"] = {
         "tool": command.tool,
         "executor": command.executor.label,
@@ -772,7 +772,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
 
     # Its content is sealed, under the retention its snapshot holds.
     snapshot = await storage.get_retention_storage().read_snapshot(org_id, sid)
-    assert snapshot is not None and snapshot.project_id == person.project_id
+    assert snapshot is not None and snapshot.agent_project_id == person.agent_project_id
     lifetime = snapshot.policy.content_lifetime
     assert lifetime is not None and lifetime == CONTENT_LIFETIME and snapshot.at_rest
     raw = {
@@ -783,7 +783,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     assert all(not raw[step.id].content.blocks for step in saying)
     found["seal"] = (
         f"{len(saying)} of {len(opened)} steps sealed; content kept "
-        f"{lifetime.days} days, project {snapshot.project_id}"
+        f"{lifetime.days} days, agent project {snapshot.agent_project_id}"
     )
     print(json.dumps(found, indent=1))
 
@@ -841,10 +841,12 @@ async def test_a_real_loop_runs_end_to_end_on_a_live_provider(
     session = await settled(stack, person, session_id)
 
     steps = await history(stack, person, session_id)
-    # The calls held and spent through billing's money gate, in its ledger.
+    # The calls held and spent through agent billing's money gate, in its ledger.
     container = stack.container
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    spend = await billing.get_spend(person.ctx, budget.id)
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
+    spend = await agent_billing.get_spend(person.ctx, budget.id)
     report |= {
         "steps": [step["type"] for step in steps],
         "answer": of_type(steps, "model_response")[-1]["text"],
@@ -918,11 +920,11 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     ]
 
 
-# A project's environment: built once, served to every session, sealed.
+# An agent project's workspace base: built once, served to every session, sealed.
 
 PACKAGE = "envpkg"
 WHEEL = f"{PACKAGE}-1.0-py3-none-any.whl"
-VALUE = "set up once, by the environment"
+VALUE = "set up once, by the workspace base"
 
 INSTALL = r"""
 import socket, subprocess, sys, urllib.request
@@ -958,8 +960,8 @@ try:
 except Exception:
     print("no egress")
 """
-"""What the engineer runs: the package's import, then a reach for the
-registry its environment's setup used."""
+"""What the software engineer runs: the package's import, then a reach for the
+registry its workspace base's setup used."""
 
 
 def wheel() -> bytes:
@@ -1097,7 +1099,7 @@ def docker_runs() -> bool:
 
 @pytest.fixture
 async def shipped(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
-    """The stack with the platform's own engineer as the latest, in its
+    """The stack with the platform's own software engineer as the latest, in its
     container."""
     async with a_stack(tmp_path, KINDS) as built:
         yield built
@@ -1119,41 +1121,41 @@ def removed(deployment: str) -> None:
 
 
 @pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
-async def test_a_projects_environment_is_built_once_and_its_engineer_imports_its_package_sealed(
+async def test_an_agent_projects_workspace_base_is_built_once_and_its_software_engineer_imports_its_package_sealed(
     shipped: Stack, registry: Registry
 ) -> None:
     person = await owner_of(shipped)
     install = base64.b64encode(INSTALL.encode()).decode()
     keep = f"import base64; open('/opt/install.py', 'wb').write(base64.b64decode('{install}'))"
-    environment = {
+    workspace_base = {
         "image": "python:3.14-slim",
         "setup": [f'python -c "{keep}"', f"python /opt/install.py {registry.port} {PACKAGE}"],
         "registries": ["host.docker.internal"],
     }
     named = await shipped.client.put(
-        f"/v1/projects/{person.project_id}/environment",
+        f"/v1/agent-projects/{person.agent_project_id}/workspace-base",
         headers=person.headers,
-        json=environment,
+        json=workspace_base,
     )
     assert named.status_code == 200, named.text
-    assert named.json()["environment"] == environment
+    assert named.json()["workspace_base"] == workspace_base
     imports = IMPORTS.replace("{port}", str(registry.port))
     sealed = [runs("python", "-c", imports), *[answers("The package imports.")] * 3]
     deployment = f"e2e-{new_id().hex[:8]}"
     shipped.runner(
-        "runner-environment",
+        "runner-workspace-base",
         [*sealed, *sealed],
         ACME_WORKSPACE_BACKEND="container",
         ACME_WORKSPACE_DEPLOYMENT=deployment,
         E2E_CONTAINERS="1",
     )
-    workspaces = shipped.container.managers.workspaces
+    workspaces = shipped.container.managers.agent_workspaces
     try:
-        first = await started(shipped, person, "engineer")
+        first = await started(shipped, person, "software_engineer")
         await say(shipped, person, first, "Check that the report's package imports.")
         first_steps = await until_steps(shipped, person, first, "loop_ended")
         built = registry.hits
-        second = await started(shipped, person, "engineer")
+        second = await started(shipped, person, "software_engineer")
         await say(shipped, person, second, "Check that the report's package imports.")
         second_steps = await until_steps(shipped, person, second, "loop_ended")
         pins = [await workspaces.get_workspace(person.ctx, UUID(s)) for s in (first, second)]
@@ -1166,7 +1168,7 @@ async def test_a_projects_environment_is_built_once_and_its_engineer_imports_its
     assert built >= 2, "the first session's setup reached the registry"
     assert registry.hits == built, "the second session ran no setup, and reached nothing"
     assert pins[0].base == pins[1].base and pins[0].base is not None
-    assert pins[0].base.setup == tuple(environment["setup"])
+    assert pins[0].base.setup == tuple(workspace_base["setup"])
     assert [pin.egress.value for pin in pins] == ["none", "none"]
     assert kept == [base_key(pins[0].spec())], "one base, kept once, for both"
     for steps in (first_steps, second_steps):

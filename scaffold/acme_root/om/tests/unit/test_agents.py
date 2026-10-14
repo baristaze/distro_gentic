@@ -341,7 +341,9 @@ def test_an_objective_past_its_bound_is_refused_with_the_bound_named() -> None:
 def hold(ctx: TenantContext, session: AgentSession, cost_micros: int) -> HoldRequest:
     """A model call of `session` with the worst case named, charged to the
     scopes the call gate charges it to."""
-    scopes = scopes_of(ctx.org_id, session.id, session.root_id, person_of(ctx), project_id=None)
+    scopes = scopes_of(
+        ctx.org_id, session.id, session.root_id, person_of(ctx), agent_project_id=None
+    )
     exposure = Spend(cost_micros=cost_micros, tokens=10)
     return HoldRequest(spender_id=ctx.user_id, scopes=scopes, exposure=exposure, purpose="main")
 

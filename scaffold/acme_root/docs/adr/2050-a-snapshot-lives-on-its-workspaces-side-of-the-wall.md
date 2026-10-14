@@ -17,16 +17,16 @@ The platform held every prepare to the session's pin, which kept the
 isolation alone. A kind that asked for snapshots or a base was refused,
 so no session of the platform's could resume on its whole machine. A
 workspace on a customer's host is made and run by that host, through the
-relay, and the host holds no key of the platform's, so the engine's
+exec relay, and the host holds no key of the platform's, so the engine's
 snapshot, taken by the process that runs the loop and sealed into the
 platform's bucket, cannot reach it.
 
 ## Decision
 
-**A kind chooses, and a project narrows.** A kind's isolation says its
-durability, `cache` or `snapshot`, and its base. The pin keeps both with
-the isolation, so every prepare of the session is held to them. A
-project that keeps its sessions' workspaces as caches
+**A kind chooses, and an agent project narrows.** A kind's isolation
+says its durability, `cache` or `snapshot`, and its base. The pin keeps
+both with the isolation, so every prepare of the session is held to
+them. An agent project that keeps its sessions' workspaces as caches
 (`workspace_snapshots` false) pins each of them a cache. A session that
 keeps no content at rest is refused a kind kept by snapshots when it is
 created: each snapshot of it would be refused, and its instance kept
@@ -35,12 +35,12 @@ live for good.
 **A snapshot lives where its workspace lives.** A workspace this
 process prepares is snapshotted by the engine, sealed into the
 platform's bucket. A workspace a host holds is snapshotted by that host,
-through the relay: a `snapshot` work item on its lane. The host takes
-back what its broker attached, takes the snapshot of the instance its
-provider holds by its labels, scans it for the value of every secret it
-keeps for the tenant, and keeps it in its own store, owner-only. It
+through the exec relay: a `snapshot` work item on its lane. The host
+takes back what its broker attached, takes the snapshot of the instance
+its provider holds by its labels, scans it for the value of every secret
+it keeps for the tenant, and keeps it in its own store, owner-only. It
 answers the reference, the SHA-256 of the bytes, and their size. The
-platform records where each snapshot lives (`workspace_snapshots`): the
+platform records where each snapshot lives (`agent_workspace_snapshots`): the
 bucket, or the pool, the host, the reference, and the digest. The step
 that names a host's snapshot carries the digest's hash keyed by the
 session, so once the key is revoked nothing confirms what it held. The
@@ -82,7 +82,8 @@ the isolation later.
 **A hosted base is its host's to build.** A session inside its
 tenant's wall whose pin names a base starts from the base the host that
 prepares it builds and keeps in its own store
-([ADR 2051](2051-a-projects-environment-is-built-once-where-its-workspaces-run.md)).
+([ADR
+2051](2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
 
 **A host advertises what it probed.** A host advertises
 `snapshot.<level>` only when that level's probe passed, a provider of its
@@ -106,7 +107,7 @@ shared Docker.
 
 ## Consequences
 
-- One migration: the pin's `durability` and `base`, a project's
+- One migration: the pin's `durability` and `base`, an agent project's
   `workspace_snapshots`, and the `workspace_snapshots` table.
 - A host's snapshots are not sealed: no key of the platform's crosses
   into the wall. They are the tenant's bytes on the tenant's machine, as

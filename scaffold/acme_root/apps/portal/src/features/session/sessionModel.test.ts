@@ -3,7 +3,7 @@ import type { AgentSessionView, ExecutionView } from "@acme/client";
 import {
   allowed,
   composerOf,
-  deliveryLines,
+  workProductLines,
   heldBy,
   parkLine,
   pullRequestBadge,
@@ -49,7 +49,7 @@ describe("status and parks", () => {
 
 });
 
-describe("runs, delivery, and usage", () => {
+describe("runs, work product, and usage", () => {
   it("says a run's check, outcome, cases, and a twin's provenance beside it", () => {
     const run: ExecutionView = {
       id: "r1",
@@ -64,7 +64,7 @@ describe("runs, delivery, and usage", () => {
       image: "img",
       host: "h1",
       isolation: "container",
-      project: "p",
+      agent_project: "p",
       provenance: "twin",
       outcome: "failed",
       cases: { passed: 3, failed: 1, skipped: 0 },
@@ -85,10 +85,10 @@ describe("runs, delivery, and usage", () => {
 
   it("splits delivered work into pull requests and branches, and says the report", () => {
     expect(
-      deliveryLines({
+      workProductLines({
         branch: "agent/tidy",
         branch_seen: true,
-        project_id: null,
+        agent_project_id: null,
         report: { seq: 8, outcome: "succeeded", verified: false, accepted_at: at },
         work: [
           { kind: "pull_request", handle: "acme/docs#12", bound_at: at },

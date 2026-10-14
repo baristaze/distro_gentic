@@ -1,6 +1,6 @@
 import { personName } from "../../app/recordModel";
-import { useAutomationPrincipal } from "../../queries/automations";
-import { useProjects } from "../../queries/projects";
+import { useAgentAutomationPrincipal } from "../../queries/agentAutomations";
+import { useAgentProjects } from "../../queries/agentProjects";
 import { useUsage } from "../../queries/usage";
 import { useUsers } from "../../queries/tenancy";
 import { usageRow } from "./usageModel";
@@ -10,11 +10,11 @@ import { usageRow } from "./usageModel";
 export function useUsageVm() {
   const usage = useUsage();
   const users = useUsers();
-  const projects = useProjects();
-  const principal = useAutomationPrincipal();
+  const agentProjects = useAgentProjects();
+  const principal = useAgentAutomationPrincipal();
   const nameOf = {
     person: (id: string) => personName(users.data, id, principal.data?.id),
-    project: (id: string) => projects.data?.find((project) => project.id === id)?.name ?? "no longer held",
+    agentProject: (id: string) => agentProjects.data?.find((agentProject) => agentProject.id === id)?.name ?? "no longer held",
   };
   return {
     rows: usage.data?.map((each) => usageRow(each, nameOf)) ?? null,

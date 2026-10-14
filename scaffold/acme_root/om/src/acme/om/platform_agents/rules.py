@@ -1,5 +1,5 @@
 """Pure rules of the agents a platform ships: the reach of the assistant,
-the operator, and the reviewer, a finding's place in a file, a review's
+the ops analyst, and the reviewer, a finding's place in a file, a review's
 verdict, an edit of
 one place in a file, the matches a search of the code
 answers, the corpus the knowledge map lists for one audience, a search of
@@ -38,7 +38,7 @@ class Reach(NamedTuple):
 
 ASSISTANT_CLASSES: frozenset[str] = frozenset({ToolClass.READ, ToolClass.SPAWN})
 """The only classes of call the platform assistant makes: it reads, and it
-hands work to an engineer. A tool that writes, runs code, reaches a bound
+hands work to a software engineer. A tool that writes, runs code, reaches a bound
 system such as a repository, or changes configuration or credentials is of
 another class, so no profile of the assistant holds one."""
 
@@ -46,9 +46,9 @@ REACHES: Mapping[str, Reach] = {
     kinds.PLATFORM_ASSISTANT: Reach(
         ASSISTANT_CLASSES, AuthorityMode.DELEGATED, "only reads and hands work on"
     ),
-    # The operator reads the tenant's operations and acts on none of them:
+    # The ops analyst reads the tenant's operations and acts on none of them:
     # a fix it finds is an objective a person hands on.
-    kinds.OPERATOR: Reach(frozenset({ToolClass.READ}), AuthorityMode.DELEGATED, "only reads"),
+    kinds.OPS_ANALYST: Reach(frozenset({ToolClass.READ}), AuthorityMode.DELEGATED, "only reads"),
     # The reviewer reads what it reviews through the forge, and comments on
     # it through the forge's integration, which a person approves: nothing
     # it holds writes a file, runs code, or pushes.

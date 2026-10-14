@@ -129,10 +129,10 @@ export const BotIcon = kitIcon(Bot);
 export const SearchIcon = kitIcon(Search);
 /** A pen on a square: a new session. */
 export const NewSessionIcon = kitIcon(SquarePen);
-/** A bolt: an automation. */
-export const AutomationIcon = kitIcon(Zap);
-/** An open book: the knowledge base. */
-export const KnowledgeIcon = kitIcon(BookOpen);
+/** A bolt: an agent automation. */
+export const AgentAutomationIcon = kitIcon(Zap);
+/** An open book: the agent knowledge base. */
+export const AgentKnowledgeIcon = kitIcon(BookOpen);
 /** A list of rows: every session. */
 export const ListIcon = kitIcon(LayoutList);
 /** Lines that narrow: a filter. */
@@ -145,8 +145,8 @@ export const KeyboardIcon = kitIcon(Keyboard);
 export const ExternalIcon = kitIcon(ExternalLink);
 /** A page: the documentation. */
 export const DocumentIcon = kitIcon(FileText);
-/** A folder with a branch: a project. */
-export const ProjectIcon = kitIcon(FolderGit2);
+/** A folder with a branch: an agent project. */
+export const AgentProjectIcon = kitIcon(FolderGit2);
 /** An arrow up: send. */
 export const SendIcon = kitIcon(ArrowUp);
 /** An i in a circle: what a field means. */

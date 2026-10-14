@@ -19,7 +19,7 @@ from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES
 from acme.om.watch.types.live import MAX_ENTRY, Appended, SentEntry
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.common import RequestBody, View
-from acme.services.api.types.relay import CrossingBody
+from acme.services.api.types.exec_relay import CrossingBody
 
 MAX_APPEND_CHARS = 4 * -(-MAX_APPEND_BYTES // 3)
 """The base64 of an append's most bytes: no entry's data runs longer."""

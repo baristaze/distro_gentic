@@ -8,8 +8,8 @@ provenance, hypotheses and findings, the validation policy and its
 protected checks, the baseline, statistical evidence, the result gate,
 the results contract, and acceptance and benchmarks. It leaves feedback
 that returns after delivery and the twin each integration has to
-`intake`, a validation session's place on the queue to `fleet`, and the
-engine's done rules to the engine.
+`intake`, a validation session's place on the queue to `agent-fleet`,
+and the engine's done rules to the engine.
 
 ## EVD-01 The platform enforces the loop's promises
 
@@ -26,8 +26,8 @@ just hopes for it.
 gate, a refusal, a check.
 
 **Violation.** A promise held only by an instruction in a prompt, a
-playbook, or a skill the agent may skip; a promise with no mechanism
-that refuses its breach.
+agent playbook, or a skill the agent may skip; a promise with no
+mechanism that refuses its breach.
 
 **Severity.** high
 
@@ -37,7 +37,7 @@ that refuses its breach.
 
 **Principle.** Every execution is recorded, durably, tied to the version
 and the environment it ran in. Its record holds the version it ran
-against, whether the tree had uncommitted changes, the environment (an
+against, whether the tree had uncommitted changes, the run image (an
 image digest, the toolchain), the host and isolation it ran under, the
 check and its version, its parameters, metrics, timing, outcome, and its
 artifacts, each with a hash and a provenance.
@@ -48,7 +48,7 @@ artifacts, each with a hash and a provenance.
 check or a command, and whether it writes one.
 
 **Violation.** An execution with no record, or a record without its
-version, whether the tree was clean, its environment, its host and
+version, whether the tree was clean, its run image, its host and
 isolation, or its check's version; an artifact with no hash or no
 provenance.
 
@@ -99,11 +99,11 @@ beside the steps.
 
 ## EVD-05 Validation is declared, and its checks are protected
 
-**Principle.** Each project declares a validation policy: which checks
-must pass, at what grade, for which kinds of change, for a success to
-count. The checks, their fixtures, the policy itself, and every path
-that changes how tests are found or how the runtime starts are
-protected, by pattern: the agent cannot edit them, and a change that
+**Principle.** Each agent project declares a validation policy: which
+checks must pass, at what grade, for which kinds of change, for a
+success to count. The checks, their fixtures, the policy itself, and
+every path that changes how tests are found or how the runtime starts
+are protected, by pattern: the agent cannot edit them, and a change that
 touches one voids validation.
 
 **Source.** Evidence, Validation Policy and Protected Checks.
@@ -291,10 +291,10 @@ a cited report), never the presence of files.
 surfaces it covers; what the harness scores.
 
 **Violation.** An acceptance verdict without the hidden suite; a prompt,
-knowledge, a tool source, evidence, or a pull request that names the
-hidden suite, or a surface the scanner skips; a harness that scores the
-presence of files; an edit to the checks or the system under test that
-goes uncaught.
+agent knowledge, a tool source, evidence, or a pull request that names
+the hidden suite, or a surface the scanner skips; a harness that scores
+the presence of files; an edit to the checks or the system under test
+that goes uncaught.
 
 **Severity.** high
 

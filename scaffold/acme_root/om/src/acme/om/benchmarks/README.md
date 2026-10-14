@@ -7,13 +7,14 @@ made of](../../../../README.md).
 
 ## What it holds
 
-- **Contender**: what an arm's sessions run: the agent kind, its
-  version, and the fill set, each model role's fill.
-- **Trial**: one preserved run of the scenario: its arm, its session, the
-  executor it ran on, the acceptance verdict that judged it, kept whole
-  with the hidden suite's runs, and its cost. Its score is the verdict's.
+- **Contender pin**: what a contender's sessions run: the agent kind,
+  its version, and the fill set, each model role's fill.
+- **Trial**: one preserved run of the scenario: its contender, its
+  session, the executor it ran on, the acceptance verdict that judged
+  it, kept whole with the hidden suite's runs, and its cost. Its score
+  is the verdict's.
 - **Benchmark**: one run of a scenario: the candidate, the baseline,
-  every trial of both, each arm's score and cost, and whether the
+  every trial of both, each contender's score and cost, and whether the
   candidate regressed. It is written once and never changed.
 
 ## What can happen
@@ -25,23 +26,24 @@ made of](../../../../README.md).
 
 ## The rules
 
-- **The arms interleave on one executor.** Trials run candidate,
-  baseline, baseline, candidate, and again. A run whose arms ran in
-  blocks, on two executors, or in different counts is refused.
-- **Every trial counts.** An arm's score is the mean of its trials'
+- **The contenders interleave on one executor.** Trials run candidate,
+  baseline, baseline, candidate, and again. A run whose contenders ran
+  in blocks, on two executors, or in different counts is refused.
+- **Every trial counts.** A contender's score is the mean of its trials'
   judged scores, and its cost their sum. None is dropped.
 - **A lower score is a regression.** A candidate that scores under its
   baseline is flagged.
-- **Pinned to what produced it.** Each arm names its agent kind, its
-  version, and its fill set.
+- **Pinned to what produced it.** Each contender names its agent kind,
+  its version, and its fill set.
 - **No gate waits on it.** The benchmark job runs on a person's
   dispatch, never on a push or a pull request.
 - **The platform's own.** A benchmark belongs to no tenant, and nothing
   purges it.
 - **It feeds the matrix.** For each model role whose fill the candidate
   changed, the run passed the model when the candidate did not regress
-  (`rules.qualifications`), and only when both arms ran one agent kind at
-  one version. Each result cites the job's run, which keeps the export.
+  (`rules.qualifications`), and only when both contenders ran one agent
+  kind at one version. Each result cites the job's run, which keeps the
+  export.
 
 <!-- agents-only
 The pure rules are `rules.py`: `schedule` gives the order, and

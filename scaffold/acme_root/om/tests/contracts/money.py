@@ -1,5 +1,5 @@
 """A loop with the platform's money behind its gate: the loop suites'
-memory storage, scripted providers, and fake clock, with an account, the
+memory storage, scripted providers, and fake clock, with a spend account, the
 one ledger, the price book, the payment provider's twin, and a pager that
 keeps its pages. Nothing here reaches a network."""
 
@@ -8,19 +8,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.impl.gate import MoneyCallGateImpl, MoneyGateImpl, MoneyGateOptions
+from acme.om.agent_billing.impl.manager import AgentBillingManagerImpl
+from acme.om.agent_billing.impl.pager import OperatorPagerMemoryImpl
+from acme.om.agent_billing.impl.prices import PriceBookTableImpl
+from acme.om.agent_billing.prices import PriceBookInterface
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
+from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UNIT_PLANS, UnitPlanCatalog
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
-from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateImpl, MoneyGateOptions
-from acme.om.billing.impl.manager import BillingManagerImpl
-from acme.om.billing.impl.pager import OperatorPagerMemoryImpl
-from acme.om.billing.impl.prices import PriceBookTableImpl
-from acme.om.billing.prices import PriceBookInterface
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.types.account import AccountRequest, FundingMode
-from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog
 from acme.om.context import Role, TenantContext
 from acme.om.models.layer import ModelsLayer
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -36,11 +36,11 @@ from contracts.loops import ASSISTANT, DELIVERY, Clock, Loop, loop_over
 @dataclass
 class Money:
     loop: Loop
-    accounts: AccountStorageInterface
-    ledger: MoneyLedgerStorageInterface
+    spend_accounts: SpendAccountStorageInterface
+    ledger: SpendLedgerStorageInterface
     gate: MoneyGateImpl
     calls: MoneyCallGateImpl
-    billing: BillingManagerImpl
+    agent_billing: AgentBillingManagerImpl
     prices: PriceBookInterface
     payments: PaymentProviderTwinImpl
     pager: OperatorPagerMemoryImpl
@@ -49,24 +49,26 @@ class Money:
     async def open(
         self,
         *,
-        plan: str = "starter",
+        unit_plan: str = "starter",
         funding: FundingMode = FundingMode.PLATFORM,
         key_ref: str | None = None,
         zone: str = "UTC",
     ) -> None:
         if self.tenant is not None:
-            # A fresh tenant's org, where tenancy reads it: billing wakes the
+            # A fresh tenant's org, where tenancy reads it: agent billing wakes the
             # tenant's sessions under the tenant's own service context.
             await self.loop.storage.get_tenancy_storage().write_org(self.tenant.id, self.tenant)
-        request = AccountRequest(funding=funding, key_ref=key_ref, plan_id=plan, zone=zone)
-        await self.billing.open_account(self.loop.owner, request)
+        request = SpendAccountRequest(
+            funding=funding, key_ref=key_ref, unit_plan_id=unit_plan, zone=zone
+        )
+        await self.agent_billing.open_spend_account(self.loop.owner, request)
 
     async def top_up(self, amount_micros: int) -> None:
         """A payment the provider confirms, posted as the provider's delivery."""
         payload, signature = self.payments.confirm(
             self.loop.owner.org_id, amount_micros, self.loop.clock()
         )
-        await self.billing.confirm_payment(self.loop.owner, payload, signature)
+        await self.agent_billing.confirm_payment(self.loop.owner, payload, signature)
 
 
 def money_over(
@@ -74,7 +76,7 @@ def money_over(
     *,
     prices: PriceBookInterface | None = None,
     options: MoneyGateOptions | None = None,
-    plans: PlanCatalog = PLANS,
+    unit_plans: UnitPlanCatalog = UNIT_PLANS,
     loop_options: LoopOptions | None = None,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
@@ -87,8 +89,8 @@ def money_over(
     tenant's owner; a suite over Postgres hands in both. The layers go to
     the loop's root as they are, and `kinds` and `extra` to the loop."""
     storage = storage or StorageMemoryImpl()
-    accounts = storage.get_account_storage()
-    ledger = storage.get_money_ledger_storage()
+    spend_accounts = storage.get_spend_account_storage()
+    ledger = storage.get_spend_ledger_storage()
     pager = OperatorPagerMemoryImpl()
     book = prices or PriceBookTableImpl()
     built: list[tuple[MoneyGateImpl, MoneyCallGateImpl]] = []
@@ -100,11 +102,11 @@ def money_over(
     def gates(managers: Managers, clock: Clock) -> CallGateInterface:
         gate = MoneyGateImpl(
             storage.get_budget_storage(),
-            accounts,
+            spend_accounts,
             ledger,
             pager,
-            plans,
-            UNITS,
+            unit_plans,
+            SPEND_UNITS,
             options or MoneyGateOptions(),
             clock,
         )
@@ -113,7 +115,7 @@ def money_over(
             book,
             managers.agent_sessions,
             managers.budgets,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
             version=None if models_layer is None else models_layer.version,
             tier=None if models_layer is None else models_layer.tier,
             clock=clock,
@@ -134,16 +136,18 @@ def money_over(
     )
     ((gate, calls),) = built
     payments = PaymentProviderTwinImpl()
-    billing = BillingManagerImpl(
-        accounts,
+    agent_billing = AgentBillingManagerImpl(
+        spend_accounts,
         ledger,
         loop.managers.budgets,
         loop.managers.agent_sessions,
         loop.managers.tenancy,
         payments,
         loop.managers.outbox,
-        plans,
-        UNITS,
+        unit_plans,
+        SPEND_UNITS,
         loop.clock,
     )
-    return Money(loop, accounts, ledger, gate, calls, billing, book, payments, pager, tenant)
+    return Money(
+        loop, spend_accounts, ledger, gate, calls, agent_billing, book, payments, pager, tenant
+    )

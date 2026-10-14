@@ -3295,13 +3295,13 @@ select.acme-field {
   margin: 0 auto;
 }
 
-/* A playbook invoked by its name, from the session's header. */
-.acme-invoke-playbook {
+/* An agent playbook invoked by its name, from the session's header. */
+.acme-invoke-agent-playbook {
   display: grid;
   gap: 8px;
   justify-items: end;
 }
 
-.acme-invoke-playbook .acme-label {
+.acme-invoke-agent-playbook .acme-label {
   justify-self: stretch;
 }

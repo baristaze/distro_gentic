@@ -5,9 +5,9 @@ import {
   amongOf,
   listed,
   listFilterParams,
-  NO_PROJECT,
-  projectChoice,
-  projectRequired,
+  NO_AGENT_PROJECT,
+  agentProjectChoice,
+  agentProjectRequired,
   readListFilter,
   serverStatus,
   sessionRow,
@@ -80,7 +80,7 @@ describe("sessions model", () => {
   it("narrows the sessions read to the agent, the archived, the title's words, and those that need a person", () => {
     const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, ...over });
     const sessions = [
-      one("Flaky test", { created_by: "u1", kind: "engineer" }),
+      one("Flaky test", { created_by: "u1", kind: "software_engineer" }),
       one("Docs", { created_by: "u2", kind: "analysis" }),
       one("Old", { created_by: "u1", archived_at: "2026-10-04T00:00:00Z" }),
       one("Asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } }),
@@ -98,7 +98,7 @@ describe("sessions model", () => {
   it("leaves support conversations out, and shows them under the platform assistant's filter", () => {
     const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, ...over });
     const sessions = [
-      one("work", { title: "Fix the flaky test", kind: "engineer" }),
+      one("work", { title: "Fix the flaky test", kind: "software_engineer" }),
       one("support", { title: "Support", kind: "platform_assistant", created_by: "u1" }),
       one("theirs", { title: "Support", kind: "platform_assistant", created_by: "u2" }),
       one("composed", { title: "Draft the webhook settings", kind: "platform_assistant" }),
@@ -111,34 +111,34 @@ describe("sessions model", () => {
 
   it("starts a session only with a title and a kind, trimmed", () => {
     const local = { required: false, count: 0 };
-    expect(startRequest({ title: " Tidy ", kind: " assistant ", projectId: "" }, local)).toEqual({ request: { title: "Tidy", kind: "assistant" } });
-    expect(startRequest({ title: "", kind: "assistant", projectId: "" }, local)).toEqual({ problem: "Give the session a title." });
-    expect(startRequest({ title: "x".repeat(TITLE_MAX + 1), kind: "assistant", projectId: "" }, local)).toEqual({
+    expect(startRequest({ title: " Tidy ", kind: " assistant ", agentProjectId: "" }, local)).toEqual({ request: { title: "Tidy", kind: "assistant" } });
+    expect(startRequest({ title: "", kind: "assistant", agentProjectId: "" }, local)).toEqual({ problem: "Give the session a title." });
+    expect(startRequest({ title: "x".repeat(TITLE_MAX + 1), kind: "assistant", agentProjectId: "" }, local)).toEqual({
       problem: "A title is at most 200 characters.",
     });
-    expect(startRequest({ title: "Tidy", kind: " ", projectId: "" }, local)).toEqual({ problem: "Name the kind of work it does." });
+    expect(startRequest({ title: "Tidy", kind: " ", agentProjectId: "" }, local)).toEqual({ problem: "Name the kind of work it does." });
   });
 
-  it("sends the chosen project, and says why it cannot start when a project is required and there is none", () => {
-    const draft = { title: "Tidy", kind: "assistant", projectId: "p1" };
-    expect(startRequest(draft, { required: true, count: 1 })).toEqual({ request: { title: "Tidy", kind: "assistant", project_id: "p1" } });
-    expect(startRequest(draft, { required: false, count: 1 })).toEqual({ request: { title: "Tidy", kind: "assistant", project_id: "p1" } });
-    expect(startRequest({ ...draft, projectId: "" }, { required: true, count: 2 })).toEqual({ problem: "Choose the project it works in." });
-    expect(startRequest({ ...draft, projectId: "" }, { required: true, count: 0 })).toEqual({ problem: NO_PROJECT });
+  it("sends the chosen agent project, and says why it cannot start when an agent project is required and there is none", () => {
+    const draft = { title: "Tidy", kind: "assistant", agentProjectId: "p1" };
+    expect(startRequest(draft, { required: true, count: 1 })).toEqual({ request: { title: "Tidy", kind: "assistant", agent_project_id: "p1" } });
+    expect(startRequest(draft, { required: false, count: 1 })).toEqual({ request: { title: "Tidy", kind: "assistant", agent_project_id: "p1" } });
+    expect(startRequest({ ...draft, agentProjectId: "" }, { required: true, count: 2 })).toEqual({ problem: "Choose the agent project it works in." });
+    expect(startRequest({ ...draft, agentProjectId: "" }, { required: true, count: 0 })).toEqual({ problem: NO_AGENT_PROJECT });
   });
 
-  it("offers the org's projects, a choice of one outside the local stack, and says so when there is none", () => {
-    const projects = [{ id: "p1", name: "Docs" }];
-    expect(projectChoice(projects, true)).toEqual({
+  it("offers the org's agent projects, a choice of one outside the local stack, and says so when there is none", () => {
+    const agentProjects = [{ id: "p1", name: "Docs" }];
+    expect(agentProjectChoice(agentProjects, true)).toEqual({
       options: [
-        { value: "", label: "Choose a project" },
+        { value: "", label: "Choose an agent project" },
         { value: "p1", label: "Docs" },
       ],
       problem: null,
     });
-    expect(projectChoice([], true)).toEqual({ options: [], problem: NO_PROJECT });
-    expect(projectChoice([], false)).toEqual({ options: [{ value: "", label: "No project" }], problem: null });
-    expect(projectChoice(null, true)).toEqual({ options: [], problem: null });
-    expect([projectRequired("local"), projectRequired("staging"), projectRequired("production")]).toEqual([false, true, true]);
+    expect(agentProjectChoice([], true)).toEqual({ options: [], problem: NO_AGENT_PROJECT });
+    expect(agentProjectChoice([], false)).toEqual({ options: [{ value: "", label: "No agent project" }], problem: null });
+    expect(agentProjectChoice(null, true)).toEqual({ options: [], problem: null });
+    expect([agentProjectRequired("local"), agentProjectRequired("staging"), agentProjectRequired("production")]).toEqual([false, true, true]);
   });
 });

@@ -33,9 +33,9 @@ from acme.om.placement.rules import pool_lane
 from acme.om.placement.types.work import WorkspaceOperation
 from acme.om.work.types.work_item import WorkItem, WorkKind
 
-PROJECT = new_id()
+AGENT_PROJECT = new_id()
 CEILINGS = Ceilings(
-    projects=frozenset({PROJECT}),
+    agent_projects=frozenset({AGENT_PROJECT}),
     min_isolation=IsolationMode.container,
     egress=frozenset({"github.com:443"}),
     readable=("/srv/work",),
@@ -127,7 +127,7 @@ def an_item(api: Stack, kind: WorkKind, payload: dict[str, Any]) -> WorkItem:
 
 def fitting(**fields: Any) -> dict[str, Any]:
     return {
-        "project_id": str(PROJECT),
+        "agent_project_id": str(AGENT_PROJECT),
         "isolation": "container",
         "egress": ["github.com:443"],
         "reads": [],

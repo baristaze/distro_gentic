@@ -1,7 +1,7 @@
-"""A delivery's validation over Postgres and the local Docker, through the
+"""A work product's validation over Postgres and the local Docker, through the
 root a deployed process builds: its checks run in a container made for
 the run alone, on the delivered commit the platform read from the
-project's repository, with the checks and their fixture from the base,
+agent project's repository, with the checks and their fixture from the base,
 and the container is gone after. The validation hashes to the results the
 run wrote, and the result gate confirms the success they show. A
 validation session runs as the platform's own work on the same executor,
@@ -9,7 +9,7 @@ a head that plants a runner of its own still runs the base's, a head's
 `.gitattributes` leaves nothing out of the tree the checks run on, a
 head whose code changes the base's fixture while it runs has no verdict,
 and a check may write a new file beside that fixture. A session pinned to
-its project's environment has its checks run on that base, with no
+its agent project's workspace base has its checks run on that base, with no
 network, so what its setup installed is there for them."""
 
 import subprocess
@@ -19,10 +19,10 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
 from contracts.loops import DELIVERY
-from contracts.project_storage import in_project
 from contracts.tools import stand_ins
 
 from acme.infra.impl.configured import InfraConfiguredImpl
@@ -33,6 +33,8 @@ from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import EgressMode, IsolationMode, Workspace, WorkspaceBase
 from acme.infra.workspaces.container import DEFAULT_IMAGE, container_name
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id, utcnow
@@ -43,14 +45,12 @@ from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
 def docker_runs() -> bool:
@@ -98,17 +98,17 @@ TOTAL = 4
 """
 """A cart whose code removes the base's fixture from its folder, which
 stays writable, while the check runs, and writes its own total there."""
-ENVIRONMENT = WorkspaceBase(
+WORKSPACE_BASE = WorkspaceBase(
     image=DEFAULT_IMAGE,
     setup=(
         "python3 -c 'import site; "
         'open(site.getsitepackages()[0] + "/cartenv.py", "w").write("TOTAL = 3")\'',
     ),
 )
-"""A project's environment whose setup installs a module, reaching
+"""An agent project's workspace base whose setup installs a module, reaching
 nothing."""
-NEEDS_ENVIRONMENT = "from cartenv import TOTAL\n"
-"""A cart that totals right with what its environment installed, and
+NEEDS_WORKSPACE_BASE = "from cartenv import TOTAL\n"
+"""A cart that totals right with what its workspace base installed, and
 fails to import anywhere else."""
 
 
@@ -165,12 +165,12 @@ async def storage(
 
 
 class Delivered:
-    """A deployed root over Postgres and the local Docker, a delivery
-    session in a project whose policy runs `unit` from the base, and what
+    """A deployed root over Postgres and the local Docker, a work product
+    session in an agent project whose policy runs `unit` from the base, and what
     the session delivered."""
 
-    project_id: UUID
-    """The project of the session `session` started."""
+    agent_project_id: UUID
+    """The agent project of the session `session` started."""
 
     def __init__(self, storage: StoragePostgresImpl, tmp_path: Path) -> None:
         self.storage = storage
@@ -184,12 +184,12 @@ class Delivered:
             tool_catalog=stand_ins(*DELIVERY.tools),
             environment="production",
             work_product=self.work,
-            workspace_projects=OnDisk(self.repository),
+            workspace_agent_projects=OnDisk(self.repository),
             workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
 
     async def session(self, files: dict[str, str]) -> tuple[TenantContext, UUID, str]:
-        """A tenant, its delivery session in a project, and the head the
+        """A tenant, its work product session in an agent project, and the head the
         session delivered, whose files are `files` over the base."""
         slug = f"ajax-{new_id().hex[-8:]}"
         owner, _ = await self.managers.tenancy.bootstrap(
@@ -198,10 +198,10 @@ class Delivered:
         session = await self.managers.agents.start_session(
             owner, Start(id=new_id(), kind="delivery", title="Fix the cart's total")
         )
-        self.project_id = await in_project(
-            self.storage.get_project_storage(), owner.org_id, session.id
+        self.agent_project_id = await in_agent_project(
+            self.storage.get_agent_project_storage(), owner.org_id, session.id
         )
-        policy = make_policy(policy_key(self.project_id))
+        policy = make_policy(policy_key(self.agent_project_id))
         await self.managers.evidence.write_policy(
             owner,
             ValidationPolicy.model_validate(
@@ -212,8 +212,8 @@ class Delivered:
         self.work.deliver(
             owner.org_id,
             session.id,
-            Delivery(
-                project=policy.project,
+            WorkProduct(
+                agent_project=policy.agent_project,
                 base=self.repository.base,
                 head=head,
                 dirty=False,
@@ -246,7 +246,7 @@ def gone(instance: UUID) -> bool:
     return True
 
 
-# Check 1: a delivery's checks run in a fresh container from the delivered
+# Check 1: a work product's checks run in a fresh container from the delivered
 # commit, the validation hashes to the results, and the gate confirms it.
 
 
@@ -367,7 +367,7 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
     validations = delivered.managers.platform_agents
     start = ValidationStart(
         id=new_id(),
-        project_id=delivered.project_id,
+        agent_project_id=delivered.agent_project_id,
         check_name="unit",
         head=head,
         base=delivered.repository.base,
@@ -396,16 +396,16 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
 
 
 async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
-    """The session's workspace pinned to `ENVIRONMENT`, in a container with
-    no egress, as its kind would pin it to its project's environment."""
-    rows = storage.get_workspace_storage()
+    """The session's workspace pinned to `WORKSPACE_BASE`, in a container with
+    no egress, as its kind would pin it to its agent project's workspace base."""
+    rows = storage.get_agent_workspace_storage()
     kept = await rows.read_workspace(ctx.org_id, session_id)
     if kept is not None:
-        moved = kept.model_copy(update={"base": ENVIRONMENT, "version": kept.version + 1})
+        moved = kept.model_copy(update={"base": WORKSPACE_BASE, "version": kept.version + 1})
         await rows.write_workspace(ctx.org_id, moved, kept.version)
         return
     now = utcnow()
-    pinned = SessionWorkspace(
+    pinned = AgentSessionWorkspace(
         id=session_id,
         created_at=now,
         updated_at=now,
@@ -414,24 +414,24 @@ async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",
-        base=ENVIRONMENT,
+        base=WORKSPACE_BASE,
         branch=f"sessions/{session_id}",
     )
     assert await rows.create_workspace(ctx.org_id, pinned)
 
 
-# A session pinned to its project's environment: its checks run in a fresh
+# A session pinned to its agent project's workspace base: its checks run in a fresh
 # container on that base, where what the setup installed is, and the gate
-# confirms them. The same head with no environment cannot import it.
+# confirms them. The same head with no workspace base cannot import it.
 
 
-async def test_a_sessions_checks_run_on_the_environment_it_pinned(
+async def test_a_sessions_checks_run_on_the_workspace_base_it_pinned(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     for name in ("bare", "pinned"):
         (tmp_path / name).mkdir()
     unpinned = Delivered(storage, tmp_path / "bare")
-    bare, bare_session, _ = await unpinned.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    bare, bare_session, _ = await unpinned.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
     await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.BASELINE)
     await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.VALIDATION)
     (record,) = await validated(unpinned.managers.evidence, bare, bare_session)
@@ -439,7 +439,7 @@ async def test_a_sessions_checks_run_on_the_environment_it_pinned(
 
     delivered = Delivered(storage, tmp_path / "pinned")
     evidence = delivered.managers.evidence
-    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
     await pin(storage, owner, session_id)
     await evidence.validate(owner, session_id, RunPurpose.BASELINE)
     (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
@@ -449,8 +449,8 @@ async def test_a_sessions_checks_run_on_the_environment_it_pinned(
         head,
         RunOutcome.PASSED,
         "container",
-    ), "the check imports what the environment's setup installed"
-    assert record.environment.image == ENVIRONMENT.image
+    ), "the check imports what the workspace base's setup installed"
+    assert record.run_image.image == WORKSPACE_BASE.image
     instance = UUID(validation.executor.removeprefix("executor:"))
     assert gone(instance), "the instance goes after its run"
     verdict = await delivered.managers.agents.judge_result(

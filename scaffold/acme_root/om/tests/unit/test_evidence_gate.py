@@ -44,7 +44,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 
 
 class Case:
-    """One session of the `checkout` project: its policy written, a work run of
+    """One session of the `checkout` agent project: its policy written, a work run of
     the agent's to cite, its work product as the case delivers it, and,
     unless the case says otherwise, a baseline taken before any change is
     validated."""
@@ -113,9 +113,9 @@ def refused(verdict: Verdict, *words: str) -> bool:
 # Check 2: the gate.
 
 
-async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() -> None:
-    """The work product names a project; the gate and the validation read
-    the session's own, from the projects, and judge by its policy: `checkout`'s
+async def test_a_delivery_is_judged_by_its_sessions_agent_project_whatever_it_names() -> None:
+    """The work product names an agent project; the gate and the validation read
+    the session's own, from the agent projects, and judge by its policy: `checkout`'s
     asks for the unit check of a change under `src/`, the other's for none."""
     org = make_org()
     evidence = evidence_over()
@@ -123,12 +123,12 @@ async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() 
     other = new_id()
     await evidence.manager.write_policy(owner, checkout_policy())
     await evidence.manager.write_policy(
-        owner, checkout_policy(Requirement(check="unit", paths=("docs/**",)), project=other)
+        owner, checkout_policy(Requirement(check="unit", paths=("docs/**",)), agent_project=other)
     )
     ours, theirs = new_id(), new_id()  # a session of `checkout`, and one of the other
-    evidence.projects.sessions[theirs] = other
+    evidence.agent_projects.sessions[theirs] = other
     for session_id, named in ((ours, str(other)), (theirs, CHECKOUT_KEY)):
-        delivery = delivered().model_copy(update={"project": named})
+        delivery = delivered().model_copy(update={"agent_project": named})
         evidence.work.deliver(org.id, session_id, delivery)
     runs = {s: make_record(s, step_id=new_id()) for s in (ours, theirs)}
     for run in runs.values():
@@ -142,7 +142,7 @@ async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() 
     await evidence.manager.validate(ctx, ours, RunPurpose.BASELINE)
     assert refused(await submit(ours), "no validation ran at the head c0ffee")
     (validation,) = await evidence.manager.validate(ctx, ours, RunPurpose.VALIDATION)
-    assert validation.project == CHECKOUT_KEY, "validated under the session's project"
+    assert validation.agent_project == CHECKOUT_KEY, "validated under the session's agent project"
     assert [check.name for check in evidence.executor.requests[-1].checks] == ["unit"]
     assert succeeded(await submit(ours))
 
@@ -224,7 +224,7 @@ async def test_a_validation_counts_only_at_the_check_versions_the_policy_declare
     case = await Case.start()
     await case.validate()
     assert succeeded(await case.submit())
-    # A person moves the project's checks to version 2: the runs at version
+    # A person moves the agent project's checks to version 2: the runs at version
     # 1 measured checks that no longer govern.
     policy = await case.evidence.manager.get_policy(case.owner, CHECKOUT_KEY)
     assert {check.version for check in policy.checks} == {"1"}
@@ -274,7 +274,9 @@ async def test_a_success_on_runs_its_executor_did_not_write_is_refused() -> None
     storage, org = case.evidence.storage, case.ctx.org_id
     # Runs another writer wrote, listed by a validation that names the
     # executor: their provenance does not name it.
-    validation, runs = make_validation(case.session, 1, executor="executor-1", project=CHECKOUT_KEY)
+    validation, runs = make_validation(
+        case.session, 1, executor="executor-1", agent_project=CHECKOUT_KEY
+    )
     forged = tuple(run.model_copy(update={"executor": "agent-workspace"}) for run in runs)
     assert await storage.create_validation(org, validation, forged)
     assert refused(await case.submit(), "not a result its validation's executor wrote")
@@ -324,7 +326,9 @@ async def test_a_run_that_validated_nothing_is_inconclusive() -> None:
 async def test_a_session_with_no_work_product_validates_nothing() -> None:
     case = await Case.start()
     case.evidence.work = type(case.evidence.work)()
-    gate = ResultGateEvidenceImpl(case.evidence.storage, case.evidence.work, case.evidence.projects)
+    gate = ResultGateEvidenceImpl(
+        case.evidence.storage, case.evidence.work, case.evidence.agent_projects
+    )
     verdict = await gate.check(
         case.ctx, case.session, Result(claim=Claim.SUCCEEDED, evidence=(case.run.id,))
     )
@@ -353,7 +357,7 @@ async def test_a_gate_that_cannot_read_the_work_product_counts_no_success() -> N
     case = await Case.start()
     await case.validate()
     gate = ResultGateEvidenceImpl(
-        case.evidence.storage, WorkProductAbsentImpl(), case.evidence.projects
+        case.evidence.storage, WorkProductAbsentImpl(), case.evidence.agent_projects
     )
     result = Result(claim=Claim.SUCCEEDED, evidence=(case.run.id,))
     assert refused(await gate.check(case.ctx, case.session, result), "reads no work product")
@@ -361,11 +365,11 @@ async def test_a_gate_that_cannot_read_the_work_product_counts_no_success() -> N
     assert (await gate.check(case.ctx, case.session, failed)).outcome is LoopOutcome.FAILED
 
 
-async def test_a_project_with_no_policy_counts_no_success() -> None:
+async def test_an_agent_project_with_no_policy_counts_no_success() -> None:
     case = await Case.start()
-    # A project that declares no policy, then no project at all.
-    for project in (new_id(), None):
-        case.evidence.projects.sessions[case.session] = project
+    # An agent project that declares no policy, then no agent project at all.
+    for agent_project in (new_id(), None):
+        case.evidence.agent_projects.sessions[case.session] = agent_project
         assert refused(await case.submit(), "declares no validation policy")
 
 
@@ -489,7 +493,7 @@ async def test_two_rates_judged_together_take_a_corrected_confidence() -> None:
 async def test_fewer_trials_than_declared_are_refused() -> None:
     case = await Case.start(ScriptedExecutor(), trials(300))
     storage, org = case.evidence.storage, case.ctx.org_id
-    validation, runs = make_validation(case.session, 3, project=CHECKOUT_KEY)
+    validation, runs = make_validation(case.session, 3, agent_project=CHECKOUT_KEY)
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
     assert await storage.create_validation(org, validation, moved)
     assert refused(await case.submit(), "trials ran 3 of the 300 trials declared")
@@ -522,7 +526,7 @@ async def test_a_sequential_test_stopped_anywhere_else_is_refused() -> None:
         (50, ("ran 50 trials, on past trial 36", "where its sequential test stopped")),
     ):
         case = await Case.start(ScriptedExecutor(), sequential())
-        validation, runs = make_validation(case.session, count, project=CHECKOUT_KEY)
+        validation, runs = make_validation(case.session, count, agent_project=CHECKOUT_KEY)
         moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
         assert await case.evidence.storage.create_validation(case.ctx.org_id, validation, moved)
         assert refused(await case.submit(), *words)
@@ -544,7 +548,7 @@ async def test_a_fixed_count_claim_runs_every_trial_and_refuses_to_stop_early() 
     assert await case.trials_run() == 50
     assert succeeded(await case.submit())
     stopped = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
-    validation, early = make_validation(stopped.session, 36, project=CHECKOUT_KEY)
+    validation, early = make_validation(stopped.session, 36, agent_project=CHECKOUT_KEY)
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in early)
     assert await stopped.evidence.storage.create_validation(stopped.ctx.org_id, validation, moved)
     assert refused(await stopped.submit(), "trials ran 36 of the 50 trials declared")

@@ -16,7 +16,7 @@ const routes: RouteObject[] = [
   { path: "/" },
   { path: "/sessions" },
   { path: "/sessions/:sessionId", handle: { about: "One session", params: { sessionId: "the session's id" } } },
-  { path: "/settings/projects/:projectId" },
+  { path: "/settings/agent-projects/:agentProjectId" },
 ];
 
 describe("a reply's link", () => {
@@ -45,8 +45,8 @@ describe("a reply's link", () => {
   });
 
   it("reads an address the way the browser will, so a chip goes where it says", () => {
-    expect(sitePath("/sessions/../settings/projects/p1")).toBe("/settings/projects/p1");
-    expect(supportLink("/sessions/../settings/projects/p1", "the project", routes)).toMatchObject({ kind: "chip", to: "/settings/projects/p1" });
+    expect(sitePath("/sessions/../settings/agent-projects/p1")).toBe("/settings/agent-projects/p1");
+    expect(supportLink("/sessions/../settings/agent-projects/p1", "the agent project", routes)).toMatchObject({ kind: "chip", to: "/settings/agent-projects/p1" });
     expect(sitePath("/a b")).toBe("/a%20b");
     expect(sitePath("https://portal.invalid/sessions")).toBeNull();
   });

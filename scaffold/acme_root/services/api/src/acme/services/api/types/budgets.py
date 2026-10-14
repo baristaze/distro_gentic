@@ -25,7 +25,7 @@ class SettableScope(StrEnum):
 
 class CreateBudgetRequest(RequestBody):
     """A budget over a scope and a window, in reference cost (millionths),
-    native tokens, or both. A person's and a project's scope is keyed by its
+    native tokens, or both. A person's and an agent project's scope is keyed by its
     id; a tenant's is the tenant itself, so its key is left out or names the
     tenant. A span window has a length in seconds, and no other window has."""
 
@@ -39,7 +39,7 @@ class CreateBudgetRequest(RequestBody):
     @model_validator(mode="after")
     def _a_keyed_scope_names_its_key(self) -> Self:
         if self.scope_kind is not SettableScope.TENANT and self.scope_key is None:
-            raise ValueError("a person's or a project's budget names its id in scope_key")
+            raise ValueError("a person's or an agent project's budget names its id in scope_key")
         return self
 
 

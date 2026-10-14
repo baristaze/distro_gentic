@@ -1,4 +1,4 @@
-"""A project's validation policy: which checks must pass, at what grade,
+"""An agent project's validation policy: which checks must pass, at what grade,
 for which kinds of change, for a success to count; and the paths the
 agent may not change, by pattern."""
 
@@ -11,7 +11,7 @@ from acme.om.base import Identifiable, Platform, Trackable
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.rate import Bound, RateRule
-from acme.om.evidence.types.record import NAME, PROJECT
+from acme.om.evidence.types.record import AGENT_PROJECT, NAME
 
 PATTERN = Annotated[str, Field(min_length=1, max_length=300, pattern=r"^[^\s\\]+$")]
 """A path pattern, from the work product's root: `*` within one part of a
@@ -44,8 +44,8 @@ class Requirement(Platform):
 
 
 class ValidationPolicy(Identifiable, Trackable):
-    """One project's policy, written by a person, never by an agent, and
-    kept under the project's id (`rules.policy_key`). Its checks are
+    """One agent project's policy, written by a person, never by an agent, and
+    kept under the agent project's id (`rules.policy_key`). Its checks are
     declared here; its requirements name them; `protected` holds the
     patterns of every path the agent may not change: the checks, their
     fixtures, and every path that changes how tests are found or how the
@@ -54,7 +54,7 @@ class ValidationPolicy(Identifiable, Trackable):
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("version",)
 
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     checks: tuple[CheckDeclaration, ...] = ()
     requirements: tuple[Requirement, ...] = ()
     protected: tuple[PATTERN, ...] = ()

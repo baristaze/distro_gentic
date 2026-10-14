@@ -8,12 +8,13 @@ chip and switch, settings, and one realtime channel.
 ## The shell and the product's slot
 
 A signed-in page sits beside the left bar. From the top: the org chip,
-Search (⌘K), New session, Automations, Knowledge with its count of
-suggestions to review, the product's entries, and the person's own
-sessions, the ones they made or take part in, grouped by what they ask:
-Needs you, Running, and Recent, each sub-agent under its parent. The user
-chip at the foot holds Settings, Profile, the theme, the keyboard
-shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+Search (⌘K), New session, Agent automations, Agent knowledge with its
+count of suggestions to review, the product's entries, and the person's
+own sessions, the ones they made or take part in, grouped by what they
+ask: Needs you, Running, and Recent, each sub-agent under its parent.
+The user chip at the foot holds Settings, Profile, the theme, the
+keyboard shortcuts, and Sign out. ⌘B folds the bar; its edge drags to
+resize.
 
 Sessions (`/sessions`) shows the person's own first, and the org's
 org-wide ones in a second view (`?view=org`), where a member joins one. A
@@ -26,10 +27,11 @@ What is set up once lives in Settings (`/settings`, ⌘,), out of the bar a
 person scans every day. There, Settings' own bar takes the left bar's
 place: back to the app, a search (`/`), and the sections by group.
 Personal holds the profile; Organization its general facts, members,
-usage, and audit; Agents the projects, models and keys, and playbooks;
-Security the API keys and single sign-on; and a product adds its own. An
-old address (`/projects`, `/models`, `/playbooks`, `/audit`, `/usage`)
-lands on its section, and `/approvals` on the sessions that need you.
+usage, and audit; Agents the agent projects, models and keys, and agent
+playbooks; Security the API keys and single sign-on; and a product adds
+its own. An old address (`/agent-projects`, `/models`,
+`/agent-playbooks`, `/audit`, `/usage`) lands on its section, and
+`/approvals` on the sessions that need you.
 
 Every text field shows a realistic example of what goes in, and an ⓘ says
 what a field means where its name does not. `watermarks.test.ts` holds
@@ -78,19 +80,19 @@ conversation only when it is their own
   search, and their keys.
 - `src/features/<name>/`: one folder per screen, a pure model, a
   view-model hook, and a page. `home/` is the composer that starts a
-  session on an agent and a project. `sessions/` is Sessions, with its two
-  views and its filters; `session/` is
+  session on an agent and an agent project. `sessions/` is Sessions,
+  with its two views and its filters; `session/` is
   one session's page: its thread, timeline, tools, evidence, changes, and
-  children, live while it runs, and a playbook invoked into it by name
-  from its header. The org's records and settings each have
-  their own: `projects/`, `models/` (the org's own provider keys and its
-  model for each role), `automations/`, `playbooks/`, `knowledge/`,
-  `audit/`, `usage/`, and `settings/` (the overview, the profile, the
-  org's general facts, members, API keys, and single sign-on).
-  `providers/` is the banner a page shows while the org's sessions wait
-  on a model provider. A secret field is write-only: the form sends it
-  once, and the page shows only who set it and when. A new API key's
-  secret shows once, until Done.
+  children, live while it runs, and an agent playbook invoked into it by
+  name from its header. The org's records and settings each have
+  their own: `agent_projects/`, `models/` (the org's own provider keys
+  and its model for each role), `agent_automations/`,
+  `agent_playbooks/`, `agent_knowledge/`, `audit/`, `usage/`, and
+  `settings/` (the overview, the profile, the org's general facts,
+  members, API keys, and single sign-on). `providers/` is the banner a
+  page shows while the org's sessions wait on a model provider. A secret
+  field is write-only: the form sends it once, and the page shows only
+  who set it and when. A new API key's secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
   `flags.ts` reads the session's flags as one snapshot from the API, and a
   view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
@@ -140,23 +142,25 @@ takes control, and finds End this run beside Give it back. The seeded
 member sees who holds it and End this run, never Run or Give it back.
 The owner ends the run there, which ends the loop cancelled. The records check needs
 only the API, on the scripted providers, and this dev server: in Settings
-the owner makes a project with a read credential, saves a provider key,
-and creates an API key, and then makes an automation; each is read back
-from the API. The credential's password and the provider key come back in
-no reply and on no screen, and the API key shows once, then on no screen.
-Their screenshots land in `e2e/screenshots/`, which git ignores.
+the owner makes an agent project with a read credential, saves a
+provider key, and creates an API key, and then makes an agent
+automation; each is read back from the API. The credential's password
+and the provider key come back in no reply and on no screen, and the API
+key shows once, then on no screen. Their screenshots land in
+`e2e/screenshots/`, which git ignores.
 
-The timeline check plays the engineer's scene: it thinks, takes its
-baseline, plans, starts two analysis sub-agents and waits for their
+The timeline check plays the software engineer's scene: it thinks, takes
+its baseline, plans, starts two analysis sub-agents and waits for their
 reports, runs a failing test, edits, runs it again, opens a pull
 request, asks its person, validates, and submits its result. Its API and runner are `portal_stack.py`'s, which
-register a scene engineer and analysis that work in a directory on this
-host and clone the org's repository from a folder of bare ones; the forge
-is its twin, seeded with it. The runner runs one loop at a time, since
-one script answers every session, and a scene plays once per runner:
+register a scene software engineer and analysis that work in a directory
+on this host and clone the org's repository from a folder of bare ones;
+the forge is its twin, seeded with it. The runner runs one loop at a
+time, since one script answers every session, and a scene plays once per
+runner:
 
 ```bash
-uv run --package acme-api python services/api/tests/portal_check.py script .local/scene.json --scene engineer
+uv run --package acme-api python services/api/tests/portal_check.py script .local/scene.json --scene software_engineer
 # with ACME_FORGE_INTEGRATION=twin and ACME_WORKSPACE_BACKEND=host set for
 # the seed, both processes, and the check, and PORTAL_REPOSITORIES naming
 # an empty folder:
@@ -165,11 +169,11 @@ uv run --package acme-session-runner python services/api/tests/portal_stack.py r
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/timeline.spec.ts
 ```
 
-The check writes the scene's repository and its project's policy itself
-(`portal_check.py scene`). It sees the first thought and words stream
-before their step lands, pauses and resumes the session from its header,
-approves each command it holds, answers its question, and opens a work
-block and a diff. Each moment is shot light and dark.
+The check writes the scene's repository and its agent project's policy
+itself (`portal_check.py scene`). It sees the first thought and words
+stream before their step lands, pauses and resumes the session from its
+header, approves each command it holds, answers its question, and opens
+a work block and a diff. Each moment is shot light and dark.
 
 The pane check plays the same scene on the same stack, with
 `PORTAL_API_URL` naming the API:
@@ -183,28 +187,29 @@ delivers, opens a step from a line of a work block, and opens the other
 views from "+". It then takes control and runs `pytest -q`: the local
 stack runs no host, so `portal_check.py host` stands in for the one that
 holds the workspace, on a clone of the scene's repository at the
-engineer's branch. It gives control back and reads the agent's reply,
-hides and shows the pane, and reloads to find its tabs kept.
+software engineer's branch. It gives control back and reads the agent's
+reply, hides and shows the pane, and reloads to find its tabs kept.
 
 The sub-agents check runs on the same stack, with `ACME_CORPUS_ROOT` set
-for the check too, since the tree it writes starts the scene's engineer,
-and on a runner of its own, since it plays the scene:
+for the check too, since the tree it writes starts the scene's software
+engineer, and on a runner of its own, since it plays the scene:
 
 ```bash
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/subagents.spec.ts
 ```
 
 The scene never has a sub-agent ask its person, so `portal_check.py tree`
-first writes an engineer's tree through storage, within its bounds: one
-answer that starts two sub-agents, a park on them, the first one's report,
-and the second at work. The check reads the card that follows each child,
-opens the report's child and comes back from its first card, and folds the
-parent's row in the left bar. The tree's next beats park the second child
-on its person, which raises a toast on the page open, then end it, which
-settles the card. Then the check plays the scene: the engineer's answer
-starts two analysis sub-agents, and the check follows each child's row
-until it is done, reads each report, and finds the tree's bounds in the
-Sub-agents tab: 2 of the 10 sub-agents it may start.
+first writes a software engineer's tree through storage, within its
+bounds: one answer that starts two sub-agents, a park on them, the first
+one's report, and the second at work. The check reads the card that
+follows each child, opens the report's child and comes back from its
+first card, and folds the parent's row in the left bar. The tree's next
+beats park the second child on its person, which raises a toast on the
+page open, then end it, which settles the card. Then the check plays the
+scene: the software engineer's answer starts two analysis sub-agents,
+and the check follows each child's row until it is done, reads each
+report, and finds the tree's bounds in the Sub-agents tab: 2 of the 10
+sub-agents it may start.
 
 The sharing check runs on the stack the sessions check runs on, with the
 sharing script, which holds a turn for each of its two sessions:

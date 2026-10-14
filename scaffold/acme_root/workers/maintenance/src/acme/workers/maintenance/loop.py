@@ -6,7 +6,7 @@ failing, beat liveness in memory and publish it to the cache as best
 effort, sweep on a timer (the expired leases and the outbox relay across
 tenants, then the standing chores of the tenants one read across tenants
 names as due, a page a pass, then per tenant its ticks, such as the
-schedules of its automations, and the purge of a tenant past its retention,
+schedules of its agent automations, and the purge of a tenant past its retention,
 then every namespace's purge of its rows past their retention across tenants,
 then the purges of done outbox rows and settled work items, within a time
 budget, then the tally of the platform's size when it is due, then the four
@@ -48,7 +48,7 @@ from acme.om.base import EMPTY_UUID, Platform, new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.placement.types.standing import FleetCounts
+from acme.om.placement.types.standing import AgentFleetCounts
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.handler import WorkHandlerInterface, WorkParked, WorkRefused
 from acme.om.work.types.work_item import WorkItem
@@ -104,9 +104,9 @@ operator plane reads (`TenancyOperatorManagerInterface.tally_size`); it runs
 once every `LoopOptions.tally_interval`, not every pass."""
 
 
-FleetStep = Callable[[], Awaitable[FleetCounts]]
+AgentFleetStep = Callable[[], Awaitable[AgentFleetCounts]]
 """The read of the platform's signals across every tenant, each by bounded
-labels (`PlacementOperatorManagerInterface.fleet_counts`): the gauges the
+labels (`PlacementOperatorManagerInterface.agent_fleet_counts`): the gauges the
 operator dashboard draws, set once a pass."""
 
 
@@ -173,7 +173,7 @@ class WorkerLoop:
         chores: Mapping[str, ChoreStep] | None = None,
         chore_tenants: ChoreTenants | None = None,
         tally: TallyStep | None = None,
-        fleet: FleetStep | None = None,
+        agent_fleet: AgentFleetStep | None = None,
         topics: TopicsInterface,
         liveness: CacheInterface,
         options: LoopOptions,
@@ -191,7 +191,7 @@ class WorkerLoop:
             raise ValueError("a chore runs in the tenants one read names as due; name the read")
         self._chore_tenants = chore_tenants
         self._tally_step = tally
-        self._fleet_step = fleet
+        self._fleet_step = agent_fleet
         self._handlers = handlers
         self._topics = topics
         self._liveness = liveness
@@ -638,7 +638,7 @@ class WorkerLoop:
             log.exception("sweep: work item purge failed")
         await self._tally()
         gauges = await self._gauges()
-        await self._fleet()
+        await self._agent_fleet()
         self.sweeps += 1
         seconds = clock() - started
         SWEEP_SECONDS.observe(seconds)
@@ -709,7 +709,7 @@ class WorkerLoop:
             found[name] = value
         return found
 
-    async def _fleet(self) -> None:
+    async def _agent_fleet(self) -> None:
         """The platform's gauges, one read across every tenant: each is
         cleared and set whole, so a plan tier no loop waits on leaves the
         dashboard. A read that fails leaves every gauge as it was."""

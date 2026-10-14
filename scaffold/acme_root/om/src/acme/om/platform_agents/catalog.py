@@ -1,7 +1,7 @@
 """The shipped agents as a root wires them: the kinds, the tools they call
 beside the adopter's, the forge's comment among them, a product's own
 readers joined to the platform assistant, and the refusal, at boot, of a
-catalog that would let the assistant, the operator, or the reviewer
+catalog that would let the assistant, the ops analyst, or the reviewer
 reach past what it may. A process hands its root a `PlatformAgents`,
 which carries the assistant's corpus, read once at boot from the
 knowledge map (`read_corpus`)."""
@@ -10,58 +10,58 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from acme.integrations.events import IntegrationInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
+from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
-from acme.om.automations import AutomationsManagerInterface
 from acme.om.base import Platform
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools import (
     DraftToolPolicyImpl,
     EditFileImpl,
-    HandOffToEngineerImpl,
-    ListAutomationsImpl,
+    HandOffToSoftwareEngineerImpl,
+    ListAgentAutomationsImpl,
+    ListAgentProjectsImpl,
     ListFilesImpl,
     ListHostsImpl,
-    ListProjectsImpl,
     ListSessionsImpl,
     NoteFindingImpl,
     OpenPullRequestImpl,
-    ReadAutomationImpl,
+    ReadAgentAutomationImpl,
+    ReadAgentKnowledgeImpl,
+    ReadAgentProjectImpl,
     ReadFileImpl,
-    ReadKnowledgeImpl,
-    ReadProjectImpl,
     ReadPullRequestFileImpl,
     ReadPullRequestImpl,
     ReadSessionImpl,
     ReadSpendImpl,
     ReadWaitImpl,
     RunCommandImpl,
+    SearchAgentKnowledgeImpl,
     SearchCodeImpl,
     SearchCorpusImpl,
-    SearchKnowledgeImpl,
     SubmitResultImpl,
     SubmitReviewImpl,
-    SuggestKnowledgeImpl,
+    SuggestAgentKnowledgeImpl,
     ValidateImpl,
     WriteFileImpl,
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
-from acme.om.projects import ProjectsManagerInterface
-from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work import WorkManagerInterface
-from acme.om.workspaces import WorkspacesManagerInterface
 
 KNOWLEDGE_MAP = "llms.txt"
 
@@ -96,23 +96,23 @@ def with_shipped(
     *,
     sessions: Callable[[], AgentSessionsManagerInterface],
     steps: Callable[[], StepsManagerInterface],
-    projects: Callable[[], ProjectsManagerInterface],
+    agent_projects: Callable[[], AgentProjectsManagerInterface],
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
-    relay: Callable[[], RelayManagerInterface],
-    automations: Callable[[], AutomationsManagerInterface],
+    exec_relay: Callable[[], ExecRelayManagerInterface],
+    agent_automations: Callable[[], AgentAutomationsManagerInterface],
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
     evidence: Callable[[], EvidenceManagerInterface],
-    workspaces: Callable[[], WorkspacesManagerInterface],
+    agent_workspaces: Callable[[], AgentWorkspacesManagerInterface],
     intake: Callable[[], IntakeManagerInterface],
-    knowledge: Callable[[], KnowledgeManagerInterface],
+    agent_knowledge: Callable[[], AgentKnowledgeManagerInterface],
     integrations: Callable[[str], IntegrationInterface],
     budgets: Callable[[], BudgetsManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
     callables the root answers once it has built them; `intake`,
-    `knowledge`, and `automations` are built over the managers, so the
+    `agent_knowledge`, and `agent_automations` are built over the managers, so the
     process that builds them answers them. `integrations` answers the
     integration of a name, the forge's among them, which the reviewer's
     reads reach, and the forge's comment when the process wires none of its
@@ -124,9 +124,9 @@ def with_shipped(
         EditFileImpl.SPEC,
         WriteFileImpl.SPEC,
         RunCommandImpl.SPEC,
-        SearchKnowledgeImpl.SPEC,
-        ReadKnowledgeImpl.SPEC,
-        SuggestKnowledgeImpl.SPEC,
+        SearchAgentKnowledgeImpl.SPEC,
+        ReadAgentKnowledgeImpl.SPEC,
+        SuggestAgentKnowledgeImpl.SPEC,
         ValidateImpl.SPEC,
         OpenPullRequestImpl.SPEC,
         SubmitResultImpl.SPEC,
@@ -134,12 +134,12 @@ def with_shipped(
         ReadSessionImpl.SPEC,
         ListSessionsImpl.SPEC,
         ReadWaitImpl.SPEC,
-        ListProjectsImpl.SPEC,
-        ReadProjectImpl.SPEC,
-        ListAutomationsImpl.SPEC,
-        ReadAutomationImpl.SPEC,
+        ListAgentProjectsImpl.SPEC,
+        ReadAgentProjectImpl.SPEC,
+        ListAgentAutomationsImpl.SPEC,
+        ReadAgentAutomationImpl.SPEC,
         DraftToolPolicyImpl.SPEC,
-        HandOffToEngineerImpl.SPEC,
+        HandOffToSoftwareEngineerImpl.SPEC,
         ReadPullRequestImpl.SPEC,
         ReadPullRequestFileImpl.SPEC,
         NoteFindingImpl.SPEC,
@@ -157,22 +157,22 @@ def with_shipped(
         EditFileImpl(evidence),
         WriteFileImpl(evidence),
         RunCommandImpl(),
-        SearchKnowledgeImpl(shipped.corpus, knowledge),
-        ReadKnowledgeImpl(shipped.corpus, knowledge),
-        SuggestKnowledgeImpl(knowledge),
+        SearchAgentKnowledgeImpl(shipped.corpus, agent_knowledge),
+        ReadAgentKnowledgeImpl(shipped.corpus, agent_knowledge),
+        SuggestAgentKnowledgeImpl(agent_knowledge),
         ValidateImpl(evidence),
-        OpenPullRequestImpl(workspaces, intake),
+        OpenPullRequestImpl(agent_workspaces, intake),
         SubmitResultImpl(),
         SearchCorpusImpl(shipped.corpus),
-        ReadSessionImpl(sessions, steps, policies, projects),
-        ListSessionsImpl(sessions, projects),
-        ReadWaitImpl(sessions, work, hosts, relay),
-        ListProjectsImpl(projects),
-        ReadProjectImpl(projects),
-        ListAutomationsImpl(automations),
-        ReadAutomationImpl(automations),
+        ReadSessionImpl(sessions, steps, policies, agent_projects),
+        ListSessionsImpl(sessions, agent_projects),
+        ReadWaitImpl(sessions, work, hosts, exec_relay),
+        ListAgentProjectsImpl(agent_projects),
+        ReadAgentProjectImpl(agent_projects),
+        ListAgentAutomationsImpl(agent_automations),
+        ReadAgentAutomationImpl(agent_automations),
         DraftToolPolicyImpl(policies, names, classes),
-        HandOffToEngineerImpl(agents),
+        HandOffToSoftwareEngineerImpl(agents),
         ReadPullRequestImpl(intake, integrations),
         ReadPullRequestFileImpl(intake, integrations),
         NoteFindingImpl(intake, integrations),
@@ -214,7 +214,7 @@ def with_assistant_tools(
 def refuse_reach(agent_kinds: Iterable[AgentKind], catalog: Iterable[ToolInterface]) -> None:
     """At boot, `UnsafeConfiguration` for a catalog that holds two tools of
     one name, since a registry could then hold either, or for a version of
-    the platform assistant, the operator, or the reviewer whose profile
+    the platform assistant, the ops analyst, or the reviewer whose profile
     reaches past what it may, whoever declares it (`rules.reach_refusal`)."""
     classes: dict[str, str] = {}
     for tool in catalog:

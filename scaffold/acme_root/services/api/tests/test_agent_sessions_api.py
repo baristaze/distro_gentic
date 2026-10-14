@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.step_storage import (
     make_request,
     make_response,
@@ -76,7 +76,11 @@ async def start(client: httpx.AsyncClient, headers: dict[str, str]) -> dict[str,
     answered = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
-        json={"kind": "assistant", "title": "the dropped object", "project_id": PROJECT_ID},
+        json={
+            "kind": "assistant",
+            "title": "the dropped object",
+            "agent_project_id": AGENT_PROJECT_ID,
+        },
     )
     assert answered.status_code == 201, answered.text
     return answered.json()
@@ -200,7 +204,7 @@ async def test_a_message_an_agent_wrote_names_it_and_a_persons_names_none(
     answered = await client.post(
         "/v1/agent-sessions",
         headers=created(owner),
-        json={"kind": "lead", "title": "the slow export", "project_id": PROJECT_ID},
+        json={"kind": "lead", "title": "the slow export", "agent_project_id": AGENT_PROJECT_ID},
     )
     assert answered.status_code == 201, answered.text
     parent = answered.json()
@@ -243,7 +247,7 @@ async def test_a_kind_that_names_the_comment_tool_starts_and_is_spoken_to(
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(owner),
-        json={"kind": "commenter", "title": "the report", "project_id": PROJECT_ID},
+        json={"kind": "commenter", "title": "the report", "agent_project_id": AGENT_PROJECT_ID},
     )
     assert started.status_code == 201, started.text
     said = await client.post(
@@ -349,7 +353,7 @@ async def test_a_kind_the_product_does_not_run_starts_nothing(
     answered = await client.post(
         "/v1/agent-sessions",
         headers=created(owner),
-        json={"kind": "unheard_of", "title": "a session", "project_id": PROJECT_ID},
+        json={"kind": "unheard_of", "title": "a session", "agent_project_id": AGENT_PROJECT_ID},
     )
     assert answered.status_code == 404
     assert answered.json()["error"]["code"] == "unknown_agent_kind"
@@ -372,7 +376,7 @@ async def test_a_viewer_reads_a_session_and_sends_it_nothing(
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(viewer),
-        json={"kind": "assistant", "title": "t", "project_id": PROJECT_ID},
+        json={"kind": "assistant", "title": "t", "agent_project_id": AGENT_PROJECT_ID},
     )
 
     # No park a person clears is the viewer's to clear.
@@ -410,7 +414,7 @@ async def test_a_member_cannot_steer_a_session_into_an_admins_tool(
     made = await client.post(
         "/v1/agent-sessions",
         headers=created(owner),
-        json={"kind": "configurer", "title": "t", "project_id": PROJECT_ID},
+        json={"kind": "configurer", "title": "t", "agent_project_id": AGENT_PROJECT_ID},
     )
     assert made.status_code == 201, made.text
     path = f"/v1/agent-sessions/{made.json()['id']}"
@@ -425,7 +429,7 @@ async def test_a_member_cannot_steer_a_session_into_an_admins_tool(
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(member),
-        json={"kind": "configurer", "title": "t", "project_id": PROJECT_ID},
+        json={"kind": "configurer", "title": "t", "agent_project_id": AGENT_PROJECT_ID},
     )
 
     assert unseen.status_code == 404
@@ -480,7 +484,7 @@ async def test_no_route_reaches_another_tenants_session(
     assert steps.json()["items"] == [] and runs_of(container, session["id"]) == 0
 
 
-async def test_outside_local_a_session_starts_in_a_project_or_not_at_all(
+async def test_outside_local_a_session_starts_in_an_agent_project_or_not_at_all(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:
     refused = await client.post(
@@ -489,11 +493,11 @@ async def test_outside_local_a_session_starts_in_a_project_or_not_at_all(
         json={"kind": "assistant", "title": "the dropped object"},
     )
     assert refused.status_code == 422, refused.text
-    assert "project" in refused.json()["error"]["message"]
+    assert "agent_project" in refused.json()["error"]["message"]
 
     session = await start(client, owner)
     org = await container.storage.get_tenancy_storage().read_org_by_slug("ajax")
     assert org is not None
-    rows = container.storage.get_project_storage()
+    rows = container.storage.get_agent_project_storage()
     bound = await rows.read_binding(org.id, UUID(session["id"]))
-    assert bound is not None and str(bound.project_id) == PROJECT_ID
+    assert bound is not None and str(bound.agent_project_id) == AGENT_PROJECT_ID

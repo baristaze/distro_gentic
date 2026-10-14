@@ -21,18 +21,18 @@ and the role decides what they may do:
 Writing covers starting a session, writing to one, and every control on
 it. Nothing of one org is ever visible from another.
 
-## Projects
+## Agent projects
 
-A **project** belongs to the org and is bound to one repository, where
-its sessions' work lands. A session belongs to at most one project,
-named before the session exists, and it never moves. A project has no
-states: it is there until an admin removes it.
+An **agent project** belongs to the org and is bound to one repository,
+where its sessions' work lands. A session belongs to at most one agent
+project, named before the session exists, and it never moves. An agent
+project has no states: it is there until an admin removes it.
 
-Readers: `list_projects`, `read_project`.
+Readers: `list_agent_projects`, `read_agent_project`.
 
 ## Agent sessions
 
-An **agent session** belongs to the org. A person starts it, an
+An **agent session** belongs to the org. A person starts it, an agent
 automation starts it, another session hands work to it, or a session
 spawns it as a **sub-agent**, a child in its tree. Its **kind** fixes
 its tools when it starts. It is a series of **loops** over one history,
@@ -51,9 +51,9 @@ Any person who may write can cancel a session from its page. A session
 marked **archived** wakes for nothing; one marked **deleted** is hidden
 from every read until it is restored.
 
-Readers: `list_sessions` (by status, park reason, or project, newest
-first, each session with the sub-agents under it), `read_session` (where
-one stands and what its park waits on),
+Readers: `list_sessions` (by status, park reason, or agent project,
+newest first, each session with the sub-agents under it), `read_session`
+(where one stands and what its park waits on),
 `read_wait` (its place in the queue and its hosts).
 
 ## Why a session is parked
@@ -161,19 +161,19 @@ from what is live. An admin applies it.
 ## Budgets
 
 A **budget** says how much may be spent: by a session, a tree of
-sessions, a person, a project, a team, or the whole org, over its life
-or per period. Every model call asks the **gate** first. When the gate
-refuses, the session parks on `budget` until the budget is raised or
-resets.
+sessions, a person, an agent project, a team, or the whole org, over its
+life or per period. Every model call asks the **gate** first. When the
+gate refuses, the session parks on `budget` until the budget is raised
+or resets.
 
 Reader: `read_spend` (each budget, what it bounds, its amount and
 window, what the window spent so far, and what calls running now hold).
 
-## Automations
+## Agent automations
 
-An **automation** belongs to the org. A person creates it, and it runs
-as its creator or as the org's automation principal. An event or a
-schedule **fires** it, and every firing is a recorded **run**:
+An **agent automation** belongs to the org. A person creates it, and it
+runs as its creator or as the org's agent automation principal. An event
+or a schedule **fires** it, and every firing is a recorded **run**:
 
 | Run status | Means |
 | --- | --- |
@@ -185,27 +185,28 @@ A run is refused for its own session's event (`own_event`), a chain past
 its hop limit (`hop_limit`), its cost cap (`cost_cap`), its rate
 (`rate`), its concurrency (`concurrency`), a full queue (`queue_full`),
 a creator who left or a principal not granted (`principal`), an action
-that cannot run (`action`), a start with no project where one is needed
-(`project`), or the platform's own act with no session recorded for it
-(`unattributed`). A person who may write changes its limits or turns it
-off, in person; one that runs as its creator, only its creator.
+that cannot run (`action`), a start with no agent project where one is
+needed (`agent_project`), or the platform's own act with no session
+recorded for it (`unattributed`). A person who may write changes its
+limits or turns it off, in person; one that runs as its creator, only
+its creator.
 
-Readers: `list_automations`, `read_automation` (its trigger, its action,
-its limits, and its recent runs, newest first).
+Readers: `list_agent_automations`, `read_agent_automation` (its trigger,
+its action, its limits, and its recent runs, newest first).
 
-## Knowledge
+## Agent knowledge
 
-The org's **knowledge** is what its people keep for later sessions: an
-entry for one project or the whole org. An agent may suggest one, and
-no session reads it until a person reviews it. The platform's own
-documentation, this page among it, is knowledge too.
+The org's **agent knowledge** is what its people keep for later
+sessions: an entry for one agent project or the whole org. An agent may
+suggest one, and no session reads it until a person reviews it. The
+platform's own documentation, this page among it, is knowledge too.
 
-Readers: `search_knowledge`, `read_knowledge`, `search_corpus`.
+Readers: `search_agent_knowledge`, `read_agent_knowledge`, `search_corpus`.
 
 ## Validation sessions
 
-A **validation session** runs one check of a project's policy at a
-delivered commit, on a fresh machine, with no agent. It is `queued`
+A **validation session** runs one check of an agent project's policy at
+a delivered commit, on a fresh machine, with no agent. It is `queued`
 while its work waits or runs, then `finished` with the run it recorded,
 or `refused` with the reason the check cannot run here, or with the
 error its work failed with on its last attempt.

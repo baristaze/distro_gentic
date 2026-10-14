@@ -21,10 +21,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import (
-    PROJECT_ID,
+    AGENT_PROJECT_ID,
     add_member,
     build_container,
-    open_account,
+    open_spend_account,
     seed_request,
     sign_in,
     sign_in_as,
@@ -118,7 +118,7 @@ class Case:
         made = await self.client.post(
             "/v1/agent-sessions",
             headers=created(headers),
-            json={"kind": kind, "title": "t", "project_id": PROJECT_ID},
+            json={"kind": kind, "title": "t", "agent_project_id": AGENT_PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]
@@ -198,7 +198,7 @@ async def owner(client: httpx.AsyncClient, container: AppContainer) -> dict[str,
     """The owner, signed in, the tenant's account open: a loop's calls have
     someone to charge."""
     headers = await sign_in(client, container)
-    await open_account(container, headers)
+    await open_spend_account(container, headers)
     return headers
 
 

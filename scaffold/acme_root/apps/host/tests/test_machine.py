@@ -26,8 +26,8 @@ from host_support import Stack, probes
 from acme.apps.host.agent import HostAgent, RoutesHostImpl
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import settings_from_env
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.seed import forget_key, read_seed
 from acme.client.claimant.credential import BadSetting
 from acme.client.client import ApiError
@@ -54,7 +54,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.machine import WorkspaceMachineImpl
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.rules import new_key, seed
-from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.tenancy.rules import hash_token
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -333,7 +333,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     key = new_key()
     now = utcnow()
     await api.container.storage.get_cloud_pool_storage().create_machine(
-        PoolMachine(
+        PoolVm(
             id=new_id(),
             created_at=now,
             name="acme-vm-ptest0000000000",
@@ -362,7 +362,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     )
     host = HostAgent(
         settings,
-        Ceilings(projects=None, min_isolation=HostMode.vm, egress=None, readable=("/",)),
+        Ceilings(agent_projects=None, min_isolation=HostMode.vm, egress=None, readable=("/",)),
         probes(HostMode.vm),
         api.client,
         executor,
@@ -374,10 +374,10 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     assert identity.session_id == session.id
 
     kept = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
-    assert await managers.relay.ask_prepare(api.owner, session.id, kept)
+    assert await managers.exec_relay.ask_prepare(api.owner, session.id, kept)
     assert await host.claim_once() is not None
     await host.idle()
-    binding = await managers.relay.binding_of(api.owner, session.id)
+    binding = await managers.exec_relay.binding_of(api.owner, session.id)
     assert binding is not None and binding.host_id == identity.id
     assert made_under(binding.location, tmp_path / "workspace")
 

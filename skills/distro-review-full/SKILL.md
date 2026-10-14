@@ -99,7 +99,7 @@ whenever the change is narrower than the tree.
    - `distro-review-evidence`
    - `distro-review-wall`
    - `distro-review-money`
-   - `distro-review-fleet`
+   - `distro-review-agent-fleet`
 5. Wait for every reviewer. A report of this layer follows the group
    format when every section of it is there (the title, the Scope and
    Lenses lines, Findings, Deviations, Passed, Unverified, Not
@@ -174,7 +174,7 @@ per-layer table, and a per-group table of this layer:
 
 **Scope.** <the scope line>
 **Layers.** platform, engine, guideline (a layer not run: `<layer> (not run: <why>)`)
-**Groups.** placement, workspaces, watch, intake, evidence, wall, money, fleet
+**Groups.** placement, workspaces, watch, intake, evidence, wall, money, agent-fleet
 **Lenses.** <n> applied, <p> passed, <f> findings, <u> unverified, <x> not applicable
 
 ## Findings
@@ -204,7 +204,7 @@ per-layer table, and a per-group table of this layer:
 | evidence   |         |        |          |            |                |
 | wall       |         |        |          |            |                |
 | money      |         |        |          |            |                |
-| fleet      |         |        |          |            |                |
+| agent-fleet |         |        |          |            |                |
 
 ## Passed
 

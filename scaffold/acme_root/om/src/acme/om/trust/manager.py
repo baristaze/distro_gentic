@@ -20,7 +20,7 @@ from acme.om.context import TenantContext
 from acme.om.steps.types.step import Step
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import ProviderKey
-from acme.om.trust.types.secret import PROJECT, SecretDeclaration
+from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration
 
 
 class TrustManagerInterface(ABC):
@@ -55,9 +55,9 @@ class TrustManagerInterface(ABC):
     ) -> SecretDeclaration:
         """Declares a secret by name, as one who writes the tenant's own
         configuration may (`manage_members`, ADR 2010): its variable, its scope, what it is declared on, and the store
-        that holds it. A project it is declared on is one of the tenant's;
+        that holds it. An agent project it is declared on is one of the tenant's;
         another tenant's, or none, is `NotFound`, and nothing is written.
-        A name is its owner's: each project declares its own secret of a
+        A name is its owner's: each agent project declares its own secret of a
         name. The same declaration made again is answered as stored; another
         under a name its owner took is `Conflict`. No value is taken here."""
         ...
@@ -75,14 +75,14 @@ class TrustManagerInterface(ABC):
     async def put_secret(
         self,
         ctx: TenantContext,
-        project_id: UUID,
+        agent_project_id: UUID,
         name: str,
         value: str,
         *,
-        owner_kind: str = PROJECT,
+        owner_kind: str = AGENT_PROJECT,
     ) -> SecretDeclaration:
-        """Writes the value of a cloud secret the project `project_id`
-        declared into the platform's store, under that project, as one who
+        """Writes the value of a cloud secret the agent project `agent_project_id`
+        declared into the platform's store, under that agent project, as one who
         writes the tenant's configuration may; `owner_kind` names an owner
         of a product's kind in its place. A secret held inside a customer's
         wall never takes its value here (`SecretCrossesWall`): its host's
@@ -96,7 +96,7 @@ class TrustManagerInterface(ABC):
         """The name the tenant's store keeps each of `uses` under, for the
         session: a name means the declaration of the first owner the session
         is placed on, through the owner kinds in the registry's order (its
-        project first, as the projects answer it), and never one of an owner
+        agent project first, as the agent projects answer it), and never one of an owner
         it is not placed on. A declared
         cloud secret is kept under its owner; one never declared is kept
         under its own name, and is absent from the answer. Refuses

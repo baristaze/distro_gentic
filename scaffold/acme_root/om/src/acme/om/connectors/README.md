@@ -13,9 +13,9 @@ the kinds of thing [Acme is made of](../../../../README.md).
   definition they read, pinned by its hash, with the class and the effect
   they gave it and what the [lever checks](../levers/README.md) found in
   its description.
-- **Attachment**: a kind the connector is attached to, for one project or
-  for the whole tenant, deferred until the agent loads it unless it says
-  otherwise.
+- **Attachment**: a kind the connector is attached to, for one agent
+  project or for the whole tenant, deferred until the agent loads it
+  unless it says otherwise.
 - **Pin**: what a session holds of its tenant's connectors, written as its
   first run begins.
 
@@ -59,14 +59,14 @@ the kinds of thing [Acme is made of](../../../../README.md).
 <!-- agents-only
 The loop asks `root.ConnectorsLayer` (an `AttachedToolsetsInterface`) for
 a session's toolsets once a run; a root that runs loops hands it to
-`build_managers` as `attached_toolsets`. The pin is `SessionConnectors`,
+`build_managers` as `attached_toolsets`. The pin is `AgentSessionConnectors`,
 keyed by the session's id (`storage.create_pin`), and a sub-agent pins
 only what its parent pinned (`rules.pinned`). Each tool is the engine's
 `McpToolImpl` over an `McpBinding` whose input schema is the server's
 (`impl.toolsets.input_model_of`). A cloud call goes through the engine's
-`McpServers`; a host call goes through the relay transport's `call_mcp`,
-an `exec` item whose request is `relay.types.exec.McpRequest`, which the
-host answers from the servers its owner configures (`ceilings.toml`,
-`[mcp_servers.<name>]`). Every call first checks the connector's current
-review (`rules.still_reviewed`).
--->
+`McpServers`; a host call goes through the exec relay transport's
+`call_mcp`, an `exec` item whose request is
+`exec_relay.types.exec.McpRequest`, which the host answers from the
+servers its owner configures (`ceilings.toml`, `[mcp_servers.<name>]`).
+Every call first checks the connector's current review
+(`rules.still_reviewed`). -->

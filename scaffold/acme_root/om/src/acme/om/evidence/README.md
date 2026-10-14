@@ -8,7 +8,7 @@ of](../../../../README.md).
 ## What it holds
 
 - **Run**: one execution of one check. It records the version it ran
-  against and whether the tree held uncommitted changes, the environment
+  against and whether the tree held uncommitted changes, the run image
   (an image and a toolchain), the host and its isolation, who ran it and
   wrote its results, the check and its version, its parameters, metrics,
   timing, and outcome, and its artifacts, each with a hash. A run is
@@ -21,15 +21,15 @@ of](../../../../README.md).
 - **Hypothesis** and **finding**: what may explain a behavior, and what
   the runs show. Each links the runs that support or refute it. What one
   says stays in the agent's step that stated it.
-- **Validation policy**: a project's say over what counts. It declares
-  the project's checks, which ones a change must pass and at what grade,
-  for which paths, and the paths an agent may not change: the checks,
-  their fixtures, and whatever changes how tests are found or how the
-  runtime starts.
+- **Validation policy**: an agent project's say over what counts. It
+  declares the agent project's checks, which ones a change must pass and
+  at what grade, for which paths, and the paths an agent may not change:
+  the checks, their fixtures, and whatever changes how tests are found
+  or how the runtime starts.
 - **Validation**: one pass of the policy's checks on a fresh executor,
   from the delivered commit, with the checks, fixtures, and runner taken
-  from the version the work started from. Checks of two environments
-  take one validation each, on each one's executor. A **baseline** is
+  from the version the work started from. Checks of two executors
+  take one validation each, one on each. A **baseline** is
   the same pass at that starting version, before any change.
 - **Rate claim**: what repeated trials show of a failure rate: never the
   rate, only a bound under it at a declared confidence. The trials are a
@@ -74,7 +74,7 @@ of](../../../../README.md).
   failure explained by runs is a result. A success that validated
   nothing is inconclusive.
 - **One baseline rule.** A baseline comes first when it ran at the
-  delivery's base, lists its runs, and was taken before the head was
+  work product's base, lists its runs, and was taken before the head was
   validated (`rules.baseline`). The gate and acceptance both call it. A
   session whose base moves takes one at the new base, then validates its
   head again.
@@ -89,18 +89,18 @@ of](../../../../README.md).
   test declared. A fixed count runs every trial, whatever the first ones
   showed.
 - **The hidden suite stays hidden.** It lives in a source of its own,
-  a commit of another project's repository, never in the project's
-  repository the workspace checks out, and the executor fetches it only
-  to run it. The paths it names are protected in that run: they come from
-  its source, whatever the head holds there. Every other path the
-  scenario forbids comes from its base. Each file among them that the
-  tree holds is read-only to the head's code while the suite runs, and a
-  trial that changes, replaces, or removes one anyway is errored. So no
-  file that scores the suite scores it as the head rewrote it, in its
-  delivery or while it runs. A folder stays writable: a check, or the
-  head's code, may add a new file in a protected folder, and no trial
-  errors for that. A scan of every surface the agent reads finds any
-  mention of it.
+  a commit of another agent project's repository, never in the agent
+  project's repository the workspace checks out, and the executor
+  fetches it only to run it. The paths it names are protected in that
+  run: they come from its source, whatever the head holds there. Every
+  other path the scenario forbids comes from its base. Each file among
+  them that the tree holds is read-only to the head's code while the
+  suite runs, and a trial that changes, replaces, or removes one anyway
+  is errored. So no file that scores the suite scores it as the head
+  rewrote it, in its work product or while it runs. A folder stays
+  writable: a check, or the head's code, may add a new file in a
+  protected folder, and no trial errors for that. A scan of every
+  surface the agent reads finds any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
   gate accepts, a result that cites it, and the hidden suite passing at
@@ -117,5 +117,5 @@ protected, and reports the answer as its target. The work product a
 session delivered, and the executor validation runs on, are the
 platform's ports (`work_product.py`, `executor.py`), which a root wires.
 Outside `local`, the executor is an instance of the
-[workspaces](../workspaces/README.md) made for each run: the cloud's, or
+[workspaces](../agent_workspaces/README.md) made for each run: the cloud's, or
 one a host of a pinned session's pool makes.

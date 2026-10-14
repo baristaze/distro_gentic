@@ -6,7 +6,7 @@ run writes them."""
 
 from uuid import UUID
 
-from api_support import OWNER, PROJECT_ID, run, seed_request
+from api_support import AGENT_PROJECT_ID, OWNER, run, seed_request
 from cli_support import Stack
 from contracts.step_storage import make_request, make_response
 
@@ -24,7 +24,7 @@ def owner_context(stack: Stack) -> TenantContext:
 
 def started(stack: Stack) -> str:
     result = stack.acme(
-        "session", "start", "assistant", "the dropped object", "--project", PROJECT_ID
+        "session", "start", "assistant", "the dropped object", "--agent-project", AGENT_PROJECT_ID
     )
     assert result.exit_code == 0, result.output
     assert result.output.startswith("started ") and result.output.endswith(" on assistant 1\n")

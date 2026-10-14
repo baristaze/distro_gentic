@@ -32,9 +32,9 @@ WRITTEN_ONCE = (ExecutionRecords, Validations, Inferences)
 class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
     # The policies.
 
-    async def read_policy(self, org_id: UUID, project: str) -> ValidationPolicy | None:
+    async def read_policy(self, org_id: UUID, agent_project: str) -> ValidationPolicy | None:
         stmt = select(ValidationPolicies).where(
-            ValidationPolicies.org_id == org_id, ValidationPolicies.project == project
+            ValidationPolicies.org_id == org_id, ValidationPolicies.agent_project == agent_project
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -55,7 +55,7 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
         values = {
             k: v
             for k, v in to_values(policy, ValidationPolicies).items()
-            if k not in ("id", "project")
+            if k not in ("id", "agent_project")
         }
         # The version is in the WHERE, so two writers from one snapshot
         # cannot both land.

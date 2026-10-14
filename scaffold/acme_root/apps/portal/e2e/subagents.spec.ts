@@ -1,14 +1,14 @@
 // A session's sub-agents across the panes, on the stack the timeline check
 // runs (`portal_stack.py`). The scene never has a sub-agent ask its
-// person, so `portal_check.py tree` first starts the scene's engineer and
+// person, so `portal_check.py tree` first starts the scene's software engineer and
 // writes a tree through storage: one answer that starts two sub-agents, a
 // park on them, the first one's report, and the second still at work. Its
 // next beats park the second on its person, then end it. The owner reads
 // the card that follows each child, opens a report's child and comes back
 // from its first card, folds the parent's row in the left bar, and gets a
 // toast on the page open when a sub-agent starts to need them. Then the
-// engineer's scene runs for real: its answer starts two analysis
-// sub-agents and parks on them, each runs and reports, and the engineer
+// software engineer's scene runs for real: its answer starts two analysis
+// sub-agents and parks on them, each runs and reports, and the software engineer
 // wakes. The owner watches the card follow each child live, reads each
 // report, and finds its tree in the Sub-agents tab. Each view is shot light
 // and dark under e2e/screenshots/.
@@ -148,7 +148,7 @@ test("a session's sub-agents: a card that follows each, a report that leads to i
   await shoot(owner, "card-settled");
 });
 
-test("the engineer's scene starts two sub-agents: a card that follows each live, a report from each, and its tree in the Sub-agents tab", async ({ browser }) => {
+test("the software engineer's scene starts two sub-agents: a card that follows each live, a report from each, and its tree in the Sub-agents tab", async ({ browser }) => {
   test.skip(!REPOSITORIES, "PORTAL_REPOSITORIES names the folder the scene's runner clones from");
   execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "scene", REPOSITORIES!, SLUG], {
     cwd: ROOT,
@@ -156,10 +156,10 @@ test("the engineer's scene starts two sub-agents: a card that follows each live,
   });
   const owner = await signedIn(browser, OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
-  await owner.getByRole("menuitemradio", { name: /^Engineer/ }).click();
+  await owner.getByRole("menuitemradio", { name: /^Software engineer/ }).click();
   await owner.keyboard.press("Escape");
-  await owner.getByRole("button", { name: /^Project:/ }).click();
-  await owner.getByRole("menuitemradio", { name: "First project" }).click();
+  await owner.getByRole("button", { name: /^Agent project:/ }).click();
+  await owner.getByRole("menuitemradio", { name: "First agent project" }).click();
   await owner.keyboard.press("Escape");
   await owner.getByRole("textbox", { name: "Prompt" }).fill(PROMPT);
   await owner.getByRole("button", { name: "Send", exact: true }).click();
@@ -183,7 +183,7 @@ test("the engineer's scene starts two sub-agents: a card that follows each live,
   console.log(`card settled: ${(await card.innerText()).split("\n").join(" | ")}`);
 
   // A report card from each, read as data; woken by the second, the
-  // engineer goes on.
+  // software engineer goes on.
   for (const [title, says] of [
     [READS, "takes the month first"],
     [CALLERS, "written day first"],
@@ -198,7 +198,7 @@ test("the engineer's scene starts two sub-agents: a card that follows each live,
   await card.scrollIntoViewIfNeeded();
   await shoot(owner, "scene-card-settled");
 
-  // The Sub-agents tab: both done, and the tree the engineer's kind roots.
+  // The Sub-agents tab: both done, and the tree the software engineer's kind roots.
   await owner.goto(`/sessions/${sessionId}?pane=subagents`);
   const tab = owner.getByRole("complementary", { name: "Session pane" }).getByRole("tabpanel");
   await expect(tab.getByRole("region", { name: "Done" })).toContainText(READS);

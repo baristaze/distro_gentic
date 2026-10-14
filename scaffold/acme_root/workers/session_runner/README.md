@@ -53,34 +53,35 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   of, as after a restore, is left alone and logged. One whose session is
   kept by snapshots stays while no snapshot holds it as it stands, since
   a release would lose what its commands wrote outside its files. Then it
-  reads every workspace a tenant's host holds, by the relay's bindings,
-  and holds each to the same proofs. One whose loop is parked on a hand-over is
-  the person's, and stays. Past its grace, its work is pushed to a
-  snapshot ref through the relay, unless a snapshot after the session's
-  last step holds it already, as a loop's end leaves it; only then is its
-  host asked to let the instance go. One whose release was asked since
-  its session's last loop is not asked again, answered or failed (a
-  failed one is logged), one whose host is offline waits for a later
-  pass, and a deleted tenant's is left to the tenant's purge. The sweep
-  purges no rows: the purges, and the purge login, are the maintenance
-  worker's.
+  reads every workspace a tenant's host holds, by the exec relay's
+  bindings, and holds each to the same proofs. One whose loop is parked
+  on a hand-over is the person's, and stays. Past its grace, its work is
+  pushed to a snapshot ref through the exec relay, unless a snapshot
+  after the session's last step holds it already, as a loop's end leaves
+  it; only then is its host asked to let the instance go. One whose
+  release was asked since its session's last loop is not asked again,
+  answered or failed (a failed one is logged), one whose host is offline
+  waits for a later pass, and a deleted tenant's is left to the tenant's
+  purge. The sweep purges no rows: the purges, and the purge login, are
+  the maintenance worker's.
 
 The runner holds the model providers' keys and runs tools in the
 workspaces its settings name. It holds no purge login. Every call it
 runs passes the [trust](../../om/src/acme/om/trust/README.md) layer
 first: its audit entry is written with this runner as its executor, and
 a call whose secret would cross its session's wall is refused. Then the
-gates of the session's [playbooks](../../om/src/acme/om/playbooks/README.md)
-hold it, the manual its kind's pin gave it among them, and only narrow
-what policy let through. A session's first loop
-recalls the [knowledge](../../om/src/acme/om/knowledge/README.md) its
-subject triggers before its first model call. A call of a session the
-tenant's automation principal started runs on that principal's grant
-alone ([automations](../../om/src/acme/om/automations/README.md)).
+gates of the session's [agent
+playbooks](../../om/src/acme/om/agent_playbooks/README.md) hold it, the
+kind manual its kind's pin gave it among them, and only narrow what
+policy let through. A session's first loop recalls the [agent
+knowledge](../../om/src/acme/om/agent_knowledge/README.md) its subject
+triggers before its first model call. A call of a session the tenant's
+agent automation principal started runs on that principal's grant alone
+([agent automations](../../om/src/acme/om/agent_automations/README.md)).
 
 A run that parks on what only a person clears tells whoever can clear it,
 on their channels, before its item completes
-([notifications](../../om/src/acme/om/notifications/README.md)).
+([park alerts](../../om/src/acme/om/park_alerts/README.md)).
 
 ## What a product gives it
 

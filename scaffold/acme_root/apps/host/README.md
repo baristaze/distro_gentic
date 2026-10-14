@@ -40,8 +40,8 @@ macOS.
   and call again with the credential it holds. Only a refused credential
   or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
-  home: the projects it serves, its minimum isolation, its egress, the
-  paths a result may read, whether it accepts people's commands, how
+  home: the agent projects it serves, its minimum isolation, its egress,
+  the paths a result may read, whether it accepts people's commands, how
   many items it runs at once, and the MCP servers it starts, each named
   whole: its program, its arguments, its environment, and its
   credential, a secret of its own store.
@@ -67,20 +67,20 @@ macOS.
   bytes match their digest; bytes gone or altered are answered lost. An
   erase lets a session's snapshots go. It refuses a workspace kept by
   snapshots at a mode whose snapshots it did not probe.
-- **Builds a project's environment in its own store.** A workspace on a
-  base with setup starts from the base this host keeps, built here once
-  in a workspace of its own: its setup runs the project's commands with
-  no secret and no variable of the host's, its snapshot is refused when
-  it holds a value of the host's secrets, and it is kept in the store
-  beside the snapshots, never sent anywhere. A workspace on it runs the
-  environment's image in place of the host's own. A prepare that finds the
-  build running waits a while, then is refused until it is done. A
-  setup command that fails keeps nothing, and the prepare is answered
-  `unbuilt` with the command, its text cut to fit the answer, and its
-  exit code. A command in a workspace on a base starts a stopped
-  instance anew from the base the host keeps. A prepare whose setup
-  reaches a registry asks for open egress, so an owner who closed it
-  refuses that prepare.
+- **Builds an agent project's workspace base in its own store.** A
+  workspace on a base with setup starts from the base this host keeps,
+  built here once in a workspace of its own: its setup runs the agent
+  project's commands with no secret and no variable of the host's, its
+  snapshot is refused when it holds a value of the host's secrets, and
+  it is kept in the store beside the snapshots, never sent anywhere. A
+  workspace on it runs the workspace base's image in place of the host's
+  own. A prepare that finds the build running waits a while, then is
+  refused until it is done. A setup command that fails keeps nothing,
+  and the prepare is answered `unbuilt` with the command, its text cut
+  to fit the answer, and its exit code. A command in a workspace on a
+  base starts a stopped instance anew from the base the host keeps. A
+  prepare whose setup reaches a registry asks for open egress, so an
+  owner who closed it refuses that prepare.
 - **Shares its proxy and its CA, under open egress alone.** A command in
   a workspace with open egress goes through the proxy the host's
   environment names, without any credential in its URL, and trusts the
@@ -110,8 +110,8 @@ macOS.
   so only the tenant fence applies: it lets go only of what this host
   made for that session and tenant.
 - **Destroys an instance when asked.** A run that validates a pinned
-  session's delivery has a host of the pool make an instance of its own,
-  and asks the host that made it to purge it when the run ends. The
+  session's work product has a host of the pool make an instance of its
+  own, and asks the host that made it to purge it when the run ends. The
   host removes the instance, its files, and its transport's records of
   it, so nothing of that run is left for another.
 - **Runs a tool call once, and stops it at once.** An `exec` item it
@@ -138,7 +138,7 @@ macOS.
   it.
 
 ```toml
-projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
+agent_projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
 min_isolation = "container"                           # vm, container, or directory
 egress = ["github.com:443"]                           # or "open"
 readable = ["/srv/work"]
@@ -153,16 +153,16 @@ credential_env = "TRACKER_TOKEN"
 ```
 
 <!-- agents-only
-What runs an item is the executor (`agent.ExecutorInterface`), the
-relay's in `relay.ExecutorRelayImpl`, over the engine's transports by
-isolation mode (`main.host_transports`). A `WORKSPACE` prepare is made by
-the provider of its spec's mode (`main.host_workspaces`) and answered
-through `ApiClient.answer_prepare`. A release lets go of the instance the
-provider of its spec's mode holds for the session and the host's tenant,
-and is answered through `ApiClient.answer_release`; a purge removes it,
-with its files and its transport's records, and is answered the same
-way. The fields a host reads
-of an item are `project_id`, `isolation`, `egress`, `reads`, and
+What runs an item is the executor (`agent.ExecutorInterface`), the exec
+relay's in `exec_relay.ExecutorRelayImpl`, over the engine's transports
+by isolation mode (`main.host_transports`). A `WORKSPACE` prepare is
+made by the provider of its spec's mode (`main.host_workspaces`) and
+answered through `ApiClient.answer_prepare`. A release lets go of the
+instance the provider of its spec's mode holds for the session and the
+host's tenant, and is answered through `ApiClient.answer_release`; a
+purge removes it, with its files and its transport's records, and is
+answered the same way. The fields a host reads
+of an item are `agent_project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
 refused. What the item runs it reads from the gateway while it holds it
 (`ApiClient.exec_detail`), never from the payload (ADR 2004).

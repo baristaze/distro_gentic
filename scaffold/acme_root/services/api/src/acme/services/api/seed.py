@@ -1,8 +1,8 @@
 """What a local run needs of the platform before a session's first model
 call, seeded beside the tenant `bootstrap` writes: the tenant's account on
-a published plan, its first project, its retention policy, a published
+a published plan, its first agent project, its retention policy, a published
 version of the model matrix, and, where the forge is its twin, the twin's
-installation that holds the first project's repository, connected to the
+installation that holds the first agent project's repository, connected to the
 tenant. Each step answers what is there already, so a seed run twice
 writes nothing new. A development seed only: it qualifies the engine's own
 fills by a recorded run, which no deployed matrix takes."""
@@ -14,10 +14,11 @@ from datetime import timedelta
 
 from acme.integrations.events import IntegrationInterface
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
+from acme.om.agent_projects.types.agent_project import AgentProject, Repository
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.context import OperatorContext, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import Conflict
 from acme.om.intake.types.link import Installation
@@ -26,17 +27,16 @@ from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.matrix.types.record import BenchmarkRun
 from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
-from acme.om.projects.types.project import Project, Repository
 from acme.om.retention.types.policy import RetentionPolicy
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import PLATFORM_EMAIL_DOMAIN
 
-PLAN = "starter"
+UNIT_PLAN = "starter"
 """The plan a seeded tenant's account opens on."""
 
 REPOSITORY_HOST = "example.test"
-"""The host of the repository a seeded tenant's first project binds."""
+"""The host of the repository a seeded tenant's first agent project binds."""
 
 FORGE = "forge"
 """The integration that holds a session's work."""
@@ -58,8 +58,8 @@ ends it once the matrix is published."""
 
 @dataclass(frozen=True)
 class Seeded:
-    project: Project | None
-    """The first project, None when the tenant's account was there already."""
+    agent_project: AgentProject | None
+    """The first agent project, None when the tenant's account was there already."""
     matrix_version: int
 
 
@@ -128,20 +128,24 @@ async def seed_platform(
     forge: IntegrationInterface | None = None,
 ) -> Seeded:
     """The owner's tenant made ready to run a session: its account on the
-    starter plan, paid on the platform's key; its first project; its
+    starter plan, paid on the platform's key; its first agent project; its
     retention policy; the matrix, published once for every tenant; and,
     when `forge` is the forge's twin, the twin's installation that holds the
-    first project's repository, connected to the tenant as its installer
+    first agent project's repository, connected to the tenant as its installer
     would. `kinds` are the product's, beside the ones the platform ships."""
     slug = (await managers.tenancy.org.get_org(owner)).slug
-    project = None
-    if await storage.get_account_storage().read_account(owner.org_id) is None:
-        # The project before the account: a run cut short between them
-        # leaves a second project on the rerun, never a tenant with none.
-        project = await managers.projects.create_project(owner, first_project(owner, slug))
-        billing = build_billing(storage, managers, PaymentProviderTwinImpl())
-        request = AccountRequest(funding=FundingMode.PLATFORM, plan_id=PLAN, zone="UTC")
-        await billing.open_account(owner, request)
+    agent_project = None
+    if await storage.get_spend_account_storage().read_spend_account(owner.org_id) is None:
+        # The agent project before the account: a run cut short between them
+        # leaves a second agent project on the rerun, never a tenant with none.
+        agent_project = await managers.agent_projects.create_agent_project(
+            owner, first_agent_project(owner, slug)
+        )
+        agent_billing = build_agent_billing(storage, managers, PaymentProviderTwinImpl())
+        request = SpendAccountRequest(
+            funding=FundingMode.PLATFORM, unit_plan_id=UNIT_PLAN, zone="UTC"
+        )
+        await agent_billing.open_spend_account(owner, request)
     policy = await managers.retention.get_policy(owner)
     if policy.version == 0:
         await managers.retention.write_policy(
@@ -153,7 +157,7 @@ async def seed_platform(
     version = await seed_matrix(storage, managers, owner, kinds)
     if forge is not None and forge.provenance == "twin":
         await connect_forge_twin(storage, owner, forge, first_repository(slug))
-    return Seeded(project=project, matrix_version=version)
+    return Seeded(agent_project=agent_project, matrix_version=version)
 
 
 async def connect_forge_twin(
@@ -182,22 +186,22 @@ async def connect_forge_twin(
 
 
 def first_repository(slug: str) -> Repository:
-    """The repository the first project of the tenant `slug` binds,
+    """The repository the first agent project of the tenant `slug` binds,
     `example.test/<slug>/first`: under an owner of the tenant's own, so the
     forge twin's installation that holds it is the tenant's alone."""
     return Repository(host=REPOSITORY_HOST, path=f"{slug}/first")
 
 
-def first_project(owner: TenantContext, slug: str) -> Project:
-    """The first project of the tenant `slug`, bound to its seeded
+def first_agent_project(owner: TenantContext, slug: str) -> AgentProject:
+    """The first agent project of the tenant `slug`, bound to its seeded
     repository."""
     now = utcnow()
-    return Project(
+    return AgentProject(
         id=new_id(),
         created_at=now,
         updated_at=now,
         created_by=owner.user_id,
         updated_by=owner.user_id,
-        name="First project",
+        name="First agent project",
         repository=first_repository(slug),
     )

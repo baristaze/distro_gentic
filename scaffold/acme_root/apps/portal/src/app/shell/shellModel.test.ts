@@ -12,7 +12,7 @@ function session(id: string, over: Partial<AgentSessionView> = {}): AgentSession
   return {
     id,
     title: `Session ${id}`,
-    kind: "engineer",
+    kind: "software_engineer",
     kind_version: 1,
     status: "idle",
     park: null,

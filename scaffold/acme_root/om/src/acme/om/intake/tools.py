@@ -3,7 +3,7 @@ one account. Every session acts through that one account, so the account
 says nothing of which session acted: each tool records its act with intake
 before it acts, under a mark the system carries on what it makes, and then
 under the system's own id for it. An event that is or follows from the act
-names the session it came from, and an automation it feeds knows its cause
+names the session it came from, and an agent automation it feeds knows its cause
 and its hop, so an agent's act cannot start an endless chain.
 
 A tool that reaches the forge, to act or to read, does so only through an

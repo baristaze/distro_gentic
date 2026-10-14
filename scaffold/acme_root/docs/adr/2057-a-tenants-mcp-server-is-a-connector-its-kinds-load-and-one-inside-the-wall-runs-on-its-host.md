@@ -48,17 +48,19 @@ tool withdraws them all. Only a person reviews, in person; connecting
 and attaching take managing the tenant.
 
 **A connector is attached to a kind, as a toolset.** An attachment
-names a kind and a project, or none for every session, and is deferred
-unless it says otherwise. A name a kind's toolsets take is refused.
+names a kind and an agent project, or none for every session, and is
+deferred unless it says otherwise. A name a kind's toolsets take is
+refused.
 
 **A session pins its connectors once.** As a session's first run
 begins, it pins every reviewed connector attached to its kind for its
-project, on its side of the wall, in `core.session_connectors`, keyed by
-the session. The pin is written even when it holds nothing. Every later
-run reads it, so a review or an attachment reaches the next session, and
-a session's tool definitions never move under it. A sub-agent pins only
-what its parent pinned, at the same review, so it never holds a tool its
-parent does not.
+agent project, on its side of the wall, in
+`core.agent_session_connectors`, keyed by the session. The pin is
+written even when it holds nothing. Every later run reads it, so a
+review or an attachment reaches the next session, and a session's tool
+definitions never move under it. A sub-agent pins only what its parent
+pinned, at the same review, so it never holds a tool its parent does
+not.
 
 **The loop takes a session's own toolsets.** The engine's loop asks an
 `AttachedToolsetsInterface` once a run for what a session holds beyond
@@ -111,8 +113,8 @@ a host server's definitions to its review. Trigger: host connectors pass
 a tenth of the connectors tenants connect.
 
 **Not now: connectors in the reading of stalled sessions.** The lever
-reading names playbooks and knowledge. Trigger: a connector's toolset is
-loaded in a tenth of the sessions that stall.
+reading names agent playbooks and agent knowledge. Trigger: a
+connector's toolset is loaded in a tenth of the sessions that stall.
 
 ## Consequences
 

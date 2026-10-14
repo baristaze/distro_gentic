@@ -266,7 +266,7 @@ async def test_the_absent_ports_refuse_loudly() -> None:
         evidence.manager._relay,  # pyright: ignore[reportPrivateUsage]
         Executors(ExecutorAbsentImpl()),
         WorkProductAbsentImpl(),
-        evidence.projects,
+        evidence.agent_projects,
         EvidenceOptions(),
     )
     ctx = context(Role.MEMBER, org)

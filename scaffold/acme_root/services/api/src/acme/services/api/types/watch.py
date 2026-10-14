@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.relay.types.exec import ExecState, StopKind
+from acme.om.exec_relay.types.exec import ExecState, StopKind
 from acme.om.watch.types.control import MAX_ARG, MAX_ARGS, MAX_TIMEOUT
 from acme.services.api.types.agent_sessions import MAX_MESSAGE
 from acme.services.api.types.common import RequestBody, View
@@ -95,7 +95,7 @@ class CommandPartView(View):
 
 class CommandProgressView(View):
     """How a command stands: its state, its output after the last part read,
-    and how it ended once it has. `refused` names why its host or the relay
+    and how it ended once it has. `refused` names why its host or the exec relay
     refused it, such as a command a later run fenced."""
 
     state: ExecState

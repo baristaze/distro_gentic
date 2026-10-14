@@ -11,10 +11,10 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import make_agent_project, make_binding
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.loops import reply, said, use
-from contracts.project_storage import make_binding, make_project
 from contracts.tools import INJECTED_TOKEN, echoing
 from contracts.trust import Trusted, trusted
 
@@ -44,7 +44,7 @@ from acme.om.trust.types.identities import (
     ExecutorKind,
 )
 from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
-from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
+from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore, kept_as
 
 SECRET = "ghs_4b1d9e7c2a6f80c3-deploy"
 
@@ -72,9 +72,9 @@ async def audits(platform: Trusted) -> list[CallAudit]:
 
 
 def declared(
-    name: str = INJECTED_TOKEN.name, store: SecretStore = SecretStore.CLOUD, *, project: UUID
+    name: str = INJECTED_TOKEN.name, store: SecretStore = SecretStore.CLOUD, *, agent_project: UUID
 ) -> SecretDeclaration:
-    """A declaration on `project` as a caller sends it: the manager stamps
+    """A declaration on `agent_project` as a caller sends it: the manager stamps
     who and when."""
     now = utcnow()
     return SecretDeclaration(
@@ -85,26 +85,28 @@ def declared(
         updated_by=new_id(),
         name=name,
         variable=INJECTED_TOKEN.env or "",
-        owner_kind=PROJECT,
-        owner_id=project,
+        owner_kind=AGENT_PROJECT,
+        owner_id=agent_project,
         scope="call:records-api",
         store=store,
     )
 
 
-async def another_project(platform: Trusted) -> UUID:
-    """A second project of the owner's tenant."""
-    other = make_project("octo/ledger")
-    await platform.storage.get_project_storage().create_project(platform.owner.org_id, other, ())
+async def another_agent_project(platform: Trusted) -> UUID:
+    """A second agent project of the owner's tenant."""
+    other = make_agent_project("octo/ledger")
+    await platform.storage.get_agent_project_storage().create_agent_project(
+        platform.owner.org_id, other, ()
+    )
     return other.id
 
 
-async def of_project(platform: Trusted, project_id: UUID) -> UUID:
-    """A session of `project_id`, its row written once it stands."""
+async def of_agent_project(platform: Trusted, agent_project_id: UUID) -> UUID:
+    """A session of `agent_project_id`, its row written once it stands."""
     start = Start(id=new_id(), kind="steady", title="the ledger")
     session = await platform.managers.agents.start_session(platform.owner, start)
-    binding = make_binding(session.id, project_id)
-    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
+    binding = make_binding(session.id, agent_project_id)
+    await platform.storage.get_agent_project_storage().bind_session(platform.owner.org_id, binding)
     return session.id
 
 
@@ -292,11 +294,13 @@ async def test_a_secrets_value_reaches_no_step_no_log_no_stream_part_and_no_mode
 ) -> None:
     caplog.set_level(logging.DEBUG)
     platform = trusted(tmp_path)
-    project = await platform.owners_project()
-    await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
-    await platform.trust.trust.put_secret(platform.owner, project, INJECTED_TOKEN.name, SECRET)
+    agent_project = await platform.owners_agent_project()
+    await platform.trust.trust.declare_secret(platform.owner, declared(agent_project=agent_project))
+    await platform.trust.trust.put_secret(
+        platform.owner, agent_project, INJECTED_TOKEN.name, SECRET
+    )
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start(project=True)
+    session_id = await platform.start(agent_project=True)
     await platform.say(session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Done.")))
 
@@ -333,11 +337,13 @@ async def test_a_cloud_secret_is_refused_for_a_session_inside_a_customers_wall(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
-    project = await platform.owners_project()
-    await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
-    await platform.trust.trust.put_secret(platform.owner, project, INJECTED_TOKEN.name, SECRET)
+    agent_project = await platform.owners_agent_project()
+    await platform.trust.trust.declare_secret(platform.owner, declared(agent_project=agent_project))
+    await platform.trust.trust.put_secret(
+        platform.owner, agent_project, INJECTED_TOKEN.name, SECRET
+    )
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start(project=True)
+    session_id = await platform.start(agent_project=True)
     platform.placement.walled.add(session_id)
     await platform.say(session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Refused.")))
@@ -357,58 +363,68 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
-    project = await platform.owners_project()
+    agent_project = await platform.owners_agent_project()
     trust = platform.trust.trust
-    walled, cloud = await platform.start(project=True), await platform.start(project=True)
+    walled, cloud = (
+        await platform.start(agent_project=True),
+        await platform.start(agent_project=True),
+    )
     platform.placement.walled.add(walled)
     # Never declared: resolved from the platform's store, so a cloud secret.
     with pytest.raises(SecretCrossesWall):
         await trust.resolve_secrets(platform.owner, walled, (INJECTED_TOKEN,))
     await trust.resolve_secrets(platform.owner, cloud, (INJECTED_TOKEN,))
     held_inside = await trust.declare_secret(
-        platform.owner, declared(store=SecretStore.HOST, project=project)
+        platform.owner, declared(store=SecretStore.HOST, agent_project=agent_project)
     )
     await trust.resolve_secrets(platform.owner, walled, (INJECTED_TOKEN,))
     with pytest.raises(SecretCrossesWall):
         await trust.resolve_secrets(platform.owner, cloud, (INJECTED_TOKEN,))
     with pytest.raises(SecretCrossesWall):
-        await trust.put_secret(platform.owner, project, held_inside.name, SECRET)
+        await trust.put_secret(platform.owner, agent_project, held_inside.name, SECRET)
     assert not await platform.infra.get_secrets().has(platform.owner.org_id, held_inside.name)
     aimed_elsewhere = INJECTED_TOKEN.model_copy(update={"env": "OTHER_TOKEN"})
     with pytest.raises(SecretCrossesWall):
         await trust.resolve_secrets(platform.owner, walled, (aimed_elsewhere,))
     with pytest.raises(NotAuthorized):
-        await trust.declare_secret(platform.member(), declared(name="another", project=project))
+        await trust.declare_secret(
+            platform.member(), declared(name="another", agent_project=agent_project)
+        )
 
 
-async def test_each_project_keeps_its_own_value_of_one_name_and_its_sessions_read_it(
+async def test_each_agent_project_keeps_its_own_value_of_one_name_and_its_sessions_read_it(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
     trust, owner = platform.trust.trust, platform.owner
-    ours, theirs = await platform.owners_project(), await another_project(platform)
-    for project_id in (ours, theirs):
-        await trust.declare_secret(owner, declared(project=project_id))
-        await trust.put_secret(owner, project_id, INJECTED_TOKEN.name, f"value-{project_id}")
+    ours, theirs = await platform.owners_agent_project(), await another_agent_project(platform)
+    for agent_project_id in (ours, theirs):
+        await trust.declare_secret(owner, declared(agent_project=agent_project_id))
+        await trust.put_secret(
+            owner, agent_project_id, INJECTED_TOKEN.name, f"value-{agent_project_id}"
+        )
     seen = reading(platform)
-    for session_id in (await platform.start(project=True), await of_project(platform, theirs)):
+    for session_id in (
+        await platform.start(agent_project=True),
+        await of_agent_project(platform, theirs),
+    ):
         await call_the_api(platform, session_id)
 
-    assert seen == [f"value-{ours}", f"value-{theirs}"], "each session its own project's"
+    assert seen == [f"value-{ours}", f"value-{theirs}"], "each session its own agent project's"
     secrets = platform.infra.get_secrets()
     assert not await secrets.has(owner.org_id, INJECTED_TOKEN.name), "no value is the tenant's"
 
 
-async def test_a_session_never_reaches_another_projects_secret_of_its_name(
+async def test_a_session_never_reaches_another_agent_projects_secret_of_its_name(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
     trust, owner = platform.trust.trust, platform.owner
-    ours, theirs = await platform.owners_project(), await another_project(platform)
-    await trust.declare_secret(owner, declared(project=theirs))
+    ours, theirs = await platform.owners_agent_project(), await another_agent_project(platform)
+    await trust.declare_secret(owner, declared(agent_project=theirs))
     await trust.put_secret(owner, theirs, INJECTED_TOKEN.name, "value-theirs")
     seen = reading(platform)
-    first, loose = await platform.start(project=True), await platform.start()
+    first, loose = await platform.start(agent_project=True), await platform.start()
     for session_id in (first, loose):
         resolved = await trust.resolve_secrets(owner, session_id, (INJECTED_TOKEN,))
         assert resolved == {}, "the name alone: the tenant's own, never theirs"
@@ -416,27 +432,29 @@ async def test_a_session_never_reaches_another_projects_secret_of_its_name(
     await call_the_api(platform, first)
     assert seen == [], "the tenant holds no value of the name, and theirs is not read"
     await platform.infra.get_secrets().put(owner.org_id, INJECTED_TOKEN.name, "value-tenant")
-    await call_the_api(platform, await platform.start(project=True))
+    await call_the_api(platform, await platform.start(agent_project=True))
     await call_the_api(platform, loose)
 
     assert seen == ["value-tenant", "value-tenant"]
     assert ours != theirs
 
 
-async def test_a_declaration_on_a_project_the_tenant_does_not_hold_is_refused(
+async def test_a_declaration_on_an_agent_project_the_tenant_does_not_hold_is_refused(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
     trust = platform.trust.trust
-    stranger = make_project("ajax/reports")
-    projects = platform.storage.get_project_storage()
-    assert await projects.create_project(make_org().id, stranger, ())
-    for project_id in (stranger.id, new_id()):
+    stranger = make_agent_project("ajax/reports")
+    agent_projects = platform.storage.get_agent_project_storage()
+    assert await agent_projects.create_agent_project(make_org().id, stranger, ())
+    for agent_project_id in (stranger.id, new_id()):
         with pytest.raises(NotFound):
-            await trust.declare_secret(platform.owner, declared(project=project_id))
+            await trust.declare_secret(platform.owner, declared(agent_project=agent_project_id))
     assert await trust.get_secrets(platform.owner, None, 10) == (), "nothing was written"
-    ours = await platform.owners_project()
-    assert (await trust.declare_secret(platform.owner, declared(project=ours))).owner_id == ours
+    ours = await platform.owners_agent_project()
+    assert (
+        await trust.declare_secret(platform.owner, declared(agent_project=ours))
+    ).owner_id == ours
 
 
 # A rotated tenant key is never served from a client cached by its
@@ -519,18 +537,18 @@ async def test_a_purged_tenants_values_leave_the_store_with_their_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     platform = trusted(tmp_path)
-    project = await platform.owners_project()
+    agent_project = await platform.owners_agent_project()
     trust, owner = platform.trust.trust, platform.owner
     secrets = platform.infra.get_secrets()
     key = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-first")
-    await trust.declare_secret(owner, declared(project=project))
-    await trust.put_secret(owner, project, INJECTED_TOKEN.name, SECRET)
+    await trust.declare_secret(owner, declared(agent_project=agent_project))
+    await trust.put_secret(owner, agent_project, INJECTED_TOKEN.name, SECRET)
     await trust.declare_secret(
-        owner, declared("held_inside", store=SecretStore.HOST, project=project)
+        owner, declared("held_inside", store=SecretStore.HOST, agent_project=agent_project)
     )
     assert await trust.purge_tenant(owner) == 0, "a living tenant keeps everything"
     (cloud,) = [d for d in await trust.get_secrets(owner, None, 10) if d.store is SecretStore.CLOUD]
-    assert await secrets.has(owner.org_id, kept_as(cloud)), "kept under its project"
+    assert await secrets.has(owner.org_id, kept_as(cloud)), "kept under its agent project"
 
     async def expired(ctx: object) -> bool:
         return True

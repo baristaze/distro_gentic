@@ -3,26 +3,26 @@ with its own powers. A profile names its tools, its done rule, the
 authority its calls run under, its workspace, and its layer of policy; the
 engine runs every one of them the same way.
 
-- The engineer takes an objective to a validated, reviewable change in a
+- The software engineer takes an objective to a validated, reviewable change in a
   workspace of its own: it edits a file by one place, searches the code,
   opens its pull request on its own branch, so its committed head is on
   the repository, validates that head on a fresh executor, and ends
   through the result gate, citing those runs. It searches and reads the
-  knowledge base, and suggests an entry for a person to review.
+  agent knowledge base, and suggests an entry for a person to review.
 - Analysis reads what a run produced in a workspace, searches it and the
-  knowledge base, changes nothing, and answers with findings.
-- The engineer and analysis split independent work, such as hypotheses
+  agent knowledge base, changes nothing, and answers with findings.
+- The software engineer and analysis split independent work, such as hypotheses
   or checks, into sub-agents, each in a clean context of its own, and wait
   for their reports. Every kind takes the engine's tree, three levels deep
   and ten sub-agents besides its root, and each kind a sub-agent may run
   as names its share (ADR 2043).
 - The planner turns findings into tasks: it reads where sessions stand,
-  hands new engineering work to an engineer, and answers with its plan.
+  hands new engineering work to a software engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
-  platform, on their own permissions: it reads the corpus, the knowledge
+  platform, on their own permissions: it reads the corpus, the agent knowledge
   base, and the tenant's live records (its sessions and what they wait
-  on, its projects, its automations), drafts configuration a person
-  applies, and hands engineering work to an engineer. It has no
+  on, its agent projects, its agent automations), drafts configuration a person
+  applies, and hands engineering work to a software engineer. It has no
   workspace, repository, or shell.
 - The reviewer reads one pull request through the forge: its files and
   their patches, its checks, and a file at its head. It notes each
@@ -31,14 +31,14 @@ engine runs every one of them the same way.
   nothing; it comments on the pull request only through the forge's
   integration, and a person approves each comment. It asks XL of its main
   role.
-- The operator reads the tenant's operations on its person's own
+- The ops analyst reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, its hosts and what they
   offer, its budgets and their spend. Every tool it holds reads; a fix it
-  finds leaves as an objective a person hands to an engineer.
+  finds leaves as an objective a person hands to a software engineer.
 
 A lead is a kind like any other, whose toolsets include `sub_agents`: it
-starts the others as sub-agents, such as an engineer on a change and a
-reviewer on the pull request the engineer opens, and answers with their
+starts the others as sub-agents, such as a software engineer on a change and a
+reviewer on the pull request the software engineer opens, and answers with their
 reports.
 
 Every kind is built from the platform's toolsets (`TOOLSETS`), with a few
@@ -68,12 +68,12 @@ from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
 from acme.om.windows.rules import READ_ARTIFACT
 
-ENGINEER = "engineer"
+SOFTWARE_ENGINEER = "software_engineer"
 ANALYSIS = "analysis"
 PLANNER = "planner"
 PLATFORM_ASSISTANT = "platform_assistant"
 REVIEWER = "reviewer"
-OPERATOR = "operator"
+OPS_ANALYST = "ops_analyst"
 
 # The tools the shipped kinds call, by name (`tools.py`).
 LIST_FILES = "list_files"
@@ -88,16 +88,16 @@ OPEN_PULL_REQUEST = "open_pull_request"
 SEARCH_CORPUS = "search_corpus"
 READ_SESSION = "read_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
-HAND_OFF = "hand_off_to_engineer"
-SEARCH_KNOWLEDGE = "search_knowledge"
-READ_KNOWLEDGE = "read_knowledge"
-SUGGEST_KNOWLEDGE = "suggest_knowledge"
+HAND_OFF = "hand_off_to_software_engineer"
+SEARCH_AGENT_KNOWLEDGE = "search_agent_knowledge"
+READ_AGENT_KNOWLEDGE = "read_agent_knowledge"
+SUGGEST_AGENT_KNOWLEDGE = "suggest_agent_knowledge"
 LIST_SESSIONS = "list_sessions"
 READ_WAIT = "read_wait"
-LIST_PROJECTS = "list_projects"
-READ_PROJECT = "read_project"
-LIST_AUTOMATIONS = "list_automations"
-READ_AUTOMATION = "read_automation"
+LIST_AGENT_PROJECTS = "list_agent_projects"
+READ_AGENT_PROJECT = "read_agent_project"
+LIST_AGENT_AUTOMATIONS = "list_agent_automations"
+READ_AGENT_AUTOMATION = "read_agent_automation"
 READ_PULL_REQUEST = "read_pull_request"
 READ_PULL_REQUEST_FILE = "read_pull_request_file"
 NOTE_FINDING = "note_finding"
@@ -110,10 +110,10 @@ ASSISTANT_READERS = (
     READ_SESSION,
     LIST_SESSIONS,
     READ_WAIT,
-    LIST_PROJECTS,
-    READ_PROJECT,
-    LIST_AUTOMATIONS,
-    READ_AUTOMATION,
+    LIST_AGENT_PROJECTS,
+    READ_AGENT_PROJECT,
+    LIST_AGENT_AUTOMATIONS,
+    READ_AGENT_AUTOMATION,
 )
 """The assistant's readers of the tenant's live records, each through the
 asking person's own context."""
@@ -134,14 +134,14 @@ CODE_TOOLSET = Toolset(
     summary="Change the files in your workspace, one place at a time or whole, and run commands.",
     tools=(EDIT_FILE, WRITE_FILE, RUN_COMMAND),
 )
-KNOWLEDGE_TOOLSET = Toolset(
-    name="knowledge",
+AGENT_KNOWLEDGE_TOOLSET = Toolset(
+    name="agent_knowledge",
     version=1,
     summary="Search and read what your team already knows.",
-    tools=(SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
+    tools=(SEARCH_AGENT_KNOWLEDGE, READ_AGENT_KNOWLEDGE),
 )
-DELIVERY_TOOLSET = Toolset(
-    name="delivery",
+WORK_PRODUCT_TOOLSET = Toolset(
+    name="work_product",
     version=1,
     summary="Validate your change, open its pull request, and submit your result.",
     tools=(VALIDATE, OPEN_PULL_REQUEST, SUBMIT_RESULT),
@@ -155,13 +155,13 @@ SUB_AGENTS_TOOLSET = Toolset(
 RECORDS_TOOLSET = Toolset(
     name="records",
     version=1,
-    summary="Read the tenant's sessions and what they wait on, its projects, and its automations.",
+    summary="Read the tenant's sessions and what they wait on, its agent projects, and its agent automations.",
     tools=ASSISTANT_READERS,
 )
 HANDOFF_TOOLSET = Toolset(
     name="handoff",
     version=1,
-    summary="Hand engineering work to an engineer, in a session of its own.",
+    summary="Hand engineering work to a software engineer, in a session of its own.",
     tools=(HAND_OFF,),
 )
 ARTIFACTS_TOOLSET = Toolset(
@@ -190,8 +190,8 @@ OPERATIONS_TOOLSET = Toolset(
 TOOLSETS: tuple[Toolset, ...] = (
     FILES_TOOLSET,
     CODE_TOOLSET,
-    KNOWLEDGE_TOOLSET,
-    DELIVERY_TOOLSET,
+    AGENT_KNOWLEDGE_TOOLSET,
+    WORK_PRODUCT_TOOLSET,
     SUB_AGENTS_TOOLSET,
     RECORDS_TOOLSET,
     HANDOFF_TOOLSET,
@@ -225,7 +225,10 @@ kind's warm grace runs past it."""
 WARM_GRACE = PROMPT_CACHE_LIFE
 """The warm grace of a kind that names none."""
 
-GRACES: Mapping[str, timedelta] = {ENGINEER: PROMPT_CACHE_LIFE, ANALYSIS: PROMPT_CACHE_LIFE}
+GRACES: Mapping[str, timedelta] = {
+    SOFTWARE_ENGINEER: PROMPT_CACHE_LIFE,
+    ANALYSIS: PROMPT_CACHE_LIFE,
+}
 """Each shipped kind's warm grace, by name, every version of it: how long
 its workspace stays held after a loop, for a follow-up to find it warm. The
 planner and the assistant have no workspace to hold."""
@@ -250,17 +253,17 @@ def allowing(*classes: ToolClass) -> PolicyLayer:
     )
 
 
-ENGINEER_V1 = AgentKind(
-    name=ENGINEER,
+SOFTWARE_ENGINEER_V1 = AgentKind(
+    name=SOFTWARE_ENGINEER,
     version=1,
     tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND),
-    toolsets=(DELIVERY_TOOLSET,),
+    toolsets=(WORK_PRODUCT_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
     prompts=(
-        "You are an engineer. You take one objective to a validated, reviewable change "
+        "You are a software engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
         "Change what the objective needs and nothing else, and commit it. Open its pull "
         "request with open_pull_request, so your head is on your branch and a person can "
@@ -273,22 +276,22 @@ ENGINEER_V1 = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
     isolation=WORKSPACE,
 )
-"""The engineer before it edited by one place, searched the code, and used
-the knowledge base: kept while a session may still run it."""
+"""The software engineer before it edited by one place, searched the code, and used
+the agent knowledge base: kept while a session may still run it."""
 
-ENGINEER_V2 = AgentKind(
-    name=ENGINEER,
+SOFTWARE_ENGINEER_V2 = AgentKind(
+    name=SOFTWARE_ENGINEER,
     version=2,
-    tools=(SUGGEST_KNOWLEDGE,),
-    toolsets=(FILES_TOOLSET, CODE_TOOLSET, KNOWLEDGE_TOOLSET, DELIVERY_TOOLSET),
+    tools=(SUGGEST_AGENT_KNOWLEDGE,),
+    toolsets=(FILES_TOOLSET, CODE_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, WORK_PRODUCT_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
     prompts=(
-        "You are an engineer. You take one objective to a validated, reviewable change "
+        "You are a software engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
-        "Look up what your team already knows with search_knowledge, and find code with "
+        "Look up what your team already knows with search_agent_knowledge, and find code with "
         "search_code. Change what the objective needs and nothing else: change a file "
         "with edit_file, one place a call, and write a file whole only when it is new. "
         "Commit it. Open its pull request with open_pull_request, so your head is on your "
@@ -297,21 +300,23 @@ ENGINEER_V2 = AgentKind(
         "the result with submit_result, citing the runs validate answered: a success "
         "counts only when the validation at your head passed. A failure you explain with "
         "those runs is a result too. When you learned something a later session should "
-        "not have to find out again, suggest it with suggest_knowledge.",
+        "not have to find out again, suggest it with suggest_agent_knowledge.",
     ),
     # Its pull request is its own work product, so it opens without asking.
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
     isolation=WORKSPACE,
 )
-"""The engineer before it named a share: kept while a session may still run
+"""The software engineer before it named a share: kept while a session may still run
 it."""
 
-ENGINEER_V3 = ENGINEER_V2.model_copy(update={"version": 3, "share": Amount(cost_micros=50_000_000)})
-"""The engineer before its step guard was sized for a change: kept while a
+SOFTWARE_ENGINEER_V3 = SOFTWARE_ENGINEER_V2.model_copy(
+    update={"version": 3, "share": Amount(cost_micros=50_000_000)}
+)
+"""The software engineer before its step guard was sized for a change: kept while a
 session may still run it."""
 
-ENGINEER_STEP_GUARD = 200
-"""The model calls one engineer loop makes before it parks for a person. It
+SOFTWARE_ENGINEER_STEP_GUARD = 200
+"""The model calls one software engineer loop makes before it parks for a person. It
 is a choice, sized from the task its prompt sets: a baseline validation,
 the searches and reads that place the change, edits one place a call, the
 commands that run its tests, a commit, its pull request, the validation of
@@ -323,25 +328,27 @@ CACHED_CALL_MICROS = 100_000
 """What one call of the main role over a cached window costs at list price,
 as each share counts it: a choice."""
 
-ENGINEER_LOOPS = 3
-"""The loops at the step guard one engineer's share pays for: its first,
+SOFTWARE_ENGINEER_LOOPS = 3
+"""The loops at the step guard one software engineer's share pays for: its first,
 and two more a follow-up asks for."""
 
-ENGINEER_SHARE = Amount(cost_micros=ENGINEER_LOOPS * ENGINEER_STEP_GUARD * CACHED_CALL_MICROS)
-"""What one engineer a spawn starts may spend over its life, in reference
+SOFTWARE_ENGINEER_SHARE = Amount(
+    cost_micros=SOFTWARE_ENGINEER_LOOPS * SOFTWARE_ENGINEER_STEP_GUARD * CACHED_CALL_MICROS
+)
+"""What one software engineer a spawn starts may spend over its life, in reference
 cost: its loops at the step guard over a cached window, which is also many
 of the main role's worst-case calls at a full window, so its first call is
 never refused. Its tree's budget still bounds it, and a share never raises
 that budget."""
 
-ENGINEER_V4 = ENGINEER_V3.model_copy(
+SOFTWARE_ENGINEER_V4 = SOFTWARE_ENGINEER_V3.model_copy(
     update={
         "version": 4,
-        "share": ENGINEER_SHARE,
-        "limits": Limits(step_guard=ENGINEER_STEP_GUARD),
+        "share": SOFTWARE_ENGINEER_SHARE,
+        "limits": Limits(step_guard=SOFTWARE_ENGINEER_STEP_GUARD),
     }
 )
-"""The engineer before it started sub-agents: kept while a session may
+"""The software engineer before it started sub-agents: kept while a session may
 still run it."""
 
 SUB_AGENTS = (
@@ -356,21 +363,21 @@ SUB_AGENTS = (
 )
 """The prompt layer of a kind that starts sub-agents."""
 
-ENGINEER_SPLITS = (
+SOFTWARE_ENGINEER_SPLITS = (
     f'Start a sub-agent of kind "{ANALYSIS}" for a question that only reads or checks, '
     "such as a hypothesis to test or a check to run: it changes nothing and spends less. "
-    f'Start one of your own kind, "{ENGINEER}" (or leave kind out), only for work that '
+    f'Start one of your own kind, "{SOFTWARE_ENGINEER}" (or leave kind out), only for work that '
     "changes code: it opens a pull request of its own."
 )
-"""The engineer's layer on which kind a sub-agent runs as, so a question it
+"""The software engineer's layer on which kind a sub-agent runs as, so a question it
 splits off runs as analysis, under analysis's share, and not as another
-engineer."""
+software engineer."""
 
-ENGINEER_V5 = revised(
-    ENGINEER_V4,
+SOFTWARE_ENGINEER_V5 = revised(
+    SOFTWARE_ENGINEER_V4,
     version=5,
-    toolsets=(*ENGINEER_V4.toolsets, SUB_AGENTS_TOOLSET),
-    prompts=(*ENGINEER_V4.prompts, SUB_AGENTS, ENGINEER_SPLITS),
+    toolsets=(*SOFTWARE_ENGINEER_V4.toolsets, SUB_AGENTS_TOOLSET),
+    prompts=(*SOFTWARE_ENGINEER_V4.prompts, SUB_AGENTS, SOFTWARE_ENGINEER_SPLITS),
     # A sub-agent's calls are still decided under its own kind's policy and
     # under this one, and the strictest holds.
     policy=allowing(
@@ -381,7 +388,7 @@ ENGINEER_V5 = revised(
         ToolClass.SPAWN,
     ),
 )
-"""The engineer before it took a baseline again when its base moved: kept
+"""The software engineer before it took a baseline again when its base moved: kept
 while a session may still run it."""
 
 BASE_MOVES = (
@@ -389,43 +396,45 @@ BASE_MOVES = (
     "branch in or is cut again, then validate your head again: a success counts only when a "
     "baseline at its base ran before its head was validated."
 )
-"""The engineer's layer on a base that moves, so feedback after its pull
+"""The software engineer's layer on a base that moves, so feedback after its pull
 request merged, on a branch cut again, can still end in a success."""
 
-ENGINEER_V6 = ENGINEER_V5.model_copy(
-    update={"version": 6, "prompts": (*ENGINEER_V5.prompts, BASE_MOVES)}
+SOFTWARE_ENGINEER_V6 = SOFTWARE_ENGINEER_V5.model_copy(
+    update={"version": 6, "prompts": (*SOFTWARE_ENGINEER_V5.prompts, BASE_MOVES)}
 )
-"""The engineer before it read back a result kept outside its window:
+"""The software engineer before it read back a result kept outside its window:
 kept while a session may still run it."""
 
-ENGINEER_V7 = revised(ENGINEER_V6, version=7, toolsets=(*ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET))
-"""The engineer before its workspace started from its project's
-environment: kept while a session may still run it."""
+SOFTWARE_ENGINEER_V7 = revised(
+    SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET)
+)
+"""The software engineer before its workspace started from its agent project's
+workspace base: kept while a session may still run it."""
 
-ENVIRONMENT = (
-    "Your workspace has no network. What your work needs installed comes from your project's "
+WORKSPACE_BASE = (
+    "Your workspace has no network. What your work needs installed comes from your agent project's "
     "environment, set up before you start. When the work needs a package your workspace "
     "lacks, do not try to install it: say which one in your result."
 )
-"""The engineer's layer on its project's environment, so a missing package
+"""The software engineer's layer on its agent project's workspace base, so a missing package
 is named rather than fetched through a network it does not have."""
 
-ENGINEER_KIND = ENGINEER_V7.model_copy(
-    update={"version": 8, "prompts": (*ENGINEER_V7.prompts, ENVIRONMENT)}
+SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
+    update={"version": 8, "prompts": (*SOFTWARE_ENGINEER_V7.prompts, WORKSPACE_BASE)}
 )
-"""The engineer. It starts sub-agents and waits on them, and since it
+"""The software engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
 reads back with `read_artifact`, by the handle the notice names. Its
-workspace starts from its project's environment, when the project names
-one, and keeps no egress (`ENVIRONMENT_KINDS`)."""
+workspace starts from its agent project's workspace base, when the agent project names
+one, and keeps no egress (`WORKSPACE_BASE_KINDS`)."""
 
-ENVIRONMENT_KINDS: frozenset[tuple[str, int]] = frozenset({(ENGINEER, 8)})
+WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset({(SOFTWARE_ENGINEER, 8)})
 """The platform's kinds, by name and version, whose workspace starts from
-the environment its session's project names: the engineer from version 8.
+the workspace base its session's agent project names: the software engineer from version 8.
 A later version that takes it joins here; the versions before it keep
 their own base. A product names its own beside these, in its slot
-(`root.ProductKinds.environments`)."""
+(`root.ProductKinds.workspace_bases`)."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -442,7 +451,7 @@ ANALYSIS_V1 = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
 )
-"""Analysis before it searched its workspace and the knowledge base: kept
+"""Analysis before it searched its workspace and the agent knowledge base: kept
 while a session may still run it."""
 
 ANALYSIS_V2 = AgentKind(
@@ -450,14 +459,14 @@ ANALYSIS_V2 = AgentKind(
     version=2,
     # It runs commands and changes no file, so it names its shell alone.
     tools=(RUN_COMMAND,),
-    toolsets=(FILES_TOOLSET, KNOWLEDGE_TOOLSET),
+    toolsets=(FILES_TOOLSET, AGENT_KNOWLEDGE_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     prompts=(
         "You read what a run produced (its logs, its telemetry, its recordings) in your "
         "workspace, and turn it into findings. Search it with search_code, and look up "
-        "what your team already knows with search_knowledge. Change nothing. Answer with "
+        "what your team already knows with search_agent_knowledge. Change nothing. Answer with "
         "the findings, each citing the files and the commands that show it.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
@@ -498,7 +507,7 @@ while a session may still run it."""
 
 ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, ARTIFACTS_TOOLSET))
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
-way an engineer splits a question, so it names a share. A result too large
+way a software engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with
 `read_artifact`, by the handle the notice names."""
 
@@ -514,8 +523,8 @@ PLANNER_KIND = AgentKind(
     prompts=(
         "You turn findings into tasks. For each task, decide whether an existing session "
         "should continue it or a new one should start: read where a session stands with "
-        "read_session, and hand new engineering work to an engineer with "
-        "hand_off_to_engineer, with an objective that stands on its own. Answer with the "
+        "read_session, and hand new engineering work to a software engineer with "
+        "hand_off_to_software_engineer, with an objective that stands on its own. Answer with the "
         "plan: each task and the session it goes to.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
@@ -535,40 +544,40 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
         "passage you use. Diagnose live state with read_session, never by guessing. Draft "
         "a change to the tool policy with draft_tool_policy and show the difference from "
         "what is live: a person applies it, never you. When the work is engineering, hand "
-        "it to an engineer with hand_off_to_engineer and an objective that stands on its "
+        "it to a software engineer with hand_off_to_software_engineer and an objective that stands on its "
         "own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
     isolation=NO_WORKSPACE,
 )
-"""The platform assistant before it read the tenant's sessions, projects,
-and automations, and its knowledge: kept while a session may still run
+"""The platform assistant before it read the tenant's sessions, agent projects,
+and agent automations, and its agent knowledge: kept while a session may still run
 it."""
 
 PLATFORM_ASSISTANT_KIND = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=2,
     tools=(SEARCH_CORPUS, DRAFT_TOOL_POLICY),
-    toolsets=(KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, HANDOFF_TOOLSET),
+    toolsets=(AGENT_KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, HANDOFF_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
-        "product only from what search_corpus and search_knowledge find, and cite the "
+        "product only from what search_corpus and search_agent_knowledge find, and cite the "
         "document of every passage you use: docs/object-model.md says what each thing is, "
         "what owns it, and what moves it between its states. docs/portal-routes.md lists "
         "the portal's pages: when you name a page, link it by its address as that "
         "document says, so the person can open it. Diagnose by reading first, "
         "never by guessing. Find sessions with list_sessions and read one with "
         "read_session; read what a waiting session waits on, its place in the work queue "
-        "and the hosts that run it, with read_wait; read projects and automations, and an "
-        "automation's recent runs, the same way, and any other reader you hold. When "
+        "and the hosts that run it, with read_wait; read agent projects and agent_automations, and an "
+        "agent_automation's recent runs, the same way, and any other reader you hold. When "
         "something waits or is slow, say what it waits on as you read it, what clears it, "
         "who may clear it, and where they do. Draft a change to the tool policy with "
         "draft_tool_policy and show the difference from what is live: a person applies "
-        "it, never you. When the work is engineering, hand it to an engineer with "
-        "hand_off_to_engineer and an objective that stands on its own, then step back.",
+        "it, never you. When the work is engineering, hand it to a software engineer with "
+        "hand_off_to_software_engineer and an objective that stands on its own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
     isolation=NO_WORKSPACE,
@@ -581,7 +590,7 @@ REVIEWER_PROMPT = (
     "You review one pull request, named in what you were asked as owner/repo#12. Read it with "
     "read_pull_request: its head, the files it changes with their patches, and its checks. "
     "When a patch shows too little, read the whole file at the head with "
-    "read_pull_request_file, and look up what your team already knows with search_knowledge. "
+    "read_pull_request_file, and look up what your team already knows with search_agent_knowledge. "
     "Note each defect you find with note_finding: the file, its line at the head, a grade, "
     "and what is wrong and what it does in real use. Grade it high for harm that cannot be "
     "undone or a wrong result on the path the change exists for, medium for a wrong result "
@@ -622,7 +631,7 @@ REVIEWER_KIND = AgentKind(
     # person approves each comment: the platform's ceiling holds every
     # outward call, and its own layer runs no integration unattended.
     tools=(COMMENT,),
-    toolsets=(REVIEW_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
     asks=REVIEWER_ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_REVIEW,
@@ -638,47 +647,47 @@ file, runs code, or pushes. It delivers its review through its result
 tool, citing the findings it noted, and its share lets a lead start it as
 a sub-agent on the pull request another kind opened."""
 
-OPERATOR_PROMPT = (
+OPS_ANALYST_PROMPT = (
     "You read how the tenant's part of the platform runs, and you change nothing: every "
     "tool you hold reads. Find sessions with list_sessions and read one with read_session. "
     "Read what a waiting session waits on with read_wait: its loop's place on the work "
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
-    "with read_spend, and its projects and automations with their readers. Explain only from "
-    "what search_knowledge finds, and cite the document of every passage you use. Diagnose "
+    "with read_spend, and its agent projects and agent automations with their readers. Explain only from "
+    "what search_agent_knowledge finds, and cite the document of every passage you use. Diagnose "
     "by reading first, never by guessing: say what something waits on as you read it, what "
     "clears it, who may clear it, and where they do. When the fix is engineering, write it "
-    "as an objective that stands on its own, for a person to hand to an engineer: you start "
+    "as an objective that stands on its own, for a person to hand to a software engineer: you start "
     "no session and apply nothing."
 )
-"""The operator's layer: what it reads, and how a fix leaves it."""
+"""The ops analyst's layer: what it reads, and how a fix leaves it."""
 
-OPERATOR_KIND = AgentKind(
-    name=OPERATOR,
+OPS_ANALYST_KIND = AgentKind(
+    name=OPS_ANALYST,
     version=1,
-    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
-    prompts=(OPERATOR_PROMPT,),
+    prompts=(OPS_ANALYST_PROMPT,),
     policy=allowing(ToolClass.READ),
     isolation=NO_WORKSPACE,
 )
-"""The operator. It reads the tenant's operations on its person's own
+"""The ops analyst. It reads the tenant's operations on its person's own
 permissions: its sessions and what they wait on, its hosts and what they
-offer, its budgets and their spend, its projects and automations. Every
+offer, its budgets and their spend, its agent projects and agent automations. Every
 tool it holds reads, so it changes nothing; a fix it finds leaves as an
-objective a person hands to an engineer."""
+objective a person hands to a software engineer."""
 
 SHIPPED: tuple[AgentKind, ...] = (
-    ENGINEER_V1,
-    ENGINEER_V2,
-    ENGINEER_V3,
-    ENGINEER_V4,
-    ENGINEER_V5,
-    ENGINEER_V6,
-    ENGINEER_V7,
-    ENGINEER_KIND,
+    SOFTWARE_ENGINEER_V1,
+    SOFTWARE_ENGINEER_V2,
+    SOFTWARE_ENGINEER_V3,
+    SOFTWARE_ENGINEER_V4,
+    SOFTWARE_ENGINEER_V5,
+    SOFTWARE_ENGINEER_V6,
+    SOFTWARE_ENGINEER_V7,
+    SOFTWARE_ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_V2,
     ANALYSIS_V3,
@@ -687,6 +696,6 @@ SHIPPED: tuple[AgentKind, ...] = (
     PLATFORM_ASSISTANT_V1,
     PLATFORM_ASSISTANT_KIND,
     REVIEWER_KIND,
-    OPERATOR_KIND,
+    OPS_ANALYST_KIND,
 )
 """Every kind the platform ships, at every version it still runs."""

@@ -48,7 +48,7 @@ describe("the route catalog", () => {
   });
 
   it("reads a parameter's name off its address", () => {
-    expect(paramNames("/settings/projects/:projectId")).toEqual(["projectId"]);
+    expect(paramNames("/settings/agent-projects/:agentProjectId")).toEqual(["agentProjectId"]);
     expect(paramNames("/a/:one/b/:two?")).toEqual(["one", "two"]);
     expect(paramNames("/")).toEqual([]);
   });

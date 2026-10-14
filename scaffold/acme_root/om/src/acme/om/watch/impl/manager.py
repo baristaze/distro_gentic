@@ -7,6 +7,9 @@ from pydantic import Field, SecretStr
 from acme.infra.workspaces import Durability
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.loop_rules import kept_snapshot
@@ -22,13 +25,13 @@ from acme.om.exceptions import (
     Unavailable,
     ValidationFailed,
 )
+from acme.om.exec_relay import ExecRelayManagerInterface
+from acme.om.exec_relay.exceptions import NoWorkspaceHost
+from acme.om.exec_relay.rules import exec_id, key_time, stale
+from acme.om.exec_relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.intake.rules import in_person
-from acme.om.relay import RelayManagerInterface
-from acme.om.relay.exceptions import NoWorkspaceHost
-from acme.om.relay.rules import exec_id, key_time, stale
-from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.retention.crossing import CrossingKind, CrossingRefused
 from acme.om.retention.crossing import verified as crossed
 from acme.om.steps import StepsManagerInterface
@@ -56,9 +59,6 @@ from acme.om.watch.types.live import (
     Seen,
 )
 from acme.om.work import WorkManagerInterface
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.placed import PlacedWorkspacesInterface
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 TAKEN = "watch.control.taken"
 SENT = "watch.command.sent"
@@ -80,8 +80,8 @@ class WatchManagerImpl(WatchManagerInterface):
         agents: AgentsManagerInterface,
         loop: LoopManagerInterface,
         steps: StepsManagerInterface,
-        relay: RelayManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        exec_relay: ExecRelayManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         events: EventsManagerInterface,
         stream: StreamServiceInterface,
         options: WatchOptions,
@@ -96,8 +96,8 @@ class WatchManagerImpl(WatchManagerInterface):
         self._agents = agents
         self._loop = loop
         self._steps = steps
-        self._relay = relay
-        self._workspaces = workspaces
+        self._exec_relay = exec_relay
+        self._agent_workspaces = agent_workspaces
         self._events = events
         self._stream = stream
         self._options = options
@@ -214,7 +214,7 @@ class WatchManagerImpl(WatchManagerInterface):
         cursor = await self._steps.get_cursor(ctx, session_id)
         # What the agent's run still runs on the host stops now, so nothing of
         # its runs beside the person's commands; theirs run under this epoch.
-        await self._relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
+        await self._exec_relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
         await self._audit(ctx, new_id(), TAKEN, session_id, {"epoch": cursor.epoch})
         return session
 
@@ -229,7 +229,7 @@ class WatchManagerImpl(WatchManagerInterface):
         same restore. One that something touched since its last snapshot
         stands as it is."""
         try:
-            pin = await self._workspaces.get_workspace(ctx, session_id)
+            pin = await self._agent_workspaces.get_workspace(ctx, session_id)
         except NotFound:
             return
         if pin.durability is not Durability.SNAPSHOT:
@@ -238,7 +238,7 @@ class WatchManagerImpl(WatchManagerInterface):
         named = None if latest is None else named_snapshot(latest)
         if named is None:
             return
-        record = await self._workspaces.kept_snapshot(ctx, named.id)
+        record = await self._agent_workspaces.kept_snapshot(ctx, named.id)
         if self._placed is None or record is None or not record.on_host:
             return
         if record.hash != named.hash:
@@ -277,9 +277,9 @@ class WatchManagerImpl(WatchManagerInterface):
             )
         if session.park.holder not in (None, ctx.user_id):
             raise NotAuthorized(f"session {session_id} is held by another person")
-        if await self._relay.binding_of(ctx, session_id) is None:
+        if await self._exec_relay.binding_of(ctx, session_id) is None:
             raise NoWorkspaceHost(f"no host holds session {session_id}'s workspace")
-        workspace = await self._workspaces.get_workspace(ctx, session_id)
+        workspace = await self._agent_workspaces.get_workspace(ctx, session_id)
         request = RunRequest(argv=command.argv, cwd=command.cwd)
         item_id = exec_id(command.key, REQUESTS.dump_json(request), 0)
         # Recorded as the person's before it is sent: no command runs that
@@ -301,7 +301,7 @@ class WatchManagerImpl(WatchManagerInterface):
             spec=workspace.spec(),
             by_person=True,
         )
-        item = await self._relay.send(ctx, ctx.org_id, call, 0)
+        item = await self._exec_relay.send(ctx, ctx.org_id, call, 0)
         return HandRun(
             item_id=item.id,
             session_id=session_id,
@@ -317,10 +317,10 @@ class WatchManagerImpl(WatchManagerInterface):
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
         cursor = await self._steps.get_cursor(ctx, session_id)
-        item = await self._relay.outcome_of(ctx, ctx.org_id, session_id, key, cursor.epoch)
+        item = await self._exec_relay.outcome_of(ctx, ctx.org_id, session_id, key, cursor.epoch)
         if item is None:
             raise NotFound(f"session {session_id} sent no command under {key}")
-        return await self._relay.watch(ctx, ctx.org_id, item.id, after_seq)
+        return await self._exec_relay.watch(ctx, ctx.org_id, item.id, after_seq)
 
     async def give_back(
         self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
@@ -333,7 +333,7 @@ class WatchManagerImpl(WatchManagerInterface):
             cursor = await self._steps.get_cursor(ctx, session_id)
             running = [
                 item
-                for item in await self._relay.running(ctx, ctx.org_id, session_id)
+                for item in await self._exec_relay.running(ctx, ctx.org_id, session_id)
                 if not stale(item.epoch, cursor.epoch)
             ]
             if running and not stop:
@@ -342,7 +342,7 @@ class WatchManagerImpl(WatchManagerInterface):
                     "wait for it to end, or give back with stop"
                 )
             if running:
-                await self._relay.interrupt_running(ctx, ctx.org_id, session_id, None)
+                await self._exec_relay.interrupt_running(ctx, ctx.org_id, session_id, None)
         session = await self._loop.give_back(ctx, session_id, summary)
         cursor = await self._steps.get_cursor(ctx, session_id)
         await self._audit(ctx, new_id(), GIVEN_BACK, session_id, {"epoch": cursor.epoch})

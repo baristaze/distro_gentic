@@ -24,12 +24,12 @@ class AgentKind(RootModel[str]):
     root: Annotated[str, Field(max_length=200, min_length=1, title='Agent Kind')]
 
 
+class AgentPlaybook(RootModel[str]):
+    root: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Agent Playbook')]
+
+
 class Brief(RootModel[str]):
     root: Annotated[str, Field(max_length=20000, min_length=1, title='Brief')]
-
-
-class Playbook(RootModel[str]):
-    root: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Playbook')]
 
 
 class Title(RootModel[str]):
@@ -56,6 +56,27 @@ class Capability(RootModel[str]):
     root: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,62}$')]
 
 
+class AgentKnowledgeRequest(BaseModel):
+    """
+    An entry: its title, the words that trigger it, all of which must
+    appear in what a session is about, and what it says. A trigger word
+    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+    in it, so it would match every session.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    text: Annotated[str, Field(max_length=10000, min_length=1, title='Text')]
+    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
+    trigger: Annotated[list[str], Field(max_length=20, min_length=1, title='Trigger')]
+
+
+class AgentKnowledgeStatus(StrEnum):
+    suggested = 'suggested'
+    reviewed = 'reviewed'
+    rejected = 'rejected'
+
+
 class AgentRefView(BaseModel):
     """
     The agent that wrote a message: its kind and the session it runs in.
@@ -65,6 +86,36 @@ class AgentRefView(BaseModel):
     """
     kind: Annotated[str, Field(title='Kind')]
     session_id: Annotated[UUID, Field(title='Session Id')]
+
+
+class Registry(RootModel[str]):
+    root: Annotated[str, Field(max_length=253, pattern='^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$')]
+
+
+class SetupItem(RootModel[str]):
+    root: Annotated[str, Field(max_length=4000, min_length=1)]
+
+
+class AgentWorkspaceBaseBody(BaseModel):
+    """
+    The workspace base an agent project's sessions' workspaces start from: the
+    image, the commands that set it up, run once in order, and the package
+    registries the setup reaches. A setup that names a registry runs with
+    open egress; one that names none reaches nothing. Registries serve a
+    setup, so they come with one.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    image: Annotated[str, Field(max_length=255, min_length=1, pattern='^[A-Za-z0-9][A-Za-z0-9._/:@-]*$', title='Image')]
+    registries: Annotated[list[Registry] | None, Field(max_length=20, title='Registries')] = None
+    setup: Annotated[list[SetupItem] | None, Field(max_length=50, title='Setup')] = None
+
+
+class AgentWorkspaceBaseView(BaseModel):
+    image: Annotated[str, Field(title='Image')]
+    registries: Annotated[list[str], Field(title='Registries')]
+    setup: Annotated[list[str], Field(title='Setup')]
 
 
 class Among(StrEnum):
@@ -109,22 +160,6 @@ class ApprovalView(BaseModel):
     seq: Annotated[int, Field(title='Seq')]
     session_id: Annotated[UUID, Field(title='Session Id')]
     tool: Annotated[str, Field(title='Tool')]
-
-
-class Arm(StrEnum):
-    candidate = 'candidate'
-    baseline = 'baseline'
-
-
-class ArmResultView(BaseModel):
-    """
-    One arm's result: its trials, how many passed, the mean of their
-    scores, and the sum of their costs.
-    """
-    cost_micros: Annotated[int, Field(title='Cost Micros')]
-    passed: Annotated[int, Field(title='Passed')]
-    score: Annotated[float, Field(title='Score')]
-    trials: Annotated[int, Field(title='Trials')]
 
 
 class ArtifactPageView(BaseModel):
@@ -175,22 +210,22 @@ class AskRequest(BaseModel):
 
 class AttachRequest(BaseModel):
     """
-    A kind the connector joins, for one project's sessions or every
+    A kind the connector joins, for one agent project's sessions or every
     session of the tenant, deferred until the agent loads it unless
     `deferred` is false.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     deferred: Annotated[bool | None, Field(title='Deferred')] = True
     kind: Annotated[str, Field(max_length=64, min_length=1, title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
 
 
 class AttachmentView(BaseModel):
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     deferred: Annotated[bool, Field(title='Deferred')]
     kind: Annotated[str, Field(title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
 
 
 class BudgetScopeKind(StrEnum):
@@ -339,6 +374,22 @@ class ConnectorPlace(StrEnum):
     """
     cloud = 'cloud'
     host = 'host'
+
+
+class Contender(StrEnum):
+    candidate = 'candidate'
+    baseline = 'baseline'
+
+
+class ContenderResultView(BaseModel):
+    """
+    One contender's result: its trials, how many passed, the mean of their
+    scores, and the sum of their costs.
+    """
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    passed: Annotated[int, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    trials: Annotated[int, Field(title='Trials')]
 
 
 class ContentState(StrEnum):
@@ -701,36 +752,6 @@ class EntryView(BaseModel):
     n: Annotated[int, Field(title='N')]
 
 
-class Registry(RootModel[str]):
-    root: Annotated[str, Field(max_length=253, pattern='^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$')]
-
-
-class SetupItem(RootModel[str]):
-    root: Annotated[str, Field(max_length=4000, min_length=1)]
-
-
-class EnvironmentBody(BaseModel):
-    """
-    The environment a project's sessions' workspaces start from: the
-    image, the commands that set it up, run once in order, and the package
-    registries the setup reaches. A setup that names a registry runs with
-    open egress; one that names none reaches nothing. Registries serve a
-    setup, so they come with one.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    image: Annotated[str, Field(max_length=255, min_length=1, pattern='^[A-Za-z0-9][A-Za-z0-9._/:@-]*$', title='Image')]
-    registries: Annotated[list[Registry] | None, Field(max_length=20, title='Registries')] = None
-    setup: Annotated[list[SetupItem] | None, Field(max_length=50, title='Setup')] = None
-
-
-class EnvironmentView(BaseModel):
-    image: Annotated[str, Field(title='Image')]
-    registries: Annotated[list[str], Field(title='Registries')]
-    setup: Annotated[list[str], Field(title='Setup')]
-
-
 class EventView(BaseModel):
     """
     One record of the tenant's append-only stream, paged by `after_seq`.
@@ -795,7 +816,7 @@ class ExtendLeaseRequest(BaseModel):
 
 class FetchCredentialRequest(BaseModel):
     """
-    A read-only credential of the project's repository, as source control
+    A read-only credential of the agent project's repository, as source control
     takes it over HTTPS. It goes to the tenant's store and is never read
     back.
     """
@@ -808,10 +829,10 @@ class FetchCredentialRequest(BaseModel):
 
 class FetchCredentialView(BaseModel):
     """
-    That the project's repository has a fetch credential, and who gave it
+    That the agent project's repository has a fetch credential, and who gave it
     when. Never its value.
     """
-    project_id: Annotated[UUID, Field(title='Project Id')]
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]
@@ -967,16 +988,16 @@ class InvitationState(StrEnum):
 
 class InvocationView(BaseModel):
     """
-    A version brought into a session. `pinned` marks the manual the
+    A version brought into a session. `pinned` marks the kind manual the
     session was made with, whose brief is its standing text; every other
     invocation's brief arrived as its invoker's message.
     """
+    agent_playbook_id: Annotated[UUID, Field(title='Agent Playbook Id')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     id: Annotated[UUID, Field(title='Id')]
     invoked_by: Annotated[UUID, Field(title='Invoked By')]
     name: Annotated[str, Field(title='Name')]
     pinned: Annotated[bool, Field(title='Pinned')]
-    playbook_id: Annotated[UUID, Field(title='Playbook Id')]
     session_id: Annotated[UUID, Field(title='Session Id')]
     version: Annotated[int, Field(title='Version')]
 
@@ -1121,27 +1142,6 @@ class KeyStatus(StrEnum):
     refused = 'refused'
 
 
-class KnowledgeRequest(BaseModel):
-    """
-    An entry: its title, the words that trigger it, all of which must
-    appear in what a session is about, and what it says. A trigger word
-    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
-    in it, so it would match every session.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    text: Annotated[str, Field(max_length=10000, min_length=1, title='Text')]
-    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
-    trigger: Annotated[list[str], Field(max_length=20, min_length=1, title='Trigger')]
-
-
-class KnowledgeStatus(StrEnum):
-    suggested = 'suggested'
-    reviewed = 'reviewed'
-    rejected = 'rejected'
-
-
 class LaneLoadView(BaseModel):
     kind: Annotated[str, Field(title='Kind')]
     lane: Annotated[str, Field(title='Lane')]
@@ -1177,46 +1177,6 @@ class LeaseView(BaseModel):
     term_seconds: Annotated[int, Field(title='Term Seconds')]
 
 
-class LedgerEntryView(BaseModel):
-    """
-    One entry, written once. A field a kind does not carry is null:
-
-    - `hold`: `session_id`, `units` (the worst case, null when no price
-      applies), and `cost_micros` (the exposure).
-    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
-      buckets paid).
-    - `credit`: `amount_micros` and `reference` (the payment's).
-    - `grant`: `units`, `reason`, and `by` (the operator).
-    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
-      `by`.
-    """
-    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
-    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
-    by: Annotated[UUID | None, Field(title='By')] = None
-    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
-    id: Annotated[UUID, Field(title='Id')]
-    kind: EntryKind
-    reason: Annotated[str | None, Field(title='Reason')] = None
-    reference: Annotated[str | None, Field(title='Reference')] = None
-    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
-    tokens: Annotated[int | None, Field(title='Tokens')] = None
-    units: Annotated[int | None, Field(title='Units')] = None
-
-
-class LedgerPageView(BaseModel):
-    """
-    One read of a tenant's ledger, the newest first. `has_more` says the
-    read was cut at its limit and older entries match it too: narrow it by
-    kind, hold, or session to reach them.
-    """
-    has_more: Annotated[bool, Field(title='Has More')]
-    items: Annotated[list[LedgerEntryView], Field(title='Items')]
-
-
 class LeverCheck(StrEnum):
     """
     What a check found in a lever's text.
@@ -1229,8 +1189,8 @@ class LeverCheck(StrEnum):
 
 
 class LeverKind(StrEnum):
-    playbook = 'playbook'
-    knowledge = 'knowledge'
+    agent_playbook = 'agent_playbook'
+    agent_knowledge = 'agent_knowledge'
 
 
 class LeverView(BaseModel):
@@ -1249,7 +1209,7 @@ class LimitsBody(BaseModel):
     The most its runs spend in a period, in millionths at list price, and
     the share one run may take; the most firings a period; the most runs at
     work at once; whether a stopped firing waits, and how many may; and the
-    longest chain of automations a firing extends.
+    longest chain of agent automations a firing extends.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -1537,30 +1497,30 @@ class Permission(StrEnum):
 
 class PinRequest(BaseModel):
     """
-    A kind's manual: the name whose latest version is pinned to `kind`,
-    for the tenant's sessions of it, or with `project_id` those of one
-    project, where it wins over the tenant's.
+    A kind manual: the name whose latest version is pinned to `kind`,
+    for the tenant's sessions of it, or with `agent_project_id` those of one
+    agent project, where it wins over the tenant's.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
     name: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Name')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
 
 
 class PinView(BaseModel):
     """
-    A version pinned to a kind as its manual. Each session of the kind
+    A version pinned to a kind as its kind manual. Each session of the kind
     made after it was pinned holds it; one made before keeps its own.
     """
+    agent_playbook_id: Annotated[UUID, Field(title='Agent Playbook Id')]
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     name: Annotated[str, Field(title='Name')]
-    playbook_id: Annotated[UUID, Field(title='Playbook Id')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]
@@ -1701,7 +1661,7 @@ class ProviderName(StrEnum):
 
 class PublishRequest(BaseModel):
     """
-    The next version of a playbook's name: its description, its body, and
+    The next version of an agent playbook's name: its description, its body, and
     its gates.
     """
     model_config = ConfigDict(
@@ -1755,7 +1715,7 @@ class RaiseRequest(BaseModel):
     tokens: Annotated[Tokens2 | None, Field(title='Tokens')] = None
 
 
-class RenameProjectRequest(BaseModel):
+class RenameAgentProjectRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -1933,10 +1893,10 @@ class RunPurpose(StrEnum):
 
 class RunsAs(StrEnum):
     """
-    Whose authority an automation's action runs on.
+    Whose authority an agent automation's action runs on.
     """
     creator = 'creator'
-    automation_principal = 'automation_principal'
+    agent_automation_principal = 'agent_automation_principal'
 
 
 class SaveKeyRequest(BaseModel):
@@ -2173,6 +2133,57 @@ class SnapshotView(BaseModel):
     workspace_id: Annotated[UUID, Field(title='Workspace Id')]
 
 
+class SpendLedgerEntryView(BaseModel):
+    """
+    One entry, written once. A field a kind does not carry is null:
+
+    - `hold`: `session_id`, `units` (the worst case, null when no price
+      applies), and `cost_micros` (the exposure).
+    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+      buckets paid).
+    - `credit`: `amount_micros` and `reference` (the payment's).
+    - `grant`: `units`, `reason`, and `by` (the operator).
+    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+      `by`.
+    """
+    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
+    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
+    by: Annotated[UUID | None, Field(title='By')] = None
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
+    id: Annotated[UUID, Field(title='Id')]
+    kind: EntryKind
+    reason: Annotated[str | None, Field(title='Reason')] = None
+    reference: Annotated[str | None, Field(title='Reference')] = None
+    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
+    tokens: Annotated[int | None, Field(title='Tokens')] = None
+    units: Annotated[int | None, Field(title='Units')] = None
+
+
+class SpendLedgerPageView(BaseModel):
+    """
+    One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[SpendLedgerEntryView], Field(title='Items')]
+
+
+class SpendUnitsGrantRequest(BaseModel):
+    """
+    Units the platform grants the tenant for its life, and why.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    reason: Annotated[str, Field(max_length=200, min_length=1, title='Reason')]
+    units: Annotated[int, Field(gt=0, le=1000000000000000, title='Units')]
+
+
 class Intent(StrEnum):
     sso = 'sso'
     domain_verification = 'domain_verification'
@@ -2205,14 +2216,14 @@ class Role2(RootModel[str]):
 class StartSessionRequest(BaseModel):
     """
     A session to start on the latest version of a kind the product runs,
-    in a project of the caller's tenant. Outside a local stack a session
-    starts in a project or not at all.
+    in an agent project of the caller's tenant. Outside a local stack a session
+    starts in an agent project or not at all.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
 
@@ -2232,17 +2243,17 @@ class StartUploadRequest(BaseModel):
 
 class StartValidationRequest(BaseModel):
     """
-    A check the project's policy declares, to run at `head`, the delivered
+    A check the agent project's policy declares, to run at `head`, the delivered
     commit, with the checks, fixtures, and runner taken from `base`. Each is
     a commit's full id, never a name that moves.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     base: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Base')]
     check: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Check')]
     head: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Head')]
-    project_id: Annotated[UUID, Field(title='Project Id')]
 
 
 class StepType(StrEnum):
@@ -2409,11 +2420,11 @@ class TreeBoundsView(BaseModel):
 
 class TrialView(BaseModel):
     """
-    One trial: its arm, its session, where and when it ran, its cost, and
+    One trial: its contender, its session, where and when it ran, its cost, and
     what its acceptance verdict found.
     """
-    arm: Arm
     broken: Annotated[list[str], Field(title='Broken')]
+    contender: Contender
     cost_micros: Annotated[int, Field(title='Cost Micros')]
     executor: Annotated[str, Field(title='Executor')]
     passed: Annotated[bool, Field(title='Passed')]
@@ -2434,17 +2445,6 @@ class TriggerView(BaseModel):
     every: Annotated[timedelta | None, Field(title='Every')]
     integrations: Annotated[list[str], Field(title='Integrations')]
     kind: TriggerKind
-
-
-class UnitsGrantRequest(BaseModel):
-    """
-    Units the platform grants the tenant for its life, and why.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    reason: Annotated[str, Field(max_length=200, min_length=1, title='Reason')]
-    units: Annotated[int, Field(gt=0, le=1000000000000000, title='Units')]
 
 
 class UpdateIdentityRequest(BaseModel):
@@ -2559,10 +2559,10 @@ class ValidationView(BaseModel):
     ran at and the version its checks came from, who ran it, the hash of
     the results it wrote, and its runs.
     """
+    agent_project: Annotated[str, Field(title='Agent Project')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     executor: Annotated[str, Field(title='Executor')]
     id: Annotated[UUID, Field(title='Id')]
-    project: Annotated[str, Field(title='Project')]
     purpose: RunPurpose
     records: Annotated[list[UUID], Field(title='Records')]
     results_sha256: Annotated[str, Field(title='Results Sha256')]
@@ -2628,6 +2628,20 @@ class WorkHandleView(BaseModel):
     kind: HandleKind
 
 
+class WorkProductView(BaseModel):
+    """
+    What a session delivered: its agent project, its branch and whether the
+    remote has held it, the pull requests and branches bound to it, and its
+    latest accepted result. A session that never had a workspace has no
+    branch.
+    """
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
+    branch: Annotated[str | None, Field(title='Branch')]
+    branch_seen: Annotated[bool, Field(title='Branch Seen')]
+    report: ReportView | None
+    work: Annotated[list[WorkHandleView], Field(title='Work')]
+
+
 class WorkStatus(StrEnum):
     queued = 'queued'
     claimed = 'claimed'
@@ -2638,7 +2652,7 @@ class WorkStatus(StrEnum):
 class ActionBody(BaseModel):
     """
     `start_session`: start a session of `agent_kind` titled `title` in the
-    tenant's project `project_id`, and invoke the tenant's `playbook` of
+    tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
     that name into it first, its latest version at each firing, when one is
     named; a name with no version is refused. `message_session`: send the brief to the
     standing session `session_id`; an enabled one is refused, since nothing
@@ -2650,22 +2664,22 @@ class ActionBody(BaseModel):
         extra='forbid',
     )
     agent_kind: Annotated[AgentKind | None, Field(title='Agent Kind')] = None
+    agent_playbook: Annotated[AgentPlaybook | None, Field(title='Agent Playbook')] = None
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     brief: Annotated[Brief | None, Field(title='Brief')] = None
     kind: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Kind')]
     params: Annotated[dict[str, JsonValue] | None, Field(title='Params')] = None
-    playbook: Annotated[Playbook | None, Field(title='Playbook')] = None
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     session_id: Annotated[UUID | None, Field(title='Session Id')] = None
     title: Annotated[Title | None, Field(title='Title')] = None
 
 
 class ActionView(BaseModel):
     agent_kind: Annotated[str | None, Field(title='Agent Kind')]
+    agent_playbook: Annotated[str | None, Field(title='Agent Playbook')]
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     brief: Annotated[str | None, Field(title='Brief')]
     kind: Annotated[str, Field(title='Kind')]
     params: Annotated[dict[str, JsonValue], Field(title='Params')]
-    playbook: Annotated[str | None, Field(title='Playbook')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     session_id: Annotated[UUID | None, Field(title='Session Id')]
     title: Annotated[str | None, Field(title='Title')]
 
@@ -2711,6 +2725,47 @@ class AdvertisementView(BaseModel):
     isolation_modes: Annotated[list[IsolationMode], Field(title='Isolation Modes')]
     os: Annotated[str, Field(title='Os')]
     shell: Annotated[str, Field(title='Shell')]
+
+
+class AgentAutomationPrincipalView(BaseModel):
+    """
+    The tenant's agent automation principal: its id, the role it holds, and who
+    granted it.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    granted_by: Annotated[UUID, Field(title='Granted By')]
+    id: Annotated[UUID, Field(title='Id')]
+    role: Role
+
+
+class AgentAutomationView(BaseModel):
+    """
+    An agent automation, whom it runs as, and who made and last edited it.
+    """
+    action: ActionView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    enabled: Annotated[bool, Field(title='Enabled')]
+    id: Annotated[UUID, Field(title='Id')]
+    limits: LimitsView
+    name: Annotated[str, Field(title='Name')]
+    own_events: Annotated[bool, Field(title='Own Events')]
+    runs_as: RunsAs
+    trigger: TriggerView
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class AgentProjectView(BaseModel):
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    name: Annotated[str, Field(title='Name')]
+    repository: RepositoryView
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+    workspace_base: AgentWorkspaceBaseView | None
+    workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
 
 
 class AgentSessionView(BaseModel):
@@ -2778,35 +2833,6 @@ class ApproverRuleBody(BaseModel):
 class ApproverRuleView(BaseModel):
     authorization_class: Annotated[str, Field(title='Authorization Class')]
     roles: Annotated[list[Role], Field(title='Roles')]
-
-
-class AutomationPrincipalView(BaseModel):
-    """
-    The tenant's automation principal: its id, the role it holds, and who
-    granted it.
-    """
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    granted_by: Annotated[UUID, Field(title='Granted By')]
-    id: Annotated[UUID, Field(title='Id')]
-    role: Role
-
-
-class AutomationView(BaseModel):
-    """
-    An automation, whom it runs as, and who made and last edited it.
-    """
-    action: ActionView
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    enabled: Annotated[bool, Field(title='Enabled')]
-    id: Annotated[UUID, Field(title='Id')]
-    limits: LimitsView
-    name: Annotated[str, Field(title='Name')]
-    own_events: Annotated[bool, Field(title='Own Events')]
-    runs_as: RunsAs
-    trigger: TriggerView
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    updated_by: Annotated[UUID, Field(title='Updated By')]
 
 
 class BenchmarkResultRequest(BaseModel):
@@ -2914,7 +2940,7 @@ class ClaimantWorkView(BaseModel):
 class CommandProgressView(BaseModel):
     """
     How a command stands: its state, its output after the last part read,
-    and how it ended once it has. `refused` names why its host or the relay
+    and how it ended once it has. `refused` names why its host or the exec relay
     refused it, such as a command a later run fenced.
     """
     exit_code: Annotated[int | None, Field(title='Exit Code')] = None
@@ -2959,10 +2985,26 @@ class ControlRequest(BaseModel):
     snapshot_id: Annotated[UUID | None, Field(title='Snapshot Id')] = None
 
 
+class CreateAgentProjectRequest(BaseModel):
+    """
+    An agent project and the one repository it binds, which never moves; whether
+    a kind that keeps its workspace by snapshots keeps it so here, False
+    keeping each of its sessions' workspaces a cache; and the workspace base
+    its sessions' workspaces start from, if it names one.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
+    repository: RepositoryBody
+    workspace_base: AgentWorkspaceBaseBody | None = None
+    workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
+
+
 class CreateBudgetRequest(BaseModel):
     """
     A budget over a scope and a window, in reference cost (millionths),
-    native tokens, or both. A person's and a project's scope is keyed by its
+    native tokens, or both. A person's and an agent project's scope is keyed by its
     id; a tenant's is the tenant itself, so its key is left out or names the
     tenant. A span window has a length in seconds, and no other window has.
     """
@@ -2977,22 +3019,6 @@ class CreateBudgetRequest(BaseModel):
     window_seconds: Annotated[WindowSeconds | None, Field(title='Window Seconds')] = None
 
 
-class CreateProjectRequest(BaseModel):
-    """
-    A project and the one repository it binds, which never moves; whether
-    a kind that keeps its workspace by snapshots keeps it so here, False
-    keeping each of its sessions' workspaces a cache; and the environment
-    its sessions' workspaces start from, if it names one.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    environment: EnvironmentBody | None = None
-    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
-    repository: RepositoryBody
-    workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
-
-
 class CrossingBody(BaseModel):
     """
     What the sender declares of the bytes it sends: what they are, their
@@ -3004,20 +3030,6 @@ class CrossingBody(BaseModel):
     kind: CrossingKind
     sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$', title='Sha256')]
     size: Annotated[int, Field(ge=0, title='Size')]
-
-
-class DeliveryView(BaseModel):
-    """
-    What a session delivered: its project, its branch and whether the
-    remote has held it, the pull requests and branches bound to it, and its
-    latest accepted result. A session that never had a workspace has no
-    branch.
-    """
-    branch: Annotated[str | None, Field(title='Branch')]
-    branch_seen: Annotated[bool, Field(title='Branch Seen')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
-    report: ReportView | None
-    work: Annotated[list[WorkHandleView], Field(title='Work')]
 
 
 class EnrollRequest(BaseModel):
@@ -3055,6 +3067,7 @@ class ExecutionView(BaseModel):
     a baseline or a validation run names its validation.
     """
     abort: Annotated[str | None, Field(title='Abort')]
+    agent_project: Annotated[str, Field(title='Agent Project')]
     cases: CasesView
     check: Annotated[str, Field(title='Check')]
     check_version: Annotated[str, Field(title='Check Version')]
@@ -3066,7 +3079,6 @@ class ExecutionView(BaseModel):
     image: Annotated[str, Field(title='Image')]
     isolation: Annotated[str, Field(title='Isolation')]
     outcome: RunOutcome
-    project: Annotated[str, Field(title='Project')]
     provenance: Provenance
     purpose: RunPurpose
     started_at: Annotated[AwareDatetime, Field(title='Started At')]
@@ -3133,7 +3145,7 @@ class FindingView(BaseModel):
 
 class GrantRequest(BaseModel):
     """
-    The role the automation principal holds: never above the granter's.
+    The role the agent automation principal holds: never above the granter's.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -3290,26 +3302,6 @@ class JobCompletionRequest(BaseModel):
     failure: ToolFailure | None = None
     handle: Annotated[str, Field(max_length=200, min_length=1, title='Handle')]
     text: Annotated[str | None, Field(max_length=1000000, title='Text')] = ''
-
-
-class KnowledgeView(BaseModel):
-    """
-    An entry, its state, who suggested and who reviewed it, the version
-    an edit names in `If-Match`, and what the lever checks found in its
-    words at that version: advice, never a refusal; null on a version they
-    never read, an empty list on one they read and found nothing in.
-    """
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
-    id: Annotated[UUID, Field(title='Id')]
-    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
-    status: KnowledgeStatus
-    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
-    text: Annotated[str, Field(title='Text')]
-    title: Annotated[str, Field(title='Title')]
-    trigger: Annotated[list[str], Field(title='Trigger')]
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    version: Annotated[int, Field(title='Version')]
 
 
 class LastOwnerDetail(BaseModel):
@@ -3528,25 +3520,6 @@ class MintOperatorTokenRequest(BaseModel):
     permission: OperatorRole
 
 
-class NotificationView(BaseModel):
-    """
-    What waits on the caller: the session, why it parked, the one action
-    that clears it, and that action's route, empty when none serves it yet.
-    `read_at` is when the caller marked it read.
-    """
-    action: Annotated[str, Field(title='Action')]
-    channel: Annotated[str, Field(title='Channel')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    id: Annotated[UUID, Field(title='Id')]
-    link: Annotated[str, Field(title='Link')]
-    provenance: Provenance | None
-    read_at: Annotated[AwareDatetime | None, Field(title='Read At')]
-    reason: ParkReason
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    text: Annotated[str, Field(title='Text')]
-    unlock: Annotated[str, Field(title='Unlock')]
-
-
 class OperatorTokenPageView(BaseModel):
     """
     One page of the caller's live operator tokens, newest first;
@@ -3593,6 +3566,25 @@ class OrgPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
+class ParkAlertView(BaseModel):
+    """
+    What waits on the caller: the session, why it parked, the one action
+    that clears it, and that action's route, empty when none serves it yet.
+    `read_at` is when the caller marked it read.
+    """
+    action: Annotated[str, Field(title='Action')]
+    channel: Annotated[str, Field(title='Channel')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    link: Annotated[str, Field(title='Link')]
+    provenance: Provenance | None
+    read_at: Annotated[AwareDatetime | None, Field(title='Read At')]
+    reason: ParkReason
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    text: Annotated[str, Field(title='Text')]
+    unlock: Annotated[str, Field(title='Unlock')]
+
+
 class PartRequest(BaseModel):
     """
     One part of an item's output, in the order the host read it.
@@ -3616,36 +3608,6 @@ class PlacementView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     version: Annotated[int, Field(title='Version')]
     waiting: Annotated[bool, Field(title='Waiting')]
-
-
-class PlaybookView(BaseModel):
-    """
-    A version as published, with what the lever checks found in it as it
-    was: advice, which never refused the publish. `findings` is null on a
-    version the checks never read, one published before they ran, and an
-    empty list on one they read and found nothing in.
-    """
-    body: Annotated[str, Field(title='Body')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    description: Annotated[str, Field(title='Description')]
-    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
-    gates: Annotated[list[GateView], Field(title='Gates')]
-    id: Annotated[UUID, Field(title='Id')]
-    name: Annotated[str, Field(title='Name')]
-    published_by: Annotated[UUID, Field(title='Published By')]
-    version: Annotated[int, Field(title='Version')]
-
-
-class ProjectView(BaseModel):
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    environment: EnvironmentView | None
-    id: Annotated[UUID, Field(title='Id')]
-    name: Annotated[str, Field(title='Name')]
-    repository: RepositoryView
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    updated_by: Annotated[UUID, Field(title='Updated By')]
-    workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
 
 
 class ProviderKeyView(BaseModel):
@@ -3712,11 +3674,11 @@ class SessionRetentionView(BaseModel):
     report of the key it destroyed, none when the service holds the tenant's
     key alone and the platform's revocation is the destruction.
     """
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     content_expired_at: Annotated[AwareDatetime | None, Field(title='Content Expired At')]
     content_expires_at: Annotated[AwareDatetime | None, Field(title='Content Expires At')]
     destruction: KeyDestructionView | None
     policy: RetentionPolicyView
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     session_id: Annotated[UUID, Field(title='Session Id')]
     shape_expired_at: Annotated[AwareDatetime | None, Field(title='Shape Expired At')]
     shape_expires_at: Annotated[AwareDatetime | None, Field(title='Shape Expires At')]
@@ -3930,7 +3892,7 @@ class ValidationSessionView(BaseModel):
     and where it stands. Once its run is recorded, `passed` is the verdict
     and `run` is that run; both are null while it waits. The run passes
     when it passed, at least one of its cases did, and what served it meets
-    the strictest grade the project's policy asks of the check, a twin when
+    the strictest grade the agent project's policy asks of the check, a twin when
     no requirement names it: a run on a double, or with a dependency that
     was not there, never passes. A check a requirement rates runs its
     declared trials and passes only as that requirement judges them
@@ -3939,6 +3901,7 @@ class ValidationSessionView(BaseModel):
     whose check cannot run here, for good, is `refused`: it never passes,
     `reason` says why it could not run, and `run` is null.
     """
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     base: Annotated[str, Field(title='Base')]
     check: Annotated[str, Field(title='Check')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
@@ -3947,10 +3910,79 @@ class ValidationSessionView(BaseModel):
     head: Annotated[str, Field(title='Head')]
     id: Annotated[UUID, Field(title='Id')]
     passed: Annotated[bool | None, Field(title='Passed')]
-    project_id: Annotated[UUID, Field(title='Project Id')]
     reason: Annotated[str | None, Field(title='Reason')]
     run: ExecutionView | None
     status: ValidationStatus
+
+
+class AgentAutomationRequest(BaseModel):
+    """
+    An agent automation whole, as made or as edited.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    action: ActionBody
+    enabled: Annotated[bool | None, Field(title='Enabled')] = True
+    limits: LimitsBody
+    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
+    own_events: Annotated[bool | None, Field(title='Own Events')] = False
+    runs_as: RunsAs | None = None
+    trigger: TriggerBody
+
+
+class AgentKnowledgeView(BaseModel):
+    """
+    An entry, its state, who suggested and who reviewed it, the version
+    an edit names in `If-Match`, and what the lever checks found in its
+    words at that version: advice, never a refusal; null on a version they
+    never read, an empty list on one they read and found nothing in.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
+    id: Annotated[UUID, Field(title='Id')]
+    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
+    status: AgentKnowledgeStatus
+    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
+    text: Annotated[str, Field(title='Text')]
+    title: Annotated[str, Field(title='Title')]
+    trigger: Annotated[list[str], Field(title='Trigger')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    version: Annotated[int, Field(title='Version')]
+
+
+class AgentPlaybookView(BaseModel):
+    """
+    A version as published, with what the lever checks found in it as it
+    was: advice, which never refused the publish. `findings` is null on a
+    version the checks never read, one published before they ran, and an
+    empty list on one they read and found nothing in.
+    """
+    body: Annotated[str, Field(title='Body')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    description: Annotated[str, Field(title='Description')]
+    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
+    gates: Annotated[list[GateView], Field(title='Gates')]
+    id: Annotated[UUID, Field(title='Id')]
+    name: Annotated[str, Field(title='Name')]
+    published_by: Annotated[UUID, Field(title='Published By')]
+    version: Annotated[int, Field(title='Version')]
+
+
+class AgentProjectRetentionBody(BaseModel):
+    """
+    What one agent project of the tenant narrows; it never widens the tenant's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyBody
+
+
+class AgentProjectRetentionView(BaseModel):
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyView
 
 
 class AgentSessionPageView(BaseModel):
@@ -3969,22 +4001,6 @@ class ApiKeyPageView(BaseModel):
     """
     items: Annotated[list[ApiKeyView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
-
-
-class AutomationRequest(BaseModel):
-    """
-    An automation whole, as made or as edited.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    action: ActionBody
-    enabled: Annotated[bool | None, Field(title='Enabled')] = True
-    limits: LimitsBody
-    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
-    own_events: Annotated[bool | None, Field(title='Own Events')] = False
-    runs_as: RunsAs | None = None
-    trigger: TriggerBody
 
 
 class BudgetUsageView(BaseModel):
@@ -4075,9 +4091,9 @@ class ConnectorView(BaseModel):
     version: Annotated[int, Field(title='Version')]
 
 
-class ContenderView(BaseModel):
+class ContenderPinView(BaseModel):
     """
-    What an arm's sessions ran: the agent kind, its version, and each model
+    What a contender's sessions ran: the agent kind, its version, and each model
     role's fill.
     """
     fills: Annotated[list[RoleFillView], Field(title='Fills')]
@@ -4203,22 +4219,6 @@ class MembershipPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
-class ProjectRetentionBody(BaseModel):
-    """
-    What one project of the tenant narrows; it never widens the tenant's.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    policy: RetentionPolicyBody
-    project_id: Annotated[UUID, Field(title='Project Id')]
-
-
-class ProjectRetentionView(BaseModel):
-    policy: RetentionPolicyView
-    project_id: Annotated[UUID, Field(title='Project Id')]
-
-
 class RetentionRequest(BaseModel):
     """
     The tenant's whole policy, written over the version `If-Match` names,
@@ -4227,16 +4227,16 @@ class RetentionRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_projects: Annotated[list[AgentProjectRetentionBody] | None, Field(max_length=500, title='Agent Projects')] = None
     policy: RetentionPolicyBody | None = None
-    projects: Annotated[list[ProjectRetentionBody] | None, Field(max_length=500, title='Projects')] = None
 
 
 class RetentionView(BaseModel):
     """
     The tenant's policy; version 0, the loosest, until its first write.
     """
+    agent_projects: Annotated[list[AgentProjectRetentionView], Field(title='Agent Projects')]
     policy: RetentionPolicyView
-    projects: Annotated[list[ProjectRetentionView], Field(title='Projects')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]
@@ -4283,10 +4283,10 @@ class BenchmarkSummaryView(BaseModel):
     One run of a scenario, without its trials: a point of the scenario's
     trend.
     """
-    baseline: ContenderView
-    baseline_result: ArmResultView
-    candidate: ContenderView
-    candidate_result: ArmResultView
+    baseline: ContenderPinView
+    baseline_result: ContenderResultView
+    candidate: ContenderPinView
+    candidate_result: ContenderResultView
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     id: Annotated[UUID, Field(title='Id')]
     recorded_by: Annotated[UUID, Field(title='Recorded By')]
@@ -4296,12 +4296,12 @@ class BenchmarkSummaryView(BaseModel):
 
 class BenchmarkView(BaseModel):
     """
-    One run of a scenario, with every trial of both arms.
+    One run of a scenario, with every trial of both contenders.
     """
-    baseline: ContenderView
-    baseline_result: ArmResultView
-    candidate: ContenderView
-    candidate_result: ArmResultView
+    baseline: ContenderPinView
+    baseline_result: ContenderResultView
+    candidate: ContenderPinView
+    candidate_result: ContenderResultView
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     id: Annotated[UUID, Field(title='Id')]
     recorded_by: Annotated[UUID, Field(title='Recorded By')]

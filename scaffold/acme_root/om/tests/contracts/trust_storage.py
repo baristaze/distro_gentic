@@ -15,7 +15,7 @@ from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
-from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore
+from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -44,7 +44,7 @@ def make_declaration(
     store: SecretStore = SecretStore.CLOUD,
     *,
     owner: UUID | None = None,
-    kind: str = PROJECT,
+    kind: str = AGENT_PROJECT,
 ) -> SecretDeclaration:
     now = utcnow()
     actor = new_id()
@@ -130,12 +130,12 @@ class TrustStorageContract:
     ) -> None:
         org, ours, theirs = new_id(), new_id(), new_id()
         assert await storage.create_declaration(org, make_declaration(owner=theirs), ())
-        assert await storage.read_declaration(org, PROJECT, ours, "deploy_token") is None
+        assert await storage.read_declaration(org, AGENT_PROJECT, ours, "deploy_token") is None
         own = make_declaration(owner=ours)
         assert await storage.create_declaration(org, own, ())
-        assert await storage.read_declaration(org, PROJECT, ours, "deploy_token") == own
+        assert await storage.read_declaration(org, AGENT_PROJECT, ours, "deploy_token") == own
         assert await storage.read_declaration(org, "batch", ours, "deploy_token") is None
-        assert await storage.read_declaration(org, PROJECT, ours, "other") is None
+        assert await storage.read_declaration(org, AGENT_PROJECT, ours, "other") is None
 
     async def test_declarations_list_by_name_and_id_after_a_name_and_id(
         self, storage: TrustStorageInterface

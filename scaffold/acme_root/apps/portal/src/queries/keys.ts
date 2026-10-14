@@ -42,12 +42,12 @@ export const keys = {
     all: ["invitation"] as const,
     list: (limit: number) => ["invitation", "list", limit] as const,
   },
-  // The tenant's projects, which a new session starts in. No push names a
-  // project, so the list is read on its own clock.
-  projects: {
-    all: ["project"] as const,
-    list: (limit: number) => ["project", "list", limit] as const,
-    one: (id: string) => ["project", id] as const,
+  // The tenant's agent projects, which a new session starts in. No push names an
+  // agent project, so the list is read on its own clock.
+  agentProjects: {
+    all: ["agent_project"] as const,
+    list: (limit: number) => ["agent_project", "list", limit] as const,
+    one: (id: string) => ["agent_project", id] as const,
   },
   // The records below are named by no push, so each is read on its own
   // clock and again after a write of the screen's own.
@@ -62,21 +62,21 @@ export const keys = {
     options: ["fill_choice", "options"] as const,
     choices: ["fill_choice", "list"] as const,
   },
-  automations: {
-    all: ["automation"] as const,
-    list: (limit: number) => ["automation", "list", limit] as const,
-    one: (id: string) => ["automation", id] as const,
-    principal: ["automation", "principal"] as const,
+  agentAutomations: {
+    all: ["agent_automation"] as const,
+    list: (limit: number) => ["agent_automation", "list", limit] as const,
+    one: (id: string) => ["agent_automation", id] as const,
+    principal: ["agent_automation", "principal"] as const,
   },
-  // A playbook is read by its name, at its latest version.
-  playbooks: {
-    all: ["playbook"] as const,
-    one: (name: string) => ["playbook", name] as const,
+  // An agent playbook is read by its name, at its latest version.
+  agentPlaybooks: {
+    all: ["agent_playbook"] as const,
+    one: (name: string) => ["agent_playbook", name] as const,
   },
-  knowledge: {
-    all: ["knowledge"] as const,
-    list: (status: string, limit: number) => ["knowledge", "list", status, limit] as const,
-    one: (id: string) => ["knowledge", id] as const,
+  agentKnowledge: {
+    all: ["agent_knowledge"] as const,
+    list: (status: string, limit: number) => ["agent_knowledge", "list", status, limit] as const,
+    one: (id: string) => ["agent_knowledge", id] as const,
   },
   // The org's events, newest first, as the audit reads them.
   audit: {

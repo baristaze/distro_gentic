@@ -32,7 +32,7 @@ from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey, key_secret_name
 from acme.om.trust.types.secret import (
-    PROJECT,
+    AGENT_PROJECT,
     SecretDeclaration,
     SecretStore,
     kept_as,
@@ -176,16 +176,18 @@ class TrustManagerImpl(TrustManagerInterface):
     async def put_secret(
         self,
         ctx: TenantContext,
-        project_id: UUID,
+        agent_project_id: UUID,
         name: str,
         value: str,
         *,
-        owner_kind: str = PROJECT,
+        owner_kind: str = AGENT_PROJECT,
     ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
-        declaration = await self._storage.read_declaration(ctx.org_id, owner_kind, project_id, name)
+        declaration = await self._storage.read_declaration(
+            ctx.org_id, owner_kind, agent_project_id, name
+        )
         if declaration is None:
-            raise NotFound(f"no secret named {name} is declared on {owner_kind} {project_id}")
+            raise NotFound(f"no secret named {name} is declared on {owner_kind} {agent_project_id}")
         if declaration.store is not SecretStore.CLOUD:
             raise SecretCrossesWall(
                 f"{name} is held inside a customer's wall; its host's store takes its value"

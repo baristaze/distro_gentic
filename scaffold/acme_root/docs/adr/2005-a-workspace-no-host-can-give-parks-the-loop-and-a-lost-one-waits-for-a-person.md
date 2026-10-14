@@ -70,8 +70,8 @@ alone.
   repository holds it, fetched into a fresh repository of the
   platform's own; the checkout of the workspace this process holds
   tells only what was not delivered. A session whose workspace this
-  process does not hold, or whose project binds no repository, reads as
-  nothing and counts no success.
+  process does not hold, or whose agent project binds no repository,
+  reads as nothing and counts no success.
 - The engine's loop gains the two parks and the told change, and its
   workspace interface gains `changed` and `WorkspaceLost`. The next move
   of the base merges over all four.

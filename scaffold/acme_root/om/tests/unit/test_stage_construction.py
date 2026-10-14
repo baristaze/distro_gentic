@@ -4,7 +4,7 @@ test: a static scan of every source tree enumerates every site that
 constructs `IdentityContext`, `TenantContext`, or `OperatorContext`, or calls
 `build_context`, and fails when a site appears that is not listed here.
 The list is the tenancy manager's transitions and the helper they use,
-and the transition that answers for the tenant's automation principal by
+and the transition that answers for the tenant's agent automation principal by
 its grant.
 Test fakes under `tests/` are outside the scan."""
 
@@ -44,9 +44,9 @@ ALLOWED: Counter[tuple[str, str, str]] = Counter(
         (TRANSITIONS, "TenancyManagerImpl.service_contexts", "build_context"): 1,
         # A member's live context, for a call made on their authority.
         (TRANSITIONS, "TenancyManagerImpl.delegated_context", "build_context"): 1,
-        # The tenant's automation principal's live context, by its grant, for
-        # a call an automation's session makes on its authority.
-        ("acme.om.automations.root", "automation_principals.live", "build_context"): 1,
+        # The tenant's agent automation principal's live context, by its grant, for
+        # a call an agent automation's session makes on its authority.
+        ("acme.om.agent_automations.root", "agent_automation_principals.live", "build_context"): 1,
         # The one service_contexts mints, for a tenant a purge across tenants
         # found a row of.
         (TRANSITIONS, "TenancyManagerImpl.sweep_context", "build_context"): 1,

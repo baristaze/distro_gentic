@@ -4,7 +4,7 @@ session pinned of them. Every operation takes org_id first."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.connectors.types.connector import Connector, SessionConnectors
+from acme.om.connectors.types.connector import AgentSessionConnectors, Connector
 from acme.om.outbox.types.row import OutboxRow
 
 
@@ -38,13 +38,13 @@ class ConnectorStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def create_pin(self, org_id: UUID, pin: SessionConnectors) -> SessionConnectors:
+    async def create_pin(self, org_id: UUID, pin: AgentSessionConnectors) -> AgentSessionConnectors:
         """The session's pin, or the one it holds already, which answers
         instead: a session pins once."""
         ...
 
     @abstractmethod
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> SessionConnectors | None: ...
+    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None: ...
 
     @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:

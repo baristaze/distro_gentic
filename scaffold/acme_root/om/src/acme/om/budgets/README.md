@@ -54,7 +54,7 @@ thing [Acme is made of](../../../../README.md).
   not bill. Otherwise it counts the usage the provider reported, or
   usage retrieved later, else the whole hold: a broken stream or a crash
   after the call was sent is usually billed. A hold whose run died before
-  it settled is settled by the sweep ([billing](../billing/README.md)).
+  it settled is settled by the sweep ([agent billing](../agent_billing/README.md)).
 - **Read a budget's spend** in its current window.
 
 ## The rules

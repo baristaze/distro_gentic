@@ -17,8 +17,8 @@ from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import RequestContext, TenantContext
+from acme.om.exec_relay.types.exec import ExecProgress
 from acme.om.hosts.types.host import ClaimantIdentity
-from acme.om.relay.types.exec import ExecProgress
 from acme.om.watch.types.control import HandCommand, HandRun
 from acme.om.watch.types.live import (
     Appended,

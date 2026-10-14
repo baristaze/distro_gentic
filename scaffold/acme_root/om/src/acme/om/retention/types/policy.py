@@ -1,11 +1,11 @@
 """What a tenant declares about how long a session's content and its shape
-are kept, and where; and what each project of the tenant narrows of it.
+are kept, and where; and what each agent project of the tenant narrows of it.
 
-A tenant has one policy, changed by a compare-and-set on its version. A
-project's narrowing only tightens: a session of the project takes the
+A tenant has one policy, changed by a compare-and-set on its version. An
+agent project's narrowing only tightens: a session of the agent project takes the
 tighter of the two, field by field (`retention.rules.tighter`), so no
-project setting widens its tenant's policy. The one field two policies can
-disagree on without one being tighter is the region, and a project that
+agent project setting widens its tenant's policy. The one field two policies can
+disagree on without one being tighter is the region, and an agent project that
 names another region than its tenant's is refused."""
 
 from datetime import timedelta
@@ -20,7 +20,7 @@ from acme.om.privacy.types.session_privacy import StorageMode
 REGION = r"^[a-z0-9][a-z0-9-]{0,31}$"
 """A region as a cloud names it, such as `eu-central-1`."""
 
-MAX_PROJECTS = 500
+MAX_AGENT_PROJECTS = 500
 """The narrowings one tenant's policy holds at most."""
 
 MAX_LIFETIME = timedelta(days=36500)
@@ -60,32 +60,36 @@ class RetentionPolicy(Platform):
         return self
 
 
-class ProjectRetention(Platform):
-    """What one project narrows of its tenant's policy. A field it leaves at
+class AgentProjectRetention(Platform):
+    """What one agent project narrows of its tenant's policy. A field it leaves at
     its default narrows nothing."""
 
-    project_id: UUID
+    agent_project_id: UUID
     policy: RetentionPolicy
 
 
 class TenantRetention(Identifiable, Trackable):
-    """The tenant's policy and its projects' narrowings, one record a
+    """The tenant's policy and its agent projects' narrowings, one record a
     tenant. Version 0 is the policy of a tenant that has declared none: the
     loosest, never stored."""
 
     policy: RetentionPolicy = RetentionPolicy()
-    projects: tuple[ProjectRetention, ...] = Field(default=(), max_length=MAX_PROJECTS)
+    agent_projects: tuple[AgentProjectRetention, ...] = Field(
+        default=(), max_length=MAX_AGENT_PROJECTS
+    )
     version: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def _one_narrowing_a_project(self) -> Self:
-        ids = [project.project_id for project in self.projects]
+    def _one_narrowing_an_agent_project(self) -> Self:
+        ids = [agent_project.agent_project_id for agent_project in self.agent_projects]
         if len(ids) != len(set(ids)):
-            raise ValueError("a project narrows its tenant's policy once")
+            raise ValueError("an agent project narrows its tenant's policy once")
         return self
 
-    def narrowing(self, project_id: UUID | None) -> RetentionPolicy | None:
-        """The project's narrowing, when the project has one."""
-        if project_id is None:
+    def narrowing(self, agent_project_id: UUID | None) -> RetentionPolicy | None:
+        """The agent project's narrowing, when the agent project has one."""
+        if agent_project_id is None:
             return None
-        return next((p.policy for p in self.projects if p.project_id == project_id), None)
+        return next(
+            (p.policy for p in self.agent_projects if p.agent_project_id == agent_project_id), None
+        )

@@ -1,6 +1,6 @@
 """Take control: a command a person runs in a session's workspace while
 the agent stands down, and the run it is recorded as. What the command runs
-and prints is the session's content, sealed in the relay's item; what is
+and prints is the session's content, sealed in the exec relay's item; what is
 here stays in the clear."""
 
 from typing import Annotated
@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.base import Platform
-from acme.om.relay.types.exec import ExecState
+from acme.om.exec_relay.types.exec import ExecState
 
 MAX_ARGS = 256
 MAX_ARG = 4096
@@ -30,7 +30,7 @@ class HandCommand(Platform):
 
 
 class HandRun(Platform):
-    """A person's command as it was recorded: the relay's item, which holds
+    """A person's command as it was recorded: the exec relay's item, which holds
     what ran and how it ended, the person it is attributed to, and the
     writer epoch it runs under."""
 

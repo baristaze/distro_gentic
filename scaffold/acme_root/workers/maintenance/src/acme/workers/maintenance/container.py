@@ -15,46 +15,52 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl, Integr
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations.impl.manager import AgentAutomationsOptions
+from acme.om.agent_automations.root import build_agent_automations
+from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.agent_billing.root import (
+    build_agent_billing_purge,
+    build_money_gate,
+    refuse_open_money,
+)
+from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
+from acme.om.agent_knowledge.impl.manager import AgentKnowledgeOptions
+from acme.om.agent_knowledge.root import build_agent_knowledge
+from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_projects.impl.manager import AgentProjectsOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
+from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
-from acme.om.automations.impl.manager import AutomationsOptions
-from acme.om.automations.root import build_automations
 from acme.om.base import new_id
-from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
-from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_open_money
-from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.events.impl.manager import EventsOptions
+from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.impl.manager import IntakeOptions
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.impl.manager import KnowledgeOptions
-from acme.om.knowledge.root import build_knowledge
 from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
-from acme.om.notifications.impl.manager import NotificationsOptions
-from acme.om.notifications.root import build_notifications
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
+from acme.om.park_alerts.impl.manager import ParkAlertsOptions
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.impl.manager import PlaybooksOptions
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.projects.impl.manager import ProjectsOptions
-from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import (
     LOCAL,
@@ -75,8 +81,6 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
-from acme.om.workspaces.impl.executor import ExecutorOptions
-from acme.om.workspaces.impl.manager import WorkspacesOptions
 from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
 
@@ -146,7 +150,7 @@ def worker_managers(
 ) -> Managers:
     """The managers, each one the sweep purges through with its retention and
     its batch from the settings. The worker is the one process that purges,
-    so it is the one that sets them. Its budget gate is billing's money
+    so it is the one that sets them. Its budget gate is agent billing's money
     gate, the one whose holds its sweep settles; `ports` are the platform's
     ports the product sets, None each for the platform's own, and their
     `kinds` the product's, which `build` reads from `PRODUCT_KINDS`. Outside
@@ -154,7 +158,7 @@ def worker_managers(
     money gate, is refused at boot.
 
     The catalog classes every tool a session can name, as the API's and the
-    session runner's do, since an intake event, an automation's start, and
+    session runner's do, since an intake event, an agent automation's start, and
     a message are checked against a session's tools here: `platform_agents`
     ships the platform's agents, which a deployed worker reads from its
     corpus root and refuses to boot with none, and the runner's `comment`
@@ -217,9 +221,9 @@ def worker_managers(
         placement_options=PlacementOptions(purge_batch=batch),
         hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
-        projects_options=ProjectsOptions(purge_batch=batch),
-        relay_options=RelayOptions(purge_batch=batch),
-        workspaces_options=WorkspacesOptions(purge_batch=batch),
+        agent_projects_options=AgentProjectsOptions(purge_batch=batch),
+        relay_options=ExecRelayOptions(purge_batch=batch),
+        agent_workspaces_options=AgentWorkspacesOptions(purge_batch=batch),
         cloud_pool_options=cloud_pool_options(settings),
         cloud_pool_stage=stage,
         budget_gate=ports.budget_gate or build_money_gate(storage),
@@ -227,13 +231,13 @@ def worker_managers(
         executor=ports.executor,
         executor_options=ExecutorOptions(image=settings.workspace_image),
         work_product=ports.work_product,
-        session_projects=ports.session_projects,
-        workspace_projects=ports.workspace_projects,
+        agent_session_projects=ports.agent_session_projects,
+        workspace_agent_projects=ports.workspace_agent_projects,
         product_kinds=ports.kinds,
         models_layer=matrix.layer,
-        # An automation's start and an intake event make sessions here, each
-        # with its kind's manual.
-        agents_layer=PlaybooksLayer(storage).agents,
+        # An agent automation's start and an intake event make sessions here, each
+        # with its kind manual.
+        agents_layer=AgentPlaybooksLayer(storage).agents,
     )
     refuse_open_money(settings.environment, managers)
     return managers
@@ -249,7 +253,7 @@ class WorkerContainer:
         integrations: IntegrationsInterface,
         kinds: ProductKinds | None = None,
     ) -> None:
-        """`kinds` are the product's, whose automation actions its firings
+        """`kinds` are the product's, whose agent automation actions its firings
         and its ticks run; None adds none."""
         kinds = kinds or ProductKinds()
         self.settings = settings
@@ -270,24 +274,24 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # playbooks, knowledge, and notifications, for their purges.
+        # agent playbooks, agent knowledge, and park alerts, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
-        # Outside a local stack, an automation's session starts in a project:
+        # Outside a local stack, an agent automation's session starts in an agent project:
         # a start that names none fires nothing.
-        self.automations = build_automations(
+        self.agent_automations = build_agent_automations(
             storage,
             managers,
-            project_required=settings.environment != LOCAL,
-            options=AutomationsOptions(purge_batch=batch),
+            agent_project_required=settings.environment != LOCAL,
+            options=AgentAutomationsOptions(purge_batch=batch),
             actions=kinds.actions,
-            playbooks=lambda: self.playbooks,
+            agent_playbooks=lambda: self.agent_playbooks,
         )
-        self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
-            managers
-        )
-        self.knowledge = build_knowledge(
-            storage, managers, options=KnowledgeOptions(purge_batch=batch)
+        self.agent_playbooks = AgentPlaybooksLayer(
+            storage, options=AgentPlaybooksOptions(purge_batch=batch)
+        ).build(managers)
+        self.agent_knowledge = build_agent_knowledge(
+            storage, managers, options=AgentKnowledgeOptions(purge_batch=batch)
         )
         self.connectors = build_connectors(
             storage,
@@ -296,14 +300,14 @@ class WorkerContainer:
             client=McpClientSdkImpl(),
             options=ConnectorsOptions(purge_batch=batch),
         )
-        # Billing's account, for its purge; its ledger stays.
-        self.billing = build_billing_purge(storage, managers)
+        # Agent agent billing's account, for its purge; its ledger stays.
+        self.agent_billing = build_agent_billing_purge(storage, managers)
         # The platform's duties the sweep carries across tenants: a hold
         # nobody settled settles through the money gate whose ledger holds
         # it, at the provider's bill, else whole; and a session pending with
         # no loop has its run asked for again.
         self.holds = HoldSweepImpl(
-            storage.get_money_ledger_storage(),
+            storage.get_spend_ledger_storage(),
             managers.budget_gate,
             managers.tenancy,
             ProviderBillsUnknownImpl(),
@@ -315,12 +319,12 @@ class WorkerContainer:
             managers.tenancy,
             StalledOptions(batch=STALLED_SWEEP_BATCH),
         )
-        self.notifications = build_notifications(
+        self.park_alerts = build_park_alerts(
             storage,
             managers,
             integrations,
             self.intake,
-            options=NotificationsOptions(purge_batch=batch),
+            options=ParkAlertsOptions(purge_batch=batch),
         )
 
     @property

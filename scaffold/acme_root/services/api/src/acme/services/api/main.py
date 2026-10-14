@@ -250,9 +250,9 @@ def add_member(args: argparse.Namespace) -> int:
 
 def seed_platform_of(args: argparse.Namespace) -> int:
     """A local org made ready to run a session: its account on a plan, its
-    first project, its retention policy, the published matrix, which serves
+    first agent project, its retention policy, the published matrix, which serves
     the product's agent kinds beside the platform's, and the forge twin's
-    installation that holds the project's repository, where the forge is
+    installation that holds the agent project's repository, where the forge is
     its twin. A no-op for what is there already."""
 
     async def run() -> int:
@@ -277,8 +277,10 @@ def seed_platform_of(args: argparse.Namespace) -> int:
             )
         finally:
             await container.close()
-        project = "seeded before" if seeded.project is None else seeded.project.id
-        print(f"seeded org {args.slug}: project {project}, matrix version {seeded.matrix_version}")
+        agent_project = "seeded before" if seeded.agent_project is None else seeded.agent_project.id
+        print(
+            f"seeded org {args.slug}: agent project {agent_project}, matrix version {seeded.matrix_version}"
+        )
         return 0
 
     return asyncio.run(run())
@@ -355,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_seed = sub.add_parser(
         "seed-platform",
-        help="give a local org its account on a plan, its first project, its retention "
+        help="give a local org its account on a plan, its first agent project, its retention "
         "policy, the published matrix, and the forge twin's installation of its repository; "
         "a no-op for what exists",
     )

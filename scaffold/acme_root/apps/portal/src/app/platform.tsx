@@ -3,16 +3,16 @@
 // agents it ships, and the examples its fields show. The shell joins it with
 // the product's and refuses an entry the two share.
 import { AuditPage } from "../features/audit/AuditPage";
-import { AutomationPage } from "../features/automations/AutomationPage";
-import { AutomationsPage } from "../features/automations/AutomationsPage";
+import { AgentAutomationPage } from "../features/agent_automations/AgentAutomationPage";
+import { AgentAutomationsPage } from "../features/agent_automations/AgentAutomationsPage";
 import { HomePage } from "../features/home/HomePage";
-import { EntryPage } from "../features/knowledge/EntryPage";
-import { KnowledgePage } from "../features/knowledge/KnowledgePage";
+import { EntryPage } from "../features/agent_knowledge/EntryPage";
+import { AgentKnowledgePage } from "../features/agent_knowledge/AgentKnowledgePage";
 import { ModelsPage } from "../features/models/ModelsPage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
-import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
-import { ProjectPage } from "../features/projects/ProjectPage";
-import { ProjectsPage } from "../features/projects/ProjectsPage";
+import { AgentPlaybooksPage } from "../features/agent_playbooks/AgentPlaybooksPage";
+import { AgentProjectPage } from "../features/agent_projects/AgentProjectPage";
+import { AgentProjectsPage } from "../features/agent_projects/AgentProjectsPage";
 import { PLATFORM_TABS } from "../features/session/PaneTabs";
 import { SessionPage } from "../features/session/SessionPage";
 import { PLATFORM_GISTS } from "../features/session/toolGists";
@@ -26,36 +26,36 @@ import { SignOnPage } from "../features/settings/SignOnPage";
 import { UsagePage } from "../features/usage/UsagePage";
 import {
   AuditIcon,
-  AutomationIcon,
+  AgentAutomationIcon,
   BotIcon,
   DocumentIcon,
   KeyIcon,
-  KnowledgeIcon,
+  AgentKnowledgeIcon,
   OrgIcon,
-  ProjectIcon,
+  AgentProjectIcon,
   SignOnIcon,
   UsageIcon,
   UserIcon,
   UsersIcon,
 } from "../design/kit";
-import { useKnowledge } from "../queries/knowledge";
+import { useAgentKnowledge } from "../queries/agentKnowledge";
 import { Moved } from "./Moved";
 import type { PortalProduct } from "./product";
 import { paramNames } from "./routeCatalog";
 
 /** How many suggested entries wait on a review; null until read. */
 function useSuggestedCount(): number | null {
-  return useKnowledge("suggested").data?.length ?? null;
+  return useAgentKnowledge("suggested").data?.length ?? null;
 }
 
 /** The addresses the portal moved, and where each lands now: what is set up
  * once went under Settings, and the calls waiting on a person are the
  * sessions that need one. A `:name` in the new address takes the old one's. */
 export const MOVED: readonly { from: string; to: string }[] = [
-  { from: "/projects", to: "/settings/projects" },
-  { from: "/projects/:projectId", to: "/settings/projects/:projectId" },
+  { from: "/agent-projects", to: "/settings/agent-projects" },
+  { from: "/agent-projects/:agentProjectId", to: "/settings/agent-projects/:agentProjectId" },
   { from: "/models", to: "/settings/models" },
-  { from: "/playbooks", to: "/settings/playbooks" },
+  { from: "/agent-playbooks", to: "/settings/agent-playbooks" },
   { from: "/audit", to: "/settings/audit" },
   { from: "/usage", to: "/settings/usage" },
   { from: "/approvals", to: "/sessions?needs=you" },
@@ -63,7 +63,7 @@ export const MOVED: readonly { from: string; to: string }[] = [
 
 export const PLATFORM: PortalProduct = {
   routes: [
-    { path: "/", element: <HomePage />, handle: { about: "Home: a box to describe a task, the agent and the project it starts on, and starter prompts" } },
+    { path: "/", element: <HomePage />, handle: { about: "Home: a box to describe a task, the agent and the agent project it starts on, and starter prompts" } },
     {
       path: "/sessions",
       element: <SessionsPage />,
@@ -77,14 +77,14 @@ export const PLATFORM: PortalProduct = {
         params: { sessionId: "the session's id" },
       },
     },
-    { path: "/automations", element: <AutomationsPage />, handle: { about: "The org's automations, a new one, and the automation principal" } },
+    { path: "/agent-automations", element: <AgentAutomationsPage />, handle: { about: "The org's agent automations, a new one, and the agent automation principal" } },
     {
-      path: "/automations/:automationId",
-      element: <AutomationPage />,
-      handle: { about: "One automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { automationId: "the automation's id" } },
+      path: "/agent-automations/:agentAutomationId",
+      element: <AgentAutomationPage />,
+      handle: { about: "One agent automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { agentAutomationId: "the agent automation's id" } },
     },
-    { path: "/knowledge", element: <KnowledgePage />, handle: { about: "Knowledge: what every session should know, and the suggestions waiting on a review" } },
-    { path: "/knowledge/:entryId", element: <EntryPage />, handle: { about: "One knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
+    { path: "/agent-knowledge", element: <AgentKnowledgePage />, handle: { about: "Agent knowledge: what every session should know, and the suggestions waiting on a review" } },
+    { path: "/agent-knowledge/:entryId", element: <EntryPage />, handle: { about: "One agent knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
     { path: "/settings", element: <SettingsPage />, handle: { about: "Settings: every section, by group" } },
     { path: "/orgs/new", element: <NewOrgPage />, handle: { about: "A new org of the signed-in person's own" } },
     ...MOVED.map(({ from, to }) => ({
@@ -95,17 +95,17 @@ export const PLATFORM: PortalProduct = {
   ],
   nav: [
     {
-      id: "automations",
-      label: "Automations",
-      icon: <AutomationIcon />,
-      to: "/automations",
+      id: "agent_automations",
+      label: "Agent automations",
+      icon: <AgentAutomationIcon />,
+      to: "/agent-automations",
       tip: "What starts or messages a session on an event or a schedule",
     },
     {
-      id: "knowledge",
-      label: "Knowledge",
-      icon: <KnowledgeIcon />,
-      to: "/knowledge",
+      id: "agent_knowledge",
+      label: "Agent knowledge",
+      icon: <AgentKnowledgeIcon />,
+      to: "/agent-knowledge",
       tip: "What every session should know; the count is suggestions to review",
       count: useSuggestedCount,
     },
@@ -157,16 +157,16 @@ export const PLATFORM: PortalProduct = {
     },
     {
       group: "Agents",
-      id: "projects",
-      label: "Projects",
-      icon: <ProjectIcon />,
+      id: "agent_projects",
+      label: "Agent projects",
+      icon: <AgentProjectIcon />,
       about: "Each bound to its repository, and the credential it is read with",
       routes: [
-        { path: "/settings/projects", element: <ProjectsPage /> },
+        { path: "/settings/agent-projects", element: <AgentProjectsPage /> },
         {
-          path: "/settings/projects/:projectId",
-          element: <ProjectPage />,
-          handle: { about: "One project: its repository, the credential it is read with, its name, and its removal", params: { projectId: "the project's id" } },
+          path: "/settings/agent-projects/:agentProjectId",
+          element: <AgentProjectPage />,
+          handle: { about: "One agent project: its repository, the credential it is read with, its name, and its removal", params: { agentProjectId: "the agent project's id" } },
         },
       ],
     },
@@ -180,11 +180,11 @@ export const PLATFORM: PortalProduct = {
     },
     {
       group: "Agents",
-      id: "playbooks",
-      label: "Playbooks",
+      id: "agent_playbooks",
+      label: "Agent playbooks",
       icon: <DocumentIcon />,
       about: "The team's procedures, as versioned briefs",
-      routes: [{ path: "/settings/playbooks", element: <PlaybooksPage /> }],
+      routes: [{ path: "/settings/agent-playbooks", element: <AgentPlaybooksPage /> }],
     },
     {
       group: "Security",
@@ -204,9 +204,9 @@ export const PLATFORM: PortalProduct = {
     },
   ],
   agents: [
-    { kind: "engineer", label: "Engineer", about: "Changes code in the project's repository, validates it, and opens a pull request." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code in the agent project's repository, validates it, and opens a pull request." },
     { kind: "analysis", label: "Analysis", about: "Reads what a run produced and answers with findings; it changes nothing." },
-    { kind: "planner", label: "Planner", about: "Turns findings into tasks, and hands engineering work to an engineer." },
+    { kind: "planner", label: "Planner", about: "Turns findings into tasks, and hands engineering work to a software engineer." },
     {
       kind: "platform_assistant",
       label: "Platform assistant",

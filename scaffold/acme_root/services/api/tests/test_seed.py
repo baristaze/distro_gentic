@@ -1,9 +1,9 @@
 """A local org is seeded ready to run a session: its account on a plan,
-its first project, its retention policy, and the published matrix, and a
+its first agent project, its retention policy, and the published matrix, and a
 seed run twice writes nothing new. The matrix is published by the
 provisioner, admitted on a token the seed ends when it is done. Where the
 forge is its twin, each seeded org connects the twin's installation that
-holds its project's repository, so its sessions write through it."""
+holds its agent project's repository, so its sessions write through it."""
 
 import re
 from pathlib import Path
@@ -14,14 +14,14 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import absent_model_providers
+from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.matrix.types.matrix import MatrixStatus
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
 from acme.services.api.seed import (
     CONTENT_LIFETIME,
     FORGE,
-    PLAN,
     PROVISIONER,
+    UNIT_PLAN,
     first_repository,
     seed_platform,
 )
@@ -40,11 +40,13 @@ async def test_a_seed_readies_the_tenant_once_and_a_second_run_writes_nothing(
     first = await seed_platform(container.storage, container.managers, owner)
     second = await seed_platform(container.storage, container.managers, owner)
 
-    account = await container.storage.get_account_storage().read_account(org.id)
-    assert account is not None and account.plan_id == PLAN
-    assert first.project is not None and second.project is None
-    project = await container.managers.projects.get_project(owner, first.project.id)
-    assert project.repository == first_repository("ajax")
+    account = await container.storage.get_spend_account_storage().read_spend_account(org.id)
+    assert account is not None and account.unit_plan_id == UNIT_PLAN
+    assert first.agent_project is not None and second.agent_project is None
+    agent_project = await container.managers.agent_projects.get_agent_project(
+        owner, first.agent_project.id
+    )
+    assert agent_project.repository == first_repository("ajax")
     assert (await container.managers.retention.get_policy(owner)).policy.content_lifetime == (
         CONTENT_LIFETIME
     )
@@ -74,11 +76,11 @@ async def test_make_seed_readies_both_local_orgs_each_with_its_account(tmp_path:
         for owner, _ in (first, second)
     ]
 
-    accounts = container.storage.get_account_storage()
+    accounts = container.storage.get_spend_account_storage()
     for _, org in (first, second):
-        account = await accounts.read_account(org.id)
-        assert account is not None and account.plan_id == PLAN, org.slug
-    assert all(each.project is not None for each in seeded)
+        account = await accounts.read_spend_account(org.id)
+        assert account is not None and account.unit_plan_id == UNIT_PLAN, org.slug
+    assert all(each.agent_project is not None for each in seeded)
     assert seeded[0].matrix_version == seeded[1].matrix_version
 
 
@@ -101,12 +103,12 @@ async def test_after_the_seed_a_session_in_each_seeded_org_pushes_and_opens_a_pu
     writes = SourceControlForgeImpl(
         integrations.get_integration, container.storage.get_intake_storage().read_installation_org
     )
-    projects = WorkspaceProjectsBoundImpl(container.storage.get_project_storage())
+    agent_projects = WorkspaceAgentProjectsBoundImpl(container.storage.get_agent_project_storage())
 
     for owner in owners:
         seeded = await seed_platform(container.storage, container.managers, owner, forge=forge)
-        assert seeded.project is not None
-        binding = await projects.binding_of(owner, seeded.project.id)
+        assert seeded.agent_project is not None
+        binding = await agent_projects.binding_of(owner, seeded.agent_project.id)
         assert binding is not None
         await writes.push(owner, binding, "refs/heads/sessions/one", "9a8b7c6", b"bundle")
         await writes.open_pull_request(owner, binding, "sessions/one", "A fix", "Fixes it.")

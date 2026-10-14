@@ -16,10 +16,10 @@ from fastapi.responses import StreamingResponse
 
 from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.hosts import Host
-from acme.services.api.gateway.resolve import RelayService
-from acme.services.api.types.relay import ControlView
+from acme.services.api.gateway.resolve import ExecRelayService
+from acme.services.api.types.exec_relay import ControlView
 
-router = APIRouter(tags=["relay"])
+router = APIRouter(tags=["exec_relay"])
 
 MEDIA_TYPE = "application/x-ndjson"
 
@@ -30,12 +30,12 @@ MEDIA_TYPE = "application/x-ndjson"
     responses={200: {"model": ControlView, "content": {MEDIA_TYPE: {}}}},
 )
 async def control(
-    rctx: Rctx, relay: RelayService, host: Host, after: UUID | None = None
+    rctx: Rctx, exec_relay: ExecRelayService, host: Host, after: UUID | None = None
 ) -> StreamingResponse:
     """The host's control stream, after the message `after` names."""
 
     async def lines() -> AsyncIterator[str]:
-        async for message in relay.control(rctx, host, after):
+        async for message in exec_relay.control(rctx, host, after):
             yield message.model_dump_json(exclude_none=True) + "\n"
 
     return StreamingResponse(lines(), media_type=MEDIA_TYPE)

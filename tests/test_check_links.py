@@ -20,7 +20,7 @@ def test_missing_file_fails(repo, links, capsys):
 
 
 def test_a_sibling_spec_named_by_a_relative_path_fails(repo, links, capsys):
-    repo.edit("distro_gentic_spec.md", "A step is written once.", "A fleet is [the platform's](platform_spec.md#money).")
+    repo.edit("distro_gentic_spec.md", "A step is written once.", "An agent fleet is [the platform's](platform_spec.md#money).")
     assert links.main() == 1
     assert "distro_gentic_spec.md:" in capsys.readouterr().out
 
@@ -29,7 +29,7 @@ def test_a_sibling_spec_named_by_its_url_passes(repo, links):
     repo.edit(
         "distro_gentic_spec.md",
         "A step is written once.",
-        "A fleet is [the platform's][p].\n\n[p]: https://example.com/p.md#money",
+        "An agent fleet is [the platform's][p].\n\n[p]: https://example.com/p.md#money",
     )
     assert links.main() == 0
 

@@ -111,7 +111,7 @@ reason = "a host runs the items it holds through the engine's container transpor
 
 [[tool.distro-check.exception]]
 rule = "PLC-10"
-path = "apps/host/src/acme/apps/host/relay.py"
+path = "apps/host/src/acme/apps/host/exec_relay.py"
 adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
 reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
 
@@ -124,7 +124,7 @@ reason = "a host starts an MCP server its owner names through the engine's MCP c
 [[tool.distro-check.exception]]
 rule = "PLC-10"
 path = "apps/host/src/acme/apps/host/bases.py"
-adr = "docs/adr/2051-a-projects-environment-is-built-once-where-its-workspaces-run.md"
+adr = "docs/adr/2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md"
 reason = "a host builds a workspace's base through the engine's provider and transport on its own disk, keeps it in its own store, and reaches the platform through the client alone"
 
 # The guideline's static checker (`make arch-check`). The layout is the
@@ -168,7 +168,7 @@ reason = "the watch keeps no rows: its buffers are a cache, and its records are 
 
 # The levers keep no table: a finding is kept in its lever's own row, with
 # the version it read, and a reading is read from the sessions, the
-# playbooks they invoked, and the knowledge they recalled (ADR 2054).
+# agent playbooks they invoked, and the agent knowledge they recalled (ADR 2054).
 [[tool.arch-check.exception]]
 rule = "OM-14"
 path = "om/src/acme/om/levers/__init__.py"
@@ -241,14 +241,14 @@ tenantless = [
     "MatrixStorageInterface.read_version",
     "MediaStorageInterface.purge_files_across_tenants",
     "MediaStorageInterface.read_purgeable",
-    "MoneyLedgerStorageInterface.read_open",
+    "SpendLedgerStorageInterface.read_open",
     "OrchestrationsStorageInterface.purge_settled",
     "OutboxStorageInterface.claim_pending",
     "OutboxStorageInterface.count_failed_since",
     "OutboxStorageInterface.oldest_pending_at",
     "OutboxStorageInterface.purge_done",
-    "RelayStorageInterface.read_bindings",
-    "RelayStorageInterface.read_expired",
+    "ExecRelayStorageInterface.read_bindings",
+    "ExecRelayStorageInterface.read_expired",
     "RetentionStorageInterface.read_behind",
     "RetentionStorageInterface.read_due",
     "TenancyStorageInterface.clear_failed_sign_ins",
@@ -303,7 +303,7 @@ sites = [
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.resume",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_context",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.member_context",
-    "om/src/acme/om/automations/root.py::automation_principals",
+    "om/src/acme/om/agent_automations/root.py::agent_automation_principals",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_contexts",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.delegated_context",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.sweep_context",

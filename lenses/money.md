@@ -1,15 +1,15 @@
 # Money
 
-Group id: `money`. Covers Money and Models Are a Fleet Decision of
-`distro_gentic_spec.md`.
+Group id: `money`. Covers Money and Models Are an Agent Fleet Decision
+of `distro_gentic_spec.md`.
 
 This group judges everything behind the engine's budget gate: metering,
-limits and their windows, units, charges, and billing, rate and spend
+limits and their windows, units, charges, and agent billing, rate and spend
 limits, outages and anomalies, the one ledger and the one price source,
 and the model matrix. It leaves the gate itself, the hold, and usage to
-the engine; the park a provider outage causes across the fleet and the
-hold the sweep settles to `fleet`; and a tenant's provider key as a
-secret to `wall`.
+the engine; the park a provider outage causes across the agent fleet and
+the hold the sweep settles to `agent-fleet`; and a tenant's provider key
+as a secret to `wall`.
 
 ## MNY-01 One aggregation serves every view of usage
 
@@ -31,10 +31,10 @@ with two; a dashboard, a list, or a cap that sums usage its own way.
 
 ## MNY-02 A window follows the tenant's time zone and the billing period
 
-**Principle.** Limits are budgets over a scope (person, project, team,
-tenant) and a window (hour, day, week, month, or custom). Days and weeks
-follow the tenant's time zone, months follow the billing period, and a
-change of time zone never manufactures budget.
+**Principle.** Limits are budgets over a scope (person, agent project,
+team, tenant) and a window (hour, day, week, month, or custom). Days and
+weeks follow the tenant's time zone, months follow the billing period,
+and a change of time zone never manufactures budget.
 
 **Source.** Money, Metering and Limits.
 
@@ -66,20 +66,20 @@ carries into later windows, or changes the limit itself.
 
 **Check.** review
 
-## MNY-04 A unit beside usage and cost, and a charge apart from both
+## MNY-04 A spend unit beside usage and cost, and a charge apart from both
 
 **Principle.** Beside native usage and reference cost, the platform
-defines an abstract unit: a token unit weighted by cost, so a plan can
+defines a spend unit: a token unit weighted by cost, so a unit plan can
 include usage across models and providers without promising dollars or
 a token count. The weights are the platform's to publish. The charge is
 what a tenant is billed.
 
-**Source.** Money, Units, Charges, and Billing.
+**Source.** Money, Spend Units, Charges, and Agent Billing.
 
-**Look for.** The unit's definition, and where its weights come from;
+**Look for.** The spend unit's definition, and where its weights come from;
 the fields for usage, reference cost, units, and charge.
 
-**Violation.** A plan that promises dollars or a token count; unit
+**Violation.** A unit plan that promises dollars or a token count; unit
 weights a tenant or a session sets; one figure standing for two of
 usage, reference cost, units, and charge.
 
@@ -89,13 +89,13 @@ usage, reference cost, units, and charge.
 
 ## MNY-05 The ledger is append-only, and a hold draws in a fixed order
 
-**Principle.** Billing keeps accounts, versioned plans, and an
-append-only ledger. A hold draws on buckets in a fixed order: the plan's
-included units, granted units, prepaid credits, and an enterprise line
-of credit. Prepaid and postpaid differ in which bucket pays, never in
-the path a call takes.
+**Principle.** Agent billing keeps spend accounts, versioned unit plans,
+and an append-only spend ledger. A hold draws on buckets in a fixed
+order: the unit plan's included units, granted units, prepaid
+credits, and an enterprise line of credit. Prepaid and postpaid differ
+in which bucket pays, never in the path a call takes.
 
-**Source.** Money, Units, Charges, and Billing.
+**Source.** Money, Spend Units, Charges, and Agent Billing.
 
 **Look for.** The ledger's writes; the order a hold draws buckets in;
 every branch on how a tenant pays.
@@ -114,7 +114,7 @@ prepaid or postpaid.
 confirmation, and a top-up never raises a limit. No top-up relaxes a
 rate limit either.
 
-**Source.** Money, Units, Charges, and Billing; Rate Limits Are Not
+**Source.** Money, Spend Units, Charges, and Agent Billing; Rate Limits Are Not
 Spend Limits.
 
 **Look for.** When a bought credit becomes spendable; what a top-up
@@ -237,7 +237,7 @@ before the role's; in one that holds none, it resolves as a role asked
 no size. A version is published only with a row for each size a kind
 asks.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** The matrix's keys and its resolution order; the size a
 question carries for a role its kind asks of; the check for the row that
@@ -261,7 +261,7 @@ a size a kind asks.
 A running session keeps the version it started with until it switches
 explicitly.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** How the matrix is edited and published; which version a
 running session resolves with.
@@ -277,7 +277,7 @@ with the latest version without an explicit switch.
 
 **Principle.** A model enters the matrix only after its price does.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** The check, when a version is published, that every fill
 has a price in the price table.
@@ -295,7 +295,7 @@ or only a default price.
 passes for the model roles it will serve. Benchmarks never gate a code
 change; they gate a matrix release.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** What a fill needs before it is published; where benchmarks
 run as a gate.
@@ -314,7 +314,7 @@ change.
 own keys may override the fill for a model role, among qualified fills
 from providers it holds keys for.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** Where a tenant can set a model or a fill; what an override
 accepts.
@@ -332,7 +332,7 @@ one from a provider the tenant holds no key for.
 **Principle.** A tenant that requires zero data retention, or a region,
 is resolved only to fills that support it, fallbacks included.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** Where the tenant's retention and region requirements
 filter the matrix; the fallback chain.
@@ -349,7 +349,7 @@ zero retention or its region.
 **Principle.** When a provider retires a model, sessions on it
 re-resolve at their next loop, with a `switched` step.
 
-**Source.** Models Are a Fleet Decision.
+**Source.** Models Are an Agent Fleet Decision.
 
 **Look for.** What becomes of sessions on a retired model, and when.
 

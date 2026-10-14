@@ -1,9 +1,9 @@
 // The record screens over a running local stack; only the API and this dev
-// server need to be up. In Settings, the seeded owner makes a project and
+// server need to be up. In Settings, the seeded owner makes an agent project and
 // gives its repository a read credential, saves the org's own key to a
 // provider (the stack's probe twin takes it, so no provider is called), and
-// creates an API key; then makes an automation that starts a session in the
-// project. Each record is then read back from the API as the owner. The
+// creates an API key; then makes an agent automation that starts a session in the
+// agent project. Each record is then read back from the API as the owner. The
 // credential's password and the provider key go out once, in their writes:
 // no reply the portal reads holds either, and no screen shows either. The
 // API key's secret comes back once, in its create's reply, and shows until
@@ -34,7 +34,7 @@ function listen(page: Page) {
   return { replies, bearer: () => bearer };
 }
 
-test("an owner keeps a project, a key, an API key, and an automation through the screens; the secrets show nowhere after they are saved, and another org sees none of it", async ({ browser }) => {
+test("an owner keeps an agent project, a key, an API key, and an agent automation through the screens; the secrets show nowhere after they are saved, and another org sees none of it", async ({ browser }) => {
   const owner = await signedIn(browser, OWNER, ORG);
   const seen = listen(owner);
   const readBack = async <T>(path: string): Promise<T> => {
@@ -45,25 +45,25 @@ test("an owner keeps a project, a key, an API key, and an automation through the
     return JSON.parse(body) as T;
   };
 
-  // In Settings, a project bound to its repository, and the repository's read credential.
-  await owner.goto("/settings/projects");
-  const projectName = `Docs ${STAMP}`;
+  // In Settings, an agent project bound to its repository, and the repository's read credential.
+  await owner.goto("/settings/agent-projects");
+  const agentProjectName = `Docs ${STAMP}`;
   const repository = `forge.example.com/acme/docs-${STAMP}`;
-  await owner.getByLabel("Name").fill(projectName);
+  await owner.getByLabel("Name").fill(agentProjectName);
   await owner.getByLabel("Repository").fill(`https://${repository}.git`);
-  await owner.getByRole("button", { name: "Make the project" }).click();
-  await expect(owner.getByRole("heading", { level: 1, name: projectName })).toBeVisible();
-  const projectId = new URL(owner.url()).pathname.split("/").pop()!;
+  await owner.getByRole("button", { name: "Make the agent project" }).click();
+  await expect(owner.getByRole("heading", { level: 1, name: agentProjectName })).toBeVisible();
+  const agentProjectId = new URL(owner.url()).pathname.split("/").pop()!;
   await expect(owner.locator("[data-repository]")).toHaveText(repository);
   await owner.getByLabel("User", { exact: true }).fill("reader");
   await owner.getByLabel("Password or token").fill(PASSWORD);
   await owner.getByRole("button", { name: "Save the credential" }).click();
   await expect(owner.locator("[data-credential]")).toContainText("A credential is set");
   await expect(owner.getByLabel("Password or token")).toHaveValue("");
-  await owner.screenshot({ path: `${SHOTS}project.png`, fullPage: true });
-  const project = await readBack<{ name: string; repository: { host: string; path: string } }>(`/v1/projects/${projectId}`);
-  expect(project).toMatchObject({ name: projectName, repository: { host: "forge.example.com", path: `acme/docs-${STAMP}` } });
-  console.log(`project read back: ${project.name} at ${project.repository.host}/${project.repository.path}`);
+  await owner.screenshot({ path: `${SHOTS}agent_project.png`, fullPage: true });
+  const agentProject = await readBack<{ name: string; repository: { host: string; path: string } }>(`/v1/agent-projects/${agentProjectId}`);
+  expect(agentProject).toMatchObject({ name: agentProjectName, repository: { host: "forge.example.com", path: `acme/docs-${STAMP}` } });
+  console.log(`agentProject read back: ${agentProject.name} at ${agentProject.repository.host}/${agentProject.repository.path}`);
 
   // The org's own key to a provider.
   await owner.goto("/settings/models");
@@ -95,32 +95,32 @@ test("an owner keeps a project, a key, an API key, and an automation through the
   expect(apiKeys.items.filter((key) => key.name === apiKeyName)).toHaveLength(1);
   console.log(`API key read back: ${apiKeyName}; shown once, then gone from the screen`);
 
-  // An automation that starts a session in the project, off, so it never fires.
-  await owner.goto("/automations");
-  const form = owner.getByRole("form", { name: "New automation" });
-  const automationName = `Nightly tidy ${STAMP}`;
-  await form.getByLabel("Name").fill(automationName);
+  // An agent automation that starts a session in the agent project, off, so it never fires.
+  await owner.goto("/agent-automations");
+  const form = owner.getByRole("form", { name: "New agent automation" });
+  const agentAutomationName = `Nightly tidy ${STAMP}`;
+  await form.getByLabel("Name").fill(agentAutomationName);
   await form.getByLabel("Agent", { exact: true }).selectOption("platform_assistant");
   await form.getByLabel("Session title").fill("Tidy the docs");
-  await form.getByLabel("Project").selectOption({ label: projectName });
+  await form.getByLabel("Agent project").selectOption({ label: agentProjectName });
   await form.getByLabel("Brief").fill("Tidy the **docs**.");
   await form.getByLabel("Cost cap a period").fill("2");
   await form.getByLabel("Cost cap a run", { exact: true }).fill("0.5");
   await form.getByLabel("State").selectOption("no");
-  await form.getByRole("button", { name: "Make the automation" }).click();
-  await expect(owner.getByRole("heading", { level: 1, name: automationName })).toBeVisible();
-  const automationId = new URL(owner.url()).pathname.split("/").pop()!;
-  await owner.screenshot({ path: `${SHOTS}automation.png`, fullPage: true });
-  const automation = await readBack<{ name: string; enabled: boolean; trigger: { every: string }; action: { project_id: string } }>(
-    `/v1/automations/${automationId}`,
+  await form.getByRole("button", { name: "Make the agent automation" }).click();
+  await expect(owner.getByRole("heading", { level: 1, name: agentAutomationName })).toBeVisible();
+  const agentAutomationId = new URL(owner.url()).pathname.split("/").pop()!;
+  await owner.screenshot({ path: `${SHOTS}agentAutomation.png`, fullPage: true });
+  const agentAutomation = await readBack<{ name: string; enabled: boolean; trigger: { every: string }; action: { agent_project_id: string } }>(
+    `/v1/agent-automations/${agentAutomationId}`,
   );
-  expect(automation).toMatchObject({ name: automationName, enabled: false, action: { project_id: projectId } });
-  console.log(`automation read back: ${automation.name}, every ${automation.trigger.every}, in project ${automation.action.project_id}, enabled ${automation.enabled}`);
+  expect(agentAutomation).toMatchObject({ name: agentAutomationName, enabled: false, action: { agent_project_id: agentProjectId } });
+  console.log(`agentAutomation read back: ${agentAutomation.name}, every ${agentAutomation.trigger.every}, in agent project ${agentAutomation.action.agent_project_id}, enabled ${agentAutomation.enabled}`);
 
   // No secret came back after its write, in a reply or on a screen. The API
   // key's own create is the one reply that holds it.
   const created = (reply: { url: string; method: string }) => reply.method === "POST" && new URL(reply.url, "http://x").pathname === "/v1/api-keys";
-  for (const address of [`/settings/projects/${projectId}`, "/settings/models", "/settings/api-keys", `/automations/${automationId}`]) {
+  for (const address of [`/settings/agent-projects/${agentProjectId}`, "/settings/models", "/settings/api-keys", `/agent-automations/${agentAutomationId}`]) {
     await owner.goto(address);
     await expect(owner.getByRole("heading", { level: 1 })).toBeVisible();
     for (const secret of [PASSWORD, KEY, apiKey]) await expect(owner.locator("body")).not.toContainText(secret);
@@ -131,12 +131,12 @@ test("an owner keeps a project, a key, an API key, and an automation through the
   console.log(`replies read: ${seen.replies.length}; holding the password, the provider key, or the API key past its create: 0`);
 
   const stranger = await signedIn(browser, `stranger-${STAMP}@example.test`);
-  await stranger.goto("/settings/projects");
-  await expect(stranger.getByRole("table", { name: "Projects" })).toContainText("No projects yet.");
-  await stranger.goto(`/settings/projects/${projectId}`);
-  await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No project here");
-  await stranger.goto(`/automations/${automationId}`);
-  await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No automation here");
-  await expect(stranger.getByText(projectName)).toHaveCount(0);
-  console.log(`another org at /projects/${projectId} and /automations/${automationId}: no project, no automation`);
+  await stranger.goto("/settings/agent-projects");
+  await expect(stranger.getByRole("table", { name: "Agent projects" })).toContainText("No agent projects yet.");
+  await stranger.goto(`/settings/agent-projects/${agentProjectId}`);
+  await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No agent project here");
+  await stranger.goto(`/agent-automations/${agentAutomationId}`);
+  await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No agent automation here");
+  await expect(stranger.getByText(agentProjectName)).toHaveCount(0);
+  console.log(`another org at /agent-projects/${agentProjectId} and /agent-automations/${agentAutomationId}: no agent project, no agent automation`);
 });

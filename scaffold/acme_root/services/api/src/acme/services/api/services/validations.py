@@ -1,4 +1,4 @@
-"""The validation sessions service: one check of a project's policy started
+"""The validation sessions service: one check of an agent project's policy started
 at a delivered commit, as a CI job or a command line asks for it, and read
 with its verdict once its run is recorded."""
 

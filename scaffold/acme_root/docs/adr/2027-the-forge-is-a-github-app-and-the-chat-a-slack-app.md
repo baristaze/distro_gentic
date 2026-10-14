@@ -70,8 +70,8 @@ rename can free.
 - The chat posts with one bot token, so it reaches the workspace that
   token was made in, and a grant from any other workspace is refused.
 - The client writes through the installation it is named; the platform
-  finds the tenant, where a project binds a repository and intake maps
-  an installation to its tenant.
+  finds the tenant, where an agent project binds a repository and intake
+  maps an installation to its tenant.
 - An installation is connected while GitHub still lists the record of
   its install among the App's recent deliveries; one installed long
   before is installed again to connect it.

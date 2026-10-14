@@ -15,10 +15,10 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -29,7 +29,7 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.user import User
 from acme.om.tools.tool import ToolInterface
 from acme.services.api.container import AppContainer
-from acme.services.api.seed import first_project
+from acme.services.api.seed import first_agent_project
 from acme.services.api.settings import ApiSettings
 
 OWNER = {"email": "ann@example.test", "name": "Ann"}
@@ -111,34 +111,40 @@ async def sign_in_as(client: httpx.AsyncClient, email: str, org_id: UUID) -> dic
     }
 
 
-PROJECT_ID = "0199a000-0000-7000-8000-000000000001"
-"""The project `sign_in` writes for the org it bootstraps: a session the
+AGENT_PROJECT_ID = "0199a000-0000-7000-8000-000000000001"
+"""The agent project `sign_in` writes for the org it bootstraps: a session the
 API starts names it, as every session outside a local stack names one."""
 
 
 async def sign_in(client: httpx.AsyncClient, container: AppContainer) -> dict[str, str]:
-    """Bootstraps an org with its first project, signs its owner in, and
+    """Bootstraps an org with its first agent project, signs its owner in, and
     returns the tenant headers."""
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", OWNER["email"], OWNER["name"]
     )
     # Written below the manager, so it announces nothing: a case that counts
     # the org's stream counts what it did itself.
-    project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
-    await container.storage.get_project_storage().create_project(org.id, project, ())
+    agent_project = first_agent_project(ctx, org.slug).model_copy(
+        update={"id": UUID(AGENT_PROJECT_ID)}
+    )
+    await container.storage.get_agent_project_storage().create_agent_project(
+        org.id, agent_project, ()
+    )
     return await sign_in_as(client, OWNER["email"], org.id)
 
 
-async def open_account(container: AppContainer, headers: dict[str, str]) -> None:
+async def open_spend_account(container: AppContainer, headers: dict[str, str]) -> None:
     """Opens the signed-in person's tenant account on the platform's funding,
     as `make seed` does locally, so a loop's calls have someone to charge."""
     token = headers["Authorization"].removeprefix("Bearer ")
     ctx = await container.managers.tenancy.authenticate(seed_request(), token)
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    request = AccountRequest(
-        funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
     )
-    await billing.open_account(ctx, request)
+    request = SpendAccountRequest(
+        funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
+    )
+    await agent_billing.open_spend_account(ctx, request)
 
 
 async def add_member(container: AppContainer, org_id: UUID, email: str, role: Role) -> User:

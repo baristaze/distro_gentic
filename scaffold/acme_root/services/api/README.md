@@ -15,7 +15,7 @@ A request passes four layers, each in its own folder under
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
 - **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, agent sessions, hosts, the relay,
+  operator plane, events, media, agent sessions, hosts, the exec relay,
   and webhooks. Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a
@@ -135,49 +135,54 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   answers the ledger entry it posted. A signature that does not check out
   is `400`, and another tenant's confirmation `403`.
   (`/v1/agent-sessions/{session_id}/cost-approval`,
-  `/v1/budgets/{budget_id}/raises`, `/v1/billing/payments`, ADR 2060)
-- **Projects.** An owner or an admin creates a project bound to its
-  repository, under an Idempotency-Key, renames it, and removes it while
-  no session belongs to it (`409 project_in_use` otherwise); any member
-  lists and reads them. The repository never moves. An owner or an admin
-  sets the environment its sessions' workspaces start from, an image,
-  its setup commands, and the registries the setup reaches, or takes it
-  away; a session keeps the one it started on. Its fetch credential
-  is written and never read back: the answer says who gave it when, and
-  it leaves the tenant's store with its project. (`/v1/projects`,
-  `/v1/projects/{project_id}`, `.../environment`, `.../credential`)
+  `/v1/budgets/{budget_id}/raises`, `/v1/agent-billing/payments`, ADR 2060)
+- **Agent projects.** An owner or an admin creates an agent project
+  bound to its repository, under an Idempotency-Key, renames it, and
+  removes it while no session belongs to it (`409 agent_project_in_use`
+  otherwise); any member lists and reads them. The repository never
+  moves. An owner or an admin sets the workspace base its sessions'
+  workspaces start from, an image, its setup commands, and the
+  registries the setup reaches, or takes it away; a session keeps the
+  one it started on. Its fetch credential is written and never read
+  back: the answer says who gave it when, and it leaves the tenant's
+  store with its agent project. (`/v1/agent-projects`,
+  `/v1/agent-projects/{agent_project_id}`, `.../workspace-base`,
+  `.../credential`)
 - **Validation sessions.** A member who may write starts one, under an
-  Idempotency-Key, as a CI job asks for one: a check its project's policy
-  declares, at a delivered head, with its checks from a base. The
+  Idempotency-Key, as a CI job asks for one: a check its agent project's
+  policy declares, at a delivered head, with its checks from a base. The
   platform's worker runs it once on a fresh executor, or, for a check a
   requirement rates, its declared trials, which pass only together. Any
   member reads it, and once its run is recorded, its verdict and the run
   (the last trial's, for a rated check). A check that cannot run there for
   good, one the policy no longer declares or no executor can run, reads
   `refused`, with its reason and no run, so a CI job stops waiting. So
-  does one whose work fails on its last attempt, with the error's class. A
-  project with no policy in the tenant is `404`, as another tenant's is,
-  and a check the policy does not declare is `422`. (`/v1/validation-sessions`,
-  `/v1/validation-sessions/{session_id}`)
-- **Knowledge and playbooks.** The entries in a state, the suggestions
-  waiting on a review among them, and one entry; a person writes one in
-  person, under an Idempotency-Key, edits it on the version `If-Match`
-  names, and keeps or rejects a suggestion. A person publishes a
-  playbook's next version with its gates, under an Idempotency-Key, and
-  the latest version of a name is read. A person invokes the latest
-  version into a session they may instruct, once a version. A person who
-  manages the tenant pins one to a kind as its manual, for the tenant or
-  one project, lists the pins, and takes one away; each session of the
-  kind started after holds it as its standing text. (`/v1/knowledge`,
-  `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
-  `/v1/playbooks/{name}`, `.../invocations`, `/v1/playbook-pins`)
-- **Automations.** A person makes one in person, under an
-  Idempotency-Key, in a project of the tenant; any member lists and
-  reads them; its creator edits one that runs as its creator, and a
-  person whose role holds the grant one that runs as the automation
-  principal. The principal's grant is read and set beside them.
-  (`/v1/automations`, `/v1/automations/{automation_id}`,
-  `/v1/automations/principal`)
+  does one whose work fails on its last attempt, with the error's class.
+  An agent project with no policy in the tenant is `404`, as another
+  tenant's is, and a check the policy does not declare is `422`.
+  (`/v1/validation-sessions`, `/v1/validation-sessions/{session_id}`)
+- **Agent knowledge and agent playbooks.** The entries in a state, the
+  suggestions waiting on a review among them, and one entry; a person
+  writes one in person, under an Idempotency-Key, edits it on the
+  version `If-Match` names, and keeps or rejects a suggestion. A person
+  publishes an agent playbook's next version with its gates, under an
+  Idempotency-Key, and the latest version of a name is read. A person
+  invokes the latest version into a session they may instruct, once a
+  version. A person who manages the tenant pins one to a kind as its
+  kind manual, for the tenant or one agent project, lists the pins, and
+  takes one away; each session of the kind started after holds it as its
+  standing text. (`/v1/agent-knowledge`,
+  `/v1/agent-knowledge/{entry_id}`, `.../review`, `/v1/agent-playbooks`,
+  `/v1/agent-playbooks/{name}`, `.../invocations`,
+  `/v1/agent-playbook-pins`)
+- **AgentAutomations.** A person makes one in person, under an
+  Idempotency-Key, in an agent project of the tenant; any member lists
+  and reads them; its creator edits one that runs as its creator, and a
+  person whose role holds the grant one that runs as the agent
+  automation principal. The principal's grant is read and set beside
+  them. (`/v1/agent-automations`,
+  `/v1/agent-automations/{agent_automation_id}`,
+  `/v1/agent-automations/principal`)
 - **Tool policy.** Any member reads the tenant's layer; an owner or an
   admin writes it whole on the version `If-Match` names.
   (`/v1/tools/policy`)
@@ -287,7 +292,7 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   An operator who may read reads the tenant's ledger, and one who may
   write grants it units for its life, under an Idempotency-Key, which
   wakes its sessions parked on its funds; an org that is gone is `404`
-  (`/v1/admin/orgs/{org_id}/ledger`, `.../grants`, ADR 2060).
+  (`/v1/admin/orgs/{org_id}/spend-ledger`, `.../grants`, ADR 2060).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
   than the probe's interval), metrics (`/metrics`), and the OpenAPI

@@ -35,16 +35,16 @@ from acme.om.budgets.types.amount import Amount
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.retention.agent_projects import SessionAgentProjectInterface
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared, verified
+from acme.om.retention.impl.agent_projects import SessionAgentProjectNullImpl
 from acme.om.retention.impl.keys import KeyServiceLocalImpl, TenantKeysImpl
 from acme.om.retention.impl.manager import KEY_DESTROYED, RetentionManagerImpl, RetentionOptions
-from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.retention.manager import RetentionManagerInterface
-from acme.om.retention.projects import SessionProjectInterface
 from acme.om.retention.rules import tighter
 from acme.om.retention.types.policy import (
     MAX_LIFETIME,
-    ProjectRetention,
+    AgentProjectRetention,
     RetentionPolicy,
     TenantRetention,
 )
@@ -93,7 +93,7 @@ class Roots:
     def __init__(
         self,
         tmp_path: Path,
-        projects: SessionProjectInterface | None = None,
+        agent_projects: SessionAgentProjectInterface | None = None,
         *,
         custody: bool = True,
         options: RetentionOptions | None = None,
@@ -104,14 +104,14 @@ class Roots:
         platform: KeyServiceInterface = self.platform if custody else KeyServiceMemoryImpl()
         self.keys = TenantKeysImpl(platform, self.owners)
         self.storage = StorageMemoryImpl()
-        self.projects = projects or SessionProjectNullImpl()
+        self.agent_projects = agent_projects or SessionAgentProjectNullImpl()
         self.managers: Managers = build_managers(
             self.storage,
             InfraLocalImpl(tmp_path),
             tool_catalog=TOOLS,
             agent_kinds=(KIND,),
             tenant_keys=self.keys,
-            session_projects=self.projects,
+            agent_session_projects=self.agent_projects,
         )
         self.options = options or RetentionOptions()
         self.now = utcnow()
@@ -131,7 +131,7 @@ class Roots:
             self.managers.tenancy,
             self.managers.events,
             self.managers.outbox,
-            self.projects,
+            self.agent_projects,
             self.options,
             clock=clock,
         )
@@ -158,11 +158,11 @@ class Roots:
         self,
         ctx: TenantContext,
         policy: RetentionPolicy,
-        projects: tuple[ProjectRetention, ...] = (),
+        agent_projects: tuple[AgentProjectRetention, ...] = (),
     ) -> None:
         current = await self.managers.retention.get_policy(ctx)
         await self.managers.retention.write_policy(
-            ctx, current.model_copy(update={"policy": policy, "projects": projects})
+            ctx, current.model_copy(update={"policy": policy, "agent_projects": agent_projects})
         )
 
     async def session_saying(self, ctx: TenantContext, text: str = SAID) -> AgentSession:
@@ -179,12 +179,12 @@ class Roots:
         return [dict(e.payload) for e in events if e.kind == KEY_DESTROYED]
 
 
-class OneProject(SessionProjectInterface):
+class OneAgentProject(SessionAgentProjectInterface):
     def __init__(self) -> None:
-        self.project_id = new_id()
+        self.agent_project_id = new_id()
 
-    async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
-        return self.project_id
+    async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+        return self.agent_project_id
 
 
 @pytest.fixture
@@ -555,41 +555,52 @@ async def test_a_memory_only_policy_chooses_the_engines_storage_before_the_histo
     assert not (await roots.managers.retention.get_snapshot(owner, session.id)).at_rest
 
 
-async def test_a_project_narrows_its_tenants_policy_and_never_widens_it(tmp_path: Path) -> None:
-    project = OneProject()
-    roots = Roots(tmp_path, project)
+async def test_an_agent_project_narrows_its_tenants_policy_and_never_widens_it(
+    tmp_path: Path,
+) -> None:
+    agent_project = OneAgentProject()
+    roots = Roots(tmp_path, agent_project)
     owner = await roots.tenant()
-    narrowing = ProjectRetention(project_id=project.project_id, policy=a_policy(WEEK))
-    widening = ProjectRetention(project_id=project.project_id, policy=a_policy(None))
+    narrowing = AgentProjectRetention(
+        agent_project_id=agent_project.agent_project_id, policy=a_policy(WEEK)
+    )
+    widening = AgentProjectRetention(
+        agent_project_id=agent_project.agent_project_id, policy=a_policy(None)
+    )
     await roots.declare(owner, a_policy(MONTH, region="eu-central-1"), (narrowing,))
     narrowed = await roots.session_saying(owner)
     snapshot = await roots.managers.retention.get_snapshot(owner, narrowed.id)
-    assert (snapshot.project_id, snapshot.policy.content_lifetime) == (project.project_id, WEEK)
+    assert (snapshot.agent_project_id, snapshot.policy.content_lifetime) == (
+        agent_project.agent_project_id,
+        WEEK,
+    )
     assert snapshot.policy.region == "eu-central-1"
 
     await roots.declare(owner, a_policy(MONTH), (widening,))
     widened = await roots.session_saying(owner)
     snapshot = await roots.managers.retention.get_snapshot(owner, widened.id)
-    assert snapshot.policy.content_lifetime == MONTH, "a project never loosens its tenant"
+    assert snapshot.policy.content_lifetime == MONTH, "an agent project never loosens its tenant"
 
-    elsewhere = ProjectRetention(
-        project_id=project.project_id, policy=RetentionPolicy(region="us-east-1")
+    elsewhere = AgentProjectRetention(
+        agent_project_id=agent_project.agent_project_id, policy=RetentionPolicy(region="us-east-1")
     )
     with pytest.raises(ValidationFailed):
         await roots.declare(owner, RetentionPolicy(region="eu-central-1"), (elsewhere,))
 
 
-async def test_a_child_session_belongs_to_its_parents_project(tmp_path: Path) -> None:
-    project = OneProject()
-    roots = Roots(tmp_path, project)
+async def test_a_child_session_belongs_to_its_parents_agent_project(tmp_path: Path) -> None:
+    agent_project = OneAgentProject()
+    roots = Roots(tmp_path, agent_project)
     owner = await roots.tenant()
-    narrowing = ProjectRetention(project_id=project.project_id, policy=a_policy(WEEK))
+    narrowing = AgentProjectRetention(
+        agent_project_id=agent_project.agent_project_id, policy=a_policy(WEEK)
+    )
     await roots.declare(owner, a_policy(MONTH), (narrowing,))
     parent = await roots.managers.agent_sessions.create_session(owner, make_session())
-    project.project_id = new_id()
+    agent_project.agent_project_id = new_id()
     child = await roots.managers.agent_sessions.create_session(owner, make_session(parent=parent))
     snapshot = await roots.managers.retention.get_snapshot(owner, child.id)
-    assert snapshot.project_id == narrowing.project_id
+    assert snapshot.agent_project_id == narrowing.agent_project_id
     assert snapshot.policy.content_lifetime == WEEK
 
 
@@ -958,10 +969,10 @@ async def test_a_lifetime_past_a_century_is_refused_in_a_policy_and_in_a_narrowi
         await roots.managers.retention.write_policy(
             owner, first.model_copy(update={"policy": a_policy(past)})
         )
-    narrowing = ProjectRetention(project_id=new_id(), policy=a_policy(WEEK, past))
+    narrowing = AgentProjectRetention(agent_project_id=new_id(), policy=a_policy(WEEK, past))
     with pytest.raises(ValidationFailed, match="past"):
         await roots.managers.retention.write_policy(
-            owner, first.model_copy(update={"projects": (narrowing,)})
+            owner, first.model_copy(update={"agent_projects": (narrowing,)})
         )
     assert (await roots.managers.retention.get_policy(owner)).version == 0, "nothing stored"
 

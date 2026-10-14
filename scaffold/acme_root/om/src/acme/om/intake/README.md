@@ -9,7 +9,7 @@ of](../../../../README.md).
 - **Installation**: a system's installation of the platform, by the
   system's own id, connected by one tenant. Every delivery that names it
   belongs to that tenant.
-- **Account link**: an account in an outside system, mapped to a user
+- **Identity link**: an account in an outside system, mapped to a user
   of the tenant. Only a mapped user speaks to an agent as a principal
   from outside.
 - **Work binding**: a pull request or a branch that is a session's
@@ -56,7 +56,7 @@ of](../../../../README.md).
 - **Link an account**, **unlink** one, **bind work** to a session, and
   **record an act** a session makes through the platform's account. A
   person's linked accounts are the channels
-  [notifications](../notifications/README.md) reach them on.
+  [park alerts](../park_alerts/README.md) reach them on.
 
 ## The rules
 
@@ -107,7 +107,7 @@ context, then an audit entry of that context.
 
 The delivery consumer hands each event to the router under the tenant's
 service context, then hands what the router answered to
-[automations](../automations/README.md). An agent's tool that opens a
+[agent automations](../agent_automations/README.md). An agent's tool that opens a
 pull request or pushes a branch binds it to its session. A tool that acts
 as the platform's account records the act before it acts, under a mark
 the system carries on what it makes, and then under the system's id for

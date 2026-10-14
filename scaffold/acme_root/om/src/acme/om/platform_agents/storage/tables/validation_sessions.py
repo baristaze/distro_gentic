@@ -7,13 +7,13 @@ from acme.om.storage.tables.base import Base, IdentifiableMixin, TrackableMixin
 
 
 class ValidationSessions(IdentifiableMixin, TrackableMixin, Base):
-    """A delivery's check run with no agent: its project, the check, the
+    """A delivery's check run with no agent: its agent project, the check, the
     commit it runs at and the one its checks come from, the API key it was
     started on, if one, and the execution record of its run once it is
     recorded, or why it was refused. Read by its id alone."""
 
     __tablename__ = "validation_sessions"
-    project_id: Mapped[UUID]
+    agent_project_id: Mapped[UUID]
     check_name: Mapped[str]
     head: Mapped[str]
     base: Mapped[str]

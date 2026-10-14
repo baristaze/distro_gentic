@@ -11,7 +11,7 @@ from contracts.acceptance import (
     COMPLETE,
     EXPORT,
     HEAD,
-    SUITE_PROJECT,
+    SUITE_AGENT_PROJECT,
     SUITES,
     TREE,
     DefectExecutor,
@@ -89,7 +89,7 @@ async def test_files_present_with_no_failing_baseline_fail() -> None:
 
 
 async def test_a_run_that_edited_a_check_fails() -> None:
-    # The project's policy protects nothing here, so its gate lets the edit
+    # The agent project's policy protects nothing here, so its gate lets the edit
     # through; the scenario forbids the checks on its own.
     run = await scripted(protected=())
     verdict = await run.judge(await whole(run, "src/export.py", "tests/test_export.py"))
@@ -111,7 +111,7 @@ async def test_a_run_that_edited_a_check_fails() -> None:
 async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_still_runs_it() -> (
     None
 ):
-    # The workspace checks out the project's tree at the base: no file of
+    # The workspace checks out the agent project's tree at the base: no file of
     # the hidden suite is in it, by its own name or by any marker.
     suite = SUITES[EXPORT.hidden.source]
     assert TREE.isdisjoint(suite)
@@ -125,11 +125,11 @@ async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_s
     # The executor fetched the suite from its own source, its paths
     # protected, for the verdict's run alone, with the scenario's forbidden
     # paths from its base; every run the session asked for came from the
-    # project's base.
+    # agent project's base.
     sources = [
         (
             request.purpose,
-            request.source_project,
+            request.source_agent_project,
             request.source,
             request.protected,
             request.base,
@@ -141,11 +141,11 @@ async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_s
     assert sources == [
         (RunPurpose.BASELINE, None, BASE, ("tests/**",), None, ()),
         (RunPurpose.VALIDATION, None, BASE, ("tests/**",), None, ()),
-        (RunPurpose.VALIDATION, SUITE_PROJECT, *hidden),
+        (RunPurpose.VALIDATION, SUITE_AGENT_PROJECT, *hidden),
     ]
     # A scenario that keeps its hidden suite at the base, or in the
-    # project's own repository, is refused.
-    for kept in ({"source": BASE}, {"project": EXPORT.project}):
+    # agent project's own repository, is refused.
+    for kept in ({"source": BASE}, {"agent_project": EXPORT.agent_project}):
         in_tree = EXPORT.model_copy(update={"hidden": EXPORT.hidden.model_copy(update=kept)})
         with pytest.raises(ValidationFailed, match="workspace checks out"):
             await run.harness.judge(
@@ -222,8 +222,8 @@ async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refu
     with pytest.raises(ValidationFailed, match="names what it hides"):
         await run.harness.judge(run.ctx, told, run.session, result, surfaces())
     read = surfaces()
-    del read[Surface.KNOWLEDGE]
-    with pytest.raises(ValidationFailed, match="missing: \\['knowledge'\\]"):
+    del read[Surface.AGENT_KNOWLEDGE]
+    with pytest.raises(ValidationFailed, match="missing: \\['agent_knowledge'\\]"):
         await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
 
 

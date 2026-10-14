@@ -6,6 +6,7 @@ from uuid import UUID
 from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import Platform, new_id, utcnow
@@ -28,7 +29,6 @@ from acme.om.budgets.types.usage import CallLabels, CallSite, UsageRecord
 from acme.om.context import TenantContext
 from acme.om.exceptions import BudgetRefused, Unavailable
 from acme.om.models.types.fill import Fill, ModelRole
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.rules import call_shape
 
@@ -156,7 +156,7 @@ class CallGateBudgetImpl(CallGateInterface):
     read. A model call's worst case is priced from the one source of prices
     (`windows.rules.call_shape`, `budgets.rules.call_exposure`) and held on
     every scope the call serves: its session, its tree, the person who pays,
-    the project `projects` reads of its session, and the tenant. A refusal
+    the agent project `agent_projects` reads of its session, and the tenant. A refusal
     raises `BudgetRefused`, listing every breach, with nothing held. A
     settlement prices the usage the provider reported at the same list
     price; a call the provider never processed releases its hold. Every
@@ -175,7 +175,7 @@ class CallGateBudgetImpl(CallGateInterface):
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
         budgets: BudgetsManagerInterface,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         *,
         version: PinnedVersion | None = None,
         tier: PlanTierOf | None = None,
@@ -185,7 +185,7 @@ class CallGateBudgetImpl(CallGateInterface):
         self._pricing = pricing
         self._sessions = sessions
         self._budgets = budgets
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._version = version
         self._tier = tier
         self._clock = clock
@@ -205,13 +205,13 @@ class CallGateBudgetImpl(CallGateInterface):
         # Whose key the call goes out on changes who pays the provider, never
         # what is gated: the same budgets, at the same list price.
         session = await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         spend = await spend_labels(self._version, self._tier, ctx, session_id)
         price = self._pricing.price_of(fill.provider.value, fill.model)
         request = HoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
             ),
             exposure=call_exposure(call_shape(call, fill), price),
             session_id=session_id,
@@ -281,11 +281,11 @@ class CallGateBudgetImpl(CallGateInterface):
         deadline: datetime,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         request = HoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
             ),
             exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
             session_id=session_id,
@@ -395,21 +395,21 @@ def scopes_of(
     tree_id: UUID,
     spender: Principal,
     *,
-    project_id: UUID | None,
+    agent_project_id: UUID | None,
 ) -> tuple[BudgetScope, ...]:
     """The scopes a model call of a session is charged to: the session, the
-    tree it draws on, the person who pays, the project the session belongs
-    to, by its id, and the tenant. A session of no project is charged to no
-    project. A team's scope is the platform's to add."""
-    project = (
+    tree it draws on, the person who pays, the agent project the session belongs
+    to, by its id, and the tenant. A session of no agent project is charged to no
+    agent project. A team's scope is the platform's to add."""
+    agent_project = (
         ()
-        if project_id is None
-        else (BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project_id)),)
+        if agent_project_id is None
+        else (BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(agent_project_id)),)
     )
     return (
         BudgetScope(kind=BudgetScopeKind.SESSION, key=str(session_id)),
         BudgetScope(kind=BudgetScopeKind.TREE, key=str(tree_id)),
         BudgetScope(kind=BudgetScopeKind.PERSON, key=str(spender.id)),
-        *project,
+        *agent_project,
         BudgetScope(kind=BudgetScopeKind.TENANT, key=str(org_id)),
     )

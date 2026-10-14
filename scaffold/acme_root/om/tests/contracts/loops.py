@@ -22,6 +22,7 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.gate import ResultGateInterface
@@ -40,7 +41,6 @@ from acme.om.context import CredentialKind, RequestContext, Role, TenantContext,
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.models.layer import ModelsLayer
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, build_managers, engine_tools
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -452,7 +452,7 @@ def loop_over(
                 managers.pricing,
                 managers.agent_sessions,
                 managers.budgets,
-                SessionProjectsBoundImpl(storage.get_project_storage()),
+                SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 version=None if models_layer is None else models_layer.version,
                 tier=None if models_layer is None else models_layer.tier,
                 clock=clock,

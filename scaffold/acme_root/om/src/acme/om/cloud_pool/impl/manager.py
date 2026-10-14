@@ -31,6 +31,8 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceLost,
 )
+from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
+from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.cloud_pool.exceptions import MachineUnbound
 from acme.om.cloud_pool.manager import CloudPoolManagerInterface
@@ -49,18 +51,16 @@ from acme.om.cloud_pool.rules import (
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
-from acme.om.cloud_pool.types.machine import MachineSnapshot, PoolMachine
+from acme.om.cloud_pool.types.machine import MachineSnapshot, PoolVm
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Enrollment
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool, Region
-from acme.om.relay.manager import RelayManagerInterface
 from acme.om.tenancy.rules import hash_token
-from acme.om.workspaces.placed import PlacedWorkspacesInterface
-from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class CloudPoolOptions(Platform):
 
 
 class CloudPoolManagerImpl(CloudPoolManagerInterface):
-    """`hosts`, `placed`, and `relay` answer at call time, as the root builds
+    """`hosts`, `placed`, and `exec_relay` answer at call time, as the root builds
     them after the tools."""
 
     def __init__(
@@ -110,7 +110,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         seeds: SeedsInterface,
         hosts: Callable[[], HostsManagerInterface],
         placed: Callable[[], PlacedWorkspacesInterface],
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
         options: CloudPoolOptions,
         *,
         session_gone: SessionGone,
@@ -124,7 +124,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self._seeds = seeds
         self._hosts = hosts
         self._placed = placed
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._options = options
         self._session_gone = session_gone
         self._expired = expired
@@ -299,7 +299,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         spec: IsolationSpec,
         pool: HostPool,
         restore: KeptSnapshot | None,
-    ) -> PoolMachine:
+    ) -> PoolVm:
         """The machine that serves the session, running: the one it holds,
         unless a restore replaces it; else a warm one; else a new one."""
         current = await self._storage.read_of_session(ctx.org_id, session_id)
@@ -324,8 +324,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         return await self._start(ctx, session_id, spec, pool, None)
 
     async def _running(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, machine: PoolMachine
-    ) -> PoolMachine:
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, machine: PoolVm
+    ) -> PoolVm:
         """The session's machine, running. One still on its first start waits
         on the resource, unless its start died; one that stopped starts again
         on its own disk under a new key, since its host's credential ended
@@ -372,13 +372,13 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         spec: IsolationSpec,
         pool: HostPool,
         restore: KeptSnapshot | None,
-    ) -> PoolMachine:
+    ) -> PoolVm:
         """A new machine for the session, from its snapshot or the pool's
         image. Its row is written first, so a start that dies leaves a row
         the sweep finds; one that fails here leaves nothing."""
         key = new_key()
         now = self._clock()
-        machine = PoolMachine(
+        machine = PoolVm(
             id=new_id(),
             created_at=now,
             name=machine_name(self._options.prefix),
@@ -397,7 +397,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         log.info("session %s: machine %s started from %s", session_id, machine.name, source)
         return machine
 
-    async def _launch(self, machine: PoolMachine, spec: MachineSpec, source: str, key: str) -> None:
+    async def _launch(self, machine: PoolVm, spec: MachineSpec, source: str, key: str) -> None:
         """Starts the machine its row names, handed its key, and marks it
         started; one that fails goes with its row."""
         try:
@@ -412,7 +412,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             raise
         await self._storage.mark_started(machine.id, self._clock())
 
-    async def _enrolled(self, session_id: UUID, machine: PoolMachine) -> PoolMachine:
+    async def _enrolled(self, session_id: UUID, machine: PoolVm) -> PoolVm:
         """The machine once its host has enrolled, waited on a while."""
         by = self._clock() + self._options.ready_wait
         wait = self._options.first_poll
@@ -438,7 +438,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, pool: HostPool
     ) -> Workspace:
         """The workspace once the machine's host holds it, waited on a while:
-        its host is asked to prepare it through the relay, as any host is."""
+        its host is asked to prepare it through the exec relay, as any host is."""
         by = self._clock() + self._options.ready_wait
         wait = self._options.first_poll
         while True:
@@ -474,7 +474,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 f"snapshot {restore.id} of session {session_id} does not match its digest"
             )
 
-    async def _let_go(self, rctx: RequestContext, machine: PoolMachine) -> None:
+    async def _let_go(self, rctx: RequestContext, machine: PoolVm) -> None:
         """The machine goes: its host's credential ends, then the machine and
         its disk, then its row."""
         await self._retire(rctx, machine)
@@ -482,12 +482,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._storage.delete_machine(machine.id)
         log.info("machine %s of session %s let go", machine.name, machine.session_id)
 
-    async def _retire(self, rctx: RequestContext, machine: PoolMachine) -> None:
+    async def _retire(self, rctx: RequestContext, machine: PoolVm) -> None:
         if machine.host_id is not None and machine.tenant_id is not None:
             by = machine.bound_by or machine.host_id
             await self._hosts().retire_host(rctx, machine.tenant_id, machine.host_id, by)
 
-    async def _swept(self, rctx: RequestContext, machine: PoolMachine, now: datetime) -> bool:
+    async def _swept(self, rctx: RequestContext, machine: PoolVm, now: datetime) -> bool:
         """Whether the sweep acted on a machine. It lets go of a start older
         than the boot bound that never ran, whose disk is its source's, and
         of a machine whose session, or tenant, is gone. It stops a session's
@@ -517,7 +517,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._machines.stop(machine.name)
         return True
 
-    async def _hostless(self, rctx: RequestContext, machine: PoolMachine, now: datetime) -> bool:
+    async def _hostless(self, rctx: RequestContext, machine: PoolVm, now: datetime) -> bool:
         """Whether a session's machine has no host to work for: none enrolled
         within the boot bound and the wait after the machine was handed its
         key for the session, or its host was ended, or has not called within
@@ -554,7 +554,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         keys = [new_key() for _ in range(wanted)]
         egress_open = not self._machines.closes_egress()
         made = [
-            PoolMachine(
+            PoolVm(
                 id=new_id(),
                 created_at=self._clock(),
                 name=machine_name(self._options.prefix),
@@ -571,7 +571,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             self._spawn(self._warm(machine, spec, key))
         log.info("the cloud pool starts %d warm machines", written)
 
-    async def _warm(self, machine: PoolMachine, spec: MachineSpec, key: str) -> None:
+    async def _warm(self, machine: PoolVm, spec: MachineSpec, key: str) -> None:
         try:
             await self._launch(machine, spec, self._options.image, key)
         except Exception:

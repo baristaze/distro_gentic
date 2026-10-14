@@ -12,12 +12,12 @@ import pytest
 from acme.om.base import new_id, utcnow
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.connectors.types.connector import (
+    AgentSessionConnectors,
     Connector,
     ConnectorAttachment,
     ConnectorPlace,
     ConnectorTool,
     PinnedConnector,
-    SessionConnectors,
 )
 from acme.om.exceptions import PreconditionFailed, TenantMismatch, UniqueKeyTaken
 from acme.om.levers.types.lever import LeverCheck, LeverFinding
@@ -79,20 +79,22 @@ def make_connector(name: str = "words") -> Connector:
     )
 
 
-def reviewed(connector: Connector, project_id: UUID | None = None) -> Connector:
+def reviewed(connector: Connector, agent_project_id: UUID | None = None) -> Connector:
     return connector.model_copy(
         update={
             "tools": (make_tool(),),
             "review": connector.review + 1,
             "reviewed_by": new_id(),
-            "attachments": (ConnectorAttachment(kind="engineer", project_id=project_id),),
+            "attachments": (
+                ConnectorAttachment(kind="software_engineer", agent_project_id=agent_project_id),
+            ),
             "version": connector.version + 1,
         }
     )
 
 
-def make_pin(session_id: UUID, connector: Connector) -> SessionConnectors:
-    return SessionConnectors(
+def make_pin(session_id: UUID, connector: Connector) -> AgentSessionConnectors:
+    return AgentSessionConnectors(
         id=session_id,
         created_at=utcnow(),
         connectors=(
@@ -140,7 +142,7 @@ class ConnectorStorageContract:
         session_id = new_id()
         first = make_pin(session_id, make_connector())
         assert await storage.create_pin(org, first) == first
-        later = SessionConnectors(id=session_id, created_at=utcnow(), connectors=())
+        later = AgentSessionConnectors(id=session_id, created_at=utcnow(), connectors=())
         assert await storage.create_pin(org, later) == first, "the first pin stands"
         assert await storage.read_pin(org, session_id) == first
 

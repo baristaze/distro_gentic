@@ -1,6 +1,6 @@
 """What a posted payment carries into its route: the payment provider's
 confirmation, byte for byte, and its signature header. The gateway reads
-them, and billing checks the one against the other before anything is
+them, and agent billing checks the one against the other before anything is
 credited."""
 
 from typing import Annotated

@@ -1,5 +1,5 @@
 """The owner's ceilings: limits the host's owner sets in a file on the host
-and the platform cannot raise. The projects it serves, its minimum
+and the platform cannot raise. The agent projects it serves, its minimum
 isolation, its egress, the paths it lets a result read, whether it
 accepts people's commands, how many items it runs at once, and the MCP
 servers it starts, each by the name a tenant's connector calls it. They
@@ -10,11 +10,11 @@ cannot widen what the host does.
 
 Every item a host claims is read as an ask (`ask_of`) and held to them
 before anything runs. A field an item leaves out is read as the widest
-ask it could make: no project, no isolation, open egress, a person's
+ask it could make: no agent project, no isolation, open egress, a person's
 command. So an item is refused unless it says what it needs and that fits.
 
 ```toml
-projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
+agent_projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
 min_isolation = "container"                           # vm, container, or directory
 egress = ["github.com:443", "pypi.org:443"]           # or "open"
 readable = ["/srv/work"]
@@ -86,10 +86,10 @@ class HostServer:
 
 @dataclass(frozen=True)
 class Ceilings:
-    """None is the open ceiling: every project of the host's tenant, or any
+    """None is the open ceiling: every agent project of the host's tenant, or any
     destination. The defaults are the closed ones."""
 
-    projects: frozenset[UUID] | None = frozenset()
+    agent_projects: frozenset[UUID] | None = frozenset()
     min_isolation: IsolationMode = IsolationMode.container
     egress: frozenset[str] | None = frozenset()
     readable: tuple[str, ...] = ()
@@ -104,7 +104,7 @@ class Ask:
 
     kind: str
     operation: str | None
-    project_id: UUID | None
+    agent_project_id: UUID | None
     isolation: IsolationMode | None
     egress: frozenset[str] | None
     reads: tuple[str, ...]
@@ -127,7 +127,7 @@ def load(path: Path) -> Ceilings:
     except tomllib.TOMLDecodeError as error:
         raise BadSetting(f"ceilings: {error}") from None
     known = {
-        "projects",
+        "agent_projects",
         "min_isolation",
         "egress",
         "readable",
@@ -138,13 +138,13 @@ def load(path: Path) -> Ceilings:
     unknown = set(raw) - known
     if unknown:
         raise BadSetting(f"ceilings: unknown {', '.join(sorted(unknown))}")
-    projects_raw = raw.get("projects", [])
+    agent_projects_raw = raw.get("agent_projects", [])
     egress_raw = raw.get("egress", [])
     try:
-        projects = (
+        agent_projects = (
             None
-            if projects_raw == ALL
-            else frozenset(UUID(item) for item in _strings(projects_raw, "projects"))
+            if agent_projects_raw == ALL
+            else frozenset(UUID(item) for item in _strings(agent_projects_raw, "agent_projects"))
         )
         min_isolation = IsolationMode(raw.get("min_isolation", IsolationMode.container.value))
     except ValueError as error:
@@ -162,7 +162,7 @@ def load(path: Path) -> Ceilings:
     if not 1 <= at_once <= MOST_AT_ONCE:
         raise BadSetting(f"ceilings: items_at_once is from 1 to {MOST_AT_ONCE}")
     return Ceilings(
-        projects=projects,
+        agent_projects=agent_projects,
         min_isolation=min_isolation,
         egress=egress,
         readable=tuple(posixpath.normpath(path) for path in readable),
@@ -224,9 +224,11 @@ def ask_of(item: ClaimedWorkView) -> Ask:
     """The item's ask, the widest wherever it is silent or unreadable."""
     payload: Mapping[str, Any] = item.payload
     try:
-        project_id = UUID(str(payload["project_id"])) if "project_id" in payload else None
+        agent_project_id = (
+            UUID(str(payload["agent_project_id"])) if "agent_project_id" in payload else None
+        )
     except ValueError:
-        project_id = None
+        agent_project_id = None
     try:
         isolation = IsolationMode(payload["isolation"]) if "isolation" in payload else None
     except ValueError:
@@ -250,7 +252,7 @@ def ask_of(item: ClaimedWorkView) -> Ask:
     return Ask(
         kind=item.kind,
         operation=operation if isinstance(operation, str) else None,
-        project_id=project_id,
+        agent_project_id=agent_project_id,
         isolation=isolation,
         egress=egress,
         reads=reads,
@@ -276,8 +278,8 @@ def refusals(
     if ask.kind == "WORKSPACE" and ask.operation in WITHIN_A_WORKSPACE:
         return []
     found: list[str] = []
-    if ceilings.projects is not None and ask.project_id not in ceilings.projects:
-        found.append("a project this host does not serve")
+    if ceilings.agent_projects is not None and ask.agent_project_id not in ceilings.agent_projects:
+        found.append("an agent project this host does not serve")
     if ask.isolation is None:
         found.append("no isolation named")
     else:

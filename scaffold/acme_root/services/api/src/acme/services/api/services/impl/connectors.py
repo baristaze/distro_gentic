@@ -70,14 +70,14 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
         self, ctx: TenantContext, connector_id: UUID, body: AttachRequest
     ) -> ConnectorView:
         attachment = ConnectorAttachment(
-            kind=body.kind, project_id=body.project_id, deferred=body.deferred
+            kind=body.kind, agent_project_id=body.agent_project_id, deferred=body.deferred
         )
         return view_of(await self._connectors.attach(ctx, connector_id, attachment))
 
     async def detach(
-        self, ctx: TenantContext, connector_id: UUID, kind: str, project_id: UUID | None
+        self, ctx: TenantContext, connector_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> ConnectorView:
-        return view_of(await self._connectors.detach(ctx, connector_id, kind, project_id))
+        return view_of(await self._connectors.detach(ctx, connector_id, kind, agent_project_id))
 
 
 def view_of(connector: Connector) -> ConnectorView:

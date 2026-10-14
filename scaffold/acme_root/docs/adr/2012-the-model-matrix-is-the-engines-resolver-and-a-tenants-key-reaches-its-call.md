@@ -6,10 +6,11 @@
 
 The engine never picks a model: an injected resolver turns a session's
 model roles into fills, once, and a switch is a step of the history (ADR
-1005). The platform decides for the whole fleet which model serves which
-job, and changes that decision without a release of code. It also pays
-a provider on a tenant's own key when the tenant holds one, and billing
-refuses a call on the platform's key for such a tenant (ADR 2011).
+1005). The platform decides for the whole agent fleet which model serves
+which job, and changes that decision without a release of code. It also
+pays a provider on a tenant's own key when the tenant holds one, and
+agent billing refuses a call on the platform's key for such a tenant
+(ADR 2011).
 
 ## Decision
 
@@ -57,9 +58,9 @@ tightened retention no longer admits counts as tried.
 **The tenant's key reaches its call.** Before each call the loop and the
 compaction ask for the call's client by the tenant's funding: the
 platform's key, or the tenant's live key for the provider, read per call.
-The gate is told the credential the call carries. Billing holds an
-account on its own key only for a call that carries a tenant key's
-reference, which is a UUID, and an account the platform pays only for a
+The gate is told the credential the call carries. Agent billing holds a
+spend account on its own key only for a call that carries a tenant key's
+reference, which is a UUID, and a spend account the platform pays only for a
 call that does not. The outage signal is kept under the credential the
 call carried, and a compaction's failure names the key its call carried,
 whichever is live by then. Only an authentication failure, a 401 or the
@@ -67,8 +68,8 @@ provider's own authentication error, refuses a tenant's key: it is marked
 refused and its value kept, so every session that needs it parks on the
 provider, naming the key, until the tenant saves a new one. Any other
 credential error, such as a permission the key lacks, a region it
-refuses, or a model its project cannot reach, parks only the session that
-met it, naming a permission.
+refuses, or a model its agent project cannot reach, parks only the
+session that met it, naming a permission.
 
 ## Consequences
 

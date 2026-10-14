@@ -2,7 +2,7 @@
 that builds the managers, each built as its binary builds it: the API's
 container starts a session of the product's own kind, the session runner
 runs it, its tool reading a manager the runner built, and the maintenance
-worker knows the kind too. A playbook a person invokes into that session
+worker knows the kind too. An agent playbook a person invokes into that session
 through the API holds in the runner: its brief reaches the model, and its
 gate refuses the product's tool. The roots are memory and the local infra,
 the model is scripted, and nothing is passed to any `build` but its
@@ -128,12 +128,16 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     seeded = await seed_platform(api.storage, api.managers, owner, (LEDGER,))
-    assert seeded.project is not None
+    assert seeded.agent_project is not None
     headers = await sign_in_as(client, "ann@example.test", org.id)
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
-        json={"kind": LEDGER.name, "title": TITLE, "project_id": str(seeded.project.id)},
+        json={
+            "kind": LEDGER.name,
+            "title": TITLE,
+            "agent_project_id": str(seeded.agent_project.id),
+        },
     )
     assert started.status_code == 201, started.text
     assert started.json()["kind"] == LEDGER.name
@@ -195,11 +199,11 @@ async def run_until_idle(
     return status
 
 
-# Check 1: a person invokes a playbook into a session through the API; its
+# Check 1: a person invokes an agent playbook into a session through the API; its
 # gates narrow the session's policy and its text reaches the model.
 
 
-async def test_a_playbook_invoked_through_the_api_reaches_the_model_and_its_gate_holds(
+async def test_a_agent_playbook_invoked_through_the_api_reaches_the_model_and_its_gate_holds(
     processes: Processes, client: httpx.AsyncClient
 ) -> None:
     api = processes.api
@@ -207,11 +211,11 @@ async def test_a_playbook_invoked_through_the_api_reaches_the_model_and_its_gate
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     seeded = await seed_platform(api.storage, api.managers, owner, (LEDGER,))
-    assert seeded.project is not None
+    assert seeded.agent_project is not None
     headers = await sign_in_as(client, "ann@example.test", org.id)
     brief = "Never read the title; say the ledger is closed."
     published = await client.post(
-        "/v1/playbooks",
+        "/v1/agent-playbooks",
         headers=created(headers),
         json={
             "name": "closed-ledgers",
@@ -224,7 +228,11 @@ async def test_a_playbook_invoked_through_the_api_reaches_the_model_and_its_gate
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
-        json={"kind": LEDGER.name, "title": TITLE, "project_id": str(seeded.project.id)},
+        json={
+            "kind": LEDGER.name,
+            "title": TITLE,
+            "agent_project_id": str(seeded.agent_project.id),
+        },
     )
     assert started.status_code == 201, started.text
     session_id = started.json()["id"]
@@ -242,7 +250,7 @@ async def test_a_playbook_invoked_through_the_api_reaches_the_model_and_its_gate
         answers("The ledger is closed."),
     )
     invoked = await client.post(
-        "/v1/playbooks/closed-ledgers/invocations",
+        "/v1/agent-playbooks/closed-ledgers/invocations",
         headers=headers,
         json={"session_id": session_id},
     )

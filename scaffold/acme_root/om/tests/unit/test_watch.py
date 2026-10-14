@@ -40,15 +40,10 @@ from acme.om.context import (
 )
 from acme.om.events import EventsManagerInterface
 from acme.om.exceptions import Conflict, NotAuthorized, NotFound, StaleWriter
-from acme.om.hosts.impl.manager import HostsOptions
-from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
-from acme.om.hosts.types.host import IsolationMode as Mode
-from acme.om.hosts.types.pool import HostPool
-from acme.om.placement.types.work import ExecPayload
-from acme.om.relay.exceptions import StaleExec
-from acme.om.relay.impl.manager import RelayOptions
-from acme.om.relay.impl.transport import TransportRelayImpl
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.exceptions import StaleExec
+from acme.om.exec_relay.impl.manager import ExecRelayOptions
+from acme.om.exec_relay.impl.transport import TransportRelayImpl
+from acme.om.exec_relay.types.exec import (
     ExecCall,
     ExecOutcome,
     ExecOutput,
@@ -57,6 +52,11 @@ from acme.om.relay.types.exec import (
     RunRequest,
     StopKind,
 )
+from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
+from acme.om.hosts.types.host import IsolationMode as Mode
+from acme.om.hosts.types.pool import HostPool
+from acme.om.placement.types.work import ExecPayload
 from acme.om.retention.crossing import CrossingKind, declared
 from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
@@ -130,7 +130,7 @@ async def watched(tmp_path: Path) -> Watched:
         InfraLocalImpl(tmp_path),
         tool_catalog=TOOLS,
         hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
-        relay_options=RelayOptions(lease=timedelta(seconds=30)),
+        relay_options=ExecRelayOptions(lease=timedelta(seconds=30)),
     )
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
     now = utcnow()
@@ -153,8 +153,8 @@ async def watched(tmp_path: Path) -> Watched:
     host = await managers.hosts.authenticate(request(), credential.credential)
     session = await managers.agent_sessions.create_session(owner, make_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
-    await managers.relay.bind_workspace(owner, session.id, host.host_id, "/srv/work/session")
-    await managers.workspaces.pinned(owner, session.id, CONTAINER)
+    await managers.exec_relay.bind_workspace(owner, session.id, host.host_id, "/srv/work/session")
+    await managers.agent_workspaces.pinned(owner, session.id, CONTAINER)
     epoch = await managers.steps.begin_run(owner, session.id)
     clock = Clock()
     infra = InfraLocalImpl(tmp_path / "streams")
@@ -542,7 +542,7 @@ async def claim(watched: Watched) -> ExecPayload | None:
 async def finish(watched: Watched, payload: ExecPayload, stdout: str) -> None:
     result = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout=stdout))
     data = result.model_dump_json().encode()
-    await watched.managers.relay.push_result(
+    await watched.managers.exec_relay.push_result(
         request(), watched.host, payload.item_id, declared(CrossingKind.RESULT, data), data
     )
 
@@ -559,7 +559,7 @@ async def test_under_take_control_the_agent_writes_nothing(watched: Watched) -> 
             watched.owner, watched.session_id, watched.epoch, [note]
         )
     transport = TransportRelayImpl(
-        lambda: watched.managers.relay, lambda: RequestContext(request_id=new_id(), app=RUNNER)
+        lambda: watched.managers.exec_relay, lambda: RequestContext(request_id=new_id(), app=RUNNER)
     )
     workspace = Workspace(
         id=watched.session_id, org_id=watched.owner.org_id, spec=CONTAINER, location=""
@@ -601,7 +601,7 @@ async def test_every_command_by_hand_is_a_recorded_run_attributed_to_the_person(
     payload = await claim(watched)
     assert payload is not None and payload.item_id == run.item_id
     assert payload.by_person, "the host's owner reads it as a person's command"
-    detail = await watched.managers.relay.detail(request(), watched.host, run.item_id)
+    detail = await watched.managers.exec_relay.detail(request(), watched.host, run.item_id)
     assert detail.request == RunRequest(argv=("make", "test"))
     assert (detail.epoch, detail.spec) == (run.epoch, CONTAINER)
     await finish(watched, payload, "12 passed\n")
@@ -658,19 +658,21 @@ async def test_take_control_stops_what_the_agent_still_runs_on_the_host(
         epoch=watched.epoch,
         spec=CONTAINER,
     )
-    agents = await watched.managers.relay.send(request(), watched.owner.org_id, call, 0)
+    agents = await watched.managers.exec_relay.send(request(), watched.owner.org_id, call, 0)
     payload = await claim(watched)
     assert payload is not None and payload.item_id == agents.id and not payload.by_person
-    (running,) = await watched.managers.relay.running(
+    (running,) = await watched.managers.exec_relay.running(
         request(), watched.owner.org_id, watched.session_id
     )
     assert running.id == agents.id
 
     await watched.watch.take_control(watched.person, watched.session_id)
-    progress = await watched.managers.relay.watch(request(), watched.owner.org_id, agents.id, -1)
+    progress = await watched.managers.exec_relay.watch(
+        request(), watched.owner.org_id, agents.id, -1
+    )
     assert progress.state is ExecState.INTERRUPTED and progress.outcome is not None
     assert progress.outcome.stopped is StopKind.INTERRUPT
-    controls = await watched.managers.relay.controls(request(), watched.host, None)
+    controls = await watched.managers.exec_relay.controls(request(), watched.host, None)
     assert [(c.item_id, c.kind) for c in controls] == [(agents.id, StopKind.REVOKE)], (
         "its host is told to end it and push nothing"
     )
@@ -698,7 +700,7 @@ async def test_giving_back_while_a_command_by_hand_runs_is_refused_unless_it_is_
     ended = await watched.watch.command(watched.person, watched.session_id, command.key, -1)
     assert ended.state is ExecState.INTERRUPTED and ended.outcome is not None
     assert ended.outcome.stopped is StopKind.INTERRUPT
-    controls = await watched.managers.relay.controls(request(), watched.host, None)
+    controls = await watched.managers.exec_relay.controls(request(), watched.host, None)
     assert [(c.item_id, c.kind) for c in controls] == [(run.item_id, StopKind.REVOKE)]
 
 
@@ -734,11 +736,11 @@ async def test_another_person_stops_no_command_of_a_hand_over_they_do_not_hold(
 
     with pytest.raises(NotAuthorized):
         await watched.watch.give_back(admin, watched.session_id, "Mine now.", stop=True)
-    running = await watched.managers.relay.running(
+    running = await watched.managers.exec_relay.running(
         request(), watched.owner.org_id, watched.session_id
     )
     assert [item.key for item in running] == [command.key]
-    assert await watched.managers.relay.controls(request(), watched.host, None) == []
+    assert await watched.managers.exec_relay.controls(request(), watched.host, None) == []
 
 
 async def test_control_is_taken_by_a_person_in_person_who_may_instruct(

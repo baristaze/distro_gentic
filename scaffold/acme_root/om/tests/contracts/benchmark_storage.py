@@ -11,13 +11,13 @@ import pytest
 
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.base import new_id, utcnow
-from acme.om.benchmarks.rules import arm_result, regressed, schedule
+from acme.om.benchmarks.rules import contender_result, regressed, schedule
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.types.benchmark import (
-    Arm,
     Benchmark,
     BenchmarkTrials,
     Contender,
+    ContenderPin,
     Trial,
 )
 from acme.om.context import AppContext, AppType, CredentialKind, OperatorContext, OperatorRole
@@ -40,9 +40,13 @@ OPUS = Fill(
     max_output_tokens=32_000,
     context_window=1_000_000,
 )
-CANDIDATE = Contender(kind="engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=OPUS),))
-BASELINE = Contender(kind="engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=SONNET),))
-"""The candidate changes the model alone: both arms run one kind at one
+CANDIDATE = ContenderPin(
+    kind="software_engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=OPUS),)
+)
+BASELINE = ContenderPin(
+    kind="software_engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=SONNET),)
+)
+"""The candidate changes the model alone: both contenders run one kind at one
 version, so what the run shows is the model's."""
 
 
@@ -65,24 +69,24 @@ def make_trials(
     baseline: Sequence[int],
     *,
     executor: str = "executor-1",
-    order: Sequence[Arm] | None = None,
+    order: Sequence[Contender] | None = None,
     cost_micros: int = 120_000,
 ) -> BenchmarkTrials:
-    """Trials of both arms, each judged with as many links of its chain
+    """Trials of both contenders, each judged with as many links of its chain
     broken as given (0 is a whole chain), run in `order` (the schedule's
     interleaving unless a case names its own), one minute apart."""
-    broken = {Arm.CANDIDATE: list(candidate), Arm.BASELINE: list(baseline)}
+    broken = {Contender.CANDIDATE: list(candidate), Contender.BASELINE: list(baseline)}
     start = utcnow()
     trials = []
-    for at, arm in enumerate(order or schedule(len(candidate))):
+    for at, contender in enumerate(order or schedule(len(candidate))):
         session = new_id()
         trials.append(
             Trial(
-                arm=arm,
+                contender=contender,
                 session_id=session,
                 executor=executor,
                 started_at=start + timedelta(minutes=at),
-                verdict=judged(session, broken[arm].pop(0)),
+                verdict=judged(session, broken[contender].pop(0)),
                 cost_micros=cost_micros,
             )
         )
@@ -105,8 +109,8 @@ def judged(session_id: UUID, broken: int) -> AcceptanceVerdict:
 
 def make_benchmark(run: BenchmarkTrials | None = None, minutes: int = 0) -> Benchmark:
     run = run or make_trials([0, 0], [0, 7])
-    candidate = arm_result(run.trials, Arm.CANDIDATE)
-    baseline = arm_result(run.trials, Arm.BASELINE)
+    candidate = contender_result(run.trials, Contender.CANDIDATE)
+    baseline = contender_result(run.trials, Contender.BASELINE)
     return Benchmark(
         **dict(run),
         id=new_id(),

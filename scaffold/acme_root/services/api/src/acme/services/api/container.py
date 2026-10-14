@@ -20,22 +20,23 @@ from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
-from acme.om.automations.root import build_automations
+from acme.om.agent_automations.root import build_agent_automations
+from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
+from acme.om.agent_knowledge.root import build_agent_knowledge
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.base import new_id
-from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.root import build_knowledge
 from acme.om.levers.root import build_levers
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
-from acme.om.notifications.root import build_notifications
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.root import (
     LOCAL,
@@ -56,7 +57,6 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.impl.root import build_services
@@ -243,7 +243,7 @@ class AppContainer:
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
         `ports` are the platform's ports the product sets, None each for the
-        platform's own: billing's money gate, and the evidence's result gate.
+        platform's own: agent billing's money gate, and the evidence's result gate.
         `payments` checks a payment a tenant posts; None refuses every one.
         Their `kinds` are the product's: a session starts on one of its agent
         kinds, and the session runner runs its loop with the same kinds,
@@ -259,8 +259,8 @@ class AppContainer:
         starts and is messaged."""
         ports = ports or PlatformPorts()
         held: list[IntakeManagerInterface] = []
-        # A start makes each session with its kind's manual.
-        playbooks = PlaybooksLayer(storage)
+        # A start makes each session with its kind manual.
+        agent_playbooks = AgentPlaybooksLayer(storage)
         managers = build_managers(
             storage,
             infra,
@@ -275,10 +275,10 @@ class AppContainer:
             executor=ports.executor,
             executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
-            session_projects=ports.session_projects,
-            workspace_projects=ports.workspace_projects,
+            agent_session_projects=ports.agent_session_projects,
+            workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
-            agents_layer=playbooks.agents,
+            agents_layer=agent_playbooks.agents,
         )
         refuse_open_money(settings.environment, managers)
         # A tenant's own provider keys, saved and listed here and never read
@@ -315,30 +315,32 @@ class AppContainer:
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             watch,
             trust.trust_operator,
-            # Outside a local stack, a session starts in a project.
-            project_required=settings.environment != LOCAL,
+            # Outside a local stack, a session starts in an agent project.
+            agent_project_required=settings.environment != LOCAL,
             intake=intake,
-            # A person writes an automation here, so a product's action kind
+            # A person writes an agent automation here, so a product's action kind
             # is held to its shape when it is saved.
-            automations=build_automations(
+            agent_automations=build_agent_automations(
                 storage,
                 managers,
-                project_required=settings.environment != LOCAL,
+                agent_project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
-                playbooks=lambda: playbooks.build(managers),
+                agent_playbooks=lambda: agent_playbooks.build(managers),
             ),
-            notifications=build_notifications(storage, managers, integrations, intake),
+            park_alerts=build_park_alerts(storage, managers, integrations, intake),
             matrix=matrix,
             trust=trust.trust,
             # The ledger the operators read and grant units on, and the
             # payments a tenant posts, each checked by the provider's
             # signature: with no provider wired, every one is refused.
-            billing=build_billing(storage, managers, payments or PaymentProviderAbsentImpl()),
+            agent_billing=build_agent_billing(
+                storage, managers, payments or PaymentProviderAbsentImpl()
+            ),
             # A person writes and reviews what sessions recall; the runner
-            # recalls them. A person publishes the playbooks sessions follow,
+            # recalls them. A person publishes the agent playbooks sessions follow,
             # invokes one into a session, and pins one to a kind.
-            knowledge=build_knowledge(storage, managers),
-            playbooks=playbooks.build(managers),
+            agent_knowledge=build_agent_knowledge(storage, managers),
+            agent_playbooks=agent_playbooks.build(managers),
             # An operator reads which of them the sessions that stalled reached.
             levers=build_levers(storage),
             # A person connects the tenant's servers and reviews their tools;

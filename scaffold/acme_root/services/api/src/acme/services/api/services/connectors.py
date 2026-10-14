@@ -49,5 +49,5 @@ class ConnectorsServiceInterface(ABC):
 
     @abstractmethod
     async def detach(
-        self, ctx: TenantContext, connector_id: UUID, kind: str, project_id: UUID | None
+        self, ctx: TenantContext, connector_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> ConnectorView: ...

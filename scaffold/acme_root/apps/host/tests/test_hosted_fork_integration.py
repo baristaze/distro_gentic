@@ -31,8 +31,8 @@ from runner_support import HOST, TOOLS, answers, assistant, runs
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import DEFAULT_IMAGE
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.buckets import Buckets
@@ -149,7 +149,7 @@ async def container_host_keeping(api: Stack, pool_id: UUID, where: Path) -> tupl
     """A host of the pool as the host's `main` wires one: a container per
     workspace on the local Docker, of the default image, and a store of
     its own that keeps their snapshots, which its probe showed. Its
-    ceilings take any project, and let nothing leave."""
+    ceilings take any agent project, and let nothing leave."""
     settings = replace(
         api.settings(where / "home", None), enrollment_token=await api.token(pool_id)
     )
@@ -169,7 +169,7 @@ async def container_host_keeping(api: Stack, pool_id: UUID, where: Path) -> tupl
     checks = replace(probes(HostMode.container), snapshots={HostMode.container: store.usable})
     host = HostAgent(
         settings,
-        Ceilings(projects=None, min_isolation=HostMode.container, egress=frozenset()),
+        Ceilings(agent_projects=None, min_isolation=HostMode.container, egress=frozenset()),
         checks,
         api.client,
         executor,
@@ -239,7 +239,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert parked.end is RunEnd.PARKED and parked.park is not None
         assert await host.claim_once() is not None
         await host.idle()
-        assert await managers.relay.binding_of(owner, parent) is not None
+        assert await managers.exec_relay.binding_of(owner, parent) is not None
 
         # The parent writes a file and forks in the same run.
         await managers.agent_sessions.wake_session(owner, parent, parked.park)
@@ -263,7 +263,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
             and step.header.command is ControlCommand.RESTORE
         )
         assert restore.snapshot is not None
-        record = await managers.workspaces.kept_snapshot(owner, restore.snapshot.id)
+        record = await managers.agent_workspaces.kept_snapshot(owner, restore.snapshot.id)
         assert record is not None and record.on_host and record.session_id == child
         assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
         kept = store / record.reference
@@ -279,7 +279,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert tried.outcome is LoopOutcome.SUCCEEDED, tried
         read, _ = outputs(await steps_of(runner, owner, child))
         assert "from-the-parent" in read
-        holder = await managers.relay.binding_of(owner, child)
+        holder = await managers.exec_relay.binding_of(owner, child)
         assert holder is not None and holder.host_id == UUID(host.credential.claimant_id)
 
         asked = message_step(new_id(), utcnow(), parent, owner, "What does the workspace hold?")
@@ -357,8 +357,8 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
         assert (await managers.agents.tree_of(owner, parent)).size == before, "no slot taken"
         with pytest.raises(NotFound):
             await managers.agent_sessions.get_session(owner, request.id)
-        assert await managers.workspaces.kept_snapshots(owner, request.id) == ()
-        assert await managers.workspaces.kept_snapshots(owner, parent) == ()
+        assert await managers.agent_workspaces.kept_snapshots(owner, request.id) == ()
+        assert await managers.agent_workspaces.kept_snapshots(owner, parent) == ()
         latest = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, parent)
         assert latest is not None
         asked = latest.payload["operation"]

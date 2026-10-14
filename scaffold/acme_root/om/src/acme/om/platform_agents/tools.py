@@ -7,15 +7,15 @@ The workspace's tools reach the world only through the call's runtime, so
 a kind with no workspace cannot use one even when it is handed one: an
 edit reads and writes its file there, and a search of the code runs there,
 bounded in its matches and its bytes, never in the platform's process. The
-engineer's pull request opens its own branch on its project's repository
+software engineer's pull request opens its own branch on its agent project's repository
 with a push token the platform mints for the call and checks before it
 writes; the model names neither the branch nor the repository, and never
 sees the token. The branch and the pull request are bound to the session,
 and the push recorded as its act, so the events on them find it. The
 assistant's read the corpus and the tenant's live records through the
 asking person's own permissions, never a session's content, and draft;
-the one that hands work on starts a session that waits for its person. The knowledge tools
-reach the reviewed entries of the session's project and of its whole
+the one that hands work on starts a session that waits for its person. The agent knowledge tools
+reach the reviewed entries of the session's agent project and of its whole
 tenant, and the platform's own documentation, its corpus; a suggestion
 waits for a person's review. The reviewer's read a pull request, its
 files at its head, and its checks through the forge's integration, only
@@ -37,15 +37,21 @@ from pydantic import Field, field_validator, model_validator
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface, PullRequestRead
 from acme.integrations.exceptions import ProviderRefused
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.types.agent_automation import AgentAutomation
+from acme.om.agent_automations.types.agent_automation import Limits as AgentAutomationLimits
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
+from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge
+from acme.om.agent_projects import AgentProjectsManagerInterface
+from acme.om.agent_projects.types.agent_project import AgentProject
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.rules import COMMIT
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.request import MAX_TITLE, Handoff
 from acme.om.agents.types.result import Claim
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.types.automation import Automation
-from acme.om.automations.types.automation import Limits as AutomationLimits
 from acme.om.base import Platform
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.context import Role, TenantContext
@@ -60,20 +66,16 @@ from acme.om.exceptions import (
     Unavailable,
     ValidationFailed,
 )
+from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostStatus
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import FORGE, connected
 from acme.om.intake.types.link import HandleKind
-from acme.om.knowledge import KnowledgeManagerInterface
-from acme.om.knowledge.types.knowledge import MAX_TEXT, Knowledge
-from acme.om.notifications.rules import held_calls
+from acme.om.park_alerts.rules import held_calls
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
-from acme.om.projects import ProjectsManagerInterface
-from acme.om.projects.types.project import Project
-from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.content import MAX_NAME
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolRequestHeader
@@ -85,8 +87,6 @@ from acme.om.tools.types.policy import ApproverRule, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.rules import COMMIT
 
 MAX_PATH = 1024
 MAX_READ = 200_000  # bytes one read takes at most
@@ -227,9 +227,9 @@ class Edited(Platform):
 
 class FileChangeImpl(NativeToolImpl):
     """A tool that changes one file of the workspace, by the path its input
-    names. A path the policy of the session's project protects is refused at
+    names. A path the policy of the session's agent project protects is refused at
     the call, before anyone is asked: the evidence reads it (`protection`)
-    from the session's project, never from the input."""
+    from the session's agent project, never from the input."""
 
     def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
         self._evidence = evidence
@@ -238,13 +238,13 @@ class FileChangeImpl(NativeToolImpl):
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> None:
         # The engine asks a tool's target with no session, and the session's
-        # project is what protects a path, so the refusal is made here.
+        # agent project is what protects a path, so the refusal is made here.
         assert isinstance(call_input, WriteInput | EditInput)
         target = await self._evidence().protection(ctx, runtime.session_id, [call_input.path])
         if target.kind == PATHS and target.attributes.get("protected"):
             raise ToolFailed(
                 ToolFailure.DENIED,
-                f"{call_input.path} is protected by the project's validation policy: "
+                f"{call_input.path} is protected by the agent project's validation policy: "
                 "it is never changed by an agent",
             )
 
@@ -484,7 +484,7 @@ class ValidateInput(ToolInput):
 
 
 class Validated(Platform):
-    """The validations it kept, one per environment the checks name, and
+    """The validations it kept, one per executor the checks name, and
     every run they wrote."""
 
     validations: tuple[UUID, ...]
@@ -493,7 +493,7 @@ class Validated(Platform):
 
 
 class ValidateImpl(NativeToolImpl):
-    """Asks the evidence namespace to run the project's checks on a fresh
+    """Asks the evidence namespace to run the agent project's checks on a fresh
     executor: at the base for a baseline, or at the committed head. It
     answers the runs the executor wrote, which a result cites; the result
     gate, never this tool, decides whether they pass."""
@@ -501,7 +501,7 @@ class ValidateImpl(NativeToolImpl):
     SPEC = ToolSpec(
         name=kinds.VALIDATE,
         description=(
-            "Runs the project's checks on a fresh executor, apart from your workspace: at "
+            "Runs the agent project's checks on a fresh executor, apart from your workspace: at "
             "your committed head, or at the base with baseline set. Answers the ids of the "
             "runs it wrote, which submit_result cites. Take a baseline before you validate a "
             "change, and again whenever your base moves, as when your branch takes the default "
@@ -555,7 +555,7 @@ class PullRequestOpened(Platform):
 
 class OpenPullRequestImpl(NativeToolImpl):
     """Points the session's own branch at the workspace's committed head and
-    opens its pull request on the repository its project binds. The model
+    opens its pull request on the repository its agent project binds. The model
     writes the title and the body alone: the branch, the repository, and the
     base are the platform's records, and the head is the checkout's, read as
     a commit's full id or refused. The push token is minted for this call,
@@ -563,14 +563,14 @@ class OpenPullRequestImpl(NativeToolImpl):
     or the answer. The platform's account pushes for every session, so the
     head is recorded as the session's act and the branch bound to it before
     the push, and the pull request once it opens: a comment, a check, or a
-    person's push on either finds the session, and an automation it feeds
+    person's push on either finds the session, and an agent automation it feeds
     knows its cause."""
 
     SPEC = ToolSpec(
         name=kinds.OPEN_PULL_REQUEST,
         description=(
             "Opens the pull request of your committed head on your session's own branch of "
-            "the project's repository, with a title and a body; answers where a person reads "
+            "the agent project's repository, with a title and a body; answers where a person reads "
             "it. Commit first: only the committed head is opened. Opening it again moves the "
             "branch forward to your new head, and keeps the one pull request. The branch only "
             "moves forward: a fix is a new commit on top, never an amend or a rebase."
@@ -586,10 +586,10 @@ class OpenPullRequestImpl(NativeToolImpl):
 
     def __init__(
         self,
-        workspaces: Callable[[], WorkspacesManagerInterface],
+        agent_workspaces: Callable[[], AgentWorkspacesManagerInterface],
         intake: Callable[[], IntakeManagerInterface],
     ) -> None:
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._intake = intake
 
     async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
@@ -605,15 +605,15 @@ class OpenPullRequestImpl(NativeToolImpl):
         head = found.stdout.strip()
         if found.exit_code != 0 or not COMMIT.fullmatch(head):
             raise ToolFailed(ToolFailure.PERMANENT, "the workspace holds no commit: commit first")
-        workspaces = self._workspaces()
+        agent_workspaces = self._agent_workspaces()
         try:
             intake = self._intake()
-            token = await workspaces.mint_push_token(ctx, runtime.session_id)
+            token = await agent_workspaces.mint_push_token(ctx, runtime.session_id)
             # Recorded and bound before the push: the forge's events on the
             # commit and the branch may come back before the push answers.
             await intake.record_act(ctx, runtime.session_id, FORGE, (head,))
             await intake.bind_work(ctx, runtime.session_id, HandleKind.BRANCH, token.branch)
-            opened = await workspaces.open_pull_request(
+            opened = await agent_workspaces.open_pull_request(
                 ctx,
                 runtime.session_id,
                 token.token.get_secret_value(),
@@ -629,53 +629,53 @@ class OpenPullRequestImpl(NativeToolImpl):
         return PullRequestOpened(id=opened.id, url=opened.url, branch=token.branch, head=head)
 
 
-# Knowledge.
+# Agent knowledge.
 
 EXCERPT = 500  # characters of an entry or a passage a search answers
 
-PROJECT, TENANT, PLATFORM = "project", "tenant", "platform"
-"""Where a piece of knowledge comes from: an entry of the session's project,
+AGENT_PROJECT, TENANT, PLATFORM = "agent_project", "tenant", "platform"
+"""Where a piece of agent knowledge comes from: an entry of the session's agent project,
 one of its whole tenant, or the platform's own documentation."""
 
 
-def scope_of(entry: Knowledge) -> str:
-    return TENANT if entry.project_id is None else PROJECT
+def scope_of(entry: AgentKnowledge) -> str:
+    return TENANT if entry.agent_project_id is None else AGENT_PROJECT
 
 
-class KnowledgeQuery(ToolInput):
+class AgentKnowledgeQuery(ToolInput):
     query: str = Field(min_length=1, max_length=500)
     limit: int = Field(default=5, ge=1, le=10)
 
 
-class KnowledgeHit(Platform):
+class AgentKnowledgeHit(Platform):
     scope: str
-    slug: str | None  # what read_knowledge takes
+    slug: str | None  # what read_agent_knowledge takes
     title: str
     heading: str | None = None  # the section of a platform document
     excerpt: str
 
 
-class KnowledgeHits(Platform):
-    hits: tuple[KnowledgeHit, ...]
+class AgentKnowledgeHits(Platform):
+    hits: tuple[AgentKnowledgeHit, ...]
 
 
-class SearchKnowledgeImpl(NativeToolImpl):
+class SearchAgentKnowledgeImpl(NativeToolImpl):
     """Searches what the session may know: the reviewed entries of its
-    project and of its whole tenant, never another project's or another
+    agent project and of its whole tenant, never another agent project's or another
     tenant's, and the platform's own documentation. An entry waiting for its
-    review is never found. The session and its project are the call's,
+    review is never found. The session and its agent project are the call's,
     never the input's."""
 
     SPEC = ToolSpec(
-        name=kinds.SEARCH_KNOWLEDGE,
+        name=kinds.SEARCH_AGENT_KNOWLEDGE,
         description=(
-            "Searches the knowledge base: the entries people of your team kept for your "
-            "project and for the whole team, and the platform's documentation. Answers at "
+            "Searches the agent knowledge base: the entries people of your team kept for your "
+            "agent project and for the whole team, and the platform's documentation. Answers at "
             "most limit of each, best first, each with its scope, its slug, its title, and "
-            "its opening. Read one whole with read_knowledge and its slug."
+            "its opening. Read one whole with read_agent_knowledge and its slug."
         ),
-        input_model=KnowledgeQuery,
-        output_model=KnowledgeHits,
+        input_model=AgentKnowledgeQuery,
+        output_model=AgentKnowledgeHits,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -683,20 +683,22 @@ class SearchKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+    def __init__(
+        self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
+    ) -> None:
         self._corpus = corpus
-        self._knowledge = knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, KnowledgeQuery)
-        entries = await self._knowledge().search(
+        assert isinstance(call_input, AgentKnowledgeQuery)
+        entries = await self._agent_knowledge().search(
             ctx, runtime.session_id, call_input.query, call_input.limit
         )
         passages = rules.search(self._corpus, call_input.query, call_input.limit)
         hits = [
-            KnowledgeHit(
+            AgentKnowledgeHit(
                 scope=scope_of(entry),
                 slug=entry.slug,
                 title=entry.title,
@@ -705,7 +707,7 @@ class SearchKnowledgeImpl(NativeToolImpl):
             for entry in entries
         ]
         hits += [
-            KnowledgeHit(
+            AgentKnowledgeHit(
                 scope=PLATFORM,
                 slug=passage.path,
                 title=passage.title,
@@ -714,33 +716,33 @@ class SearchKnowledgeImpl(NativeToolImpl):
             )
             for passage in passages
         ]
-        return KnowledgeHits(hits=tuple(hits))
+        return AgentKnowledgeHits(hits=tuple(hits))
 
 
-class KnowledgeSlug(ToolInput):
+class AgentKnowledgeSlug(ToolInput):
     slug: str = Field(min_length=1, max_length=MAX_PATH)
 
 
-class KnowledgeRead(Platform):
+class AgentKnowledgeRead(Platform):
     scope: str
     slug: str
     title: str
     text: str
 
 
-class ReadKnowledgeImpl(NativeToolImpl):
-    """Reads one piece of knowledge whole, by the slug a search answered: a
+class ReadAgentKnowledgeImpl(NativeToolImpl):
+    """Reads one piece of agent knowledge whole, by the slug a search answered: a
     document of the platform's corpus by its path, or a reviewed entry the
     session reaches. Any other entry is not found, as one that never existed
     is not."""
 
     SPEC = ToolSpec(
-        name=kinds.READ_KNOWLEDGE,
+        name=kinds.READ_AGENT_KNOWLEDGE,
         description=(
-            "Reads one piece of the knowledge base whole, by the slug search_knowledge answered."
+            "Reads one piece of the agent knowledge base whole, by the slug search_agent_knowledge answered."
         ),
-        input_model=KnowledgeSlug,
-        output_model=KnowledgeRead,
+        input_model=AgentKnowledgeSlug,
+        output_model=AgentKnowledgeRead,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -748,22 +750,26 @@ class ReadKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+    def __init__(
+        self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
+    ) -> None:
         self._corpus = corpus
-        self._knowledge = knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, KnowledgeSlug)
+        assert isinstance(call_input, AgentKnowledgeSlug)
         slug = call_input.slug
         for document in self._corpus.documents:
             if document.path == slug:
-                return KnowledgeRead(
+                return AgentKnowledgeRead(
                     scope=PLATFORM, slug=slug, title=document.title, text=document.text
                 )
-        entry = await self._knowledge().read(ctx, runtime.session_id, slug)
-        return KnowledgeRead(scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text)
+        entry = await self._agent_knowledge().read(ctx, runtime.session_id, slug)
+        return AgentKnowledgeRead(
+            scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text
+        )
 
 
 class SuggestionInput(ToolInput):
@@ -777,16 +783,16 @@ class Suggested(Platform):
     note: str
 
 
-class SuggestKnowledgeImpl(NativeToolImpl):
-    """Suggests an entry for the session's project, or its whole tenant when
+class SuggestAgentKnowledgeImpl(NativeToolImpl):
+    """Suggests an entry for the session's agent project, or its whole tenant when
     it has none. It waits for a person's review, and no session recalls,
     finds, or reads it before. A repeat would suggest it twice, so a call
     whose run was lost is never run again."""
 
     SPEC = ToolSpec(
-        name=kinds.SUGGEST_KNOWLEDGE,
+        name=kinds.SUGGEST_AGENT_KNOWLEDGE,
         description=(
-            "Suggests an entry for the knowledge base: what a later session should not have "
+            "Suggests an entry for the agent knowledge base: what a later session should not have "
             "to find out again, such as a procedure, a pitfall, or how a tool behaves here. "
             "Give it a title, the words that should bring it into a session that is about "
             "them, and its text. A person reviews it before any session reads it."
@@ -800,14 +806,14 @@ class SuggestKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
-        self._knowledge = knowledge
+    def __init__(self, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]) -> None:
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, SuggestionInput)
-        entry = await self._knowledge().suggest(
+        entry = await self._agent_knowledge().suggest(
             ctx, runtime.session_id, call_input.title, call_input.trigger, call_input.text
         )
         return Suggested(slug=entry.slug, note="It waits for a person's review.")
@@ -863,10 +869,10 @@ LIST_MAX = 50  # rows one list answers at most
 SESSION_SCAN = 100
 """The root sessions one list_sessions call reads at most, newest first,
 each with the sub-agents under it, before it filters by status, park reason,
-and project: the call stays one read of a page, a read of each tree's
-children, and at most a lookup of a project for each session it reads, and
+and agent project: the call stays one read of a page, a read of each tree's
+children, and at most a lookup of an agent project for each session it reads, and
 its answer says where to read on."""
-RUNS_MAX = 20  # an automation's recent runs one read answers at most
+RUNS_MAX = 20  # an agent automation's recent runs one read answers at most
 HOSTS_MAX = 20  # a pool's hosts read_wait answers at most
 CHILDREN_MAX = 20  # the sub-agents read_session answers at most
 CHILDREN_PAGE = 100  # the sub-agents of one parent a tree's read takes at a time
@@ -901,7 +907,7 @@ class SessionState(Platform):
     kind_version: int
     title: str
     started_by: UUID
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     parent_id: UUID | None = None
     handed_off_from: UUID | None = None
     status: SessionStatus
@@ -957,7 +963,7 @@ class ReadSessionImpl(NativeToolImpl):
     SPEC = ToolSpec(
         name=kinds.READ_SESSION,
         description=(
-            "Reads where a session of the tenant stands: its kind, title, project, who "
+            "Reads where a session of the tenant stands: its kind, title, agent project, who "
             "started it, whether it is pending, running, parked, or idle, why it is parked "
             "and what clears it, and when it tries again. A session parked on an approval "
             "answers each call it holds and the roles that may decide it; one parked on its "
@@ -977,12 +983,12 @@ class ReadSessionImpl(NativeToolImpl):
         sessions: Callable[[], AgentSessionsManagerInterface],
         steps: Callable[[], StepsManagerInterface],
         policies: Callable[[], ToolsManagerInterface],
-        projects: Callable[[], ProjectsManagerInterface],
+        agent_projects: Callable[[], AgentProjectsManagerInterface],
     ) -> None:
         self._sessions = sessions
         self._steps = steps
         self._policies = policies
-        self._projects = projects
+        self._agent_projects = agent_projects
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -990,7 +996,7 @@ class ReadSessionImpl(NativeToolImpl):
         assert isinstance(call_input, SessionInput)
         session = await self._sessions().get_session(ctx, call_input.session_id)
         park = session.park
-        project = await self._projects().project_of(ctx, session.id)
+        agent_project = await self._agent_projects().agent_project_of(ctx, session.id)
         held: tuple[HeldCall, ...] = ()
         if park is not None and park.reason is ParkReason.PERSON and park.unlock == APPROVAL_UNLOCK:
             policy = await self._policies().get_policy(ctx)
@@ -1011,7 +1017,7 @@ class ReadSessionImpl(NativeToolImpl):
             kind_version=session.kind_version,
             title=session.title,
             started_by=session.created_by,
-            project_id=None if project is None else project.id,
+            agent_project_id=None if agent_project is None else agent_project.id,
             parent_id=session.parent_id,
             handed_off_from=session.handed_off_from,
             status=session.status,
@@ -1040,7 +1046,7 @@ def held_call(request: Step, roles: tuple[Role, ...]) -> HeldCall:
 class SessionsQuery(ToolInput):
     status: SessionStatus | None = None
     park_reason: ParkReason | None = None
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     before: UUID | None = None  # the `next` an earlier answer gave
     limit: int = Field(default=20, ge=1, le=LIST_MAX)
 
@@ -1068,7 +1074,7 @@ class SessionList(Platform):
 
 class ListSessionsImpl(NativeToolImpl):
     """Lists the tenant's sessions, newest first, by status, park reason, and
-    project: each root the person sees, then the sub-agents under it, read
+    agent project: each root the person sees, then the sub-agents under it, read
     through the engine's children of each parent, so a sub-agent of a root
     the person does not see is never listed. One call reads at most a scan's
     worth of roots, so a filter that matches few may answer fewer than its
@@ -1080,7 +1086,7 @@ class ListSessionsImpl(NativeToolImpl):
         description=(
             "Lists the tenant's sessions, newest first: each one's id, title, kind, "
             "status, park reason, who started it, and when. Filter by status, by park reason "
-            "(parked sessions only), or by project. When the answer carries next, pass it as "
+            "(parked sessions only), or by agent project. When the answer carries next, pass it as "
             "before to read on: a filter that matches few may answer fewer than limit."
         ),
         input_model=SessionsQuery,
@@ -1095,10 +1101,10 @@ class ListSessionsImpl(NativeToolImpl):
     def __init__(
         self,
         sessions: Callable[[], AgentSessionsManagerInterface],
-        projects: Callable[[], ProjectsManagerInterface],
+        agent_projects: Callable[[], AgentProjectsManagerInterface],
     ) -> None:
         self._sessions = sessions
-        self._projects = projects
+        self._agent_projects = agent_projects
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -1138,9 +1144,9 @@ class ListSessionsImpl(NativeToolImpl):
             return None
         if reason is not None and (session.park is None or session.park.reason is not reason):
             return None
-        if query.project_id is not None:
-            project = await self._projects().project_of(ctx, session.id)
-            if project is None or project.id != query.project_id:
+        if query.agent_project_id is not None:
+            agent_project = await self._agent_projects().agent_project_of(ctx, session.id)
+            if agent_project is None or agent_project.id != query.agent_project_id:
                 return None
         return SessionLine(
             session_id=session.id,
@@ -1225,12 +1231,12 @@ class ReadWaitImpl(NativeToolImpl):
         sessions: Callable[[], AgentSessionsManagerInterface],
         work: Callable[[], WorkManagerInterface],
         hosts: Callable[[], HostsManagerInterface],
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
     ) -> None:
         self._sessions = sessions
         self._work = work
         self._hosts = hosts
-        self._relay = relay
+        self._exec_relay = exec_relay
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -1260,7 +1266,7 @@ class ReadWaitImpl(NativeToolImpl):
                 _pool_host(status)
                 for status in (await self._hosts().get_hosts(ctx, pool.id))[:HOSTS_MAX]
             )
-            binding = await self._relay().binding_of(ctx, session.id)
+            binding = await self._exec_relay().binding_of(ctx, session.id)
             if binding is not None:
                 holder = await self._hosts().get_host(ctx, pool.id, binding.host_id)
                 # A revoked host took the workspace with it: another host of
@@ -1297,42 +1303,42 @@ class PageInput(ToolInput):
     limit: int = Field(default=20, ge=1, le=LIST_MAX)
 
 
-class ProjectInput(ToolInput):
-    project_id: UUID
+class AgentProjectInput(ToolInput):
+    agent_project_id: UUID
 
 
-class ProjectRead(Platform):
-    project_id: UUID
+class AgentProjectRead(Platform):
+    agent_project_id: UUID
     name: str
     repository: str  # its host and path, such as github.com/octo/reports
     created_at: datetime
     created_by: UUID
 
 
-class ProjectList(Platform):
-    projects: tuple[ProjectRead, ...]
+class AgentProjectList(Platform):
+    agent_projects: tuple[AgentProjectRead, ...]
     next: UUID | None  # pass it as `after` to read on; none once the list is read
 
 
-def project_read(project: Project) -> ProjectRead:
-    return ProjectRead(
-        project_id=project.id,
-        name=project.name,
-        repository=f"{project.repository.host}/{project.repository.path}",
-        created_at=project.created_at,
-        created_by=project.created_by,
+def agent_project_read(agent_project: AgentProject) -> AgentProjectRead:
+    return AgentProjectRead(
+        agent_project_id=agent_project.id,
+        name=agent_project.name,
+        repository=f"{agent_project.repository.host}/{agent_project.repository.path}",
+        created_at=agent_project.created_at,
+        created_by=agent_project.created_by,
     )
 
 
-class ListProjectsImpl(NativeToolImpl):
+class ListAgentProjectsImpl(NativeToolImpl):
     SPEC = ToolSpec(
-        name=kinds.LIST_PROJECTS,
+        name=kinds.LIST_AGENT_PROJECTS,
         description=(
-            "Lists the tenant's projects: each one's id, name, and the repository its work "
+            "Lists the tenant's agent projects: each one's id, name, and the repository its work "
             "lands on. When the answer carries next, pass it as after to read on."
         ),
         input_model=PageInput,
-        output_model=ProjectList,
+        output_model=AgentProjectList,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1340,32 +1346,32 @@ class ListProjectsImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, projects: Callable[[], ProjectsManagerInterface]) -> None:
-        self._projects = projects
+    def __init__(self, agent_projects: Callable[[], AgentProjectsManagerInterface]) -> None:
+        self._agent_projects = agent_projects
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
-        rows = await self._projects().list_projects(ctx, call_input.after, limit + 1)
+        rows = await self._agent_projects().list_agent_projects(ctx, call_input.after, limit + 1)
         shown = rows[:limit]
         more = len(rows) > limit
-        return ProjectList(
-            projects=tuple(project_read(p) for p in shown),
+        return AgentProjectList(
+            agent_projects=tuple(agent_project_read(p) for p in shown),
             next=shown[-1].id if more else None,
         )
 
 
-class ReadProjectImpl(NativeToolImpl):
+class ReadAgentProjectImpl(NativeToolImpl):
     SPEC = ToolSpec(
-        name=kinds.READ_PROJECT,
+        name=kinds.READ_AGENT_PROJECT,
         description=(
-            "Reads one project of the tenant: its name, the repository its work lands on, "
-            "and who made it when. Its sessions are list_sessions with its project_id."
+            "Reads one agent project of the tenant: its name, the repository its work lands on, "
+            "and who made it when. Its sessions are list_sessions with its agent_project_id."
         ),
-        input_model=ProjectInput,
-        output_model=ProjectRead,
+        input_model=AgentProjectInput,
+        output_model=AgentProjectRead,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1373,18 +1379,20 @@ class ReadProjectImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, projects: Callable[[], ProjectsManagerInterface]) -> None:
-        self._projects = projects
+    def __init__(self, agent_projects: Callable[[], AgentProjectsManagerInterface]) -> None:
+        self._agent_projects = agent_projects
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, ProjectInput)
-        return project_read(await self._projects().get_project(ctx, call_input.project_id))
+        assert isinstance(call_input, AgentProjectInput)
+        return agent_project_read(
+            await self._agent_projects().get_agent_project(ctx, call_input.agent_project_id)
+        )
 
 
-class AutomationLine(Platform):
-    automation_id: UUID
+class AgentAutomationLine(Platform):
+    agent_automation_id: UUID
     name: str
     trigger: str  # an event or a schedule
     action: str
@@ -1392,18 +1400,18 @@ class AutomationLine(Platform):
     runs_as: str
 
 
-class AutomationList(Platform):
-    automations: tuple[AutomationLine, ...]
+class AgentAutomationList(Platform):
+    agent_automations: tuple[AgentAutomationLine, ...]
     next: UUID | None  # pass it as `after` to read on; none once the list is read
 
 
-class AutomationInput(ToolInput):
-    automation_id: UUID
+class AgentAutomationInput(ToolInput):
+    agent_automation_id: UUID
     runs: int = Field(default=5, ge=1, le=RUNS_MAX)
 
 
 class RunLine(Platform):
-    """One firing of an automation, as recorded: started, queued, or refused
+    """One firing of an agent automation, as recorded: started, queued, or refused
     and why, the session it started or messaged, and how it ended."""
 
     run_id: UUID
@@ -1418,11 +1426,11 @@ class RunLine(Platform):
     closed_at: datetime | None = None
 
 
-class AutomationRead(Platform):
-    """An automation's shape and its recent runs: never the text a person
+class AgentAutomationRead(Platform):
+    """An agent automation's shape and its recent runs: never the text a person
     briefed it with or an event brought."""
 
-    automation_id: UUID
+    agent_automation_id: UUID
     name: str
     enabled: bool
     runs_as: str
@@ -1434,33 +1442,33 @@ class AutomationRead(Platform):
     every: timedelta | None = None
     action: str
     agent_kind: str | None = None
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     session_id: UUID | None = None
-    limits: AutomationLimits
+    limits: AgentAutomationLimits
     runs: tuple[RunLine, ...]  # newest first
 
 
-def automation_line(automation: Automation) -> AutomationLine:
-    return AutomationLine(
-        automation_id=automation.id,
-        name=automation.name,
-        trigger=automation.trigger.kind,
-        action=automation.action.kind,
-        enabled=automation.enabled,
-        runs_as=automation.runs_as,
+def agent_automation_line(agent_automation: AgentAutomation) -> AgentAutomationLine:
+    return AgentAutomationLine(
+        agent_automation_id=agent_automation.id,
+        name=agent_automation.name,
+        trigger=agent_automation.trigger.kind,
+        action=agent_automation.action.kind,
+        enabled=agent_automation.enabled,
+        runs_as=agent_automation.runs_as,
     )
 
 
-class ListAutomationsImpl(NativeToolImpl):
+class ListAgentAutomationsImpl(NativeToolImpl):
     SPEC = ToolSpec(
-        name=kinds.LIST_AUTOMATIONS,
+        name=kinds.LIST_AGENT_AUTOMATIONS,
         description=(
-            "Lists the tenant's automations: each one's id, name, whether an event or a "
+            "Lists the tenant's agent automations: each one's id, name, whether an event or a "
             "schedule fires it, what it does, whether it is on, and whom it runs as. When "
             "the answer carries next, pass it as after to read on."
         ),
         input_model=PageInput,
-        output_model=AutomationList,
+        output_model=AgentAutomationList,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1468,36 +1476,38 @@ class ListAutomationsImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, automations: Callable[[], AutomationsManagerInterface]) -> None:
-        self._automations = automations
+    def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
+        self._agent_automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
-        rows = await self._automations().list_automations(ctx, call_input.after, limit + 1)
+        rows = await self._agent_automations().list_agent_automations(
+            ctx, call_input.after, limit + 1
+        )
         shown = rows[:limit]
-        return AutomationList(
-            automations=tuple(automation_line(a) for a in shown),
+        return AgentAutomationList(
+            agent_automations=tuple(agent_automation_line(a) for a in shown),
             next=shown[-1].id if len(rows) > limit else None,
         )
 
 
-class ReadAutomationImpl(NativeToolImpl):
-    """Reads one automation of the tenant and its recent runs. The automation
+class ReadAgentAutomationImpl(NativeToolImpl):
+    """Reads one agent automation of the tenant and its recent runs. The agent automation
     is read first, so another tenant's is not found before any run is."""
 
     SPEC = ToolSpec(
-        name=kinds.READ_AUTOMATION,
+        name=kinds.READ_AGENT_AUTOMATION,
         description=(
-            "Reads one automation of the tenant: what fires it, what it does, its limits "
+            "Reads one agent automation of the tenant: what fires it, what it does, its limits "
             "(cost cap, rate, concurrency, queue, hop limit), whom it runs as, and its "
             "recent runs, newest first: each started, queued, or refused and why, the "
             "session it started or messaged, and how it ended."
         ),
-        input_model=AutomationInput,
-        output_model=AutomationRead,
+        input_model=AgentAutomationInput,
+        output_model=AgentAutomationRead,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1505,22 +1515,24 @@ class ReadAutomationImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, automations: Callable[[], AutomationsManagerInterface]) -> None:
-        self._automations = automations
+    def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
+        self._agent_automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, AutomationInput)
-        automation = await self._automations().get_automation(ctx, call_input.automation_id)
-        runs = await self._automations().get_runs(ctx, automation.id, call_input.runs)
-        trigger, action = automation.trigger, automation.action
-        return AutomationRead(
-            automation_id=automation.id,
-            name=automation.name,
-            enabled=automation.enabled,
-            runs_as=automation.runs_as,
-            own_events=automation.own_events,
+        assert isinstance(call_input, AgentAutomationInput)
+        agent_automation = await self._agent_automations().get_agent_automation(
+            ctx, call_input.agent_automation_id
+        )
+        runs = await self._agent_automations().get_runs(ctx, agent_automation.id, call_input.runs)
+        trigger, action = agent_automation.trigger, agent_automation.action
+        return AgentAutomationRead(
+            agent_automation_id=agent_automation.id,
+            name=agent_automation.name,
+            enabled=agent_automation.enabled,
+            runs_as=agent_automation.runs_as,
+            own_events=agent_automation.own_events,
             trigger=trigger.kind,
             integrations=trigger.integrations,
             arrivals=trigger.arrivals,
@@ -1528,9 +1540,9 @@ class ReadAutomationImpl(NativeToolImpl):
             every=trigger.every,
             action=action.kind,
             agent_kind=action.agent_kind,
-            project_id=action.project_id,
+            agent_project_id=action.agent_project_id,
             session_id=action.session_id,
-            limits=automation.limits,
+            limits=agent_automation.limits,
             runs=tuple(
                 RunLine(
                     run_id=run.id,
@@ -1606,8 +1618,8 @@ class HandedOff(Platform):
     note: str
 
 
-class HandOffToEngineerImpl(NativeToolImpl):
-    """Hands engineering work to a new engineer session. Its objective is
+class HandOffToSoftwareEngineerImpl(NativeToolImpl):
+    """Hands engineering work to a new software engineer session. Its objective is
     data there, it waits for its person to confirm it, and the session that
     handed it over cannot steer it. The new session's id is the call's own,
     so a call asked again finds the session it made."""
@@ -1615,7 +1627,7 @@ class HandOffToEngineerImpl(NativeToolImpl):
     SPEC = ToolSpec(
         name=kinds.HAND_OFF,
         description=(
-            "Hands engineering work to a new engineer session, with a title and an objective "
+            "Hands engineering work to a new software engineer session, with a title and an objective "
             "that stands on its own: what to change, why, and how to know it is done. The "
             "session starts when its person confirms it; you cannot steer it after."
         ),
@@ -1637,7 +1649,7 @@ class HandOffToEngineerImpl(NativeToolImpl):
         assert isinstance(call_input, HandOffInput)
         handoff = Handoff(
             id=runtime.key,
-            kind=kinds.ENGINEER,
+            kind=kinds.SOFTWARE_ENGINEER,
             title=call_input.title,
             objective=call_input.objective,
         )
@@ -2118,7 +2130,7 @@ def _offering(status: HostStatus) -> OfferingHost:
 
 class BudgetSpend(Platform):
     budget_id: UUID
-    scope: str  # what it bounds: the org, a project, a person, a session
+    scope: str  # what it bounds: the org, an agent project, a person, a session
     key: str
     window: str
     window_seconds: int | None = None
@@ -2143,7 +2155,7 @@ class ReadSpendImpl(NativeToolImpl):
         name=kinds.READ_SPEND,
         description=(
             "Reads the tenant's budgets, a page at a time: what each bounds (the org, a "
-            "project, a person, or a session), its amount and window, what the window spent so "
+            "agent_project, a person, or a session), its amount and window, what the window spent so "
             "far, and what calls running now hold. Pass `next` as `after` for the next page."
         ),
         input_model=PageInput,

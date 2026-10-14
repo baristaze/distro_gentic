@@ -11,11 +11,11 @@ const platform: PortalProduct = {
     { path: "/sessions", element: page },
     { path: "/sessions/:sessionId", element: page },
   ],
-  nav: [{ id: "automations", label: "Automations", icon: null, to: "/automations", tip: "" }],
+  nav: [{ id: "agent_automations", label: "Agent automations", icon: null, to: "/agent-automations", tip: "" }],
   sessionTabs: [{ id: "step", label: "Step", icon: null, tip: "", offered: () => true, render: () => null }],
   tools: { run_command: { gist: () => "" } },
-  settings: [{ group: "Agents", id: "projects", label: "Projects", icon: null, about: "", routes: [{ path: "/projects", element: page }] }],
-  agents: [{ kind: "engineer", label: "Engineer", about: "" }],
+  settings: [{ group: "Agents", id: "agent_projects", label: "Agent projects", icon: null, about: "", routes: [{ path: "/agent-projects", element: page }] }],
+  agents: [{ kind: "software_engineer", label: "Software engineer", about: "" }],
   examples: { composer: "Describe a task", reply: "Reply", starters: ["one", "two", "three"] },
 };
 const product = (over: Partial<PortalProduct>): PortalProduct => ({ ...EMPTY_PRODUCT, ...over });
@@ -39,10 +39,10 @@ it("joins a product's entries after the platform's, its agents first, its exampl
       examples: { starters: ["a", "b", "c"] },
     }),
   );
-  expect(joined.nav.map((entry) => entry.id)).toEqual(["automations", "lines"]);
-  expect(joined.agents.map((agent) => agent.kind)).toEqual(["inspector", "engineer"]);
+  expect(joined.nav.map((entry) => entry.id)).toEqual(["agent_automations", "lines"]);
+  expect(joined.agents.map((agent) => agent.kind)).toEqual(["inspector", "software_engineer"]);
   expect(joined.examples).toEqual({ composer: "Describe a task", reply: "Reply", starters: ["a", "b", "c"] });
-  expect(routePaths(shellRoutes(joined))).toEqual(["/", "/sessions", "/sessions/:", "/lines", "/projects"]);
+  expect(routePaths(shellRoutes(joined))).toEqual(["/", "/sessions", "/sessions/:", "/lines", "/agent-projects"]);
 });
 
 it("joins an empty product to the platform unchanged", () => {
@@ -60,21 +60,21 @@ it("refuses a product's settings page at a platform address, and a page at a pla
   expect(
     refusal({ settings: [{ group: "Extras", id: "extras", label: "Extras", icon: null, about: "", routes: [{ path: "/sessions", element: page }] }] }),
   ).toContain('address "/sessions"');
-  expect(refusal({ routes: [{ path: "/projects", element: page }] })).toContain('address "/projects"');
+  expect(refusal({ routes: [{ path: "/agent-projects", element: page }] })).toContain('address "/agent-projects"');
 });
 
 it("refuses a duplicate id of each kind of entry", () => {
-  expect(refusal({ nav: [{ id: "automations", label: "Mine", icon: null, to: "/mine", tip: "" }] })).toContain(
-    'left bar entry "automations"',
+  expect(refusal({ nav: [{ id: "agent_automations", label: "Mine", icon: null, to: "/mine", tip: "" }] })).toContain(
+    'left bar entry "agent_automations"',
   );
   expect(refusal({ sessionTabs: [{ id: "step", label: "Step", icon: null, tip: "", offered: () => true, render: () => null }] })).toContain(
     'session tab "step"',
   );
   expect(refusal({ tools: { run_command: { gist: () => "" } } })).toContain('tool "run_command"');
-  expect(refusal({ settings: [{ group: "Agents", id: "projects", label: "P", icon: null, about: "", routes: [] }] })).toContain(
-    'settings section "projects"',
+  expect(refusal({ settings: [{ group: "Agents", id: "agent_projects", label: "P", icon: null, about: "", routes: [] }] })).toContain(
+    'settings section "agent_projects"',
   );
-  expect(refusal({ agents: [{ kind: "engineer", label: "Mine", about: "" }] })).toContain('agent kind "engineer"');
+  expect(refusal({ agents: [{ kind: "software_engineer", label: "Mine", about: "" }] })).toContain('agent kind "software_engineer"');
 });
 
 it("refuses a duplicate inside the product itself", () => {

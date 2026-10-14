@@ -40,9 +40,10 @@ of the oldest part, never the newest. A reader that missed parts is told
 so; the step they add up to holds them once it is stored.
 
 **The watch keeps no table.** Its namespace has no storage: a live part
-is a cache, and a person's command by hand is the relay's `exec` item,
-attributed to them by an entry in the tenant's event stream written
-before it is sent. The checker's one-shape rule is excepted for it.
+is a cache, and a person's command by hand is the exec relay's `exec`
+item, attributed to them by an entry in the tenant's event stream
+written before it is sent. The checker's one-shape rule is excepted for
+it.
 
 **The key is one secret of its own,** injected into the API from the
 secret store, the same in every API task. A process without one refuses

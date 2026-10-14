@@ -37,7 +37,7 @@ const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at
 const session = (id: string, over: Partial<AgentSessionView> = {}): AgentSessionView => ({
   id,
   title: id,
-  kind: "engineer",
+  kind: "software_engineer",
   kind_version: 1,
   status: "idle",
   park: null,
@@ -109,14 +109,14 @@ let router: ReturnType<typeof createMemoryRouter>;
 const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   nav: [
-    { id: "automations", label: "Automations", icon: null, to: "/automations", tip: "Automations" },
-    { id: "knowledge", label: "Knowledge", icon: null, to: "/knowledge", tip: "Knowledge", count: () => 2 },
+    { id: "agent_automations", label: "Agent automations", icon: null, to: "/agent-automations", tip: "Agent automations" },
+    { id: "agent_knowledge", label: "Agent knowledge", icon: null, to: "/agent-knowledge", tip: "Agent knowledge", count: () => 2 },
   ],
   settings: [
-    { group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/settings/projects" }] },
+    { group: "Agents", id: "agent_projects", label: "Agent projects", icon: null, about: "Repositories", routes: [{ path: "/settings/agent-projects" }] },
     { group: "Security", id: "api-keys", label: "API keys", icon: null, about: "Keys a program calls with", routes: [{ path: "/settings/api-keys" }] },
   ],
-  agents: [{ kind: "engineer", label: "Engineer", about: "Changes code." }],
+  agents: [{ kind: "software_engineer", label: "Software engineer", about: "Changes code." }],
 };
 
 const frame = ({ children }: { children?: ReactNode }) =>
@@ -149,8 +149,8 @@ async function mount(path = "/") {
           { path: "/sessions", Component: page("sessions") },
           { path: "/sessions/:id", Component: page("one session") },
           { path: "/settings/*", Component: page("a section") },
-          { path: "/automations", Component: page("automations") },
-          { path: "/knowledge", Component: page("knowledge") },
+          { path: "/agent-automations", Component: page("agent_automations") },
+          { path: "/agent-knowledge", Component: page("agent_knowledge") },
         ],
       },
     ],
@@ -188,7 +188,7 @@ it("holds the org chip, the search, New session, the slot's entries with their c
   await mount();
   const nav = q("nav[aria-label='Main']")!;
   const links = [...nav.querySelectorAll("a")].map((a) => a.textContent?.trim());
-  expect(links).toEqual(["New session", "Automations", "Knowledge2"]);
+  expect(links).toEqual(["New session", "Agent automations", "Agent knowledge2"]);
   expect(q("aside")!.textContent).toContain("Search");
   expect(trigger().textContent).toContain("Owner");
   expect(trigger().textContent).toContain("Ajax");
@@ -278,7 +278,7 @@ it("raises a toast on any page when a sub-agent of the person's starts to need t
 
 it("narrows the sessions by the filter it keeps, and says so when none matches", async () => {
   net.sessions = [session("analysis", { kind: "analysis" })];
-  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, kind: "engineer" } });
+  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, kind: "software_engineer" } });
   await mount();
   expect(q("aside")!.textContent).toContain("No session matches the filter.");
   expect(q("button[aria-label='Filter your sessions (on)']")).not.toBeNull();
@@ -379,7 +379,7 @@ it("searches the whole app on Cmd-K: what is typed starts a session on Home, and
   const field = q<HTMLInputElement>("input[role='combobox']")!;
   expect(field.placeholder).toBe("Search sessions, settings, and actions");
   const options = () => [...container.querySelectorAll("[role='option']")].map((o) => o.querySelector(".acme-palette-label")?.textContent);
-  expect(options()).toEqual(expect.arrayContaining(["New session", "Automations", "Projects", "Tidy the docs"]));
+  expect(options()).toEqual(expect.arrayContaining(["New session", "Agent automations", "Agent projects", "Tidy the docs"]));
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Fix the build");
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -406,17 +406,17 @@ it("opens Settings on Cmd-comma", async () => {
 });
 
 it("puts Settings' own bar in the left bar's place inside Settings: back to the app, the search, and the sections by group", async () => {
-  await mount("/settings/projects");
+  await mount("/settings/agent-projects");
   expect(q("aside[aria-label='Sidebar']")).toBeNull();
   const bar = q("aside[aria-label='Settings sidebar']")!;
   const sections = () => [...bar.querySelectorAll("nav[aria-label='Settings'] a")].map((a) => [a.textContent, a.getAttribute("href")]);
   expect(sections()).toEqual([
     ["Overview", "/settings"],
-    ["Projects", "/settings/projects"],
+    ["Agent projects", "/settings/agent-projects"],
     ["API keys", "/settings/api-keys"],
   ]);
   expect([...bar.querySelectorAll("h2")].map((h) => h.textContent)).toEqual(["Agents", "Security"]);
-  expect(bar.querySelector("a[aria-current='page']")!.textContent).toBe("Projects");
+  expect(bar.querySelector("a[aria-current='page']")!.textContent).toBe("Agent projects");
 
   const search = bar.querySelector<HTMLInputElement>("input[type='search']")!;
   expect(search.placeholder).toBe("e.g. API keys");
@@ -501,8 +501,8 @@ describe("the support dock", () => {
     await mount("/sessions");
     await act(async () => ask().click());
     await typeIn("Why is my session parked?");
-    await act(async () => router.navigate("/automations"));
-    expect(container.textContent).toContain("automations");
+    await act(async () => router.navigate("/agent-automations"));
+    expect(container.textContent).toContain("agent_automations");
     expect(dock()!.dataset.mode).toBe("side");
     expect(field().value).toBe("Why is my session parked?");
   });
@@ -513,7 +513,7 @@ describe("the support dock", () => {
     await act(async () => ask().click());
     expect(dock()!.dataset.mode).toBe("sheet");
     await typeIn("Where are the API keys?");
-    await act(async () => router.navigate("/knowledge"));
+    await act(async () => router.navigate("/agent-knowledge"));
     expect(dock()).toBeNull();
     await act(async () => ask().click());
     expect(field().value).toBe("Where are the API keys?");
@@ -525,7 +525,7 @@ describe("the support dock", () => {
     await act(async () => q<HTMLButtonElement>("button[aria-label='Expand']")!.click());
     expect(dock()!.dataset.mode).toBe("expanded");
     expect(q(".acme-main")!.hidden).toBe(true);
-    await act(async () => router.navigate("/automations"));
+    await act(async () => router.navigate("/agent-automations"));
     expect(dock()!.dataset.mode).toBe("side");
     expect(q(".acme-main")!.hidden).toBe(false);
   });
@@ -551,9 +551,9 @@ describe("the support dock", () => {
   it("never reads another member's session through the dock, nor a session of another kind, and starts the person's own instead", async () => {
     net.sessions = [
       session("theirs", { kind: "platform_assistant", created_by: "u2" }),
-      session("engineer", { kind: "engineer" }),
+      session("software_engineer", { kind: "software_engineer" }),
     ];
-    for (const kept of ["theirs", "engineer"]) {
+    for (const kept of ["theirs", "software_engineer"]) {
       net.gets.length = 0;
       net.posts.length = 0;
       useSupportStore.setState({ conversations: { "o1/u1": kept } });

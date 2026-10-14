@@ -1,5 +1,5 @@
 """An execution record: one run of one check, tied to the version and the
-environment it ran in. It is written once and never changed."""
+image it ran on. It is written once and never changed."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -13,8 +13,8 @@ from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenanc
 
 NAME = r"^[a-z][a-z0-9_.-]{0,99}$"
 """A check's name, and a kind's."""
-PROJECT = r"^[A-Za-z0-9][A-Za-z0-9_./-]{0,199}$"
-"""A project's key: the name its tenant gives the work product, such as
+AGENT_PROJECT = r"^[A-Za-z0-9][A-Za-z0-9_./-]{0,199}$"
+"""An agent project's key: the name its tenant gives the work product, such as
 its repository's."""
 VERSION = r"^\S{1,200}$"
 """A version: a commit, a tag, an image digest. No whitespace."""
@@ -36,7 +36,7 @@ class RunOutcome(StrEnum):
     ABORTED = "aborted"  # an abort ended it; a declared rule classifies it
 
 
-class Environment(Platform):
+class RunImage(Platform):
     """What a run ran under: the image's digest and the toolchain's
     versions, by name."""
 
@@ -54,7 +54,7 @@ class CaseTally(Platform):
 
 class ExecutionRecord(Identifiable, Created):
     """One run: the version it ran against and whether the tree held
-    uncommitted changes, the environment, the host and its isolation, who
+    uncommitted changes, the run image, the host and its isolation, who
     ran it and wrote its results (`executor`), the check and its version,
     its parameters, metrics, timing, and outcome, its artifacts, and every
     dependency it relied on with its provenance. `step_id` is the tool call
@@ -62,13 +62,13 @@ class ExecutionRecord(Identifiable, Created):
     validation that ran it, for the executor's."""
 
     session_id: UUID
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
     step_id: UUID | None = None
     validation_id: UUID | None = None
     version: str = Field(pattern=VERSION)
     dirty: bool
-    environment: Environment
+    run_image: RunImage
     host: str = Field(min_length=1, max_length=200)
     isolation: str = Field(min_length=1, max_length=100)
     executor: str = Field(min_length=1, max_length=200)

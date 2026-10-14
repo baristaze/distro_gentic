@@ -7,12 +7,12 @@ and back, a data migration passes the fence it runs under and fails when it
 misses rows, a workspace's notices move to the one notice and back, every
 tenant's, the one notice leaves the table with every notice kept in the list,
 the validation sessions' station columns leave the table with every session
-this release wrote kept, a platform automation this release writes reads as
-the previous release's after a downgrade, which drops the automations of a
+this release wrote kept, a platform agent automation this release writes reads as
+the previous release's after a downgrade, which drops the agent automations of a
 product's kind, a refused validation session goes back to queued, kept,
-when its reason's column leaves, a playbook version the release before
+when its reason's column leaves, an agent playbook version the release before
 wrote reads as never checked by the lever checks, and an invocation it
-wrote reads as a principal's, never a session's manual."""
+wrote reads as a principal's, never a session's kind manual."""
 
 import asyncio
 import json
@@ -21,21 +21,22 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.automation_storage import make_automation
+from contracts.agent_automation_storage import make_agent_automation
+from contracts.agent_playbook_storage import make_agent_playbook
+from contracts.agent_workspace_storage import make_workspace
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation, refused
-from contracts.playbook_storage import make_playbook
-from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
-from acme.om.automations.types.automation import Action
+from acme.om.agent_automations.storage.impl.postgres import AgentAutomationStoragePostgresImpl
+from acme.om.agent_automations.types.agent_automation import Action
+from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
+from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
-from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.logins import MIGRATION_LOGIN, PURGE_LOGIN, RUNTIME_LOGIN, SYSTEM_LOGIN
 from acme.om.storage.migrate import (
@@ -52,7 +53,6 @@ from acme.om.storage.migrate import (
 )
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
-from acme.om.workspaces.storage.impl.postgres import WorkspaceStoragePostgresImpl
 
 pytestmark = pytest.mark.integration
 
@@ -281,15 +281,24 @@ async def on_core(url: str, sql: str) -> list[tuple[object, ...]]:
         await engine.dispose()
 
 
-async def notices_of(url: str, org: UUID, session_id: UUID, column: str = "notices") -> object:
+WORKSPACES = "agent_session_workspaces"
+"""A session's workspace row, by this release's name."""
+WORKSPACES_BEFORE = "session_workspaces"
+"""The same table, by the name the releases before this one gave it."""
+
+
+async def notices_of(
+    url: str, org: UUID, session_id: UUID, column: str = "notices", table: str = WORKSPACES
+) -> object:
     """A workspace's notices, or another of its columns, as the migration
-    login reads them, inside its tenant's fence."""
+    login reads them, inside its tenant's fence, from `table`: the name the
+    revision the read runs at gives the workspace rows."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             read = await connection.exec_driver_sql(
-                f"SELECT {column} FROM core.session_workspaces WHERE id = '{session_id}'"
+                f"SELECT {column} FROM core.{table} WHERE id = '{session_id}'"
             )
             return read.scalar_one()
     finally:
@@ -301,7 +310,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
 ) -> None:
     """Down, the last notice written is the one the previous release holds;
     up, it is the list's one entry, in both tenants' rows."""
-    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    storage = AgentWorkspaceStoragePostgresImpl(pg_sessions)
     held: dict[UUID, UUID] = {}
     for org in (new_id(), new_id()):
         workspace = make_workspace().model_copy(update={"notices": ("older", "newer")})
@@ -321,12 +330,13 @@ V0_2_0_HEAD = "202610121749"
 """The core head of the release before the one notice left the table."""
 
 
-async def notice_shape(url: str) -> list[tuple[object, ...]]:
-    """The notice columns of a workspace row and the default of each."""
+async def notice_shape(url: str, table: str = WORKSPACES) -> list[tuple[object, ...]]:
+    """The notice columns of a workspace row and the default of each, in
+    `table`, the name the revision the read runs at gives the rows."""
     return await on_core(
         url,
         "SELECT column_name, column_default FROM information_schema.columns"
-        " WHERE table_schema = 'core' AND table_name = 'session_workspaces'"
+        f" WHERE table_schema = 'core' AND table_name = '{table}'"
         " AND column_name IN ('notice', 'notices') ORDER BY column_name",
     )
 
@@ -339,7 +349,7 @@ async def told_before(url: str, org: UUID, session_id: UUID) -> None:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                f"UPDATE core.session_workspaces SET notice = 'told' WHERE id = '{session_id}'"
+                f"UPDATE core.{WORKSPACES_BEFORE} SET notice = 'told' WHERE id = '{session_id}'"
             )
     finally:
         await engine.dispose()
@@ -349,7 +359,7 @@ async def seed_notices(
     pg_sessions: LoginSessions, *notices: tuple[str, ...]
 ) -> dict[UUID, tuple[UUID, tuple[str, ...]]]:
     """One workspace a tenant, each holding its notices."""
-    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    storage = AgentWorkspaceStoragePostgresImpl(pg_sessions)
     held: dict[UUID, tuple[UUID, tuple[str, ...]]] = {}
     for listed in notices:
         org = new_id()
@@ -376,7 +386,7 @@ async def seed_notices_before(
                 await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
                 await connection.execute(
                     text(
-                        "INSERT INTO core.session_workspaces (id, org_id, created_at,"
+                        f"INSERT INTO core.{WORKSPACES_BEFORE} (id, org_id, created_at,"
                         " updated_at, created_by, updated_by, project_id, level, limits,"
                         " egress, rules, egress_source, branch, branch_seen, notices, version)"
                         " VALUES (:id, :org, :at, :at, :by, :by, :project, :level,"
@@ -388,7 +398,7 @@ async def seed_notices_before(
                         "org": org,
                         "at": workspace.created_at,
                         "by": workspace.created_by,
-                        "project": workspace.project_id,
+                        "project": workspace.agent_project_id,
                         "level": workspace.level.value,
                         "limits": workspace.limits.model_dump_json(),
                         "egress": workspace.egress.value,
@@ -417,7 +427,10 @@ async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_lis
     held = await seed_notices_before(core, ("older", "newer"), ("only",), ())
     for org, (session_id, _) in held.items():
         await told_before(core, org, session_id)
-    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+    assert await notice_shape(core, WORKSPACES_BEFORE) == [
+        ("notice", None),
+        ("notices", "'[]'::jsonb"),
+    ]
 
     await upgrade(DatabaseRole.CORE, core)
 
@@ -438,11 +451,14 @@ async def test_the_one_notice_comes_back_as_the_lists_last_entry(
 
     await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
 
-    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+    assert await notice_shape(core, WORKSPACES_BEFORE) == [
+        ("notice", None),
+        ("notices", "'[]'::jsonb"),
+    ]
     for org, (session_id, listed) in held.items():
         last = listed[-1] if listed else None
-        assert await notices_of(core, org, session_id, "notice") == last
-        assert await notices_of(core, org, session_id) == list(listed)
+        assert await notices_of(core, org, session_id, "notice", WORKSPACES_BEFORE) == last
+        assert await notices_of(core, org, session_id, table=WORKSPACES_BEFORE) == list(listed)
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
@@ -469,7 +485,8 @@ async def session_shape(url: str) -> list[tuple[object, ...]]:
         "SELECT column_name, is_nullable FROM information_schema.columns"
         " WHERE table_schema = 'core' AND table_name = 'validation_sessions'"
         " AND column_name IN"
-        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'project_id')"
+        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'project_id',"
+        " 'agent_project_id')"
         " ORDER BY column_name",
     )
 
@@ -485,12 +502,12 @@ V0_2_0_SESSION_SHAPE = [
 """The columns at the release before the station's columns left: all
 nullable, so both releases' rows fit."""
 
-SESSION_SHAPE = [("base", "NO"), ("head", "NO"), ("project_id", "NO")]
+SESSION_SHAPE = [("agent_project_id", "NO"), ("base", "NO"), ("head", "NO")]
 
 
 async def written_on_a_station(url: str, org: UUID) -> UUID:
     """A session as the release before the executor wrote it: a lab, a check
-    version, and parameters, and no project or commit."""
+    version, and parameters, and no agent project or commit."""
     session_id = new_id()
     actor = new_id()
     await in_tenant(
@@ -564,7 +581,7 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
             org,
             "SELECT project_id, head, base, lab_id, check_version, parameters"
             f" FROM core.validation_sessions WHERE id = '{session.id}'",
-        ) == [(session.project_id, session.head, session.base, None, None, None)]
+        ) == [(session.agent_project_id, session.head, session.base, None, None, None)]
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
@@ -590,7 +607,7 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
     for org in held:
         session = make_validation()
         assert await storage.create_validation(org, session, ())
-        gone[org] = refused(session, "the project declares no check report.totals")
+        gone[org] = refused(session, "the agent project declares no check report.totals")
         await storage.write_validation(org, gone[org], 1, ())
 
     await downgrade(DatabaseRole.CORE, core, BEFORE_REFUSAL)
@@ -615,33 +632,36 @@ PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "sessio
 which forbids any other."""
 
 
-async def actions_of(url: str, org: UUID) -> dict[UUID, dict[str, object]]:
-    """A tenant's stored actions by automation, as the migration login reads
-    them inside the tenant's fence."""
+async def actions_of(
+    url: str, org: UUID, table: str = "agent_automations"
+) -> dict[UUID, dict[str, object]]:
+    """A tenant's stored actions by agent automation, as the migration login
+    reads them inside the tenant's fence, from `table`: the name the revision
+    the read runs at gives the agent automations."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
-            read = await connection.exec_driver_sql("SELECT id, action FROM core.automations")
+            read = await connection.exec_driver_sql(f"SELECT id, action FROM core.{table}")
             return {row[0]: row[1] for row in read}
     finally:
         await engine.dispose()
 
 
-async def test_a_platform_automation_reads_as_the_previous_releases_after_a_downgrade(
+async def test_a_platform_agent_automation_reads_as_the_previous_releases_after_a_downgrade(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """This release writes a platform action with no `params`, and the
-    downgrade strips the key from one that carries it; an automation of a
+    downgrade strips the key from one that carries it; an agent automation of a
     product's kind goes."""
-    storage = AutomationStoragePostgresImpl(pg_sessions)
+    storage = AgentAutomationStoragePostgresImpl(pg_sessions)
     org = new_id()
-    written, carried = make_automation(), make_automation()
-    product = make_automation().model_copy(
+    written, carried = make_agent_automation(), make_agent_automation()
+    product = make_agent_automation().model_copy(
         update={"action": Action(kind="run_job", params={"steps": 2})}
     )
-    for automation in (written, carried, product):
-        assert await storage.create_automation(org, automation, ())
+    for agent_automation in (written, carried, product):
+        assert await storage.create_agent_automation(org, agent_automation, ())
     core = migrated[DatabaseRole.CORE]
     assert "params" not in (await actions_of(core, org))[written.id]
     engine = create_async_engine(core)
@@ -649,78 +669,84 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                """UPDATE core.automations SET action = action || '{"params": {}}'"""
+                """UPDATE core.agent_automations SET action = action || '{"params": {}}'"""
                 f" WHERE id = '{carried.id}'"
             )
     finally:
         await engine.dispose()
 
     await downgrade(DatabaseRole.CORE, core, "202610121751")
-    previous = await actions_of(core, org)
+    previous = await actions_of(core, org, "automations")
     await upgrade(DatabaseRole.CORE, core)
 
     assert set(previous) == {written.id, carried.id}
     assert all(set(action) == PREVIOUS_ACTION for action in previous.values())
-    assert await storage.read_automation(org, written.id) == written
+    assert await storage.read_agent_automation(org, written.id) == written
     assert await check(DatabaseRole.CORE, core) == []
 
 
 BEFORE_LEVERS = "202610121800"
-"""The core head before a playbook version carried what the lever checks
+"""The core head before an agent playbook version carried what the lever checks
 found in it."""
 
 
 async def test_a_version_the_release_before_wrote_reads_as_never_checked(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
-    """At the release before, a playbook version is written with no
+    """At the release before, an agent playbook version is written with no
     findings column. Forward, its findings are null: it reads as never
     checked, which is not checked and clean."""
     core = migrated[DatabaseRole.CORE]
-    org, playbook = new_id(), make_playbook()
+    org, agent_playbook = new_id(), make_agent_playbook()
     await downgrade(DatabaseRole.CORE, core, BEFORE_LEVERS)
-    gates = json.dumps([gate.model_dump(mode="json") for gate in playbook.gates])
+    gates = json.dumps([gate.model_dump(mode="json") for gate in agent_playbook.gates])
     await in_tenant(
         core,
         org,
         "INSERT INTO core.playbooks (id, org_id, created_at, name, version, description,"
         " body, gates, published_by) VALUES"
-        f" ('{playbook.id}', '{org}', now(), '{playbook.name}', 1, 'Cut a build.',"
-        f" 'Build.', '{gates}'::jsonb, '{playbook.published_by}')",
+        f" ('{agent_playbook.id}', '{org}', now(), '{agent_playbook.name}', 1, 'Cut a build.',"
+        f" 'Build.', '{gates}'::jsonb, '{agent_playbook.published_by}')",
     )
 
     await upgrade(DatabaseRole.CORE, core)
 
-    stored = await PlaybookStoragePostgresImpl(pg_sessions).read_playbook(org, playbook.id)
+    stored = await AgentPlaybookStoragePostgresImpl(pg_sessions).read_agent_playbook(
+        org, agent_playbook.id
+    )
     assert stored is not None and stored.findings is None
-    assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.playbooks") == [(True,)]
+    assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.agent_playbooks") == [
+        (True,)
+    ]
     assert await check(DatabaseRole.CORE, core) == []
 
 
 BEFORE_PINS = "202610121801"
-"""The core head before a playbook was pinned to a kind as its manual."""
+"""The core head before an agent playbook was pinned to a kind as its kind manual."""
 
 
-async def test_an_invocation_the_release_before_wrote_reads_as_no_manual(
+async def test_an_invocation_the_release_before_wrote_reads_as_no_kind_manual(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """At the release before, an invocation is written with no `pinned`
     column, as it still is through a roll. It reads as a principal's: its
     brief was a message, and the session's standing text holds none of it."""
     core = migrated[DatabaseRole.CORE]
-    org, session, playbook = new_id(), new_id(), make_playbook()
+    org, session, agent_playbook = new_id(), new_id(), make_agent_playbook()
     await downgrade(DatabaseRole.CORE, core, BEFORE_PINS)
     await in_tenant(
         core,
         org,
         "INSERT INTO core.playbook_invocations (id, org_id, created_at, session_id,"
         " playbook_id, name, version, invoked_by) VALUES"
-        f" ('{new_id()}', '{org}', now(), '{session}', '{playbook.id}', '{playbook.name}', 1,"
+        f" ('{new_id()}', '{org}', now(), '{session}', '{agent_playbook.id}', '{agent_playbook.name}', 1,"
         f" '{new_id()}')",
     )
 
     await upgrade(DatabaseRole.CORE, core)
 
-    (stored,) = await PlaybookStoragePostgresImpl(pg_sessions).read_invocations(org, session, 10)
+    (stored,) = await AgentPlaybookStoragePostgresImpl(pg_sessions).read_invocations(
+        org, session, 10
+    )
     assert not stored.pinned
     assert await check(DatabaseRole.CORE, core) == []

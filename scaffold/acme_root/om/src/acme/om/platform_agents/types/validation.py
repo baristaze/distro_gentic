@@ -1,7 +1,7 @@
 """A validation session: one check of a delivery run with no agent at all,
 on a fresh executor. It is work on the same queue an agent's work takes,
 and its run is the same execution record an agent's validation writes. The
-session holds which of its project's checks it runs, at which commit and
+session holds which of its agent project's checks it runs, at which commit and
 from which protected source, the API key its starter started it on, if
 one, and, once the run is recorded, which record it is. A check that
 cannot run here, for good, refuses the session, which then holds why, and
@@ -17,7 +17,7 @@ from pydantic import Field, model_validator
 from acme.om.base import Identifiable, Platform, Trackable
 
 CHECK = r"^[a-z][a-z0-9_.-]{0,99}$"
-"""A check's name, as its project's policy declares it."""
+"""A check's name, as its agent project's policy declares it."""
 COMMIT = r"^([0-9a-f]{40}|[0-9a-f]{64})$"
 """A commit's full id: a check runs at a commit, never at a name that moves."""
 REFUSAL_MAX = 500
@@ -31,13 +31,13 @@ class ValidationStatus(StrEnum):
 
 
 class ValidationStart(Platform):
-    """A check of a project's policy to run at `head`, the delivered commit,
+    """A check of an agent project's policy to run at `head`, the delivered commit,
     with the checks, fixtures, and runner taken from `base`, where the work
     started. `id` is the caller's, so a start asked again answers the
     session it made."""
 
     id: UUID
-    project_id: UUID
+    agent_project_id: UUID
     check_name: str = Field(pattern=CHECK)
     head: str = Field(pattern=COMMIT)
     base: str = Field(pattern=COMMIT)
@@ -53,7 +53,7 @@ class ValidationSession(Identifiable, Trackable):
         "version",
     )
 
-    project_id: UUID
+    agent_project_id: UUID
     check_name: str = Field(pattern=CHECK)
     head: str = Field(pattern=COMMIT)
     base: str = Field(pattern=COMMIT)
@@ -66,7 +66,7 @@ class ValidationSession(Identifiable, Trackable):
     # check's last trial, whose validation holds the whole batch.
     run_id: UUID | None = None
     finished_at: datetime | None = None
-    # Why its check cannot run, once the session is refused: the project's
+    # Why its check cannot run, once the session is refused: the agent project's
     # policy no longer declares it, no executor here offers what it needs, or
     # the class of the error its work failed with on its last attempt.
     refusal: str | None = Field(default=None, max_length=REFUSAL_MAX)

@@ -42,6 +42,7 @@ from acme.infra.workspaces import (
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, StopReason
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.limits import Limit, Limits, tally_loop, tripped
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.impl.loop import LOST_SOURCE
@@ -54,7 +55,6 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import StaleWriter
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, ModelAsk, ModelSize
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.content import UNPARSED, TextBlock, ToolResultBlock, ToolUseBlock
 from acme.om.steps.types.header import (
     ControlCommand,
@@ -272,7 +272,7 @@ async def test_a_request_a_lost_run_left_open_is_closed_and_its_hold_settled_who
         managers.pricing,
         managers.agent_sessions,
         managers.budgets,
-        SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
     )
     hold = await gate.authorize(
         ctx, session_id, person(ctx.user_id), MAIN, fill, rendered.call, credential="platform"

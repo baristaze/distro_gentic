@@ -1,6 +1,6 @@
 """A private repository's work, over Postgres as a process wires it: the
 repository is served by git's own HTTP backend behind basic authentication,
-the project's fetch credential is given to the platform and kept in the
+the agent project's fetch credential is given to the platform and kept in the
 tenant's store, and the platform's own git alone is handed it. The forge
 writes with a credential of its own, the local stack's twin with the one
 its settings give it. The session's workspace, a directory on this host,
@@ -18,8 +18,8 @@ from typing import cast
 from uuid import UUID
 
 import pytest
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin
 from contracts.platform_agents import CORPUS
-from contracts.workspaces import GitTwin, ProjectsTwin
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -37,6 +37,10 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.agent_workspaces import rules
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
@@ -44,14 +48,10 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exceptions import Unavailable
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ENGINEER_KIND
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
-from acme.om.workspaces import rules
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.types.credential import FetchCredential
 
 GIT = shutil.which("git")
 pytestmark = [
@@ -69,10 +69,10 @@ WORKER = AgentKind(
     tree=TreeLimits(height=1, count=0),
     isolation=DIRECTORY,
 )
-ENGINEER = ENGINEER_KIND.model_copy(
-    update={"version": ENGINEER_KIND.version + 1, "isolation": DIRECTORY}
+SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
+    update={"version": SOFTWARE_ENGINEER_KIND.version + 1, "isolation": DIRECTORY}
 )
-"""The shipped engineer, in a directory on this host."""
+"""The shipped software engineer, in a directory on this host."""
 USER, PASSWORD = "reader", "fetch-only-5f1c0e9a7d"
 WRITER, WRITER_PASSWORD = "forge", "forge-writes-2c7d91e4b8"
 
@@ -247,7 +247,7 @@ def a_delivery(served: Path) -> tuple[str, str]:
     seed = served.parent / "seed"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
-    (seed / "README.md").write_text("the project\n")
+    (seed / "README.md").write_text("the agent project\n")
     git(seed, "add", "README.md")
     git(seed, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "1")
     git(seed, "push", "-q", str(remote), "main")
@@ -258,13 +258,13 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     tmp_path: Path, storage: StoragePostgresImpl, private_git: PrivateGit
 ) -> None:
     main, remote = a_delivery(private_git.root)
-    projects = ProjectsTwin(repository=private_git.url)
+    agent_projects = AgentProjectsTwin(repository=private_git.url)
     infra = HostInfra(tmp_path / "host")
     managers: Managers = build_managers(
         storage,
         infra,
         agent_kinds=(WORKER,),
-        workspace_projects=projects,
+        workspace_agent_projects=agent_projects,
         workspace_git=GitTwin(),
         workspace_reader=on_loopback(),
     )
@@ -297,18 +297,22 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
 
     # A wrong one too, and its value is in no message.
     wrong = FetchCredential(username=USER, password=SecretStr("not-the-password"))
-    await managers.workspaces.put_fetch_credential(owner, projects.project_id, wrong)
+    await managers.agent_workspaces.put_fetch_credential(
+        owner, agent_projects.agent_project_id, wrong
+    )
     with pytest.raises(Unavailable) as refused:
         await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     assert "not-the-password" not in str(refused.value)
 
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
-    record = await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
+    record = await managers.agent_workspaces.put_fetch_credential(
+        owner, agent_projects.agent_project_id, credential
+    )
     assert record.version == 2
     workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     here = Path(workspace.location)
     (here / "notes.txt").write_text("the agent's own work\n")
-    delivered = await managers.workspaces.delivery(owner, workspace)
+    delivered = await managers.agent_workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed) == (main, pushed, ("total.py",))
     assert private_git.authorized > 0, "read with the fetch credential"
 
@@ -317,7 +321,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     header = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
     found = grep(here, PASSWORD, header)
     assert found.returncode == 1 and found.stdout == "", found.stdout
-    held = await managers.workspaces.get_workspace(owner, session.id)
+    held = await managers.agent_workspaces.get_workspace(owner, session.id)
     assert PASSWORD not in held.model_dump_json()
 
 
@@ -325,7 +329,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     tmp_path: Path, storage: StoragePostgresImpl, private_git: PrivateGit
 ) -> None:
     main, remote = a_delivery(private_git.root)
-    projects = ProjectsTwin(repository=private_git.url)
+    agent_projects = AgentProjectsTwin(repository=private_git.url)
     forge = IntegrationTwinImpl("forge", writes=True, credential=(WRITER, WRITER_PASSWORD))
     connected: list[UUID] = []
 
@@ -337,9 +341,9 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     managers: Managers = build_managers(
         storage,
         infra,
-        agent_kinds=(ENGINEER,),
+        agent_kinds=(SOFTWARE_ENGINEER,),
         platform_agents=PlatformAgents(corpus=CORPUS),
-        workspace_projects=projects,
+        workspace_agent_projects=agent_projects,
         workspace_reader=on_loopback(),
         source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
     )
@@ -352,9 +356,11 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     )
     connected.append(owner.org_id)
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
-    await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
+    await managers.agent_workspaces.put_fetch_credential(
+        owner, agent_projects.agent_project_id, credential
+    )
     session = await managers.agents.start_session(
-        owner, Start(id=new_id(), kind=ENGINEER.name, title="a fix")
+        owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER.name, title="a fix")
     )
     branch = rules.session_branch(session.id)
 
@@ -366,7 +372,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
         branch,
         main,
     )
-    assert (here / "README.md").read_text() == "the project\n"
+    assert (here / "README.md").read_text() == "the agent project\n"
     assert private_git.authorized > 0, "read with the fetch credential, by the platform"
 
     # The agent's work: a commit on its branch, and a branch, a tag, and a
@@ -379,8 +385,8 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     git(here, "tag", "v9")
     git(here, "update-ref", "refs/heads/main", head)
 
-    token = await managers.workspaces.mint_push_token(owner, session.id)
-    opened = await managers.workspaces.open_pull_request(
+    token = await managers.agent_workspaces.mint_push_token(owner, session.id)
+    opened = await managers.agent_workspaces.open_pull_request(
         owner, session.id, token.token.get_secret_value(), head, "Add the total", ""
     )
     assert forge.pull_requests[0].id == opened.id
@@ -389,8 +395,8 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     held = git(Path(remote), "for-each-ref", "--format=%(refname) %(objectname)")
     assert held.splitlines() == [f"refs/heads/main {main}", f"refs/heads/{branch} {head}"]
 
-    # Its delivery reads with its commits, with the fetch credential.
-    delivered = await managers.workspaces.delivery(owner, workspace)
+    # Its work product reads with its commits, with the fetch credential.
+    delivered = await managers.agent_workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed, delivered.dirty) == (
         main,
         head,

@@ -95,7 +95,7 @@ MAX_SHAPES = 2
 LIST_MARKER = re.compile(r"^(?:[-*+]|\d+\.)\s+")
 NUMBERED = re.compile(r"\b(?:sub)?sections?\s+\d+|§\s*\d+", re.IGNORECASE)
 """A reference to a section by number: `section 4`, `subsection 3.2`, `§4`."""
-TABLE_ROW = re.compile(r"^\|\s*`([a-z]+)`\s*\|\s*`([A-Z]{2,3})`\s*\|\s*`([a-z]+\.md)`\s*\|")
+TABLE_ROW = re.compile(r"^\|\s*`([a-z]+(?:-[a-z]+)*)`\s*\|\s*`([A-Z]{2,3})`\s*\|\s*`([a-z]+(?:-[a-z]+)*\.md)`\s*\|")
 SKIP_SECTIONS = {"Contents"}
 LABELLED = re.compile(r"^(.*?)\s*\(([^()]*)\)$")
 BOLD_LABEL = re.compile(r"\*\*([^*]+?)\.\*\*")

@@ -12,14 +12,14 @@ from pydantic import Field
 from acme.om.base import Created, Identifiable, Platform
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import PATTERN
-from acme.om.evidence.types.record import NAME, PROJECT, VERSION, ExecutionRecord
+from acme.om.evidence.types.record import AGENT_PROJECT, NAME, VERSION, ExecutionRecord
 
 
 class Surface(StrEnum):
     """Every kind of text an agent reads. A scan covers each of them."""
 
     PROMPT = "prompt"
-    KNOWLEDGE = "knowledge"
+    AGENT_KNOWLEDGE = "agent_knowledge"
     TOOL_SOURCE = "tool_source"
     EVIDENCE = "evidence"
     PULL_REQUEST = "pull_request"
@@ -41,16 +41,16 @@ class HiddenSuite(Platform):
     delivered, and their runs stay with the verdict, never with the
     session's evidence, which the agent reads.
 
-    It lives in a source of its own, never in the project's repository: a
+    It lives in a source of its own, never in the agent project's repository: a
     protected path is write-denied, not read-denied, so a suite in the tree
     the workspace checks out is one the agent can read and fit its fix to.
-    Its source is the commit `source` of the repository `project` binds, a
-    project apart from the scenario's, and its files are the paths its
+    Its source is the commit `source` of the repository `agent_project` binds, an
+    agent project apart from the scenario's, and its files are the paths its
     `paths` patterns match. The executor fetches it only to run it: in the
     tree at the head, every path a pattern matches comes from `source`,
     whatever the head holds there."""
 
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     source: str = Field(pattern=VERSION)
     paths: tuple[PATTERN, ...] = Field(min_length=1, max_length=50)
     checks: tuple[CheckDeclaration, ...] = Field(min_length=1, max_length=50)
@@ -58,14 +58,14 @@ class HiddenSuite(Platform):
 
 
 class Scenario(Platform):
-    """One acceptance scenario: the project and the version the work starts
+    """One acceptance scenario: the agent project and the version the work starts
     from, the objective the agent reads, the markers of the root cause it
-    hides, the checks of the project's policy the baseline must fail on, the
+    hides, the checks of the agent project's policy the baseline must fail on, the
     hidden suite, and the paths no change may touch: the checks, visible
     and hidden, and the system under test."""
 
     name: str = Field(pattern=NAME)
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     base: str = Field(pattern=VERSION)
     objective: str = Field(min_length=1, max_length=20_000)
     root_cause: tuple[str, ...] = Field(min_length=1, max_length=50)

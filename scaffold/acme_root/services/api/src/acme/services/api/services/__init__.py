@@ -5,30 +5,30 @@ translates the request, calls one manager, and projects the result."""
 from abc import ABC, abstractmethod
 
 from acme.services.api.services.admin import AdminServiceInterface
+from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
+from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
+from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
+from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
+from acme.services.api.services.agent_projects import AgentProjectsServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
-from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
-from acme.services.api.services.billing import BillingServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
+from acme.services.api.services.exec_relay import ExecRelayServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface
-from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
-from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.leases import LeasesServiceInterface
-from acme.services.api.services.ledgers import LedgersServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
-from acme.services.api.services.notifications import NotificationsServiceInterface
-from acme.services.api.services.playbooks import PlaybooksServiceInterface
-from acme.services.api.services.projects import ProjectsServiceInterface
+from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
-from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
+from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
 from acme.services.api.services.validations import ValidationsServiceInterface
@@ -37,31 +37,31 @@ from acme.services.api.services.webhooks import WebhooksServiceInterface
 
 __all__ = [
     "AdminServiceInterface",
+    "AgentAutomationsServiceInterface",
+    "AgentBillingServiceInterface",
+    "AgentFleetServiceInterface",
+    "AgentKnowledgeServiceInterface",
+    "AgentPlaybooksServiceInterface",
+    "AgentProjectsServiceInterface",
     "AgentSessionsServiceInterface",
-    "AutomationsServiceInterface",
     "BenchmarksServiceInterface",
-    "BillingServiceInterface",
     "BudgetsServiceInterface",
     "ConnectorsServiceInterface",
     "EventsServiceInterface",
     "EvidenceServiceInterface",
+    "ExecRelayServiceInterface",
     "FlagsServiceInterface",
-    "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
-    "KnowledgeServiceInterface",
     "LeasesServiceInterface",
-    "LedgersServiceInterface",
     "MatrixServiceInterface",
     "MediaServiceInterface",
-    "NotificationsServiceInterface",
-    "PlaybooksServiceInterface",
-    "ProjectsServiceInterface",
+    "ParkAlertsServiceInterface",
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
-    "RelayServiceInterface",
     "RetentionServiceInterface",
     "ServicesInterface",
+    "SpendLedgersServiceInterface",
     "TenancyServiceInterface",
     "ToolsServiceInterface",
     "ValidationsServiceInterface",
@@ -102,25 +102,25 @@ class ServicesInterface(ABC):
     def get_hosts_service(self) -> HostsServiceInterface: ...
 
     @abstractmethod
-    def get_fleet_service(self) -> FleetServiceInterface: ...
+    def get_agent_fleet_service(self) -> AgentFleetServiceInterface: ...
 
     @abstractmethod
-    def get_relay_service(self) -> RelayServiceInterface: ...
+    def get_exec_relay_service(self) -> ExecRelayServiceInterface: ...
 
     @abstractmethod
-    def get_automations_service(self) -> AutomationsServiceInterface: ...
+    def get_agent_automations_service(self) -> AgentAutomationsServiceInterface: ...
 
     @abstractmethod
     def get_budgets_service(self) -> BudgetsServiceInterface: ...
 
     @abstractmethod
-    def get_billing_service(self) -> BillingServiceInterface: ...
+    def get_agent_billing_service(self) -> AgentBillingServiceInterface: ...
 
     @abstractmethod
     def get_intake_service(self) -> IntakeServiceInterface: ...
 
     @abstractmethod
-    def get_notifications_service(self) -> NotificationsServiceInterface: ...
+    def get_park_alerts_service(self) -> ParkAlertsServiceInterface: ...
 
     @abstractmethod
     def get_watch_service(self) -> WatchServiceInterface: ...
@@ -135,22 +135,22 @@ class ServicesInterface(ABC):
     def get_benchmarks_service(self) -> BenchmarksServiceInterface: ...
 
     @abstractmethod
-    def get_ledgers_service(self) -> LedgersServiceInterface: ...
+    def get_spend_ledgers_service(self) -> SpendLedgersServiceInterface: ...
 
     @abstractmethod
     def get_evidence_service(self) -> EvidenceServiceInterface: ...
 
     @abstractmethod
-    def get_projects_service(self) -> ProjectsServiceInterface: ...
+    def get_agent_projects_service(self) -> AgentProjectsServiceInterface: ...
 
     @abstractmethod
-    def get_knowledge_service(self) -> KnowledgeServiceInterface: ...
+    def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface: ...
 
     @abstractmethod
     def get_connectors_service(self) -> ConnectorsServiceInterface: ...
 
     @abstractmethod
-    def get_playbooks_service(self) -> PlaybooksServiceInterface: ...
+    def get_agent_playbooks_service(self) -> AgentPlaybooksServiceInterface: ...
 
     @abstractmethod
     def get_tools_service(self) -> ToolsServiceInterface: ...

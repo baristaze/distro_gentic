@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get Trend
-         * @description The scenario's runs, the newest first: each arm's score and cost, and
+         * @description The scenario's runs, the newest first: each contender's score and cost, and
          *     whether the candidate regressed.
          */
         get: operations["get_trend_v1_admin_benchmarks_get"];
@@ -379,28 +379,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/orgs/{org_id}/ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Ledger
-         * @description The tenant's entries, the newest first, narrowed to one kind, one
-         *     hold (its hold, settlement, and charge), or one session (its holds and
-         *     approvals) when named. `has_more` says the read was cut at its limit.
-         */
-        get: operations["get_ledger_v1_admin_orgs__org_id__ledger_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/orgs/{org_id}/levers": {
         parameters: {
             query?: never;
@@ -410,7 +388,7 @@ export interface paths {
         };
         /**
          * Read Levers
-         * @description The playbooks and knowledge the org's sessions created in `[since,
+         * @description The agent playbooks and agent knowledge the org's sessions created in `[since,
          *     until)` reached, ranked by how much more often the sessions that
          *     reached them stalled, with the sessions behind each figure. A stall is
          *     read from the steps' headers, never from what a step says, and a lever
@@ -573,6 +551,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orgs/{org_id}/spend-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ledger
+         * @description The tenant's entries, the newest first, narrowed to one kind, one
+         *     hold (its hold, settlement, and charge), or one session (its holds and
+         *     approvals) when named. `has_more` says the read was cut at its limit.
+         */
+        get: operations["get_ledger_v1_admin_orgs__org_id__spend_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orgs/{org_id}/work/lanes/{lane}/cap": {
         parameters: {
             query?: never;
@@ -645,6 +645,349 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Automations
+         * @description The tenant's agent automations by id, after the id `after` names.
+         */
+        get: operations["list_agent_automations_v1_agent_automations_get"];
+        put?: never;
+        /**
+         * Create Agent Automation
+         * @description An agent automation that runs as its maker, or as the agent automation principal.
+         */
+        post: operations["create_agent_automation_v1_agent_automations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-automations/principal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Principal */
+        get: operations["get_principal_v1_agent_automations_principal_get"];
+        /**
+         * Grant Principal
+         * @description The principal granted the role; a grant over a standing one keeps it.
+         */
+        put: operations["grant_principal_v1_agent_automations_principal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-automations/{agent_automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Automation */
+        get: operations["get_agent_automation_v1_agent_automations__agent_automation_id__get"];
+        /**
+         * Update Agent Automation
+         * @description The agent automation as edited. One that runs as its creator is edited by
+         *     its creator alone; one that runs as the agent automation principal takes its
+         *     editor as its creator.
+         */
+        put: operations["update_agent_automation_v1_agent_automations__agent_automation_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-billing/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Payment
+         * @description The credit of a payment the provider confirmed: the body is the
+         *     provider's confirmation, byte for byte, and `Payment-Signature` its
+         *     signature. `webhook_signature_invalid` when the signature does not
+         *     check out, and nothing is credited.
+         */
+        post: operations["confirm_payment_v1_agent_billing_payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Entries
+         * @description The entries in a state by id, after the id `after` names.
+         */
+        get: operations["list_entries_v1_agent_knowledge_get"];
+        put?: never;
+        /**
+         * Write Entry
+         * @description An entry a person writes, reviewed as it is written.
+         */
+        post: operations["write_entry_v1_agent_knowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Entry */
+        get: operations["get_entry_v1_agent_knowledge__entry_id__get"];
+        /**
+         * Edit Entry
+         * @description The entry as edited, on the version `If-Match` names.
+         */
+        put: operations["edit_entry_v1_agent_knowledge__entry_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge/{entry_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Entry
+         * @description A suggestion kept, so sessions recall it, or rejected.
+         */
+        post: operations["review_entry_v1_agent_knowledge__entry_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbook-pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pins
+         * @description The tenant's pins, by kind, the tenant's before an agent project's.
+         */
+        get: operations["list_pins_v1_agent_playbook_pins_get"];
+        /**
+         * Pin
+         * @description The name's latest version pinned to the kind as its kind manual, for the
+         *     tenant or one agent project; pinned again, the version then latest.
+         */
+        put: operations["pin_v1_agent_playbook_pins_put"];
+        post?: never;
+        /**
+         * Unpin
+         * @description The kind's pin for the tenant, or for one agent project, taken away. A
+         *     session made with it keeps it.
+         */
+        delete: operations["unpin_v1_agent_playbook_pins_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description The next version of the name.
+         */
+        post: operations["publish_v1_agent_playbooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Playbook
+         * @description The latest version of the name.
+         */
+        get: operations["get_agent_playbook_v1_agent_playbooks__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks/{name}/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invoke
+         * @description The latest version brought into the session: its gates hold there
+         *     from now on, and its brief arrives as the caller's message. Invoked
+         *     again, the version's invocation answers, and nothing is sent twice.
+         */
+        post: operations["invoke_v1_agent_playbooks__name__invocations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Projects
+         * @description The tenant's agent projects by id, after the id `after` names.
+         */
+        get: operations["list_agent_projects_v1_agent_projects_get"];
+        put?: never;
+        /**
+         * Create Agent Project
+         * @description An agent project bound to its repository, which never moves.
+         */
+        post: operations["create_agent_project_v1_agent_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Project */
+        get: operations["get_agent_project_v1_agent_projects__agent_project_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove Agent Project
+         * @description The agent project as it stood, with its fetch credential gone. 409
+         *     `agent_project_in_use` while a session belongs to it.
+         */
+        delete: operations["remove_agent_project_v1_agent_projects__agent_project_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Agent Project */
+        patch: operations["rename_agent_project_v1_agent_projects__agent_project_id__patch"];
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Fetch Credential
+         * @description A read-only credential of the agent project's repository; a later one
+         *     replaces it. The answer says who gave it when, never its value.
+         */
+        put: operations["put_fetch_credential_v1_agent_projects__agent_project_id__credential_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}/workspace-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Workspace Base
+         * @description The workspace base the agent project's sessions' workspaces start from; a later
+         *     one replaces it. Each session keeps the one it started on, and a changed
+         *     one is built again for the sessions created after it.
+         */
+        put: operations["set_workspace_base_v1_agent_projects__agent_project_id__workspace_base_put"];
+        post?: never;
+        /**
+         * Remove Workspace Base
+         * @description The agent project with no workspace base: its sessions created after it start
+         *     from their kind's own workspace.
+         */
+        delete: operations["remove_workspace_base_v1_agent_projects__agent_project_id__workspace_base_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -961,27 +1304,6 @@ export interface paths {
          *     One past now, or null, unlocks each session parked on the deadline.
          */
         put: operations["set_deadline_v1_agent_sessions__session_id__deadline_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/delivery": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Delivery
-         * @description Its branch, the pull requests and branches bound to it, and the result
-         *     it submitted that the gate accepted.
-         */
-        get: operations["get_delivery_v1_agent_sessions__session_id__delivery_get"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1330,6 +1652,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/work-product": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Work Product
+         * @description Its branch, the pull requests and branches bound to it, and the result
+         *     it submitted that the gate accepted.
+         */
+        get: operations["get_work_product_v1_agent_sessions__session_id__work_product_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/api-keys": {
         parameters: {
             query?: never;
@@ -1529,97 +1872,6 @@ export interface paths {
         put?: never;
         /** Start Sign In */
         post: operations["start_sign_in_v1_auth_sign_in_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Automations
-         * @description The tenant's automations by id, after the id `after` names.
-         */
-        get: operations["list_automations_v1_automations_get"];
-        put?: never;
-        /**
-         * Create Automation
-         * @description An automation that runs as its maker, or as the automation principal.
-         */
-        post: operations["create_automation_v1_automations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/principal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Principal */
-        get: operations["get_principal_v1_automations_principal_get"];
-        /**
-         * Grant Principal
-         * @description The principal granted the role; a grant over a standing one keeps it.
-         */
-        put: operations["grant_principal_v1_automations_principal_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/{automation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Automation */
-        get: operations["get_automation_v1_automations__automation_id__get"];
-        /**
-         * Update Automation
-         * @description The automation as edited. One that runs as its creator is edited by
-         *     its creator alone; one that runs as the automation principal takes its
-         *     editor as its creator.
-         */
-        put: operations["update_automation_v1_automations__automation_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/billing/payments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Confirm Payment
-         * @description The credit of a payment the provider confirmed: the body is the
-         *     provider's confirmation, byte for byte, and `Payment-Signature` its
-         *     signature. `webhook_signature_invalid` when the signature does not
-         *     check out, and nothing is credited.
-         */
-        post: operations["confirm_payment_v1_billing_payments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1945,12 +2197,12 @@ export interface paths {
         /**
          * Attach
          * @description The connector attached to a kind: an attachment of that kind and
-         *     project already held is replaced.
+         *     agent project already held is replaced.
          */
         post: operations["attach_v1_connectors__connector_id__attachments_post"];
         /**
          * Detach
-         * @description The attachment of `kind` and `project_id` taken away. A session that
+         * @description The attachment of `kind` and `agent_project_id` taken away. A session that
          *     pinned the connector keeps it.
          */
         delete: operations["detach_v1_connectors__connector_id__attachments_delete"];
@@ -2555,71 +2807,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/knowledge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Entries
-         * @description The entries in a state by id, after the id `after` names.
-         */
-        get: operations["list_entries_v1_knowledge_get"];
-        put?: never;
-        /**
-         * Write Entry
-         * @description An entry a person writes, reviewed as it is written.
-         */
-        post: operations["write_entry_v1_knowledge_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Entry */
-        get: operations["get_entry_v1_knowledge__entry_id__get"];
-        /**
-         * Edit Entry
-         * @description The entry as edited, on the version `If-Match` names.
-         */
-        put: operations["edit_entry_v1_knowledge__entry_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Review Entry
-         * @description A suggestion kept, so sessions recall it, or rejected.
-         */
-        post: operations["review_entry_v1_knowledge__entry_id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/leases": {
         parameters: {
             query?: never;
@@ -3145,43 +3332,6 @@ export interface paths {
         patch: operations["update_membership_v1_memberships__user_id__patch"];
         trace?: never;
     };
-    "/v1/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["list_notifications_v1_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark Read
-         * @description The notification marked read; the first mark holds.
-         */
-        post: operations["mark_read_v1_notifications__notification_id__read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -3250,37 +3400,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/playbook-pins": {
+    "/v1/park-alerts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Pins
-         * @description The tenant's pins, by kind, the tenant's before a project's.
-         */
-        get: operations["list_pins_v1_playbook_pins_get"];
-        /**
-         * Pin
-         * @description The name's latest version pinned to the kind as its manual, for the
-         *     tenant or one project; pinned again, the version then latest.
-         */
-        put: operations["pin_v1_playbook_pins_put"];
+        /** List Park Alerts */
+        get: operations["list_park_alerts_v1_park_alerts_get"];
+        put?: never;
         post?: never;
-        /**
-         * Unpin
-         * @description The kind's pin for the tenant, or for one project, taken away. A
-         *     session made with it keeps it.
-         */
-        delete: operations["unpin_v1_playbook_pins_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/playbooks": {
+    "/v1/park-alerts/{park_alert_id}/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -3290,148 +3427,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Publish
-         * @description The next version of the name.
+         * Mark Read
+         * @description The park alert marked read; the first mark holds.
          */
-        post: operations["publish_v1_playbooks_post"];
+        post: operations["mark_read_v1_park_alerts__park_alert_id__read_post"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Playbook
-         * @description The latest version of the name.
-         */
-        get: operations["get_playbook_v1_playbooks__name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks/{name}/invocations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Invoke
-         * @description The latest version brought into the session: its gates hold there
-         *     from now on, and its brief arrives as the caller's message. Invoked
-         *     again, the version's invocation answers, and nothing is sent twice.
-         */
-        post: operations["invoke_v1_playbooks__name__invocations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Projects
-         * @description The tenant's projects by id, after the id `after` names.
-         */
-        get: operations["list_projects_v1_projects_get"];
-        put?: never;
-        /**
-         * Create Project
-         * @description A project bound to its repository, which never moves.
-         */
-        post: operations["create_project_v1_projects_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{project_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Project */
-        get: operations["get_project_v1_projects__project_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Remove Project
-         * @description The project as it stood, with its fetch credential gone. 409
-         *     `project_in_use` while a session belongs to it.
-         */
-        delete: operations["remove_project_v1_projects__project_id__delete"];
-        options?: never;
-        head?: never;
-        /** Rename Project */
-        patch: operations["rename_project_v1_projects__project_id__patch"];
-        trace?: never;
-    };
-    "/v1/projects/{project_id}/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Put Fetch Credential
-         * @description A read-only credential of the project's repository; a later one
-         *     replaces it. The answer says who gave it when, never its value.
-         */
-        put: operations["put_fetch_credential_v1_projects__project_id__credential_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{project_id}/environment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Environment
-         * @description The environment the project's sessions' workspaces start from; a later
-         *     one replaces it. Each session keeps the one it started on, and a changed
-         *     one is built again for the sessions created after it.
-         */
-        put: operations["set_environment_v1_projects__project_id__environment_put"];
-        post?: never;
-        /**
-         * Remove Environment
-         * @description The project with no environment: its sessions created after it start
-         *     from their kind's own workspace.
-         */
-        delete: operations["remove_environment_v1_projects__project_id__environment_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3665,7 +3665,7 @@ export interface paths {
         /**
          * Start Validation
          * @description A session queued for the platform's worker, which runs its check once.
-         *     404 when the tenant holds no validation policy for the project; 422
+         *     404 when the tenant holds no validation policy for the agent project; 422
          *     when the policy declares no such check.
          */
         post: operations["start_validation_v1_validation_sessions_post"];
@@ -3775,7 +3775,7 @@ export interface components {
         /**
          * ActionBody
          * @description `start_session`: start a session of `agent_kind` titled `title` in the
-         *     tenant's project `project_id`, and invoke the tenant's `playbook` of
+         *     tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
          *     that name into it first, its latest version at each firing, when one is
          *     named; a name with no version is refused. `message_session`: send the brief to the
          *     standing session `session_id`; an enabled one is refused, since nothing
@@ -3786,6 +3786,10 @@ export interface components {
         ActionBody: {
             /** Agent Kind */
             agent_kind?: string | null;
+            /** Agent Playbook */
+            agent_playbook?: string | null;
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Brief */
             brief?: string | null;
             /** Kind */
@@ -3794,10 +3798,6 @@ export interface components {
             params?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Playbook */
-            playbook?: string | null;
-            /** Project Id */
-            project_id?: string | null;
             /** Session Id */
             session_id?: string | null;
             /** Title */
@@ -3807,6 +3807,10 @@ export interface components {
         ActionView: {
             /** Agent Kind */
             agent_kind: string | null;
+            /** Agent Playbook */
+            agent_playbook: string | null;
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Brief */
             brief: string | null;
             /** Kind */
@@ -3815,10 +3819,6 @@ export interface components {
             params: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Playbook */
-            playbook: string | null;
-            /** Project Id */
-            project_id: string | null;
             /** Session Id */
             session_id: string | null;
             /** Title */
@@ -3878,6 +3878,242 @@ export interface components {
             os: string;
             /** Shell */
             shell: string;
+        };
+        /**
+         * AgentAutomationPrincipalView
+         * @description The tenant's agent automation principal: its id, the role it holds, and who
+         *     granted it.
+         */
+        AgentAutomationPrincipalView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Granted By
+             * Format: uuid
+             */
+            granted_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            role: components["schemas"]["Role"];
+        };
+        /**
+         * AgentAutomationRequest
+         * @description An agent automation whole, as made or as edited.
+         */
+        AgentAutomationRequest: {
+            action: components["schemas"]["ActionBody"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            limits: components["schemas"]["LimitsBody"];
+            /** Name */
+            name: string;
+            /**
+             * Own Events
+             * @default false
+             */
+            own_events: boolean;
+            runs_as?: components["schemas"]["RunsAs"] | null;
+            trigger: components["schemas"]["TriggerBody"];
+        };
+        /**
+         * AgentAutomationView
+         * @description An agent automation, whom it runs as, and who made and last edited it.
+         */
+        AgentAutomationView: {
+            action: components["schemas"]["ActionView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            limits: components["schemas"]["LimitsView"];
+            /** Name */
+            name: string;
+            /** Own Events */
+            own_events: boolean;
+            runs_as: components["schemas"]["RunsAs"];
+            trigger: components["schemas"]["TriggerView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+        };
+        /**
+         * AgentKnowledgeRequest
+         * @description An entry: its title, the words that trigger it, all of which must
+         *     appear in what a session is about, and what it says. A trigger word
+         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+         *     in it, so it would match every session.
+         */
+        AgentKnowledgeRequest: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+        };
+        /**
+         * AgentKnowledgeStatus
+         * @enum {string}
+         */
+        AgentKnowledgeStatus: "suggested" | "reviewed" | "rejected";
+        /**
+         * AgentKnowledgeView
+         * @description An entry, its state, who suggested and who reviewed it, the version
+         *     an edit names in `If-Match`, and what the lever checks found in its
+         *     words at that version: advice, never a refusal; null on a version they
+         *     never read, an empty list on one they read and found nothing in.
+         */
+        AgentKnowledgeView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            status: components["schemas"]["AgentKnowledgeStatus"];
+            /** Suggested By */
+            suggested_by: string | null;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * AgentPlaybookView
+         * @description A version as published, with what the lever checks found in it as it
+         *     was: advice, which never refused the publish. `findings` is null on a
+         *     version the checks never read, one published before they ran, and an
+         *     empty list on one they read and found nothing in.
+         */
+        AgentPlaybookView: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][] | null;
+            /** Gates */
+            gates: components["schemas"]["GateView"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Published By
+             * Format: uuid
+             */
+            published_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * AgentProjectRetentionBody
+         * @description What one agent project of the tenant narrows; it never widens the tenant's.
+         */
+        AgentProjectRetentionBody: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
+            policy: components["schemas"]["RetentionPolicyBody"];
+        };
+        /** AgentProjectRetentionView */
+        AgentProjectRetentionView: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
+            policy: components["schemas"]["RetentionPolicyView"];
+        };
+        /** AgentProjectView */
+        AgentProjectView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            workspace_base: components["schemas"]["AgentWorkspaceBaseView"] | null;
+            /** Workspace Snapshots */
+            workspace_snapshots: boolean;
         };
         /**
          * AgentRefView
@@ -3960,6 +4196,31 @@ export interface components {
             /** Title */
             title: string;
             visibility: components["schemas"]["Visibility"];
+        };
+        /**
+         * AgentWorkspaceBaseBody
+         * @description The workspace base an agent project's sessions' workspaces start from: the
+         *     image, the commands that set it up, run once in order, and the package
+         *     registries the setup reaches. A setup that names a registry runs with
+         *     open egress; one that names none reaches nothing. Registries serve a
+         *     setup, so they come with one.
+         */
+        AgentWorkspaceBaseBody: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries?: string[];
+            /** Setup */
+            setup?: string[];
+        };
+        /** AgentWorkspaceBaseView */
+        AgentWorkspaceBaseView: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries: string[];
+            /** Setup */
+            setup: string[];
         };
         /**
          * Among
@@ -4078,26 +4339,6 @@ export interface components {
             roles: components["schemas"]["Role"][];
         };
         /**
-         * Arm
-         * @enum {string}
-         */
-        Arm: "candidate" | "baseline";
-        /**
-         * ArmResultView
-         * @description One arm's result: its trials, how many passed, the mean of their
-         *     scores, and the sum of their costs.
-         */
-        ArmResultView: {
-            /** Cost Micros */
-            cost_micros: number;
-            /** Passed */
-            passed: number;
-            /** Score */
-            score: number;
-            /** Trials */
-            trials: number;
-        };
-        /**
          * ArtifactPageView
          * @description A page of what a session keeps whole outside its window, such as a
          *     long tool result: its characters from `start`, the whole artifact's
@@ -4153,11 +4394,13 @@ export interface components {
         };
         /**
          * AttachRequest
-         * @description A kind the connector joins, for one project's sessions or every
+         * @description A kind the connector joins, for one agent project's sessions or every
          *     session of the tenant, deferred until the agent loads it unless
          *     `deferred` is false.
          */
         AttachRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /**
              * Deferred
              * @default true
@@ -4165,103 +4408,15 @@ export interface components {
             deferred: boolean;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id?: string | null;
         };
         /** AttachmentView */
         AttachmentView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Deferred */
             deferred: boolean;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id: string | null;
-        };
-        /**
-         * AutomationPrincipalView
-         * @description The tenant's automation principal: its id, the role it holds, and who
-         *     granted it.
-         */
-        AutomationPrincipalView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Granted By
-             * Format: uuid
-             */
-            granted_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            role: components["schemas"]["Role"];
-        };
-        /**
-         * AutomationRequest
-         * @description An automation whole, as made or as edited.
-         */
-        AutomationRequest: {
-            action: components["schemas"]["ActionBody"];
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            limits: components["schemas"]["LimitsBody"];
-            /** Name */
-            name: string;
-            /**
-             * Own Events
-             * @default false
-             */
-            own_events: boolean;
-            runs_as?: components["schemas"]["RunsAs"] | null;
-            trigger: components["schemas"]["TriggerBody"];
-        };
-        /**
-         * AutomationView
-         * @description An automation, whom it runs as, and who made and last edited it.
-         */
-        AutomationView: {
-            action: components["schemas"]["ActionView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            limits: components["schemas"]["LimitsView"];
-            /** Name */
-            name: string;
-            /** Own Events */
-            own_events: boolean;
-            runs_as: components["schemas"]["RunsAs"];
-            trigger: components["schemas"]["TriggerView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
         };
         /**
          * BenchmarkResultRequest
@@ -4322,10 +4477,10 @@ export interface components {
          *     trend.
          */
         BenchmarkSummaryView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
+            baseline: components["schemas"]["ContenderPinView"];
+            baseline_result: components["schemas"]["ContenderResultView"];
+            candidate: components["schemas"]["ContenderPinView"];
+            candidate_result: components["schemas"]["ContenderResultView"];
             /**
              * Created At
              * Format: date-time
@@ -4348,13 +4503,13 @@ export interface components {
         };
         /**
          * BenchmarkView
-         * @description One run of a scenario, with every trial of both arms.
+         * @description One run of a scenario, with every trial of both contenders.
          */
         BenchmarkView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
+            baseline: components["schemas"]["ContenderPinView"];
+            baseline_result: components["schemas"]["ContenderResultView"];
+            candidate: components["schemas"]["ContenderPinView"];
+            candidate_result: components["schemas"]["ContenderResultView"];
             /**
              * Created At
              * Format: date-time
@@ -4647,7 +4802,7 @@ export interface components {
         /**
          * CommandProgressView
          * @description How a command stands: its state, its output after the last part read,
-         *     and how it ended once it has. `refused` names why its host or the relay
+         *     and how it ended once it has. `refused` names why its host or the exec relay
          *     refused it, such as a command a later run fenced.
          */
         CommandProgressView: {
@@ -4828,17 +4983,37 @@ export interface components {
             version: number;
         };
         /**
-         * ContenderView
-         * @description What an arm's sessions ran: the agent kind, its version, and each model
+         * Contender
+         * @enum {string}
+         */
+        Contender: "candidate" | "baseline";
+        /**
+         * ContenderPinView
+         * @description What a contender's sessions ran: the agent kind, its version, and each model
          *     role's fill.
          */
-        ContenderView: {
+        ContenderPinView: {
             /** Fills */
             fills: components["schemas"]["RoleFillView"][];
             /** Kind */
             kind: string;
             /** Kind Version */
             kind_version: number;
+        };
+        /**
+         * ContenderResultView
+         * @description One contender's result: its trials, how many passed, the mean of their
+         *     scores, and the sum of their costs.
+         */
+        ContenderResultView: {
+            /** Cost Micros */
+            cost_micros: number;
+            /** Passed */
+            passed: number;
+            /** Score */
+            score: number;
+            /** Trials */
+            trials: number;
         };
         /**
          * ContentState
@@ -4908,9 +5083,27 @@ export interface components {
             up_to_micros: number;
         };
         /**
+         * CreateAgentProjectRequest
+         * @description An agent project and the one repository it binds, which never moves; whether
+         *     a kind that keeps its workspace by snapshots keeps it so here, False
+         *     keeping each of its sessions' workspaces a cache; and the workspace base
+         *     its sessions' workspaces start from, if it names one.
+         */
+        CreateAgentProjectRequest: {
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryBody"];
+            workspace_base?: components["schemas"]["AgentWorkspaceBaseBody"] | null;
+            /**
+             * Workspace Snapshots
+             * @default true
+             */
+            workspace_snapshots: boolean;
+        };
+        /**
          * CreateBudgetRequest
          * @description A budget over a scope and a window, in reference cost (millionths),
-         *     native tokens, or both. A person's and a project's scope is keyed by its
+         *     native tokens, or both. A person's and an agent project's scope is keyed by its
          *     id; a tenant's is the tenant itself, so its key is left out or names the
          *     tenant. A span window has a length in seconds, and no other window has.
          */
@@ -4950,24 +5143,6 @@ export interface components {
             name: string;
             /** Region */
             region: string;
-        };
-        /**
-         * CreateProjectRequest
-         * @description A project and the one repository it binds, which never moves; whether
-         *     a kind that keeps its workspace by snapshots keeps it so here, False
-         *     keeping each of its sessions' workspaces a cache; and the environment
-         *     its sessions' workspaces start from, if it names one.
-         */
-        CreateProjectRequest: {
-            environment?: components["schemas"]["EnvironmentBody"] | null;
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryBody"];
-            /**
-             * Workspace Snapshots
-             * @default true
-             */
-            workspace_snapshots: boolean;
         };
         /**
          * CreateTeamOrgRequest
@@ -5100,24 +5275,6 @@ export interface components {
             challenge?: string | null;
             /** Received */
             received: boolean;
-        };
-        /**
-         * DeliveryView
-         * @description What a session delivered: its project, its branch and whether the
-         *     remote has held it, the pull requests and branches bound to it, and its
-         *     latest accepted result. A session that never had a workspace has no
-         *     branch.
-         */
-        DeliveryView: {
-            /** Branch */
-            branch: string | null;
-            /** Branch Seen */
-            branch_seen: boolean;
-            /** Project Id */
-            project_id: string | null;
-            report: components["schemas"]["ReportView"] | null;
-            /** Work */
-            work: components["schemas"]["WorkHandleView"][];
         };
         /**
          * DevSignInRequest
@@ -5279,31 +5436,6 @@ export interface components {
             /** N */
             n: number;
         };
-        /**
-         * EnvironmentBody
-         * @description The environment a project's sessions' workspaces start from: the
-         *     image, the commands that set it up, run once in order, and the package
-         *     registries the setup reaches. A setup that names a registry runs with
-         *     open egress; one that names none reaches nothing. Registries serve a
-         *     setup, so they come with one.
-         */
-        EnvironmentBody: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries?: string[];
-            /** Setup */
-            setup?: string[];
-        };
-        /** EnvironmentView */
-        EnvironmentView: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries: string[];
-            /** Setup */
-            setup: string[];
-        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -5442,6 +5574,8 @@ export interface components {
         ExecutionView: {
             /** Abort */
             abort: string | null;
+            /** Agent Project */
+            agent_project: string;
             cases: components["schemas"]["CasesView"];
             /** Check */
             check: string;
@@ -5468,8 +5602,6 @@ export interface components {
             /** Isolation */
             isolation: string;
             outcome: components["schemas"]["RunOutcome"];
-            /** Project */
-            project: string;
             provenance: components["schemas"]["Provenance"];
             purpose: components["schemas"]["RunPurpose"];
             /**
@@ -5497,7 +5629,7 @@ export interface components {
         };
         /**
          * FetchCredentialRequest
-         * @description A read-only credential of the project's repository, as source control
+         * @description A read-only credential of the agent project's repository, as source control
          *     takes it over HTTPS. It goes to the tenant's store and is never read
          *     back.
          */
@@ -5512,15 +5644,15 @@ export interface components {
         };
         /**
          * FetchCredentialView
-         * @description That the project's repository has a fetch credential, and who gave it
+         * @description That the agent project's repository has a fetch credential, and who gave it
          *     when. Never its value.
          */
         FetchCredentialView: {
             /**
-             * Project Id
+             * Agent Project Id
              * Format: uuid
              */
-            project_id: string;
+            agent_project_id: string;
             /**
              * Updated At
              * Format: date-time
@@ -5761,7 +5893,7 @@ export interface components {
         };
         /**
          * GrantRequest
-         * @description The role the automation principal holds: never above the granter's.
+         * @description The role the agent automation principal holds: never above the granter's.
          */
         GrantRequest: {
             role: components["schemas"]["Role"];
@@ -5996,11 +6128,16 @@ export interface components {
         };
         /**
          * InvocationView
-         * @description A version brought into a session. `pinned` marks the manual the
+         * @description A version brought into a session. `pinned` marks the kind manual the
          *     session was made with, whose brief is its standing text; every other
          *     invocation's brief arrived as its invoker's message.
          */
         InvocationView: {
+            /**
+             * Agent Playbook Id
+             * Format: uuid
+             */
+            agent_playbook_id: string;
             /**
              * Created At
              * Format: date-time
@@ -6020,11 +6157,6 @@ export interface components {
             name: string;
             /** Pinned */
             pinned: boolean;
-            /**
-             * Playbook Id
-             * Format: uuid
-             */
-            playbook_id: string;
             /**
              * Session Id
              * Format: uuid
@@ -6347,65 +6479,6 @@ export interface components {
          * @enum {string}
          */
         KeyStatus: "live" | "rotated" | "refused";
-        /**
-         * KnowledgeRequest
-         * @description An entry: its title, the words that trigger it, all of which must
-         *     appear in what a session is about, and what it says. A trigger word
-         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
-         *     in it, so it would match every session.
-         */
-        KnowledgeRequest: {
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-        };
-        /**
-         * KnowledgeStatus
-         * @enum {string}
-         */
-        KnowledgeStatus: "suggested" | "reviewed" | "rejected";
-        /**
-         * KnowledgeView
-         * @description An entry, its state, who suggested and who reviewed it, the version
-         *     an edit names in `If-Match`, and what the lever checks found in its
-         *     words at that version: advice, never a refusal; null on a version they
-         *     never read, an empty list on one they read and found nothing in.
-         */
-        KnowledgeView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Findings */
-            findings: components["schemas"]["FindingView"][] | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Reviewed By */
-            reviewed_by: string | null;
-            status: components["schemas"]["KnowledgeStatus"];
-            /** Suggested By */
-            suggested_by: string | null;
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Version */
-            version: number;
-        };
         /** LaneLoadView */
         LaneLoadView: {
             /** Kind */
@@ -6540,66 +6613,6 @@ export interface components {
             term_seconds: number;
         };
         /**
-         * LedgerEntryView
-         * @description One entry, written once. A field a kind does not carry is null:
-         *
-         *     - `hold`: `session_id`, `units` (the worst case, null when no price
-         *       applies), and `cost_micros` (the exposure).
-         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
-         *       buckets paid).
-         *     - `credit`: `amount_micros` and `reference` (the payment's).
-         *     - `grant`: `units`, `reason`, and `by` (the operator).
-         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
-         *       `by`.
-         */
-        LedgerEntryView: {
-            /** Amount Micros */
-            amount_micros?: number | null;
-            /** Budget Id */
-            budget_id?: string | null;
-            /** By */
-            by?: string | null;
-            /** Cost Micros */
-            cost_micros?: number | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Hold Id */
-            hold_id?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            kind: components["schemas"]["EntryKind"];
-            /** Reason */
-            reason?: string | null;
-            /** Reference */
-            reference?: string | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Tokens */
-            tokens?: number | null;
-            /** Units */
-            units?: number | null;
-        };
-        /**
-         * LedgerPageView
-         * @description One read of a tenant's ledger, the newest first. `has_more` says the
-         *     read was cut at its limit and older entries match it too: narrow it by
-         *     kind, hold, or session to reach them.
-         */
-        LedgerPageView: {
-            /** Has More */
-            has_more: boolean;
-            /** Items */
-            items: components["schemas"]["LedgerEntryView"][];
-        };
-        /**
          * LeverCheck
          * @description What a check found in a lever's text.
          * @enum {string}
@@ -6609,7 +6622,7 @@ export interface components {
          * LeverKind
          * @enum {string}
          */
-        LeverKind: "playbook" | "knowledge";
+        LeverKind: "agent_playbook" | "agent_knowledge";
         /**
          * LeverReadingView
          * @description The levers of one tenant's sessions created in `[since, until)`, best
@@ -6679,7 +6692,7 @@ export interface components {
          * @description The most its runs spend in a period, in millionths at list price, and
          *     the share one run may take; the most firings a period; the most runs at
          *     work at once; whether a stopped firing waits, and how many may; and the
-         *     longest chain of automations a firing extends.
+         *     longest chain of agent automations a firing extends.
          */
         LimitsBody: {
             /** Concurrency */
@@ -7110,43 +7123,6 @@ export interface components {
          */
         ModelSize: "xs" | "s" | "m" | "l" | "xl";
         /**
-         * NotificationView
-         * @description What waits on the caller: the session, why it parked, the one action
-         *     that clears it, and that action's route, empty when none serves it yet.
-         *     `read_at` is when the caller marked it read.
-         */
-        NotificationView: {
-            /** Action */
-            action: string;
-            /** Channel */
-            channel: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Link */
-            link: string;
-            provenance: components["schemas"]["Provenance"] | null;
-            /** Read At */
-            read_at: string | null;
-            reason: components["schemas"]["ParkReason"];
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Text */
-            text: string;
-            /** Unlock */
-            unlock: string;
-        };
-        /**
          * OperatorEventView
          * @description The same record as an operator reads it, with the two provenance fields
          *     a tenant's own feed leaves out: the request that produced it and the app
@@ -7367,6 +7343,43 @@ export interface components {
             slug: string;
         };
         /**
+         * ParkAlertView
+         * @description What waits on the caller: the session, why it parked, the one action
+         *     that clears it, and that action's route, empty when none serves it yet.
+         *     `read_at` is when the caller marked it read.
+         */
+        ParkAlertView: {
+            /** Action */
+            action: string;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string;
+            provenance: components["schemas"]["Provenance"] | null;
+            /** Read At */
+            read_at: string | null;
+            reason: components["schemas"]["ParkReason"];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Text */
+            text: string;
+            /** Unlock */
+            unlock: string;
+        };
+        /**
          * ParkReason
          * @description Why a loop waits, and so what clears it.
          * @enum {string}
@@ -7417,24 +7430,31 @@ export interface components {
         Permission: "read" | "write" | "manage_members" | "manage_keys" | "manage_sessions";
         /**
          * PinRequest
-         * @description A kind's manual: the name whose latest version is pinned to `kind`,
-         *     for the tenant's sessions of it, or with `project_id` those of one
-         *     project, where it wins over the tenant's.
+         * @description A kind manual: the name whose latest version is pinned to `kind`,
+         *     for the tenant's sessions of it, or with `agent_project_id` those of one
+         *     agent project, where it wins over the tenant's.
          */
         PinRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Kind */
             kind: string;
             /** Name */
             name: string;
-            /** Project Id */
-            project_id?: string | null;
         };
         /**
          * PinView
-         * @description A version pinned to a kind as its manual. Each session of the kind
+         * @description A version pinned to a kind as its kind manual. Each session of the kind
          *     made after it was pinned holds it; one made before keeps its own.
          */
         PinView: {
+            /**
+             * Agent Playbook Id
+             * Format: uuid
+             */
+            agent_playbook_id: string;
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7454,13 +7474,6 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
-            /**
-             * Playbook Id
-             * Format: uuid
-             */
-            playbook_id: string;
-            /** Project Id */
-            project_id: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -7542,42 +7555,6 @@ export interface components {
             tenants: number;
             /** Users */
             users: number;
-        };
-        /**
-         * PlaybookView
-         * @description A version as published, with what the lever checks found in it as it
-         *     was: advice, which never refused the publish. `findings` is null on a
-         *     version the checks never read, one published before they ran, and an
-         *     empty list on one they read and found nothing in.
-         */
-        PlaybookView: {
-            /** Body */
-            body: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description: string;
-            /** Findings */
-            findings: components["schemas"]["FindingView"][] | null;
-            /** Gates */
-            gates: components["schemas"]["GateView"][];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /**
-             * Published By
-             * Format: uuid
-             */
-            published_by: string;
-            /** Version */
-            version: number;
         };
         /**
          * PolicyRuleBody
@@ -7681,61 +7658,6 @@ export interface components {
             steerer?: string | null;
         };
         /**
-         * ProjectRetentionBody
-         * @description What one project of the tenant narrows; it never widens the tenant's.
-         */
-        ProjectRetentionBody: {
-            policy: components["schemas"]["RetentionPolicyBody"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectRetentionView */
-        ProjectRetentionView: {
-            policy: components["schemas"]["RetentionPolicyView"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectView */
-        ProjectView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            environment: components["schemas"]["EnvironmentView"] | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            /** Workspace Snapshots */
-            workspace_snapshots: boolean;
-        };
-        /**
          * Provenance
          * @description From the strongest to the weakest.
          * @enum {string}
@@ -7774,7 +7696,7 @@ export interface components {
         ProviderName: "anthropic" | "openai";
         /**
          * PublishRequest
-         * @description The next version of a playbook's name: its description, its body, and
+         * @description The next version of an agent playbook's name: its description, its body, and
          *     its gates.
          */
         PublishRequest: {
@@ -7834,8 +7756,8 @@ export interface components {
             /** Tokens */
             tokens?: number | null;
         };
-        /** RenameProjectRequest */
-        RenameProjectRequest: {
+        /** RenameAgentProjectRequest */
+        RenameAgentProjectRequest: {
             /** Name */
             name: string;
         };
@@ -7990,18 +7912,18 @@ export interface components {
          *     or, with no `If-Match`, as the tenant's first.
          */
         RetentionRequest: {
+            /** Agent Projects */
+            agent_projects?: components["schemas"]["AgentProjectRetentionBody"][];
             policy?: components["schemas"]["RetentionPolicyBody"];
-            /** Projects */
-            projects?: components["schemas"]["ProjectRetentionBody"][];
         };
         /**
          * RetentionView
          * @description The tenant's policy; version 0, the loosest, until its first write.
          */
         RetentionView: {
+            /** Agent Projects */
+            agent_projects: components["schemas"]["AgentProjectRetentionView"][];
             policy: components["schemas"]["RetentionPolicyView"];
-            /** Projects */
-            projects: components["schemas"]["ProjectRetentionView"][];
             /**
              * Updated At
              * Format: date-time
@@ -8104,10 +8026,10 @@ export interface components {
         RunPurpose: "work" | "baseline" | "validation";
         /**
          * RunsAs
-         * @description Whose authority an automation's action runs on.
+         * @description Whose authority an agent automation's action runs on.
          * @enum {string}
          */
-        RunsAs: "creator" | "automation_principal";
+        RunsAs: "creator" | "agent_automation_principal";
         /**
          * SaveKeyRequest
          * @description A key's value. It is written once, under a new reference, and no
@@ -8167,14 +8089,14 @@ export interface components {
          *     key alone and the platform's revocation is the destruction.
          */
         SessionRetentionView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Content Expired At */
             content_expired_at: string | null;
             /** Content Expires At */
             content_expires_at: string | null;
             destruction: components["schemas"]["KeyDestructionView"] | null;
             policy: components["schemas"]["RetentionPolicyView"];
-            /** Project Id */
-            project_id: string | null;
             /**
              * Session Id
              * Format: uuid
@@ -8479,6 +8401,76 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * SpendLedgerEntryView
+         * @description One entry, written once. A field a kind does not carry is null:
+         *
+         *     - `hold`: `session_id`, `units` (the worst case, null when no price
+         *       applies), and `cost_micros` (the exposure).
+         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+         *       buckets paid).
+         *     - `credit`: `amount_micros` and `reference` (the payment's).
+         *     - `grant`: `units`, `reason`, and `by` (the operator).
+         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+         *       `by`.
+         */
+        SpendLedgerEntryView: {
+            /** Amount Micros */
+            amount_micros?: number | null;
+            /** Budget Id */
+            budget_id?: string | null;
+            /** By */
+            by?: string | null;
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Hold Id */
+            hold_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["EntryKind"];
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Tokens */
+            tokens?: number | null;
+            /** Units */
+            units?: number | null;
+        };
+        /**
+         * SpendLedgerPageView
+         * @description One read of a tenant's ledger, the newest first. `has_more` says the
+         *     read was cut at its limit and older entries match it too: narrow it by
+         *     kind, hold, or session to reach them.
+         */
+        SpendLedgerPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["SpendLedgerEntryView"][];
+        };
+        /**
+         * SpendUnitsGrantRequest
+         * @description Units the platform grants the tenant for its life, and why.
+         */
+        SpendUnitsGrantRequest: {
+            /** Reason */
+            reason: string;
+            /** Units */
+            units: number;
+        };
+        /**
          * SsoLinkRequest
          * @description What the identity provider's admin portal opens on: the single sign-on
          *     connection (`sso`) or the org's domains (`domain_verification`), and the
@@ -8529,14 +8521,14 @@ export interface components {
         /**
          * StartSessionRequest
          * @description A session to start on the latest version of a kind the product runs,
-         *     in a project of the caller's tenant. Outside a local stack a session
-         *     starts in a project or not at all.
+         *     in an agent project of the caller's tenant. Outside a local stack a session
+         *     starts in an agent project or not at all.
          */
         StartSessionRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id?: string | null;
             /** Title */
             title: string;
         };
@@ -8556,22 +8548,22 @@ export interface components {
         };
         /**
          * StartValidationRequest
-         * @description A check the project's policy declares, to run at `head`, the delivered
+         * @description A check the agent project's policy declares, to run at `head`, the delivered
          *     commit, with the checks, fixtures, and runner taken from `base`. Each is
          *     a commit's full id, never a name that moves.
          */
         StartValidationRequest: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
             /** Base */
             base: string;
             /** Check */
             check: string;
             /** Head */
             head: string;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
         };
         /**
          * StepPageView
@@ -8943,13 +8935,13 @@ export interface components {
         };
         /**
          * TrialView
-         * @description One trial: its arm, its session, where and when it ran, its cost, and
+         * @description One trial: its contender, its session, where and when it ran, its cost, and
          *     what its acceptance verdict found.
          */
         TrialView: {
-            arm: components["schemas"]["Arm"];
             /** Broken */
             broken: string[];
+            contender: components["schemas"]["Contender"];
             /** Cost Micros */
             cost_micros: number;
             /** Executor */
@@ -9006,16 +8998,6 @@ export interface components {
             /** Integrations */
             integrations: string[];
             kind: components["schemas"]["TriggerKind"];
-        };
-        /**
-         * UnitsGrantRequest
-         * @description Units the platform grants the tenant for its life, and why.
-         */
-        UnitsGrantRequest: {
-            /** Reason */
-            reason: string;
-            /** Units */
-            units: number;
         };
         /**
          * UpdateIdentityRequest
@@ -9207,7 +9189,7 @@ export interface components {
          *     and where it stands. Once its run is recorded, `passed` is the verdict
          *     and `run` is that run; both are null while it waits. The run passes
          *     when it passed, at least one of its cases did, and what served it meets
-         *     the strictest grade the project's policy asks of the check, a twin when
+         *     the strictest grade the agent project's policy asks of the check, a twin when
          *     no requirement names it: a run on a double, or with a dependency that
          *     was not there, never passes. A check a requirement rates runs its
          *     declared trials and passes only as that requirement judges them
@@ -9217,6 +9199,11 @@ export interface components {
          *     `reason` says why it could not run, and `run` is null.
          */
         ValidationSessionView: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
             /** Base */
             base: string;
             /** Check */
@@ -9242,11 +9229,6 @@ export interface components {
             id: string;
             /** Passed */
             passed: boolean | null;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
             /** Reason */
             reason: string | null;
             run: components["schemas"]["ExecutionView"] | null;
@@ -9264,6 +9246,8 @@ export interface components {
          *     the results it wrote, and its runs.
          */
         ValidationView: {
+            /** Agent Project */
+            agent_project: string;
             /**
              * Created At
              * Format: date-time
@@ -9276,8 +9260,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Project */
-            project: string;
             purpose: components["schemas"]["RunPurpose"];
             /** Records */
             records: string[];
@@ -9335,6 +9317,24 @@ export interface components {
             /** Handle */
             handle: string;
             kind: components["schemas"]["HandleKind"];
+        };
+        /**
+         * WorkProductView
+         * @description What a session delivered: its agent project, its branch and whether the
+         *     remote has held it, the pull requests and branches bound to it, and its
+         *     latest accepted result. A session that never had a workspace has no
+         *     branch.
+         */
+        WorkProductView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Branch Seen */
+            branch_seen: boolean;
+            report: components["schemas"]["ReportView"] | null;
+            /** Work */
+            work: components["schemas"]["WorkHandleView"][];
         };
         /**
          * WorkStatus
@@ -10047,7 +10047,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UnitsGrantRequest"];
+                "application/json": components["schemas"]["SpendUnitsGrantRequest"];
             };
         };
         responses: {
@@ -10057,7 +10057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -10094,46 +10094,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostStandingView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_ledger_v1_admin_orgs__org_id__ledger_get: {
-        parameters: {
-            query?: {
-                kind?: components["schemas"]["EntryKind"] | null;
-                hold_id?: string | null;
-                session_id?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerPageView"];
                 };
             };
             /** @description Validation Error */
@@ -10455,6 +10415,46 @@ export interface operations {
             };
         };
     };
+    get_ledger_v1_admin_orgs__org_id__spend_ledger_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["EntryKind"] | null;
+                hold_id?: string | null;
+                session_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendLedgerPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_tenant_cap_v1_admin_orgs__org_id__work_lanes__lane__cap_get: {
         parameters: {
             query?: never;
@@ -10623,6 +10623,964 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformSizeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_automations_v1_agent_automations_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_automation_v1_agent_automations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_principal_v1_agent_automations_principal_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_principal_v1_agent_automations_principal_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_automation_v1_agent_automations__agent_automation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agent_automation_v1_agent_automations__agent_automation_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_payment_v1_agent_billing_payments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "Payment-Signature"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_entries_v1_agent_knowledge_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AgentKnowledgeStatus"];
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_entry_v1_agent_knowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_entry_v1_agent_knowledge__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_entry_v1_agent_knowledge__entry_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_entry_v1_agent_knowledge__entry_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pins_v1_agent_playbook_pins_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_v1_agent_playbook_pins_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_v1_agent_playbook_pins_delete: {
+        parameters: {
+            query: {
+                kind: string;
+                agent_project_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_v1_agent_playbooks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_playbook_v1_agent_playbooks__name__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoke_v1_agent_playbooks__name__invocations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvocationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_projects_v1_agent_projects_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_project_v1_agent_projects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_project_v1_agent_projects__agent_project_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_agent_project_v1_agent_projects__agent_project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_agent_project_v1_agent_projects__agent_project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameAgentProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_fetch_credential_v1_agent_projects__agent_project_id__credential_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_workspace_base_v1_agent_projects__agent_project_id__workspace_base_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentWorkspaceBaseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_workspace_base_v1_agent_projects__agent_project_id__workspace_base_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
                 };
             };
             /** @description Validation Error */
@@ -11223,7 +12181,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -11263,41 +12221,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_delivery_v1_agent_sessions__session_id__delivery_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeliveryView"];
                 };
             };
             /** @description Validation Error */
@@ -11982,6 +12905,41 @@ export interface operations {
             };
         };
     };
+    get_work_product_v1_agent_sessions__session_id__work_product_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkProductView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_api_keys_v1_api_keys_get: {
         parameters: {
             query?: {
@@ -12450,259 +13408,6 @@ export interface operations {
             };
         };
     };
-    list_automations_v1_automations_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_automation_v1_automations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_principal_v1_automations_principal_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    grant_principal_v1_automations_principal_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GrantRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_automation_v1_automations__automation_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_automation_v1_automations__automation_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    confirm_payment_v1_billing_payments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "Payment-Signature"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_budgets_v1_budgets_get: {
         parameters: {
             query?: {
@@ -12879,7 +13584,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -13374,7 +14079,7 @@ export interface operations {
         parameters: {
             query: {
                 kind: string;
-                project_id?: string | null;
+                agent_project_id?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -14535,196 +15240,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_entries_v1_knowledge_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["KnowledgeStatus"];
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_entry_v1_knowledge_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_entry_v1_knowledge__entry_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edit_entry_v1_knowledge__entry_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    review_entry_v1_knowledge__entry_id__review_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
                 };
             };
             /** @description Validation Error */
@@ -16019,76 +16534,6 @@ export interface operations {
             };
         };
     };
-    list_notifications_v1_notifications_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_read_v1_notifications__notification_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_org_v1_orgs_post: {
         parameters: {
             query?: never;
@@ -16252,229 +16697,9 @@ export interface operations {
             };
         };
     };
-    list_pins_v1_playbook_pins_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pin_v1_playbook_pins_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PinRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    unpin_v1_playbook_pins_delete: {
-        parameters: {
-            query: {
-                kind: string;
-                project_id?: string | null;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    publish_v1_playbooks_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublishRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_playbook_v1_playbooks__name__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    invoke_v1_playbooks__name__invocations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InvokeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvocationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_projects_v1_projects_get: {
+    list_park_alerts_v1_park_alerts_get: {
         parameters: {
             query?: {
-                after?: string | null;
                 limit?: number;
             };
             header?: {
@@ -16493,7 +16718,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectView"][];
+                    "application/json": components["schemas"]["ParkAlertView"][];
                 };
             };
             /** @description Validation Error */
@@ -16507,45 +16732,7 @@ export interface operations {
             };
         };
     };
-    create_project_v1_projects_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_v1_projects__project_id__get: {
+    mark_read_v1_park_alerts__park_alert_id__read_post: {
         parameters: {
             query?: never;
             header?: {
@@ -16554,7 +16741,7 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                project_id: string;
+                park_alert_id: string;
             };
             cookie?: never;
         };
@@ -16566,194 +16753,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_project_v1_projects__project_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rename_project_v1_projects__project_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenameProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_fetch_credential_v1_projects__project_id__credential_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FetchCredentialRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FetchCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_environment_v1_projects__project_id__environment_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnvironmentBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_environment_v1_projects__project_id__environment_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
+                    "application/json": components["schemas"]["ParkAlertView"];
                 };
             };
             /** @description Validation Error */

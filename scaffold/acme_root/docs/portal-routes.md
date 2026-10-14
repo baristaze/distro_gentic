@@ -14,19 +14,19 @@ person is on, the route it matched, and the parameters it named, as data.
 
 | Address | What it shows | Parameters |
 | --- | --- | --- |
-| `/` | Home: a box to describe a task, the agent and the project it starts on, and starter prompts |  |
+| `/` | Home: a box to describe a task, the agent and the agent project it starts on, and starter prompts |  |
 | `/sessions` | Sessions: the person's own first, then the org's org-wide ones to join (`?view=org`), filtered by status, by agent, and by title; `?needs=you` shows the ones waiting on a person |  |
 | `/sessions/:sessionId` | One session: its status and what it waits on, its chat, and a pane of what it did (its steps, workspace, changes, evidence, and sub-agents) | `sessionId`: the session's id |
-| `/automations` | The org's automations, a new one, and the automation principal |  |
-| `/automations/:automationId` | One automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit | `automationId`: the automation's id |
-| `/knowledge` | Knowledge: what every session should know, and the suggestions waiting on a review |  |
-| `/knowledge/:entryId` | One knowledge entry, its review, and its edit | `entryId`: the entry's id |
+| `/agent-automations` | The org's agent automations, a new one, and the agent automation principal |  |
+| `/agent-automations/:agentAutomationId` | One agent automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit | `agentAutomationId`: the agent automation's id |
+| `/agent-knowledge` | Agent knowledge: what every session should know, and the suggestions waiting on a review |  |
+| `/agent-knowledge/:entryId` | One agent knowledge entry, its review, and its edit | `entryId`: the entry's id |
 | `/settings` | Settings: every section, by group |  |
 | `/orgs/new` | A new org of the signed-in person's own |  |
-| `/projects` | An old address: it lands on `/settings/projects` |  |
-| `/projects/:projectId` | An old address: it lands on `/settings/projects/:projectId` | `projectId`: as `/settings/projects/:projectId` names it |
+| `/agent-projects` | An old address: it lands on `/settings/agent-projects` |  |
+| `/agent-projects/:agentProjectId` | An old address: it lands on `/settings/agent-projects/:agentProjectId` | `agentProjectId`: as `/settings/agent-projects/:agentProjectId` names it |
 | `/models` | An old address: it lands on `/settings/models` |  |
-| `/playbooks` | An old address: it lands on `/settings/playbooks` |  |
+| `/agent-playbooks` | An old address: it lands on `/settings/agent-playbooks` |  |
 | `/audit` | An old address: it lands on `/settings/audit` |  |
 | `/usage` | An old address: it lands on `/settings/usage` |  |
 | `/approvals` | An old address: it lands on `/sessions?needs=you` |  |
@@ -35,9 +35,9 @@ person is on, the route it matched, and the parameters it named, as data.
 | `/settings/members` | Settings › Members: Who is in the org, their roles, and invitations |  |
 | `/settings/usage` | Settings › Usage: Each budget and what its window spent |  |
 | `/settings/audit` | Settings › Audit: What happened in the org, and who did it |  |
-| `/settings/projects` | Settings › Projects: Each bound to its repository, and the credential it is read with |  |
-| `/settings/projects/:projectId` | One project: its repository, the credential it is read with, its name, and its removal | `projectId`: the project's id |
+| `/settings/agent-projects` | Settings › Agent projects: Each bound to its repository, and the credential it is read with |  |
+| `/settings/agent-projects/:agentProjectId` | One agent project: its repository, the credential it is read with, its name, and its removal | `agentProjectId`: the agent project's id |
 | `/settings/models` | Settings › Models and keys: The org's own provider keys, and its model for each role |  |
-| `/settings/playbooks` | Settings › Playbooks: The team's procedures, as versioned briefs |  |
+| `/settings/agent-playbooks` | Settings › Agent playbooks: The team's procedures, as versioned briefs |  |
 | `/settings/api-keys` | Settings › API keys: Keys a program calls the API with, as the org |  |
 | `/settings/sign-on` | Settings › Single sign-on: Sign-in through the org's own identity provider |  |

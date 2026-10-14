@@ -10,31 +10,31 @@ from starlette.requests import HTTPConnection
 
 from acme.services.api.services import (
     AdminServiceInterface,
+    AgentAutomationsServiceInterface,
+    AgentBillingServiceInterface,
+    AgentFleetServiceInterface,
+    AgentKnowledgeServiceInterface,
+    AgentPlaybooksServiceInterface,
+    AgentProjectsServiceInterface,
     AgentSessionsServiceInterface,
-    AutomationsServiceInterface,
     BenchmarksServiceInterface,
-    BillingServiceInterface,
     BudgetsServiceInterface,
     ConnectorsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
+    ExecRelayServiceInterface,
     FlagsServiceInterface,
-    FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
-    KnowledgeServiceInterface,
     LeasesServiceInterface,
-    LedgersServiceInterface,
     MatrixServiceInterface,
     MediaServiceInterface,
-    NotificationsServiceInterface,
-    PlaybooksServiceInterface,
-    ProjectsServiceInterface,
+    ParkAlertsServiceInterface,
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
-    RelayServiceInterface,
     RetentionServiceInterface,
     ServicesInterface,
+    SpendLedgersServiceInterface,
     TenancyServiceInterface,
     ToolsServiceInterface,
     ValidationsServiceInterface,
@@ -62,8 +62,8 @@ def admin_service(connection: HTTPConnection) -> AdminServiceInterface:
     return services_of(connection).get_admin_service()
 
 
-def fleet_service(connection: HTTPConnection) -> FleetServiceInterface:
-    return services_of(connection).get_fleet_service()
+def agent_fleet_service(connection: HTTPConnection) -> AgentFleetServiceInterface:
+    return services_of(connection).get_agent_fleet_service()
 
 
 def events_service(connection: HTTPConnection) -> EventsServiceInterface:
@@ -102,32 +102,32 @@ def hosts_service(connection: HTTPConnection) -> HostsServiceInterface:
     return services_of(connection).get_hosts_service()
 
 
-def relay_service(connection: HTTPConnection) -> RelayServiceInterface:
-    return services_of(connection).get_relay_service()
+def exec_relay_service(connection: HTTPConnection) -> ExecRelayServiceInterface:
+    return services_of(connection).get_exec_relay_service()
 
 
 def watch_service(connection: HTTPConnection) -> WatchServiceInterface:
     return services_of(connection).get_watch_service()
 
 
-def automations_service(connection: HTTPConnection) -> AutomationsServiceInterface:
-    return services_of(connection).get_automations_service()
+def agent_automations_service(connection: HTTPConnection) -> AgentAutomationsServiceInterface:
+    return services_of(connection).get_agent_automations_service()
 
 
 def budgets_service(connection: HTTPConnection) -> BudgetsServiceInterface:
     return services_of(connection).get_budgets_service()
 
 
-def billing_service(connection: HTTPConnection) -> BillingServiceInterface:
-    return services_of(connection).get_billing_service()
+def agent_billing_service(connection: HTTPConnection) -> AgentBillingServiceInterface:
+    return services_of(connection).get_agent_billing_service()
 
 
 def intake_service(connection: HTTPConnection) -> IntakeServiceInterface:
     return services_of(connection).get_intake_service()
 
 
-def notifications_service(connection: HTTPConnection) -> NotificationsServiceInterface:
-    return services_of(connection).get_notifications_service()
+def park_alerts_service(connection: HTTPConnection) -> ParkAlertsServiceInterface:
+    return services_of(connection).get_park_alerts_service()
 
 
 def matrix_service(connection: HTTPConnection) -> MatrixServiceInterface:
@@ -142,24 +142,24 @@ def benchmarks_service(connection: HTTPConnection) -> BenchmarksServiceInterface
     return services_of(connection).get_benchmarks_service()
 
 
-def ledgers_service(connection: HTTPConnection) -> LedgersServiceInterface:
-    return services_of(connection).get_ledgers_service()
+def spend_ledgers_service(connection: HTTPConnection) -> SpendLedgersServiceInterface:
+    return services_of(connection).get_spend_ledgers_service()
 
 
-def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
-    return services_of(connection).get_projects_service()
+def agent_projects_service(connection: HTTPConnection) -> AgentProjectsServiceInterface:
+    return services_of(connection).get_agent_projects_service()
 
 
-def knowledge_service(connection: HTTPConnection) -> KnowledgeServiceInterface:
-    return services_of(connection).get_knowledge_service()
+def agent_knowledge_service(connection: HTTPConnection) -> AgentKnowledgeServiceInterface:
+    return services_of(connection).get_agent_knowledge_service()
 
 
 def connectors_service(connection: HTTPConnection) -> ConnectorsServiceInterface:
     return services_of(connection).get_connectors_service()
 
 
-def playbooks_service(connection: HTTPConnection) -> PlaybooksServiceInterface:
-    return services_of(connection).get_playbooks_service()
+def agent_playbooks_service(connection: HTTPConnection) -> AgentPlaybooksServiceInterface:
+    return services_of(connection).get_agent_playbooks_service()
 
 
 def tools_service(connection: HTTPConnection) -> ToolsServiceInterface:
@@ -185,22 +185,24 @@ WebhooksService = Annotated[WebhooksServiceInterface, Depends(webhooks_service)]
 AgentSessionsService = Annotated[AgentSessionsServiceInterface, Depends(agent_sessions_service)]
 EvidenceService = Annotated[EvidenceServiceInterface, Depends(evidence_service)]
 HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
-FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
-RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
+AgentFleetService = Annotated[AgentFleetServiceInterface, Depends(agent_fleet_service)]
+ExecRelayService = Annotated[ExecRelayServiceInterface, Depends(exec_relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
-AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
+AgentAutomationsService = Annotated[
+    AgentAutomationsServiceInterface, Depends(agent_automations_service)
+]
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
-BillingService = Annotated[BillingServiceInterface, Depends(billing_service)]
+AgentBillingService = Annotated[AgentBillingServiceInterface, Depends(agent_billing_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
-NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
+ParkAlertsService = Annotated[ParkAlertsServiceInterface, Depends(park_alerts_service)]
 MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
 ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
-LedgersService = Annotated[LedgersServiceInterface, Depends(ledgers_service)]
-ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
-KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
+SpendLedgersService = Annotated[SpendLedgersServiceInterface, Depends(spend_ledgers_service)]
+AgentProjectsService = Annotated[AgentProjectsServiceInterface, Depends(agent_projects_service)]
+AgentKnowledgeService = Annotated[AgentKnowledgeServiceInterface, Depends(agent_knowledge_service)]
 ConnectorsService = Annotated[ConnectorsServiceInterface, Depends(connectors_service)]
-PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
+AgentPlaybooksService = Annotated[AgentPlaybooksServiceInterface, Depends(agent_playbooks_service)]
 ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]
 RetentionService = Annotated[RetentionServiceInterface, Depends(retention_service)]
 ValidationsService = Annotated[ValidationsServiceInterface, Depends(validations_service)]

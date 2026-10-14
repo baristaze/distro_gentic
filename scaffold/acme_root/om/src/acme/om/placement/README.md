@@ -54,7 +54,7 @@ environment is.
 - **Answer for a held item.** A product's claimant reads its item, renews
   its lease, and reports it done or failed, only while it holds it, in
   its tenant. Any other item is not found. A report is held to its shape
-  first. A host answers through the relay instead.
+  first. A host answers through the exec relay instead.
 - **The cap at the claim.** A runner passes its lane's cap to the claim
   (`PlacementOptions.lane_cap`), and the claim passes over a tenant at
   its cap: its loops wait where they are, unwritten, and spend no
@@ -75,9 +75,9 @@ environment is.
   its hosts takes no work (its state, what it advertised, and what waits
   on its lanes): ids, counts, times, and states, never what the tenant
   wrote.
-- **Count the fleet.** The sweep reads, across every tenant, the parked
-  sessions by reason and age, the ready loops by plan tier, and the
-  hosts by state, each by bounded labels alone, for the operator
+- **Count the agent fleet.** The sweep reads, across every tenant, the
+  parked sessions by reason and age, the ready loops by plan tier, and
+  the hosts by state, each by bounded labels alone, for the operator
   dashboard.
 - **Purge.** A tenant deleted past its retention loses its share.
 

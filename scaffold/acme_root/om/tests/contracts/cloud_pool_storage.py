@@ -17,7 +17,7 @@ import pytest
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
-from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.exceptions import UniqueKeyTaken
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset()
@@ -31,9 +31,9 @@ def make_machine(
     tenant_id: UUID | None = None,
     session_id: UUID | None = None,
     started: bool = True,
-) -> PoolMachine:
+) -> PoolVm:
     now = utcnow()
-    return PoolMachine(
+    return PoolVm(
         id=new_id(),
         created_at=now,
         name=f"acme-vm-p{secrets.token_hex(8)}",

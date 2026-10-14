@@ -4,13 +4,13 @@ The texts a tenant customizes its agents with, read for what misleads or
 stalls an agent. This is one of the kinds of thing [Acme is made
 of](../../../../README.md).
 
-A lever is a [playbook](../playbooks/README.md) or a reviewed
-[knowledge](../knowledge/README.md) entry: words written for people
-that an agent then reads and follows. A phrase repeated until it looks
-load-bearing, a must and a must-not on one subject, a tool no kind
-holds, or "keep trying until it works" makes an agent spin. The levers
-are read twice: before a person publishes one, and after, against the
-sessions that stalled.
+A lever is a [agent playbook](../agent_playbooks/README.md) or a
+reviewed [agent knowledge](../agent_knowledge/README.md) entry: words
+written for people that an agent then reads and follows. A phrase
+repeated until it looks load-bearing, a must and a must-not on one
+subject, a tool no kind holds, or "keep trying until it works" makes an
+agent spin. The levers are read twice: before a person publishes one,
+and after, against the sessions that stalled.
 
 ## What it holds
 
@@ -28,19 +28,19 @@ It keeps no table of its own.
 ## The checks
 
 Each runs on the text alone, calls no model, and runs nothing it reads.
-They read the words a person wrote (a playbook's description and steps,
-an entry's title and text), never what the platform writes around them.
-They find:
+They read the words a person wrote (an agent playbook's description and
+steps, an entry's title and text), never what the platform writes around
+them. They find:
 
 - a phrase of three to six words said past a bound that grows with the
   text;
 - a must and a must-not on one subject;
 - a tool or a kind it names in backticks, beside a word that calls it
-  a tool, a kind, or an agent, that no kind it reaches holds, a
+  a tool, a kind, or an agent, that no kind it reaches holds, a agent
   playbook's gates included;
 - an instruction to retry with no stopping condition;
-- a playbook whose brief, as a session receives it, is longer than a
-  session holds whole once it summarizes.
+- an agent playbook whose brief, as a session receives it, is longer
+  than a session holds whole once it summarizes.
 
 A lever reaches every kind its tenant's sessions start on, at its latest
 version.
@@ -64,8 +64,8 @@ version.
 
 ## How another namespace composes it
 
-The playbooks and the knowledge swimlanes run the checks as a person
-publishes, writes, edits, or keeps an entry, against `reach_of` their
-root's kinds. The knowledge swimlane records the version each session
-recalls, or reads by its slug, as the playbooks swimlane records each
-invocation, and the reading reads both.
+The agent playbooks and the agent knowledge swimlanes run the checks as
+a person publishes, writes, edits, or keeps an entry, against `reach_of`
+their root's kinds. The agent knowledge swimlane records the version
+each session recalls, or reads by its slug, as the agent playbooks
+swimlane records each invocation, and the reading reads both.

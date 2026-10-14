@@ -1,8 +1,8 @@
 """Pure rules of retention: the tighter of two policies, the policy a
-session of a project takes, its expiries, and what a sweep folds into a
+session of an agent project takes, its expiries, and what a sweep folds into a
 snapshot.
 
-`tighter` is the one operation. A project's narrowing is folded into its
+`tighter` is the one operation. An agent project's narrowing is folded into its
 tenant's policy with it, and the tenant's policy into a session's snapshot
 with it, so a narrowing never widens and a loosening never reaches back:
 each field of the result is at least as strict as the same field of
@@ -49,7 +49,7 @@ def tighter(a: RetentionPolicy, b: RetentionPolicy) -> RetentionPolicy:
 
 
 def region_conflicts(tenant: RetentionPolicy, narrowing: RetentionPolicy) -> bool:
-    """A project that names a region other than its tenant's: neither is
+    """An agent project that names a region other than its tenant's: neither is
     tighter, so the narrowing is refused rather than folded."""
     return (
         tenant.region is not None
@@ -67,13 +67,13 @@ def past_bound(policy: RetentionPolicy) -> bool:
     )
 
 
-def effective(tenant: TenantRetention | None, project_id: UUID | None) -> RetentionPolicy:
-    """The policy a session of the project takes now: its tenant's, narrowed
-    by the project's when it has one. A tenant with no policy declared takes
+def effective(tenant: TenantRetention | None, agent_project_id: UUID | None) -> RetentionPolicy:
+    """The policy a session of the agent project takes now: its tenant's, narrowed
+    by the agent project's when it has one. A tenant with no policy declared takes
     the loosest."""
     if tenant is None:
         return RetentionPolicy()
-    narrowing = tenant.narrowing(project_id)
+    narrowing = tenant.narrowing(agent_project_id)
     return tenant.policy if narrowing is None else tighter(tenant.policy, narrowing)
 
 
@@ -94,7 +94,7 @@ def folded(
     snapshot: SessionRetention, current: RetentionPolicy, version: int, now: datetime
 ) -> SessionRetention:
     """The snapshot once the sweep has read version `version` of its tenant's
-    policy, which a session of its project takes as `current`. A tightening
+    policy, which a session of its agent project takes as `current`. A tightening
     moves its policy and its expiries earlier; a loosening, or no change,
     leaves both as they are and only records the version read. An expiry
     never moves later."""

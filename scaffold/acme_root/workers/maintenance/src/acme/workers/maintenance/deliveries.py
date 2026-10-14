@@ -25,8 +25,8 @@ from uuid import UUID
 from acme.infra.observability import OUTCOMES, current_traceparent, request_id_var
 from acme.infra.queues import QueueMessage, Queues, QueuesInterface
 from acme.integrations.identity import ProvidedDelivery
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.types.automation import Firing
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.types.agent_automation import Firing
 from acme.om.base import EMPTY_UUID, Platform, derived_id, new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
@@ -109,15 +109,15 @@ class FeedbackDelivery(Platform):
 
 class FeedbackDeliveriesImpl(DeliveryProviderInterface[FeedbackDelivery]):
     """The world's events: each is routed to the session it names, by the
-    routing table, and then fires the tenant's automations with what the
+    routing table, and then fires the tenant's agent automations with what the
     router answered. Both are keyed by the event, so a copy changes
     nothing."""
 
     def __init__(
-        self, intake: IntakeManagerInterface, automations: AutomationsManagerInterface
+        self, intake: IntakeManagerInterface, agent_automations: AgentAutomationsManagerInterface
     ) -> None:
         self._intake = intake
-        self._automations = automations
+        self._agent_automations = agent_automations
 
     def read(self, delivery: object) -> FeedbackDelivery:
         return FeedbackDelivery.model_validate(delivery)
@@ -138,7 +138,7 @@ class FeedbackDeliveriesImpl(DeliveryProviderInterface[FeedbackDelivery]):
             platform=routed.platform,
             text=described(event),
         )
-        await self._automations.fire(ctx, firing)
+        await self._agent_automations.fire(ctx, firing)
         return True
 
 

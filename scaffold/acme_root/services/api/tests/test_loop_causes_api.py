@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import build_container, open_account, seed_request, sign_in
+from api_support import build_container, open_spend_account, seed_request, sign_in
 
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
@@ -70,7 +70,7 @@ class Setup:
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    # Local, where a twin plays the workspace and a session needs no project
+    # Local, where a twin plays the workspace and a session needs no agent project
     # with a repository to clone: anywhere else a host holds the workspace.
     return build_container(tmp_path, agent_kinds=(BUILDER,), environment="local")
 
@@ -80,7 +80,7 @@ async def owner(client: httpx.AsyncClient, container: AppContainer) -> dict[str,
     """The owner, signed in, the tenant's account open: a loop's calls have
     someone to charge."""
     headers = await sign_in(client, container)
-    await open_account(container, headers)
+    await open_spend_account(container, headers)
     return headers
 
 

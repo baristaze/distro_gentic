@@ -1,4 +1,4 @@
-"""The evidence storage contract: each project's validation policy, and the
+"""The evidence storage contract: each agent project's validation policy, and the
 runs, validations, and hypotheses and findings, written once. The cases
 named in `CROSS_TENANT_CASES` are the tenant fence's evidence: each one
 presents another tenant's identifier and asserts that nothing is found and
@@ -17,8 +17,8 @@ from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance
 from acme.om.evidence.types.record import (
     CaseTally,
-    Environment,
     ExecutionRecord,
+    RunImage,
     RunOutcome,
     RunPurpose,
 )
@@ -49,7 +49,7 @@ in this module that presents another tenant's."""
 HASH = "ab" * 32
 
 
-def make_policy(project: str = "checkout") -> ValidationPolicy:
+def make_policy(agent_project: str = "checkout") -> ValidationPolicy:
     now = utcnow()
     actor = new_id()
     return ValidationPolicy(
@@ -58,7 +58,7 @@ def make_policy(project: str = "checkout") -> ValidationPolicy:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        project=project,
+        agent_project=agent_project,
         checks=(
             CheckDeclaration(
                 name="unit",
@@ -90,13 +90,13 @@ def make_record(
         id=new_id(),
         created_at=now,
         session_id=session_id,
-        project="checkout",
+        agent_project="checkout",
         purpose=purpose,
         step_id=step_id,
         validation_id=validation_id,
         version=version,
         dirty=False,
-        environment=Environment(image="sha256:" + "1" * 64, toolchain={"python": "3.14"}),
+        run_image=RunImage(image="sha256:" + "1" * 64, toolchain={"python": "3.14"}),
         host="host-1",
         isolation="vm",
         executor=executor,
@@ -121,7 +121,7 @@ def make_validation(
     *runs: int,
     version: str = "c0ffee",
     executor: str = "executor-1",
-    project: str = "checkout",
+    agent_project: str = "checkout",
     purpose: RunPurpose = RunPurpose.VALIDATION,
 ) -> tuple[Validation, tuple[ExecutionRecord, ...]]:
     validation_id = new_id()
@@ -139,7 +139,7 @@ def make_validation(
         id=validation_id,
         created_at=utcnow(),
         session_id=session_id,
-        project=project,
+        agent_project=agent_project,
         purpose=purpose,
         version=version,
         source="base0",
@@ -188,7 +188,9 @@ class EvidenceStorageContract:
         assert await storage.read_policy(org, "checkout") == policy
         assert await storage.read_policy(org, "other") is None
 
-    async def test_a_project_holds_one_policy(self, storage: EvidenceStorageInterface) -> None:
+    async def test_an_agent_project_holds_one_policy(
+        self, storage: EvidenceStorageInterface
+    ) -> None:
         org = new_id()
         first = make_policy()
         assert await storage.create_policy(org, first, ())

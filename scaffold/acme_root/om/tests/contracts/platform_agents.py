@@ -22,6 +22,8 @@ from acme.integrations.model_providers.calls import ModelCall, ModelReply, Strea
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.rules import CHILDREN_PARK
@@ -30,22 +32,20 @@ from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.root import build_automations
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import Installation
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, ENGINEER_KIND
+from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, SOFTWARE_ENGINEER_KIND
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.root import Managers, ProductKinds, build_managers
@@ -56,13 +56,13 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
+from contracts.agent_project_storage import in_agent_project, make_binding
 from contracts.budget_storage import make_budget
 from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.factories import make_org
 from contracts.loops import live, reply, said
-from contracts.project_storage import in_project, make_binding
 from contracts.step_storage import make_message
 
 SESSIONS_GUIDE = Document(
@@ -110,7 +110,7 @@ class Platform:
     anthropic: ModelProviderReadingImpl
     openai: ModelProviderScriptedImpl
     owner: TenantContext
-    automations: AutomationsManagerInterface
+    agent_automations: AgentAutomationsManagerInterface
     intake: IntakeManagerInterface | None = None
 
     async def connect(self, integration: str, installation: str) -> None:
@@ -178,7 +178,7 @@ def platform_over(
     forge: IntegrationInterface | None = None,
 ) -> Platform:
     """The managers with the platform's agents shipped over `corpus`, each
-    principal a member of the tenant at every call, and the automations the
+    principal a member of the tenant at every call, and the agent automations the
     assistant reads, built over them. `storage` None is the memory storage,
     and `owner` None a fresh tenant's owner; a suite over Postgres hands in
     both. `kinds` are the adopter's beside the shipped ones, `executor` and
@@ -192,7 +192,7 @@ def platform_over(
         {ProviderName.ANTHROPIC: anthropic, ProviderName.OPENAI: openai}
     )
     storage = storage or StorageMemoryImpl()
-    automations: list[AutomationsManagerInterface] = []
+    agent_automations: list[AgentAutomationsManagerInterface] = []
     intakes: list[IntakeManagerInterface] = []
     integrations = IntegrationsOverImpl(
         IdentityProviderAbsentImpl(), providers, {} if forge is None else {FORGE: forge}
@@ -208,15 +208,17 @@ def platform_over(
         executor=executor,
         work_product=work_product,
         product_kinds=product_kinds,
-        automations=lambda: automations[0],
+        agent_automations=lambda: agent_automations[0],
         intake=None if forge is None else lambda: intakes[0],
     )
-    automations.append(build_automations(storage, managers, project_required=False))
+    agent_automations.append(
+        build_agent_automations(storage, managers, agent_project_required=False)
+    )
     if forge is not None:
         intakes.append(build_intake(storage, managers, integrations=integrations))
     owner = owner or context(Role.OWNER, make_org())
     intake = intakes[0] if intakes else None
-    return Platform(storage, managers, anthropic, openai, owner, automations[0], intake)
+    return Platform(storage, managers, anthropic, openai, owner, agent_automations[0], intake)
 
 
 def calls(name: str, use_id: str, **tool_input: object) -> ToolUseBlock:
@@ -235,7 +237,7 @@ def on_the_twin(kind: AgentKind) -> AgentKind:
 
 
 def citing(claim: Claim) -> Later:
-    """The engineer's turn that submits `claim`, citing the runs the last
+    """The software engineer's turn that submits `claim`, citing the runs the last
     validation it read answered."""
 
     def turn(call: ModelCall) -> ModelReply:
@@ -253,26 +255,30 @@ def citing(claim: Claim) -> Later:
     return turn
 
 
-async def an_engineer(platform: Platform, work: WorkProductMemoryImpl, project_id: UUID) -> UUID:
-    """An engineer session of the project, whose work product changed `src/`
+async def a_software_engineer(
+    platform: Platform, work: WorkProductMemoryImpl, agent_project_id: UUID
+) -> UUID:
+    """A software engineer session of the agent project, whose work product changed `src/`
     and is committed, and whose policy requires its unit check there."""
-    session_id = await platform.start(kinds.ENGINEER)
-    binding = make_binding(session_id, project_id)
-    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
-    delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
-    work.deliver(platform.owner.org_id, session_id, delivery)
+    session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
+    binding = make_binding(session_id, agent_project_id)
+    await platform.storage.get_agent_project_storage().bind_session(platform.owner.org_id, binding)
+    work_product = WorkProduct(
+        agent_project="reports", base="b1", head="c2", changed=("src/report.py",)
+    )
+    work.deliver(platform.owner.org_id, session_id, work_product)
     await platform.say(session_id, "The weekly report misses its total. Fix it.")
     return session_id
 
 
-# The engineer starts sub-agents.
+# The software engineer starts sub-agents.
 
 
 def sub_agents_over(
     tmp_path: Path, *, storage: StorageInterface | None = None
 ) -> tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl]:
-    """The platform with the shipped engineer on the twin, and analysis with
-    no workspace: a sub-agent belongs to its parent's project, whose
+    """The platform with the shipped software engineer on the twin, and analysis with
+    no workspace: a sub-agent belongs to its parent's agent project, whose
     repository no suite can fetch, and the case's sub-agents read none."""
     executor = ScriptedExecutor(capabilities=frozenset())
     work = WorkProductMemoryImpl()
@@ -282,7 +288,7 @@ def sub_agents_over(
     platform = platform_over(
         tmp_path,
         storage=storage,
-        kinds=(on_the_twin(ENGINEER_KIND), reader),
+        kinds=(on_the_twin(SOFTWARE_ENGINEER_KIND), reader),
         executor=executor,
         work_product=work,
     )
@@ -315,22 +321,22 @@ async def a_woken_root(platform: Platform, root: UUID) -> None:
     assert (session.status, session.park) == (SessionStatus.PENDING, None), "a report wakes it"
 
 
-async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
+async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     platform: Platform, executor: ScriptedExecutor, work: WorkProductMemoryImpl
 ) -> None:
-    """The shipped engineer takes its baseline, then starts two analysis
+    """The shipped software engineer takes its baseline, then starts two analysis
     sub-agents in one turn and parks on them. Each report wakes it: it reads
     the first and waits on the second, reads the second, validates its
-    head, and ends through its result gate. Each sub-agent runs under its share in the root's project,
+    head, and ends through its result gate. Each sub-agent runs under its share in the root's agent project,
     and what the whole tree spent and holds stays within the root's budget,
     which is far below the shares added up."""
-    projects = platform.storage.get_project_storage()
-    project_id = await in_project(projects, platform.owner.org_id)
+    agent_projects = platform.storage.get_agent_project_storage()
+    agent_project_id = await in_agent_project(agent_projects, platform.owner.org_id)
     await platform.managers.evidence.write_policy(
-        platform.owner, make_policy(policy_key(project_id))
+        platform.owner, make_policy(policy_key(agent_project_id))
     )
     executor.outcome = lambda check, trial: "passed"
-    root = await an_engineer(platform, work, project_id)
+    root = await a_software_engineer(platform, work, agent_project_id)
     budget = await platform.managers.budgets.create_budget(
         platform.owner,
         make_budget(BudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP),
@@ -374,8 +380,12 @@ async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     for child in (first, second):
         scope = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
         assert [b.amount for b in budgets.items if b.scope == scope] == [ANALYSIS_SHARE]
-        project = await platform.managers.projects.project_of(platform.owner, child.id)
-        assert project is not None and project.id == project_id, "in its root's project"
+        agent_project = await platform.managers.agent_projects.agent_project_of(
+            platform.owner, child.id
+        )
+        assert agent_project is not None and agent_project.id == agent_project_id, (
+            "in its root's agent project"
+        )
 
     # The first reports: the root wakes, reads it, and waits on the second.
     platform.anthropic.add(reply(said("A week with no rows drops the total (report.log:12).")))

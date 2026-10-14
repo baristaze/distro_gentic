@@ -69,12 +69,12 @@ class ConnectorTool(Platform):
 
 
 class ConnectorAttachment(Platform):
-    """A kind a connector is attached to, for one project's sessions or, with
+    """A kind a connector is attached to, for one agent project's sessions or, with
     none, for every session of the tenant. A deferred one waits for the
     agent to load it; one that is not is in its registry from the start."""
 
     kind: str = Field(min_length=1, max_length=64)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     deferred: bool = True
 
 
@@ -146,7 +146,7 @@ class PinnedConnector(Platform):
     deferred: bool = True
 
 
-class SessionConnectors(Identifiable, Created):
+class AgentSessionConnectors(Identifiable, Created):
     """The connectors one session holds, pinned as its first run began: the
     row's id is the session's, so a session pins once."""
 

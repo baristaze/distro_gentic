@@ -21,9 +21,9 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.retention.agent_projects import SessionAgentProjectInterface
 from acme.om.retention.keys import KeyDestruction, TenantKeysInterface
 from acme.om.retention.manager import RetentionManagerInterface
-from acme.om.retention.projects import SessionProjectInterface
 from acme.om.retention.rules import (
     content_due,
     effective,
@@ -76,7 +76,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         tenancy: TenancyManagerInterface,
         events: EventsManagerInterface,
         relay: OutboxRelayInterface,
-        projects: SessionProjectInterface,
+        agent_projects: SessionAgentProjectInterface,
         options: RetentionOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -87,7 +87,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         self._tenancy = tenancy
         self._events = events
         self._relay = relay
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._options = options
         self._clock = clock
 
@@ -111,14 +111,14 @@ class RetentionManagerImpl(RetentionManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         if past_bound(policy.policy):
             raise ValidationFailed(f"a lifetime is at most {MAX_LIFETIME.days} days")
-        for project in policy.projects:
-            if past_bound(project.policy):
+        for agent_project in policy.agent_projects:
+            if past_bound(agent_project.policy):
                 raise ValidationFailed(
-                    f"project {project.project_id} names a lifetime past {MAX_LIFETIME.days} days"
+                    f"agent project {agent_project.agent_project_id} names a lifetime past {MAX_LIFETIME.days} days"
                 )
-            if region_conflicts(policy.policy, project.policy):
+            if region_conflicts(policy.policy, agent_project.policy):
                 raise ValidationFailed(
-                    f"project {project.project_id} names a region its tenant does not"
+                    f"agent project {agent_project.agent_project_id} names a region its tenant does not"
                 )
         stored = await self._storage.read_policy(ctx.org_id)
         now = self._clock()
@@ -132,7 +132,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
                 policy=policy.policy,
-                projects=policy.projects,
+                agent_projects=policy.agent_projects,
                 version=1,
             )
             rows = (versioned_row(ctx, CREATED, created.id, created.version),)
@@ -152,7 +152,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         updated = stored.model_copy(
             update={
                 "policy": policy.policy,
-                "projects": policy.projects,
+                "agent_projects": policy.agent_projects,
                 "version": stored.version + 1,
                 "updated_at": now,
                 "updated_by": ctx.user_id,
@@ -170,9 +170,9 @@ class RetentionManagerImpl(RetentionManagerInterface):
         stored = await self._storage.read_snapshot(ctx.org_id, session.id)
         if stored is not None:
             return stored
-        project_id = await self._project_of(ctx, session)
+        agent_project_id = await self._project_of(ctx, session)
         tenant = await self._storage.read_policy(ctx.org_id)
-        policy = effective(tenant, project_id)
+        policy = effective(tenant, agent_project_id)
         now = self._clock()
         at_rest = policy.storage_mode is StorageMode.SEALED
         content, shape = expiries(policy, now, at_rest, now)
@@ -180,7 +180,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
             id=new_id(),
             created_at=now,
             session_id=session.id,
-            project_id=project_id,
+            agent_project_id=agent_project_id,
             policy=policy,
             policy_version=0 if tenant is None else tenant.version,
             at_rest=at_rest,
@@ -194,19 +194,19 @@ class RetentionManagerImpl(RetentionManagerInterface):
         stored = await self._storage.read_snapshot(ctx.org_id, session.id)
         if stored is not None:
             return stored.at_rest
-        project_id = await self._project_of(ctx, session)
-        policy = effective(await self._storage.read_policy(ctx.org_id), project_id)
+        agent_project_id = await self._project_of(ctx, session)
+        policy = effective(await self._storage.read_policy(ctx.org_id), agent_project_id)
         return policy.storage_mode is StorageMode.SEALED
 
     async def _project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
-        """The project of the session it came from, when it came from one
+        """The agent project of the session it came from, when it came from one
         that has a snapshot; otherwise the one the platform names for it."""
         came_from = session.parent_id or session.handed_off_from
         if came_from is not None:
             source = await self._storage.read_snapshot(ctx.org_id, came_from)
             if source is not None:
-                return source.project_id
-        return await self._projects.project_of(ctx, session)
+                return source.agent_project_id
+        return await self._agent_projects.agent_project_of(ctx, session)
 
     async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
         ctx.require(Permission.READ)
@@ -251,7 +251,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         failed = 0
         for org_id, snapshot, tenant in behind:
             try:
-                current = effective(tenant, snapshot.project_id)
+                current = effective(tenant, snapshot.agent_project_id)
                 # A write that loses its compare-and-set leaves the snapshot
                 # to the next pass, which reads it again.
                 await self._storage.write_snapshot(

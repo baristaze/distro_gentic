@@ -24,7 +24,7 @@ class PlatformAgentsManagerInterface(ABC):
         the platform's worker claims it and runs the check
         (`run_validation`). Requires the write permission. Refused before
         anything is written when the tenant holds no validation policy for
-        its project (`NotFound`, as another tenant's project is), or the
+        its agent project (`NotFound`, as another tenant's agent project is), or the
         policy declares no such check (`ValidationFailed`). A start asked
         again under the same id, of a check still declared, answers the
         session as stored. A start on an API key records the key, so its
@@ -48,7 +48,7 @@ class PlatformAgentsManagerInterface(ABC):
         capped by the API key they started it on, never the service role. A
         finished session runs nothing. Asked again after the run was kept,
         it runs nothing more and finishes with that run. A check that cannot
-        run here, for good (its project's policy no longer declares it, no
+        run here, for good (its agent project's policy no longer declares it, no
         executor offers what it needs, its starter may no longer write, or
         the key no longer holds), refuses the session with that reason
         (`refuse_validation`) and raises `PreconditionFailed`; a refused

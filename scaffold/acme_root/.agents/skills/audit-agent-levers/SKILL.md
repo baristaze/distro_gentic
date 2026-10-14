@@ -1,18 +1,18 @@
 ---
 name: audit-agent-levers
-description: "Audit which levers an org's agents stalled after, in one environment: the playbooks its sessions invoked and the knowledge they recalled, ranked by how much more often the sessions that reached them stalled (a call made again and again, a call failing again and again, a request sent again unchanged, a nudge, a guard, a loop a bound ended), read through the operator plane with a read-only operator token by `acme-ops levers`; then a report with verdicts and proposed tickets. Never changes anything."
+description: "Audit which levers an org's agents stalled after, in one environment: the agent playbooks its sessions invoked and the agent knowledge they recalled, ranked by how much more often the sessions that reached them stalled (a call made again and again, a call failing again and again, a request sent again unchanged, a nudge, a guard, a loop a bound ended), read through the operator plane with a read-only operator token by `acme-ops levers`; then a report with verdicts and proposed tickets. Never changes anything."
 allowed-tools: Read, Write, Bash(curl:*), Bash(jq:*), Bash(uv run acme-ops size:*), Bash(uv run acme-ops levers:*)
 ---
 
 # audit-agent-levers
 
 Which of a tenant's levers came before its agents stalled. A lever is a
-text the tenant customizes its agents with: a playbook a principal
-invokes into a session, or a reviewed knowledge entry a session
-recalls (ADR 2054). A lever written for people can make an agent spin:
-a phrase said until it looks load-bearing, a must and a must-not on one
-subject, a tool no kind holds, a "keep trying until it works". The
-checks that run as a person publishes a lever catch some of it; this
+text the tenant customizes its agents with: an agent playbook a
+principal invokes into a session, or a reviewed agent knowledge entry a
+session recalls (ADR 2054). A lever written for people can make an agent
+spin: a phrase said until it looks load-bearing, a must and a must-not
+on one subject, a tool no kind holds, a "keep trying until it works".
+The checks that run as a person publishes a lever catch some of it; this
 audit reads what happened after. The engine records a stall in its
 steps' headers, and the operator plane's reading ranks each lever by
 how much more often the sessions that reached it stalled than the
@@ -100,13 +100,13 @@ token has expired: stop, and name the refresh the preamble gives.
    stalled, and the answer says so.
 5. Write the report, with a proposed ticket for each finding. The
    ticket's work is a person's of the tenant, never this audit's: that
-   person reads the lever's version (the portal shows the playbook or
-   the entry with what its checks found) and the sessions named behind
-   it, for a phrase said again and again, a must and a must-not on one
-   subject, a tool its kinds do not hold, or a retry with no stopping
-   condition, then publishes its next version. The audit proposes; it
-   never fixes, and it never reads a lever's text or a session's
-   content.
+   person reads the lever's version (the portal shows the agent playbook
+   or the entry with what its checks found) and the sessions named
+   behind it, for a phrase said again and again, a must and a must-not
+   on one subject, a tool its kinds do not hold, or a retry with no
+   stopping condition, then publishes its next version. The audit
+   proposes; it never fixes, and it never reads a lever's text or a
+   session's content.
 
 ## What it never does
 
@@ -135,7 +135,7 @@ token has expired: stop, and name the refresh the preamble gives.
 
 | Kind | Id | Version | Stalled with | Stalled without | Lift | Verdict |
 |---|---|---|---|---|---|---|
-| <playbook / knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / weak / too few |
+| <agent_playbook / agent_knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / weak / too few |
 
 ## Findings, by impact
 

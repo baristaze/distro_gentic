@@ -6,11 +6,11 @@ feedback returns to the same session.
 
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
-it, twins in the suites, automations, playbooks and knowledge,
-connectors, and notifications. It leaves the inbox and how data renders
-to the engine; steering messages to `watch`; who may speak as a
-principal and how outside text is labelled to `wall`; and the provenance
-a twin feeds into evidence to `evidence`.
+it, twins in the suites, agent automations, agent playbooks and agent
+knowledge, connectors, and park alerts. It leaves the inbox and how
+data renders to the engine; steering messages to `watch`; who may speak
+as a principal and how outside text is labelled to `wall`; and the
+provenance a twin feeds into evidence to `evidence`.
 
 ## INT-01 Events come in through the guideline's inbound queue
 
@@ -135,56 +135,57 @@ evidence is EVD-03.)
 
 **Check.** review
 
-## INT-07 An automation runs as its creator or the automation principal
+## INT-07 An agent automation runs as its creator or as its principal
 
-**Principle.** Automations turn events into bounded work. A trigger, an
-event with filters or a schedule, leads to an action: start a session,
-message a standing session (refused while enabled, until a run's cap can
-end with its run), or a product's own action. A product's
-action may refuse the person who writes the automation, or the
+**Principle.** Agent automations turn events into bounded work. A
+trigger, an event with filters or a schedule, leads to an action: start
+a session, message a standing session (refused while enabled, until a
+run's cap can end with its run), or a product's own action. A product's
+action may refuse the person who writes the agent automation, or the
 principal it is set to run as, so one its firings would refuse is never
-saved. An automation runs as its creator or as the tenant's automation
-principal.
+saved. An agent automation runs as its creator or as the tenant's agent
+automation principal.
 
-**Source.** Work In, Results Out, Automations.
+**Source.** Work In, Results Out, Agent Automations.
 
-**Look for.** The principal each automation's action runs under; where
-the create and the edit of an enabled automation of a product's action
-ask its kind's check of the writer (`check_writer`), under the writer's
-own context, with whom the automation runs as.
+**Look for.** The principal each agent automation's action runs under;
+where the create and the edit of an enabled agent automation of a
+product's action ask its kind's check of the writer (`check_writer`),
+under the writer's own context, with whom the agent automation runs as.
 
-**Violation.** An automation that acts as the system, as the agent, or as
-the person whose event triggered it; an enabled automation of a product's
-action written without its kind's check of the writer, or checked under
-a context other than the writer's or blind to whom it runs as.
+**Violation.** An agent automation that acts as the system, as the
+agent, or as the person whose event triggered it; an enabled agent
+automation of a product's action written without its kind's check of the
+writer, or checked under a context other than the writer's or blind to
+whom it runs as.
 
 **Severity.** high
 
 **Check.** review
 
-## INT-08 An automation is bounded, and a chain stops at its hop limit
+## INT-08 An agent automation is bounded, and a chain stops at its hop limit
 
-**Principle.** An automation has limits of its own: a cost cap, a rate,
-a concurrency, and whether to queue when limited. It ignores the events
-its own sessions caused, unless it declares otherwise, and a chain of
-automations stops at a hop limit, so an agent's comment cannot start an
-endless chain. Every firing is a recorded run, and the run of a
-product's action stays at work until its check says the work ended. A
-firing while a run is open starts another beside it, as the limits
-allow, and an event delivered again, or a schedule's slot met again,
-answers the run it made. Autonomy stops exactly where policy says: at
+**Principle.** An agent automation has limits of its own: a cost cap, a
+rate, a concurrency, and whether to queue when limited. It ignores the
+events its own sessions caused, unless it declares otherwise, and a
+chain of agent automations stops at a hop limit, so an agent's comment
+cannot start an endless chain. Every firing is a recorded run, and the
+run of a product's action stays at work until its check says the work
+ended. A firing while a run is open starts another beside it, as the
+limits allow, and an event delivered again, or a schedule's slot met
+again, answers the run it made. Autonomy stops where policy says: at
 an approval, a bound, or a limit.
 
-**Source.** Work In, Results Out, Automations; What Closes a Loop.
+**Source.** Work In, Results Out, Agent Automations; What Closes a Loop.
 
-**Look for.** An automation's limits, and where each is enforced; how it
-knows an event its own sessions caused; the hop count a chain carries;
-the record of each firing.
+**Look for.** An agent automation's limits, and where each is enforced;
+how it knows an event its own sessions caused; the hop count a chain
+carries; the record of each firing.
 
-**Violation.** An automation without a cost cap, a rate, or a
-concurrency, or one whose limits are not enforced; an automation that
-fires on its own sessions' events without declaring it; a chain with no
-hop count or no limit; a firing with no recorded run; a run of a
+**Violation.** An agent automation without a cost cap, a rate, or a
+concurrency, or one whose limits are not enforced; an agent automation
+that fires on its own sessions' events without declaring it; a chain
+with no hop count or no limit; a firing with no recorded run; a run of a
 product's action closed before its check says its work ended; an event
 delivered again, or a slot met again, that makes a second run.
 
@@ -192,49 +193,49 @@ delivered again, or a slot met again, that makes a second run.
 
 **Check.** review
 
-## INT-09 Only a person publishes a playbook, and its gates only narrow
+## INT-09 Only a person publishes an agent playbook, and its gates only narrow
 
-**Principle.** Playbooks are a team's procedures as versioned,
+**Principle.** Agent playbooks are a team's procedures as versioned,
 executable briefs, in the Agent Skills format with their gates in a
-namespaced metadata extension. Only a person publishes a playbook. A
-principal or an automation invokes one, and its gates compile into the
-session's policy, where they can only narrow it. A person who manages
-the tenant pins one to a kind as its manual: each session of the kind
-made after the pin holds its brief as its standing text, whole on every
-request, and its gates in its policy, and keeps that version for its
-life.
+namespaced metadata extension. Only a person publishes an agent
+playbook. A principal or an agent automation invokes one, and its gates
+compile into the session's policy, where they can only narrow it. A
+person who manages the tenant pins one to a kind as its kind manual:
+each session of the kind made after the pin holds its brief as its
+standing text, whole on every request, and its gates in its policy, and
+keeps that version for its life.
 
-**Source.** Work In, Results Out, Playbooks and Knowledge.
+**Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
-**Look for.** Who may publish a playbook; who may invoke one, and who
-may pin one; how its gates compile into the session's policy; where a
-manual renders, and when a session takes it.
+**Look for.** Who may publish an agent playbook; who may invoke one, and
+who may pin one; how its gates compile into the session's policy; where
+a kind manual renders, and when a session takes it.
 
-**Violation.** A playbook an agent publishes, invokes on its own, or
-pins; one run unversioned; a gate that widens a session's policy, adds
-a tool, or lifts an approval; a manual rendered as a message or cut to
-an excerpt, or one that changes under a session already made; a manual
-whose gates hold only after the session's first call.
+**Violation.** An agent playbook an agent publishes, invokes on its own,
+or pins; one run unversioned; a gate that widens a session's policy,
+adds a tool, or lifts an approval; a kind manual rendered as a message
+or cut to an excerpt, or one that changes under a session already made;
+a kind manual whose gates hold only after the session's first call.
 
 **Severity.** high
 
 **Check.** review
 
-## INT-10 Knowledge a person has not reviewed is never recalled
+## INT-10 Agent knowledge a person has not reviewed is never recalled
 
-**Principle.** Knowledge is recalled into a session when its trigger
-matches, so a new session does not rediscover its environment. It
-renders as data. An agent may suggest knowledge, and a person reviews it
-before any session recalls it, so one session cannot plant instructions
-for the next.
+**Principle.** Agent knowledge is recalled into a session when its
+trigger matches, so a new session does not rediscover its environment.
+It renders as data. An agent may suggest agent knowledge, and a person
+reviews it before any session recalls it, so one session cannot plant
+instructions for the next.
 
-**Source.** Work In, Results Out, Playbooks and Knowledge.
+**Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
-**Look for.** How knowledge is suggested, reviewed, and recalled; how
-recalled knowledge renders.
+**Look for.** How agent knowledge is suggested, reviewed, and recalled;
+how recalled agent knowledge renders.
 
 **Violation.** An agent's suggestion recalled before a person reviews
-it; recalled knowledge rendered as an instruction.
+it; recalled agent knowledge rendered as an instruction.
 
 **Severity.** high
 
@@ -246,13 +247,13 @@ it; recalled knowledge rendered as an instruction.
 (the requester, eligible approvers, a budget's owner) on their channels,
 with a link to the one action that clears it.
 
-**Source.** Work In, Results Out, Notifications.
+**Source.** Work In, Results Out, Park Alerts.
 
 **Look for.** What a park that needs a person sends, to whom, and with
 which link.
 
 **Violation.** A park that needs a person and notifies no one, or only
-people who cannot clear it; a notification with no link to the action
+people who cannot clear it; a park alert with no link to the action
 that clears it.
 
 **Severity.** medium

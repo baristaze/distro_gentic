@@ -7,15 +7,15 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import Created, Identifiable, Platform
-from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 
 MACHINE_NAME = r"^[a-z][a-z0-9-]{0,62}$"
 """How the machines' backend names a machine: short, since a backend may keep
 a socket under the name, whose path its host bounds."""
 
 
-class PoolMachine(Identifiable, Created):
+class PoolVm(Identifiable, Created):
     """One machine the cloud pool started, under its name in the machines'
     backend: the platform's own record, which names a tenant only once a
     session of the tenant claims the machine. While it is warm it names no

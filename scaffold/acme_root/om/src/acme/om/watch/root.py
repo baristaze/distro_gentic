@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from acme.infra.root import InfraInterface
 from acme.om.base import utcnow
 from acme.om.events import EventsManagerInterface
-from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
+from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.root import Managers, ProductKinds
 from acme.om.watch.impl.kinds import KindStreamsImpl
 from acme.om.watch.impl.manager import WatchManagerImpl, WatchOptions
@@ -72,8 +72,8 @@ def build_watch(
         managers.agents,
         managers.loop,
         managers.steps,
-        managers.relay,
-        managers.workspaces,
+        managers.exec_relay,
+        managers.agent_workspaces,
         managers.events,
         stream,
         options or WatchOptions(),
@@ -84,6 +84,6 @@ def build_watch(
         # A take of control waits a while for a host to restore a workspace
         # kept by snapshots.
         placed=PlacedWorkspacesRelayedImpl(
-            lambda: managers.relay, lambda: managers.hosts, restore_wait=TAKE_RESTORE_WAIT
+            lambda: managers.exec_relay, lambda: managers.hosts, restore_wait=TAKE_RESTORE_WAIT
         ),
     )

@@ -13,7 +13,7 @@ from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.intake.types.event import ChatApproval, FeedbackEvent
-from acme.om.intake.types.link import AccountLink, HandleKind, Installation, WorkBinding
+from acme.om.intake.types.link import HandleKind, IdentityLink, Installation, WorkBinding
 from acme.om.intake.types.route import Routed
 from acme.om.steps.types.step import Step
 
@@ -46,7 +46,7 @@ class IntakeManagerInterface(ABC):
     @abstractmethod
     async def link_account(
         self, ctx: TenantContext, integration: str, external_id: str, user_id: UUID
-    ) -> AccountLink:
+    ) -> IdentityLink:
         """Maps an outside account to a user of the tenant, as a person who
         manages its members may, in person: a context an agent's call runs
         under is `NotAuthorized`. A user who holds no place in the tenant is
@@ -74,7 +74,7 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
+    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[IdentityLink, ...]:
         """The accounts linked to a user of the tenant: the channels the
         platform reaches them on beside its own."""
         ...

@@ -2,7 +2,7 @@
 // cost or a count. No React, no fetch.
 import type { UserView } from "@acme/client";
 
-/** A member by name, else by address; the org's automation principal, whose
+/** A member by name, else by address; the org's agent automation principal, whose
  * id its runs' calls and records carry, as itself; one no longer in the org,
  * or not yet read, is said so, never shown as an id. */
 export function personName(
@@ -11,7 +11,7 @@ export function personName(
   principalId: string | null = null,
 ): string {
   if (id === null) return "no one";
-  if (id === principalId) return "the automation principal";
+  if (id === principalId) return "the agent automation principal";
   const user = users?.find((each) => each.id === id);
   if (!user) return "a former member";
   return user.display_name.trim() || user.email;

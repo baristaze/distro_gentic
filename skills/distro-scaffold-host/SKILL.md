@@ -10,7 +10,7 @@ A path that starts with `../` is read from this skill's folder as
 `realpath` resolves it.
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Placement and Workspace Hosts
-(Workspace Hosts, The Relay Transport), Workspaces and Isolation
+(Workspace Hosts, The Exec Relay Transport), Workspaces and Isolation
 (Isolation Levels, Pinned, Probed, Refused, Egress), Trust (Four
 Identities, Secrets by Placement).
 Lenses: `../../lenses/placement.md`, `../../lenses/workspaces.md`.
@@ -28,9 +28,9 @@ as the host's dedicated workspace user, never as the host's own".
   `host_transports` does not run: `vm` or `directory`. The transport is
   keyed by the engine's mode for it, `IsolationMode` in
   `infra/src/<name>/infra/workspaces/__init__.py`, as `HOST_ISOLATION`
-  in `om/src/<name>/om/relay/rules.py` maps them. A mode in neither list
-  is a change to the platform's wire types, not this skill's: stop and
-  say so.
+  in `om/src/<name>/om/exec_relay/rules.py` maps them. A mode in neither
+  list is a change to the platform's wire types, not this skill's: stop
+  and say so.
 - `--transport` names a transport under
   `infra/src/<name>/infra/transports/` that already runs commands at
   that mode, such as one `distro-scaffold-workspace-provider` wrote.
@@ -58,16 +58,16 @@ from `infra/src/<name>/infra/transports/container.py`.
 | `apps/host/src/<name>/apps/host/probe.py` | the mode's probe, when it does not check what the transport needs |
 | `apps/host/src/<name>/apps/host/config.py` | a setting the transport reads, `ACME_HOST_*`, with `ACME_` read as the tree's prefix |
 | `infra/tests/test_transports.py` (no `--transport`) | `TestTransport<Mode>(TransportContract)` |
-| `apps/host/tests/test_relay.py`, `apps/host/tests/test_probe.py` | the cases of step 5 |
+| `apps/host/tests/test_exec_relay.py`, `apps/host/tests/test_probe.py` | the cases of step 5 |
 | `apps/host/README.md` | the mode in What it does, and the agents-only block's line on the transports by mode |
 
 ## Procedure
 
 1. A host runs a relayed `exec` item through the transport its spec's
-   mode names (`ExecutorRelayImpl._run` in `relay.py`), and answers an
-   item at a mode it has no transport for as refused, `capability_missing`.
-   After this skill, an item at `<mode>` runs, and every other refusal
-   stands.
+   mode names (`ExecutorRelayImpl._run` in `exec_relay.py`), and answers
+   an item at a mode it has no transport for as refused,
+   `capability_missing`. After this skill, an item at `<mode>` runs, and
+   every other refusal stands.
 2. The transport is built in `host_transports`, in `main.py`, the one
    host module the platform's checker lets build an engine transport:
    `[[tool.distro-check.exception]]` for `PLC-10` in `pyproject.toml`
@@ -100,7 +100,7 @@ from `infra/src/<name>/infra/transports/container.py`.
      is;
    - an item at `<mode>` runs once on the host and streams its output,
      shape `test_a_relayed_command_runs_once_on_its_host_and_streams_its_output`
-     in `apps/host/tests/test_relay.py`, over a stand-in transport keyed
+     in `apps/host/tests/test_exec_relay.py`, over a stand-in transport keyed
      by the mode, as the `relayed` fixture keys one;
    - an item at a mode the host did not probe is still refused, and one
      below the owner's `min_isolation` too, shape

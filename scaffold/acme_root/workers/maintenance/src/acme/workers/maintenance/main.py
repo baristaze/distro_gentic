@@ -105,9 +105,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
         work=managers.work,
         outbox=managers.outbox,
         # Per tenant, once a pass, what its time sets going: each schedule of
-        # its automations fires once for the slot it is in, whichever
+        # its agent automations fires once for the slot it is in, whichever
         # worker's sweep comes first.
-        ticks={"automations": container.automations.tick},
+        ticks={"agent_automations": container.agent_automations.tick},
         # Per tenant, what only a tenant deleted past its retention has: every
         # row of it goes. Any other tenant costs these nothing.
         purges={
@@ -130,8 +130,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "hosts": managers.hosts.purge_tenant,
             "validation_sessions": managers.platform_agents.purge_tenant,
             # Its exec items with their output, its controls, its bindings.
-            "relay": managers.relay.purge_tenant,
-            "workspaces": managers.workspaces.purge_tenant,
+            "exec_relay": managers.exec_relay.purge_tenant,
+            "agent_workspaces": managers.agent_workspaces.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
             # The history, then its sessions, both under the purge login: a
@@ -141,27 +141,27 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's key versions, then its privacy record: the
             # content sealed under them is noise from the first batch.
             "privacy": managers.privacy.purge_tenant,
-            # Each session's project row, then the tenant's projects.
-            "projects": managers.projects.purge_tenant,
+            # Each session's agent project row, then the tenant's agent projects.
+            "agent_projects": managers.agent_projects.purge_tenant,
             # Each session's retention snapshot, then the tenant's policy.
             "retention": managers.retention.purge_tenant,
             # What a call held and spent is not a purge of its tenant's: no
             # serving login deletes it, so it never holds the tenant's mark.
             "budgets": managers.budgets.purge_tenant,
-            "billing": container.billing.purge_tenant,
+            "agent_billing": container.agent_billing.purge_tenant,
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
-            # Its account links and work bindings, its automations and their
-            # runs, its playbooks and their invocations, its knowledge, and
+            # Its identity links and work bindings, its agent automations and their
+            # runs, its agent playbooks and their invocations, its agent knowledge, and
             # who was told what waited on them.
             "intake": container.intake.purge_tenant,
-            "automations": container.automations.purge_tenant,
-            "playbooks": container.playbooks.purge_tenant,
-            "knowledge": container.knowledge.purge_tenant,
+            "agent_automations": container.agent_automations.purge_tenant,
+            "agent_playbooks": container.agent_playbooks.purge_tenant,
+            "agent_knowledge": container.agent_knowledge.purge_tenant,
             # Its connectors, each credential with them, and what sessions pinned.
             "connectors": container.connectors.purge_tenant,
-            "notifications": container.notifications.purge_tenant,
+            "park_alerts": container.park_alerts.purge_tenant,
         },
         # Once a pass, across every tenant: each namespace's rows past their
         # retention.
@@ -194,7 +194,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "stalled_sessions": container.stalled,
             # Each exec item whose host's lease ran out: an unsafe one ends
             # `interrupted`, a repeatable one waits for its host again.
-            "relay": managers.relay.settle_expired,
+            "exec_relay": managers.exec_relay.settle_expired,
             # Each share the release before wrote: the number of its loops
             # at once, carried as the tenant's own cap on its loop lane, once.
             "share_caps": unstaged(
@@ -225,7 +225,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
         tally=managers.tenancy_operator.tally_size,
         # The platform's signals across every tenant, by bounded labels: the
         # gauges the operator dashboard draws, set once a pass.
-        fleet=managers.placement_operator.fleet_counts,
+        agent_fleet=managers.placement_operator.agent_fleet_counts,
         handlers={
             WorkKind.NOOP: NoopHandlerImpl(),
             WorkKind.ORCHESTRATION: OrchestrationHandlerImpl(
@@ -259,7 +259,7 @@ def build_consumer(container: WorkerContainer) -> DeliveryConsumer:
         tenancy=container.managers.tenancy,
         providers={
             "identity": IdentityDeliveriesImpl(container.managers.events),
-            "feedback": FeedbackDeliveriesImpl(container.intake, container.automations),
+            "feedback": FeedbackDeliveriesImpl(container.intake, container.agent_automations),
         },
         options=DeliveryOptions(worker_id=container.settings.worker_id),
     )

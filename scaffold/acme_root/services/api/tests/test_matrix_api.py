@@ -14,8 +14,8 @@ import pytest
 from api_support import OWNER, build_container, enrol_operator, seed_request, sign_in_as
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.context import OperatorRole, TenantContext
 from acme.om.matrix.types.record import ModelRef
 from acme.om.models.types.fill import MAIN, SUMMARIZER
@@ -48,12 +48,14 @@ async def tenant_on(
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), slug.title(), slug, email, OWNER["name"]
     )
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
     own = funding is FundingMode.OWN_KEY
-    await billing.open_account(
+    await agent_billing.open_spend_account(
         ctx,
-        AccountRequest(
-            funding=funding, key_ref="own-keys" if own else None, plan_id="starter", zone="UTC"
+        SpendAccountRequest(
+            funding=funding, key_ref="own-keys" if own else None, unit_plan_id="starter", zone="UTC"
         ),
     )
     return ctx, await sign_in_as(client, email, org.id)

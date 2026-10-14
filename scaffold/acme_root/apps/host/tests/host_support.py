@@ -22,10 +22,10 @@ from fastapi import FastAPI
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -263,7 +263,7 @@ async def directory_host(
 ) -> tuple[HostAgent, Path]:
     """A host of the pool, started, that makes a directory per workspace
     under its root and runs commands there; its root is answered with it.
-    Its ceilings take any project and any egress, and read its root alone,
+    Its ceilings take any agent project and any egress, and read its root alone,
     unless the case names its own. It starts the MCP servers `servers`
     names."""
     root = where / "workspaces"
@@ -274,7 +274,7 @@ async def directory_host(
         replace(api.settings(where / "home", None), name=name),
         ceilings
         or Ceilings(
-            projects=None,
+            agent_projects=None,
             min_isolation=IsolationMode.directory,
             egress=None,
             readable=(str(root),),
@@ -290,13 +290,13 @@ async def directory_host(
 async def container_host(api: Stack, pool_id: UUID, where: Path) -> HostAgent:
     """A host of the pool as the host's `main` wires one: a container per
     workspace on the local Docker, of the default image. Its ceilings take
-    any project, and let nothing leave."""
+    any agent project, and let nothing leave."""
     settings = api.settings(where / "home", None)
     return await started_host(
         api,
         pool_id,
         settings,
-        Ceilings(projects=None, min_isolation=IsolationMode.container, egress=frozenset()),
+        Ceilings(agent_projects=None, min_isolation=IsolationMode.container, egress=frozenset()),
         IsolationMode.container,
         host_transports(settings),
         host_workspaces(settings),

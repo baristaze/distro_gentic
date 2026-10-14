@@ -1,6 +1,6 @@
 """Pure rules of trust: the four answers of a tool call, read each from its
 own source; where a secret may be resolved, given the session's wall and
-its project; whether an operator's content grant holds; and which parks a
+its agent project; whether an operator's content grant holds; and which parks a
 saved key clears. Values in, values out; no
 clock, no storage."""
 
@@ -61,8 +61,8 @@ def crossing(
 ) -> str | None:
     """Why a command may not use `use` in a session on this side of a wall,
     placed on the owners `placed` names by kind, or None when it may. A
-    secret reaches only the sessions placed on its owner: a project's its
-    own project's sessions, and a product's owner kind's the sessions placed
+    secret reaches only the sessions placed on its owner: an agent project's its
+    own agent project's sessions, and a product's owner kind's the sessions placed
     on that owner, never a session of another owner or of none. A cloud
     secret never reaches a customer's host, and a secret held inside the
     wall never crosses into the cloud. An injected secret lands in the

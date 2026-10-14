@@ -1,7 +1,7 @@
 """A product adds its own kind of work at its root: a work kind with its
 payload, its claimant kind, and its lane; a secret owner kind with the
 placement that reaches it; a stream kind with its bounds; an executor
-for a validation's environment; and a resource kind. Each registers beside the platform's own,
+for a validation's executor; and a resource kind. Each registers beside the platform's own,
 which go through the same registries, and each is held as the platform's
 is. A product's own class takes its ceiling beside the platform's. The
 example is a `render` job on a `batch` pool."""
@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import SessionProjectsMemory, context
+from contracts.doubles import SessionAgentProjectsMemory, context
 from contracts.evidence import (
     CHECKOUT,
     CHECKOUT_KEY,
@@ -35,7 +35,7 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import AppContext, AppType, Permission, RequestContext, Role, TenantContext
 from acme.om.evidence.executor import Executors
 from acme.om.evidence.rules import CEILINGS
-from acme.om.evidence.types.contract import PLATFORM_ENVIRONMENT
+from acme.om.evidence.types.contract import PLATFORM_EXECUTOR
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunPurpose
@@ -66,9 +66,9 @@ from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.rules import decide
 from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
-from acme.om.trust.owners import ProjectOwnerImpl, SecretOwnerInterface, SecretOwners
+from acme.om.trust.owners import AgentProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
-from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
+from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore, kept_as
 from acme.om.watch.impl.stream import StreamOptions, step_kinds
 from acme.om.watch.kinds import STEP, StreamKind
 from acme.om.watch.root import build_kind_streams, build_stream
@@ -352,7 +352,7 @@ def test_the_platforms_kinds_go_through_the_same_registries(managers: Managers) 
     assert held.claimed_by(BATCH) == {RENDER} and held.claimed_by("greedy") == frozenset()
     platform = ScriptedExecutor()
     with pytest.raises(ValueError, match="registered twice"):
-        Executors(platform, {PLATFORM_ENVIRONMENT: ScriptedExecutor(name="batch-1")})
+        Executors(platform, {PLATFORM_EXECUTOR: ScriptedExecutor(name="batch-1")})
 
 
 # A ceiling of a class of the product's own, beside the platform's.
@@ -497,21 +497,24 @@ async def test_a_products_secret_reaches_only_the_sessions_placed_on_its_owner(
     assert refusal == f"{INJECTED_TOKEN.name} is declared on another batch, " + (
         "and never reaches this session"
     )
-    assert crossing(INJECTED_TOKEN, declared, inside_wall=False, placed={PROJECT: ours})
+    assert crossing(INJECTED_TOKEN, declared, inside_wall=False, placed={AGENT_PROJECT: ours})
     # An owner the tenant does not hold, or of a kind nobody registered, owns nothing.
     for unowned in (on_pool(new_id()), on_pool(ours).model_copy(update={"owner_kind": "farm"})):
         with pytest.raises(NotFound):
             await trust.declare_secret(owner, unowned)
 
 
-def test_a_product_never_takes_over_the_projects_secrets() -> None:
+def test_a_product_never_takes_over_the_agent_projects_secrets() -> None:
     class Impostor(BatchPools):
-        kind = PROJECT
+        kind = AGENT_PROJECT
 
-    project = ProjectOwnerImpl(SessionProjectsMemory())
-    assert [owner.kind for owner in SecretOwners((project, BatchPools()))] == [PROJECT, BATCH]
+    agent_project = AgentProjectOwnerImpl(SessionAgentProjectsMemory())
+    assert [owner.kind for owner in SecretOwners((agent_project, BatchPools()))] == [
+        AGENT_PROJECT,
+        BATCH,
+    ]
     with pytest.raises(ValueError, match="registered twice"):
-        SecretOwners((project, Impostor()))
+        SecretOwners((agent_project, Impostor()))
 
 
 # A stream kind, bounded like the step's.
@@ -590,15 +593,15 @@ def test_a_stream_kind_a_claimant_reads_names_a_claimant_kind_of_the_products_ow
             )
 
 
-# An executor for a validation's environment, held at the gate as the
+# An executor of a product's for a validation, held at the gate as the
 # platform's is.
 
 
-def policy_in(environment: str) -> ValidationPolicy:
-    """The `checkout` policy, its `unit` check run in `environment`."""
+def policy_in(executor: str) -> ValidationPolicy:
+    """The `checkout` policy, its `unit` check run on `executor`."""
     policy = checkout_policy()
     checks = tuple(
-        check.model_copy(update={"environment": environment}) if check.name == "unit" else check
+        check.model_copy(update={"executor": executor}) if check.name == "unit" else check
         for check in policy.checks
     )
     return policy.model_copy(update={"checks": checks})
@@ -612,26 +615,26 @@ SCRIPTS: dict[str, dict[str, Any]] = {
 }
 
 
-async def gate_reads(environment: str, script: dict[str, Any]) -> str:
+async def gate_reads(executor: str, script: dict[str, Any]) -> str:
     """What the gate makes of a success whose `unit` check ran in
-    `environment`, on an executor scripted as `script` says: the platform's
-    under its own environment, and the product's under `batch`."""
-    runs = ScriptedExecutor(name=f"{environment}-1", **script)
+    `executor`, scripted as `script` says: the platform's under its own
+    name, and the product's under `batch`."""
+    runs = ScriptedExecutor(name=f"{executor}-1", **script)
     idle = ScriptedExecutor(name="idle-1")
-    if environment == PLATFORM_ENVIRONMENT:
+    if executor == PLATFORM_EXECUTOR:
         evidence = evidence_over(runs, executors={BATCH: idle})
     else:
         evidence = evidence_over(idle, executors={BATCH: runs})
     org = make_org()
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
-    await evidence.manager.write_policy(owner, policy_in(environment))
+    await evidence.manager.write_policy(owner, policy_in(executor))
     work = make_record(session, step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
     # A baseline came first, written apart from the executors the case compares.
     first, runs_at_base = make_validation(
-        session, version="base0", project=CHECKOUT_KEY, purpose=RunPurpose.BASELINE
+        session, version="base0", agent_project=CHECKOUT_KEY, purpose=RunPurpose.BASELINE
     )
     assert await evidence.storage.create_validation(org.id, first, runs_at_base)
     try:
@@ -640,7 +643,7 @@ async def gate_reads(environment: str, script: dict[str, Any]) -> str:
         kept = await evidence.storage.read_validations(org.id, session, "c0ffee", 10)
         return f"not kept ({len(kept)}): {error}"
     finally:
-        assert idle.requests == [], "only the check's own environment ran it"
+        assert idle.requests == [], "only the check's own executor ran it"
     assert [check.name for request in runs.requests for check in request.checks] == ["unit"]
     result = Result(claim=Claim.SUCCEEDED, evidence=(work.id,))
     verdict = await evidence.gate.check(ctx, session, result)
@@ -653,18 +656,18 @@ async def gate_reads(environment: str, script: dict[str, Any]) -> str:
 async def test_a_products_executor_passes_the_gate_only_as_the_platforms_does(
     script: str,
 ) -> None:
-    platforms = await gate_reads(PLATFORM_ENVIRONMENT, SCRIPTS[script])
+    platforms = await gate_reads(PLATFORM_EXECUTOR, SCRIPTS[script])
     products = await gate_reads(BATCH, SCRIPTS[script])
     assert products == platforms
     assert (platforms == "succeeded") == (script == "passes")
 
 
-def two_environments(platform_check: str = "unit") -> ValidationPolicy:
+def two_executors(platform_check: str = "unit") -> ValidationPolicy:
     """The `checkout` policy with a `frames` check run in `batch`: a change
     under `src/` needs it and `platform_check`, which runs on the
     platform's executor."""
     policy = checkout_policy(Requirement(check=platform_check, paths=("src/**",)))
-    frames = policy.declared("unit").model_copy(update={"name": "frames", "environment": BATCH})
+    frames = policy.declared("unit").model_copy(update={"name": "frames", "executor": BATCH})
     return ValidationPolicy.model_validate(
         {
             **dict(policy),
@@ -677,13 +680,13 @@ def two_environments(platform_check: str = "unit") -> ValidationPolicy:
     )
 
 
-async def test_a_change_needing_checks_of_two_environments_validates_in_each() -> None:
+async def test_a_change_needing_checks_of_two_executors_validates_on_each() -> None:
     platform, product = ScriptedExecutor(), ScriptedExecutor(name="batch-1")
     evidence = evidence_over(platform, executors={BATCH: product})
     org = make_org()
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
-    await evidence.manager.write_policy(owner, two_environments())
+    await evidence.manager.write_policy(owner, two_executors())
     work = make_record(session, step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
@@ -705,7 +708,7 @@ async def test_a_change_needing_checks_of_two_environments_validates_in_each() -
     platform = ScriptedExecutor(capabilities=frozenset())
     product = ScriptedExecutor(name="batch-1")
     evidence = evidence_over(platform, executors={BATCH: product})
-    await evidence.manager.write_policy(owner, two_environments("trials"))
+    await evidence.manager.write_policy(owner, two_executors("trials"))
     evidence.work.deliver(org.id, session, delivered())
     with pytest.raises(PreconditionFailed, match="browser"):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
@@ -713,7 +716,7 @@ async def test_a_change_needing_checks_of_two_environments_validates_in_each() -
     assert not await evidence.storage.read_validations(org.id, session, None, 10)
 
 
-async def test_a_check_runs_only_in_an_environment_an_executor_is_registered_for() -> None:
+async def test_a_check_runs_only_on_an_executor_registered_under_its_name() -> None:
     platform, product = ScriptedExecutor(), ScriptedExecutor(name="batch-1")
     evidence = evidence_over(platform, executors={BATCH: product})
     org = make_org()
@@ -721,18 +724,18 @@ async def test_a_check_runs_only_in_an_environment_an_executor_is_registered_for
     session = new_id()
     evidence.work.deliver(org.id, session, delivered())
     await evidence.manager.write_policy(owner, policy_in("nowhere"))
-    with pytest.raises(PreconditionFailed, match="no executor here runs the nowhere environment"):
+    with pytest.raises(PreconditionFailed, match="no executor here is named nowhere"):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert platform.requests == product.requests == []
 
-    # A validation session's one check runs on its environment's executor.
+    # A validation session's one check runs on its executor.
     evidence = evidence_over(platform, executors={BATCH: product})
     await evidence.manager.write_policy(owner, policy_in(BATCH))
     validation = await evidence.manager.run_check(
         ctx, new_id(), CHECKOUT, "unit", "c0ffee", "base0"
     )
     assert validation.executor == "batch-1" and platform.requests == []
-    assert [check.environment for check in product.requests[0].checks] == [BATCH]
+    assert [check.executor for check in product.requests[0].checks] == [BATCH]
 
 
 def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path) -> None:

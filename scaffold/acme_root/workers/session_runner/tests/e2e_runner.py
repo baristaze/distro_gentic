@@ -10,7 +10,7 @@ brings: an executor that writes the results stream a fresh executor would,
 and each bound repository cloned from a folder of bare repositories on
 this host (`E2E_REPOSITORIES`) instead of over HTTPS.
 
-With `E2E_CONTAINERS` set, the platform's engineer is the latest, in its
+With `E2E_CONTAINERS` set, the platform's software engineer is the latest, in its
 own container, and no session has a checkout: a container reaches no
 folder of this host's."""
 
@@ -34,42 +34,42 @@ def main() -> int:
 
     from acme.infra.workspaces import WorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
+    from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
+    from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
+    from acme.om.agent_workspaces.types.source import RepositoryBinding
     from acme.om.context import TenantContext
     from acme.om.root import PlatformPorts, ProductKinds
     from acme.om.storage.impl.postgres import StoragePostgresImpl
-    from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
-    from acme.om.workspaces.projects import WorkspaceProjectsInterface
-    from acme.om.workspaces.types.source import RepositoryBinding
     from acme.workers.session_runner.main import main as run
     from acme.workers.session_runner.settings import SessionRunnerSettings
 
-    class RepositoriesOnDisk(WorkspaceProjectsInterface):
-        """The projects' answers, each bound repository cloned from
+    class RepositoriesOnDisk(WorkspaceAgentProjectsInterface):
+        """The agent projects' answers, each bound repository cloned from
         `<root>/<host>/<path>.git` on this host instead of over HTTPS."""
 
-        def __init__(self, inner: WorkspaceProjectsInterface, root: Path) -> None:
+        def __init__(self, inner: WorkspaceAgentProjectsInterface, root: Path) -> None:
             self._inner = inner
             self._root = root
 
-        async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
-            return await self._inner.project_of(ctx, session)
+        async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+            return await self._inner.agent_project_of(ctx, session)
 
         async def binding_of(
-            self, ctx: TenantContext, project_id: UUID
+            self, ctx: TenantContext, agent_project_id: UUID
         ) -> RepositoryBinding | None:
-            bound = await self._inner.binding_of(ctx, project_id)
+            bound = await self._inner.binding_of(ctx, agent_project_id)
             if bound is None or containers:
                 return None
             local = bound.repository.replace("https://", f"file://{self._root}/", 1)
             return bound.model_copy(update={"repository": local})
 
-        async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
-            return await self._inner.keeps_snapshots(ctx, project_id)
+        async def keeps_snapshots(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
+            return await self._inner.keeps_snapshots(ctx, agent_project_id)
 
-        async def environment_of(
-            self, ctx: TenantContext, project_id: UUID
+        async def workspace_base_of(
+            self, ctx: TenantContext, agent_project_id: UUID
         ) -> WorkspaceBase | None:
-            return await self._inner.environment_of(ctx, project_id)
+            return await self._inner.workspace_base_of(ctx, agent_project_id)
 
     containers = bool(os.environ.get("E2E_CONTAINERS"))
     settings = SessionRunnerSettings()
@@ -79,8 +79,8 @@ def main() -> int:
     ports = PlatformPorts(
         kinds=ProductKinds(agents=KINDS if containers else E2E_KINDS),
         executor=ScriptedExecutor(capabilities=frozenset()),
-        workspace_projects=RepositoriesOnDisk(
-            WorkspaceProjectsBoundImpl(rows.get_project_storage()),
+        workspace_agent_projects=RepositoriesOnDisk(
+            WorkspaceAgentProjectsBoundImpl(rows.get_agent_project_storage()),
             Path(os.environ["E2E_REPOSITORIES"]),
         ),
     )

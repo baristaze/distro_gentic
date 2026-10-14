@@ -7,7 +7,7 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.benchmarks import rules
 from acme.om.benchmarks.manager import BenchmarksManagerInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
-from acme.om.benchmarks.types.benchmark import Arm, Benchmark, BenchmarkTrials
+from acme.om.benchmarks.types.benchmark import Benchmark, BenchmarkTrials, Contender
 from acme.om.context import OperatorContext, OperatorPermission
 from acme.om.exceptions import NotFound, ValidationFailed
 
@@ -37,8 +37,8 @@ class BenchmarksManagerImpl(BenchmarksManagerInterface):
         refusal = rules.interleaving_refusal(run.trials)
         if refusal is not None:
             raise ValidationFailed(f"benchmark {run.scenario}: {refusal}")
-        candidate = rules.arm_result(run.trials, Arm.CANDIDATE)
-        baseline = rules.arm_result(run.trials, Arm.BASELINE)
+        candidate = rules.contender_result(run.trials, Contender.CANDIDATE)
+        baseline = rules.contender_result(run.trials, Contender.BASELINE)
         benchmark = Benchmark(
             **dict(run),
             id=new_id(),

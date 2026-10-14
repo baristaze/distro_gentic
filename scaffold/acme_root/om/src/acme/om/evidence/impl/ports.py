@@ -8,7 +8,7 @@ from uuid import UUID
 from acme.om.context import TenantContext
 from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.types.contract import Offer
-from acme.om.evidence.types.validation import Delivery, ExecutionRequest, ExecutorReport
+from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport, WorkProduct
 from acme.om.evidence.work_product import WorkProductInterface
 from acme.om.exceptions import Unavailable
 
@@ -28,7 +28,7 @@ class WorkProductAbsentImpl(WorkProductInterface):
     """Loud: no work product is wired, so none is read, and the gate counts
     no success on what it cannot see."""
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> Delivery | None:
+    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
         raise Unavailable("this platform reads no work product")
 
 
@@ -36,10 +36,10 @@ class WorkProductMemoryImpl(WorkProductInterface):
     """Each session's work product as this process was told it."""
 
     def __init__(self) -> None:
-        self._deliveries: dict[tuple[UUID, UUID], Delivery] = {}
+        self._work_products: dict[tuple[UUID, UUID], WorkProduct] = {}
 
-    def deliver(self, org_id: UUID, session_id: UUID, delivery: Delivery) -> None:
-        self._deliveries[(org_id, session_id)] = delivery
+    def deliver(self, org_id: UUID, session_id: UUID, work_product: WorkProduct) -> None:
+        self._work_products[(org_id, session_id)] = work_product
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> Delivery | None:
-        return self._deliveries.get((ctx.org_id, session_id))
+    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
+        return self._work_products.get((ctx.org_id, session_id))

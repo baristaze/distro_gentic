@@ -50,13 +50,13 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         self, ctx: TenantContext, start: ValidationStart
     ) -> ValidationSession:
         ctx.require(Permission.WRITE)
-        # Refused before anything is written: a check its project does not
+        # Refused before anything is written: a check its agent project does not
         # declare would only fail for good on the worker. The policy is read
-        # in the caller's tenant, so another tenant's project has none.
-        policy = await self._evidence.get_policy(ctx, policy_key(start.project_id))
+        # in the caller's tenant, so another tenant's agent project has none.
+        policy = await self._evidence.get_policy(ctx, policy_key(start.agent_project_id))
         if all(each.name != start.check_name for each in policy.checks):
             raise ValidationFailed(
-                f"the project {start.project_id} declares no check {start.check_name}"
+                f"the agent project {start.agent_project_id} declares no check {start.check_name}"
             )
         now = self._clock()
         session = ValidationSession(
@@ -65,7 +65,7 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            project_id=start.project_id,
+            agent_project_id=start.agent_project_id,
             check_name=start.check_name,
             head=start.head,
             base=start.base,
@@ -118,7 +118,7 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
                 validation = await self._evidence.run_check(
                     starter,
                     stored.id,
-                    stored.project_id,
+                    stored.agent_project_id,
                     stored.check_name,
                     stored.head,
                     stored.base,
