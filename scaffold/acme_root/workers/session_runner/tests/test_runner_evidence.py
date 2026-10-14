@@ -7,13 +7,18 @@ import re
 from pathlib import Path
 
 import pytest
+from contracts.doubles import context
+from contracts.factories import make_org
 from contracts.ports import open_ports
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.workspaces import EgressMode, IsolationMode, WorkspaceBase
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om.agents.impl.manager import AgentsManagerImpl
+from acme.om.base import new_id, utcnow
+from acme.om.context import Role
 from acme.om.evidence import WorkProductInterface
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl
@@ -22,8 +27,9 @@ from acme.om.exceptions import UnsafeConfiguration
 from acme.om.playbooks.impl.agents import AgentsManagerManualImpl
 from acme.om.root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
+from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl, Pin
 from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
+from acme.om.workspaces.types.workspace import SessionWorkspace
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
@@ -82,3 +88,35 @@ def test_the_runners_executor_records_the_image_its_workspaces_run(tmp_path: Pat
     executor = evidence._executors.platform  # pyright: ignore[reportPrivateUsage]
     assert isinstance(executor, ExecutorWorkspacesImpl)
     assert executor._options.image == "registry.example/checks:2"  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned(
+    tmp_path: Path,
+) -> None:
+    storage = StorageMemoryImpl()
+    container = runner(tmp_path, storage=storage)
+    evidence = container.managers.evidence
+    assert isinstance(evidence, EvidenceManagerImpl)
+    executor = evidence._executors.platform  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(executor, ExecutorWorkspacesImpl)
+    assert executor._bases is not None, "a base with setup is read, never refused"  # pyright: ignore[reportPrivateUsage]
+    ctx = context(Role.OWNER, make_org())
+    now = utcnow()
+    pinned = SessionWorkspace(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        project_id=new_id(),
+        level=IsolationMode.CONTAINER,
+        egress=EgressMode.NONE,
+        egress_source="its kind's",
+        base=WorkspaceBase(image="registry.example/robotics:3", setup=("make deps",)),
+        branch="sessions/one",
+    )
+    await storage.get_workspace_storage().create_workspace(ctx.org_id, pinned)
+
+    read = executor._pinned  # pyright: ignore[reportPrivateUsage]
+    assert await read(ctx, pinned.id) == Pin(pinned.spec(), walled=False)
+    assert await read(ctx, new_id()) is None, "a session that pinned none runs as before"

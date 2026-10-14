@@ -4,7 +4,8 @@ there with their templates filled, and the instance is destroyed after,
 whatever ended the run, so nothing of one run is there for the next. A
 session inside its tenant's wall runs on an instance a host of its pool
 makes, never on the cloud's, and a process that reaches no pool refuses it
-before anything is made."""
+before anything is made. A session pinned to its project's environment has
+its checks run on a new instance of that base, with no egress."""
 
 import io
 import json
@@ -23,13 +24,14 @@ from contracts.factories import make_org
 from acme.infra.exceptions import InfraNotFound
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandResult, CommandSpec, TransportInterface
-from acme.infra.transports.twin import TransportTwinImpl, TwinReply
+from acme.infra.transports.twin import TransportTwinImpl, TwinHandler, TwinReply
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
     Workspace,
+    WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.base import new_id, utcnow
@@ -42,7 +44,7 @@ from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpos
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import Unavailable
 from acme.om.workspaces.impl import executor as executor_module
-from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl
+from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl, Pin
 from acme.om.workspaces.placed import PlacedInstancesInterface
 
 HEAD = "c" * 40
@@ -61,6 +63,24 @@ def a_tree() -> bytes:
 TAR = a_tree()
 PINNED = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 """A directory on a host of the session's pool, as its session is pinned."""
+ENVIRONMENT = WorkspaceBase(
+    image="registry.example/robotics:3",
+    setup=("pip install --target /opt/deps numpy",),
+    egress=EgressPolicy(mode=EgressMode.OPEN),
+)
+"""A project's environment, as its session's pin names it: an image, and a
+setup that reaches a package registry."""
+ON_ENVIRONMENT = IsolationSpec(
+    mode=IsolationMode.CONTAINER,
+    egress=EgressPolicy(mode=EgressMode.NONE),
+    base=ENVIRONMENT,
+)
+"""A session pinned to its project's environment, in a container with no
+egress, as the engineer's is."""
+ENVIRONMENT_SNAPSHOT = b"the environment, once its setup ran"
+"""The base's snapshot, as the tenant keeps it: what the setup installed."""
+HOSTED = b"the environment, as the host built it"
+"""The base's snapshot, as a host of the session's pool keeps it."""
 ROOT = "/instance"
 CHECK = CheckDeclaration(
     name="unit",
@@ -72,11 +92,13 @@ CHECK = CheckDeclaration(
 
 
 class Instances(WorkspaceTwinImpl):
-    """The twin provider, keeping every instance it made, in order."""
+    """The twin provider, keeping every instance it made, in order, and the
+    snapshot and the base's snapshot each started from."""
 
     def __init__(self) -> None:
         super().__init__()
         self.made: list[Workspace] = []
+        self.started: list[tuple[bytes | None, bytes | None]] = []
 
     async def prepare(
         self,
@@ -92,6 +114,7 @@ class Instances(WorkspaceTwinImpl):
             org_id, workspace_id, spec, snapshot, base, building=building
         )
         self.made.append(workspace)
+        self.started.append((snapshot, base))
         return workspace
 
 
@@ -99,7 +122,8 @@ class Pool(PlacedInstancesInterface):
     """A host of a pinned session's pool, as the twins play it: the
     instances it is asked for, each with the session and the spec it was
     asked at, made over `provider` and reached by `transport`, and the ones
-    it is asked to destroy."""
+    it is asked to destroy. One on a base with setup starts from the base
+    the host keeps in its own store (`HOSTED`)."""
 
     def __init__(self, provider: Instances, transport: TransportInterface) -> None:
         self.provider = provider
@@ -117,7 +141,9 @@ class Pool(PlacedInstancesInterface):
     ) -> tuple[Workspace, TransportInterface]:
         self.asked.append((session_id, instance_id, spec))
         played = spec.model_copy(update={"mode": IsolationMode.TWIN})
-        return await self.provider.prepare(ctx.org_id, instance_id, played), self.transport
+        base = HOSTED if spec.base is not None and spec.base.setup else None
+        made = await self.provider.prepare(ctx.org_id, instance_id, played, base=base)
+        return made, self.transport
 
     async def destroy(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> None:
         self.destroyed.append(instance_id)
@@ -128,7 +154,10 @@ class Executor:
     """The executor over the twins, a runner that writes a passing stream to
     its `{out}`, and what the tree was asked for. A pinned session's runs
     are made by `pool` when it reaches one, and `provider` makes every
-    instance either way, so `cloud` is what the cloud's provider made."""
+    instance either way, so `cloud` is what the cloud's provider made.
+    `pin` is what the session pinned, `PINNED` inside the wall unless it
+    names another; the tenant's bases answer every base the executor asks
+    for with its snapshot, unless `bases` is off."""
 
     def __init__(
         self,
@@ -137,6 +166,8 @@ class Executor:
         pinned: bool = False,
         pool: bool = False,
         max_bytes: int = 1 << 20,
+        pin: IsolationSpec | None = None,
+        bases: bool = True,
     ) -> None:
         infra = InfraLocalImpl(tmp_path)
         transport = infra.get_transport()
@@ -147,6 +178,8 @@ class Executor:
         self.pool = Pool(self.provider, transport) if pool else None
         self.trees: list[tuple[UUID, str, str, tuple[str, ...]]] = []
         self.pinned = pinned
+        self.pin = pin
+        self.bases: list[IsolationSpec] = []
         self.written: list[dict[str, bytes]] = []
         self.transport.handler = self._answer
         self.executor = ExecutorWorkspacesImpl(
@@ -156,6 +189,7 @@ class Executor:
             self._pinned,
             self.pool,
             ExecutorOptions(isolation=IsolationMode.TWIN, max_results_bytes=max_bytes),
+            bases=self._base if bases else None,
         )
 
     async def _tree(
@@ -173,9 +207,17 @@ class Executor:
         self.trees.append((project_id, version, source, protected))
         return TAR
 
-    async def _pinned(self, ctx: TenantContext, session_id: UUID) -> IsolationSpec | None:
-        """A pinned session runs in a directory on its pool's host."""
-        return PINNED if self.pinned else None
+    async def _pinned(self, ctx: TenantContext, session_id: UUID) -> Pin | None:
+        """A pinned session runs in a directory on its pool's host, unless
+        its pin names another isolation."""
+        if self.pinned:
+            return Pin(self.pin or PINNED, walled=True)
+        return None if self.pin is None else Pin(self.pin, walled=False)
+
+    async def _base(self, ctx: TenantContext, spec: IsolationSpec) -> bytes:
+        """The tenant's snapshot of the base `spec` names, as it keeps it."""
+        self.bases.append(spec)
+        return ENVIRONMENT_SNAPSHOT
 
     async def _answer(self, command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
         workspace = self.provider.made[-1]
@@ -448,3 +490,127 @@ async def test_a_pinned_session_is_refused_where_no_pool_is_reached(
         await harness.executor.run(context(Role.OWNER, make_org()), a_request())
 
     assert harness.provider.made == [] and harness.trees == []
+
+
+def needs_its_environment(harness: Executor) -> TwinHandler:
+    """A check that imports what the environment's setup installed: it
+    crashes on an instance that started from no base."""
+    answer = harness._answer  # pyright: ignore[reportPrivateUsage]
+
+    async def handler(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+        workspace = harness.provider.made[-1]
+        if command.argv[0] != "sh" and workspace.id not in harness.provider.bases:
+            return TwinReply(1, stderr="ModuleNotFoundError: No module named 'numpy'")
+        return await answer(command, env)
+
+    return handler
+
+
+# Check 1: a session pinned to its project's environment has its checks run
+# on a new instance of that base, with no egress, and the record names the
+# base's image.
+
+
+async def test_a_sessions_checks_run_on_a_new_instance_of_the_base_it_pinned(
+    tmp_path: Path,
+) -> None:
+    harness = Executor(tmp_path, pin=ON_ENVIRONMENT)
+    harness.transport.handler = needs_its_environment(harness)
+    ctx = context(Role.OWNER, make_org())
+    request = a_request()
+
+    report = await harness.executor.run(ctx, request)
+
+    (made,) = harness.provider.made
+    assert made.id != request.session_id, "an instance of its own, never the session's workspace"
+    assert made.spec.base == ENVIRONMENT, "on the environment's image and setup"
+    assert made.spec.egress == EgressPolicy(mode=EgressMode.NONE), (
+        "the setup's egress is its build's alone"
+    )
+    assert (made.spec.mode, made.spec.limits) == (IsolationMode.TWIN, ExecutorOptions().limits), (
+        "at the executor's own isolation"
+    )
+    assert harness.bases == [made.spec], "the base is read by what the spec names alone"
+    assert harness.provider.started == [(None, ENVIRONMENT_SNAPSHOT)], (
+        "started from the base's snapshot, never from a snapshot of the session's work"
+    )
+    (record,) = collected(report, request)
+    assert record.outcome is RunOutcome.PASSED, "the check finds what the setup installed"
+    assert (record.host, record.environment.image) == ("cloud", ENVIRONMENT.image)
+    assert harness.provider.live == set(), "and the instance goes after its run"
+
+    # A base that is its image alone needs no snapshot: the instance runs it.
+    bare = Executor(
+        tmp_path / "image",
+        pin=ON_ENVIRONMENT.model_copy(update={"base": WorkspaceBase(image=ENVIRONMENT.image)}),
+    )
+    (record,) = collected(await bare.executor.run(ctx, request), request)
+    assert bare.bases == [] and bare.provider.started == [(None, None)]
+    assert bare.provider.made[0].spec.base == WorkspaceBase(image=ENVIRONMENT.image)
+    assert record.environment.image == ENVIRONMENT.image
+
+
+async def test_a_base_with_setup_is_refused_where_no_base_is_read(tmp_path: Path) -> None:
+    harness = Executor(tmp_path, pin=ON_ENVIRONMENT, bases=False)
+
+    with pytest.raises(Unavailable, match="never run on the bare image"):
+        await harness.executor.run(context(Role.OWNER, make_org()), a_request())
+
+    assert harness.provider.made == [] and harness.trees == []
+
+
+# Check 2: a session that pinned no environment runs as before: no base, and
+# the record names the executor's own image.
+
+
+async def test_a_session_with_no_environment_runs_on_the_executors_own_image(
+    tmp_path: Path,
+) -> None:
+    ctx = context(Role.OWNER, make_org())
+    request = a_request()
+    no_base = ON_ENVIRONMENT.model_copy(update={"base": None})
+    for name, pin in (("never-pinned", None), ("no-base", no_base)):
+        harness = Executor(tmp_path / name, pin=pin)
+
+        (record,) = collected(await harness.executor.run(ctx, request), request)
+
+        (made,) = harness.provider.made
+        assert made.spec == IsolationSpec(
+            mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE)
+        ), name
+        assert harness.bases == [] and harness.provider.started == [(None, None)], name
+        assert (record.host, record.environment.image) == ("cloud", "python:3.14"), name
+
+
+# Check 3: a session inside the wall pinned to its project's environment has
+# its checks run on an instance a host of its pool makes on that base, with no
+# egress, whatever egress the session holds.
+
+
+async def test_a_walled_sessions_checks_run_on_the_base_it_pinned_with_no_egress(
+    tmp_path: Path,
+) -> None:
+    opened = ON_ENVIRONMENT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
+    harness = Executor(tmp_path, pinned=True, pool=True, pin=opened)
+    harness.transport.handler = needs_its_environment(harness)
+    ctx = context(Role.OWNER, make_org())
+    request = a_request()
+
+    report = await harness.executor.run(ctx, request)
+
+    assert harness.pool is not None and harness.cloud.made == [], "nothing of the cloud's"
+    ((session_id, instance_id, spec),) = harness.pool.asked
+    assert session_id == request.session_id and instance_id != session_id
+    assert spec.base == ENVIRONMENT, "the host makes it on the base the session pinned"
+    assert spec.egress == EgressPolicy(mode=EgressMode.NONE), (
+        "neither the setup's egress nor the session's reaches the checks"
+    )
+    assert spec == opened.model_copy(update={"egress": EgressPolicy(mode=EgressMode.NONE)}), (
+        "the rest is the session's pinned isolation, which its pool gives"
+    )
+    assert harness.bases == [], "the host reads its own base, never the platform's"
+    assert harness.provider.started == [(None, HOSTED)]
+    (record,) = collected(report, request)
+    assert record.outcome is RunOutcome.PASSED, "the check finds what the setup installed"
+    assert (record.host, record.environment.image) == ("pool", ENVIRONMENT.image)
+    assert harness.pool.destroyed == [instance_id] and harness.provider.live == set()

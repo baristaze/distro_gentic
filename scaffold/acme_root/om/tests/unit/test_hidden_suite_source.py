@@ -47,6 +47,7 @@ from acme.om.workspaces.impl.executor import (
     SEEN,
     ExecutorOptions,
     ExecutorWorkspacesImpl,
+    Pin,
 )
 from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.projects import WorkspaceProjectsInterface
@@ -394,8 +395,8 @@ class Repositories:
         )
 
 
-async def no_wall(ctx: TenantContext, session_id: UUID) -> IsolationSpec | None:
-    """Every session of the case is the cloud's."""
+async def no_wall(ctx: TenantContext, session_id: UUID) -> Pin | None:
+    """Every session of the case is the cloud's, and pinned no isolation."""
     return None
 
 
