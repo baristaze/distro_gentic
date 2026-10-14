@@ -58,7 +58,7 @@ from `infra/src/<name>/infra/transports/container.py`.
 | `apps/host/src/<name>/apps/host/probe.py` | the mode's probe, when it does not check what the transport needs |
 | `apps/host/src/<name>/apps/host/config.py` | a setting the transport reads, `ACME_HOST_*`, with `ACME_` read as the tree's prefix |
 | `infra/tests/test_transports.py` (no `--transport`) | `TestTransport<Mode>(TransportContract)` |
-| `apps/host/tests/test_relay.py`, `apps/host/tests/test_probe.py` | the cases of step 5 |
+| `apps/host/tests/test_exec_relay.py`, `apps/host/tests/test_probe.py` | the cases of step 5 |
 | `apps/host/README.md` | the mode in What it does, and the agents-only block's line on the transports by mode |
 
 ## Procedure
@@ -100,7 +100,7 @@ from `infra/src/<name>/infra/transports/container.py`.
      is;
    - an item at `<mode>` runs once on the host and streams its output,
      shape `test_a_relayed_command_runs_once_on_its_host_and_streams_its_output`
-     in `apps/host/tests/test_relay.py`, over a stand-in transport keyed
+     in `apps/host/tests/test_exec_relay.py`, over a stand-in transport keyed
      by the mode, as the `relayed` fixture keys one;
    - an item at a mode the host did not probe is still refused, and one
      below the owner's `min_isolation` too, shape

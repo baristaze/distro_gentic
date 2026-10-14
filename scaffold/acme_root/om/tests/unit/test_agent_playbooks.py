@@ -37,7 +37,7 @@ from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.types.kind import TreeLimits
 from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id, utcnow
+from acme.om.base import derived_id, new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.context import Role
 from acme.om.exceptions import NotAuthorized, NotFound
@@ -327,6 +327,20 @@ async def test_an_invocation_is_once_a_version(platform: Wired) -> None:
     )
     other = await platform.start()
     assert await platform.agent_playbooks.gates_of(platform.owner, other) == ()
+
+
+async def test_an_invocations_brief_keeps_the_id_the_release_before_derived(
+    platform: Wired,
+) -> None:
+    """The brief's id is derived from bytes no rename moves: an invocation
+    run again across an upgrade sends no second brief."""
+    session_id = await platform.start()
+    await platform.agent_playbooks.publish(platform.owner, draft())
+    invocation = await platform.agent_playbooks.invoke(
+        platform.owner, session_id, "answer-a-question"
+    )
+    (brief,) = [s for s in await platform.history(session_id) if s.type is StepType.MESSAGE]
+    assert brief.id == derived_id(invocation.id, invocation.created_at, "playbook")
 
 
 async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_its_hold(

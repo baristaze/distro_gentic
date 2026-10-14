@@ -48,9 +48,9 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   check("scene", REPOSITORIES!, SLUG);
   const owner = await signedIn(browser, OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
-  await owner.getByRole("menuitemradio", { name: /^SoftwareEngineer/ }).click();
+  await owner.getByRole("menuitemradio", { name: /^Software engineer/ }).click();
   await owner.keyboard.press("Escape");
-  await owner.getByRole("button", { name: /^AgentProject:/ }).click();
+  await owner.getByRole("button", { name: /^Agent project:/ }).click();
   await owner.getByRole("menuitemradio", { name: "First agent project" }).click();
   await owner.keyboard.press("Escape");
   await owner.getByRole("textbox", { name: "Prompt" }).fill(PROMPT);

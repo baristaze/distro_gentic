@@ -15,7 +15,7 @@ from contracts.loops import reply, said, use
 
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id, utcnow
+from acme.om.base import derived_id, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.events.types.event import Event
 from acme.om.evidence.types.provenance import Provenance
@@ -406,6 +406,19 @@ async def test_an_unlink_stopped_after_its_audit_writes_it_once_when_run_again(
     assert await platform.intake.get_links(platform.owner, person.user_id) == ()
     entries = await events.get_events(platform.owner, 0, 100)
     assert [e.target_id for e in entries if e.kind == UNLINKED] == [link.id]
+
+
+async def test_an_unlinks_entry_keeps_the_id_the_release_before_derived(
+    platform: Wired,
+) -> None:
+    """The entry's id is derived from bytes no rename moves: an unlink run
+    again across an upgrade writes no second entry."""
+    person = await mapped(platform, Role.MEMBER)
+    (link,) = await platform.intake.get_links(platform.owner, person.user_id)
+    await platform.intake.unlink_account(person, "chat", "U-ANN")
+    entries = await platform.managers.events.get_events(platform.owner, 0, 100)
+    (entry,) = [e for e in entries if e.kind == UNLINKED]
+    assert entry.id == derived_id(link.id, link.created_at, "intake.account_link.deleted")
 
 
 # Text from outside, as the agent reads it.

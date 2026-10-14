@@ -143,8 +143,8 @@ The shape of a kind is the four profiles in
    authority, and no workspace, in `REACHES` in `rules.py`, which
    `refuse_reach` in `catalog.py` checks for every version of it over
    the whole catalog. A new kind a person talks to that acts on nothing
-   takes a reach of its own, shape `OPERATOR`. Its prompt says what it
-   does and what it answers, never how policy treats it.
+   takes a reach of its own, shape `kinds.OPS_ANALYST`. Its prompt says
+   what it does and what it answers, never how policy treats it.
 5. The tests hold, over `SHIPPED`, with the helpers of
    `om/tests/contracts/platform_agents.py` (`platform_over`,
    `Platform.start`, `calls`):

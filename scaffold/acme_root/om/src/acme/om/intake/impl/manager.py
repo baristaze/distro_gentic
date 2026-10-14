@@ -41,6 +41,11 @@ CONNECTED = "intake.installation.created"
 UNLINKED = "intake.identity_link.deleted"
 APPROVED = "intake.chat_approval.decided"
 REFUSED = "intake.chat_approval.refused"
+UNLINK_SEED = "intake.account_link.deleted"
+"""The part the audit entry of a link's end derives its id with, a constant
+apart from the event's kind. Its bytes are fixed, whatever the kind is
+called, so the id stays the one every release derived: an unlink run again
+writes no second entry."""
 
 
 class IntakeOptions(Platform):
@@ -402,5 +407,5 @@ class IntakeManagerImpl(IntakeManagerInterface):
         appends the same entry, which answers as the one held, then deletes.
         An erasure is never without its record, nor recorded twice."""
         facts: dict[str, object] = {"integration": link.integration, "user_id": str(link.user_id)}
-        entry_id = derived_id(link.id, link.created_at, UNLINKED)
+        entry_id = derived_id(link.id, link.created_at, UNLINK_SEED)
         await self._events.append_event(ctx, audit_event(ctx, entry_id, UNLINKED, link.id, facts))
