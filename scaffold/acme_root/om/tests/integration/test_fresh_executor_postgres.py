@@ -1,7 +1,7 @@
 """A work product's validation over Postgres and the local Docker, through the
 root a deployed process builds: its checks run in a container made for
 the run alone, on the delivered commit the platform read from the
-project's repository, with the checks and their fixture from the base,
+agent project's repository, with the checks and their fixture from the base,
 and the container is gone after. The validation hashes to the results the
 run wrote, and the result gate confirms the success they show. A
 validation session runs as the platform's own work on the same executor,
@@ -9,7 +9,7 @@ a head that plants a runner of its own still runs the base's, a head's
 `.gitattributes` leaves nothing out of the tree the checks run on, a
 head whose code changes the base's fixture while it runs has no verdict,
 and a check may write a new file beside that fixture. A session pinned to
-its project's workspace base has its checks run on that base, with no
+its agent project's workspace base has its checks run on that base, with no
 network, so what its setup installed is there for them."""
 
 import subprocess
@@ -19,10 +19,10 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
 from contracts.loops import DELIVERY
-from contracts.project_storage import in_project
 from contracts.tools import stand_ins
 
 from acme.infra.impl.configured import InfraConfiguredImpl
@@ -105,7 +105,7 @@ WORKSPACE_BASE = WorkspaceBase(
         'open(site.getsitepackages()[0] + "/cartenv.py", "w").write("TOTAL = 3")\'',
     ),
 )
-"""A project's workspace base whose setup installs a module, reaching
+"""An agent project's workspace base whose setup installs a module, reaching
 nothing."""
 NEEDS_WORKSPACE_BASE = "from cartenv import TOTAL\n"
 """A cart that totals right with what its workspace base installed, and
@@ -166,11 +166,11 @@ async def storage(
 
 class Delivered:
     """A deployed root over Postgres and the local Docker, a work product
-    session in a project whose policy runs `unit` from the base, and what
+    session in an agent project whose policy runs `unit` from the base, and what
     the session delivered."""
 
-    project_id: UUID
-    """The project of the session `session` started."""
+    agent_project_id: UUID
+    """The agent project of the session `session` started."""
 
     def __init__(self, storage: StoragePostgresImpl, tmp_path: Path) -> None:
         self.storage = storage
@@ -184,12 +184,12 @@ class Delivered:
             tool_catalog=stand_ins(*DELIVERY.tools),
             environment="production",
             work_product=self.work,
-            workspace_projects=OnDisk(self.repository),
+            workspace_agent_projects=OnDisk(self.repository),
             workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
 
     async def session(self, files: dict[str, str]) -> tuple[TenantContext, UUID, str]:
-        """A tenant, its work product session in a project, and the head the
+        """A tenant, its work product session in an agent project, and the head the
         session delivered, whose files are `files` over the base."""
         slug = f"ajax-{new_id().hex[-8:]}"
         owner, _ = await self.managers.tenancy.bootstrap(
@@ -198,10 +198,10 @@ class Delivered:
         session = await self.managers.agents.start_session(
             owner, Start(id=new_id(), kind="delivery", title="Fix the cart's total")
         )
-        self.project_id = await in_project(
-            self.storage.get_project_storage(), owner.org_id, session.id
+        self.agent_project_id = await in_agent_project(
+            self.storage.get_agent_project_storage(), owner.org_id, session.id
         )
-        policy = make_policy(policy_key(self.project_id))
+        policy = make_policy(policy_key(self.agent_project_id))
         await self.managers.evidence.write_policy(
             owner,
             ValidationPolicy.model_validate(
@@ -213,7 +213,7 @@ class Delivered:
             owner.org_id,
             session.id,
             WorkProduct(
-                project=policy.project,
+                agent_project=policy.agent_project,
                 base=self.repository.base,
                 head=head,
                 dirty=False,
@@ -367,7 +367,7 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
     validations = delivered.managers.platform_agents
     start = ValidationStart(
         id=new_id(),
-        project_id=delivered.project_id,
+        agent_project_id=delivered.agent_project_id,
         check_name="unit",
         head=head,
         base=delivered.repository.base,
@@ -397,7 +397,7 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
 
 async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
     """The session's workspace pinned to `WORKSPACE_BASE`, in a container with
-    no egress, as its kind would pin it to its project's workspace base."""
+    no egress, as its kind would pin it to its agent project's workspace base."""
     rows = storage.get_agent_workspace_storage()
     kept = await rows.read_workspace(ctx.org_id, session_id)
     if kept is not None:
@@ -420,7 +420,7 @@ async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID
     assert await rows.create_workspace(ctx.org_id, pinned)
 
 
-# A session pinned to its project's workspace base: its checks run in a fresh
+# A session pinned to its agent project's workspace base: its checks run in a fresh
 # container on that base, where what the setup installed is, and the gate
 # confirms them. The same head with no workspace base cannot import it.
 

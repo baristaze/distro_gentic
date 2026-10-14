@@ -374,7 +374,7 @@ def wakes_after(session_id: UUID, park: Park, spread: timedelta) -> datetime | N
     or, for a park in `STAGGERED`, a share of `spread` after it. The share is
     drawn from the session and the retry time, so the sessions one outage
     parked wake spread across it, each never before the retry time, and a
-    session that projects its park twice asks for the same time. None for a
+    session that agent projects its park twice asks for the same time. None for a
     park only a person clears."""
     if park.retry_at is None:
         return None

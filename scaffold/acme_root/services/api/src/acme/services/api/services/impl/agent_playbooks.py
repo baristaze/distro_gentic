@@ -38,11 +38,13 @@ class AgentPlaybooksServiceImpl(AgentPlaybooksServiceInterface):
         return InvocationView.model_validate(invocation)
 
     async def pin(self, ctx: TenantContext, body: PinRequest) -> PinView:
-        pinned = await self._agent_playbooks.pin(ctx, body.kind, body.name, body.project_id)
+        pinned = await self._agent_playbooks.pin(ctx, body.kind, body.name, body.agent_project_id)
         return PinView.model_validate(pinned)
 
-    async def unpin(self, ctx: TenantContext, kind: str, project_id: UUID | None) -> PinView:
-        return PinView.model_validate(await self._agent_playbooks.unpin(ctx, kind, project_id))
+    async def unpin(self, ctx: TenantContext, kind: str, agent_project_id: UUID | None) -> PinView:
+        return PinView.model_validate(
+            await self._agent_playbooks.unpin(ctx, kind, agent_project_id)
+        )
 
     async def pins(self, ctx: TenantContext) -> list[PinView]:
         return [PinView.model_validate(pin) for pin in await self._agent_playbooks.pins(ctx)]

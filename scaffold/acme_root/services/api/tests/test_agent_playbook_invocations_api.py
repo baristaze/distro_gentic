@@ -3,8 +3,8 @@ version into a session they may instruct, once a version, and its brief
 arrives as their message; a viewer invokes none, and a name with no
 version is not found. A person who manages the tenant pins one to a kind
 as its kind manual, which a session started after holds as its standing text
-and one started before does not; a member pins none, and a kind, a
-project, or a brief no session could hold whole is refused."""
+and one started before does not; a member pins none, and a kind, an
+agent project, or a brief no session could hold whole is refused."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -26,7 +26,7 @@ DRAFT = {
     "body": "1. Run the checks.\n2. Read the diff.\n3. Never push to main.",
     "gates": [{"tool": "send", "decision": "approve"}],
 }
-PROJECT = {"name": "the ledger", "repository": {"host": "github.com", "path": "octo/ledger"}}
+AGENT_PROJECT = {"name": "the ledger", "repository": {"host": "github.com", "path": "octo/ledger"}}
 
 
 @pytest.fixture
@@ -36,17 +36,17 @@ def container(tmp_path: Path) -> AppContainer:
 
 
 async def started(client: httpx.AsyncClient, headers: dict[str, str]) -> str:
-    """A session of the assistant, in a project of the tenant's."""
-    project = await client.post("/v1/projects", headers=headers, json=PROJECT)
-    if project.status_code != 201:
-        listed = await client.get("/v1/projects", headers=headers)
-        project_id = listed.json()[0]["id"]
+    """A session of the assistant, in an agent project of the tenant's."""
+    agent_project = await client.post("/v1/agent-projects", headers=headers, json=AGENT_PROJECT)
+    if agent_project.status_code != 201:
+        listed = await client.get("/v1/agent-projects", headers=headers)
+        agent_project_id = listed.json()[0]["id"]
     else:
-        project_id = project.json()["id"]
+        agent_project_id = agent_project.json()["id"]
     session = await client.post(
         "/v1/agent-sessions",
         headers={**headers, "Idempotency-Key": str(uuid4())},
-        json={"kind": ASSISTANT.name, "title": "the ledger", "project_id": project_id},
+        json={"kind": ASSISTANT.name, "title": "the ledger", "agent_project_id": agent_project_id},
     )
     assert session.status_code == 201, session.text
     return session.json()["id"]
@@ -96,7 +96,7 @@ async def test_a_pinned_agent_playbook_is_the_standing_text_of_a_session_started
     pin = {"kind": ASSISTANT.name, "name": "release-check"}
     pinned = await client.put("/v1/agent-playbook-pins", headers=ajax.owner, json=pin)
     assert pinned.status_code == 200, pinned.text
-    assert (pinned.json()["version"], pinned.json()["project_id"]) == (1, None)
+    assert (pinned.json()["version"], pinned.json()["agent_project_id"]) == (1, None)
     listed = await client.get("/v1/agent-playbook-pins", headers=ajax.owner)
     assert listed.json() == [pinned.json()]
     after = await started(client, ajax.owner)
@@ -136,7 +136,7 @@ async def test_only_one_who_manages_the_tenant_pins_and_a_brief_too_long_is_refu
         404,
         "unknown_agent_kind",
     )
-    elsewhere = {**pin, "project_id": str(new_id())}
+    elsewhere = {**pin, "agent_project_id": str(new_id())}
     refused(
         await client.put("/v1/agent-playbook-pins", headers=ajax.owner, json=elsewhere),
         404,

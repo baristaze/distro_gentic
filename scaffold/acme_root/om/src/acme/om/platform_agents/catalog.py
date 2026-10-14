@@ -12,6 +12,7 @@ from pathlib import Path
 from acme.integrations.events import IntegrationInterface
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
+from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agents import AgentsManagerInterface
@@ -30,16 +31,16 @@ from acme.om.platform_agents.tools import (
     EditFileImpl,
     HandOffToSoftwareEngineerImpl,
     ListAgentAutomationsImpl,
+    ListAgentProjectsImpl,
     ListFilesImpl,
     ListHostsImpl,
-    ListProjectsImpl,
     ListSessionsImpl,
     NoteFindingImpl,
     OpenPullRequestImpl,
     ReadAgentAutomationImpl,
     ReadAgentKnowledgeImpl,
+    ReadAgentProjectImpl,
     ReadFileImpl,
-    ReadProjectImpl,
     ReadPullRequestFileImpl,
     ReadPullRequestImpl,
     ReadSessionImpl,
@@ -56,7 +57,6 @@ from acme.om.platform_agents.tools import (
     WriteFileImpl,
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
-from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
@@ -96,7 +96,7 @@ def with_shipped(
     *,
     sessions: Callable[[], AgentSessionsManagerInterface],
     steps: Callable[[], StepsManagerInterface],
-    projects: Callable[[], ProjectsManagerInterface],
+    agent_projects: Callable[[], AgentProjectsManagerInterface],
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
     exec_relay: Callable[[], ExecRelayManagerInterface],
@@ -134,8 +134,8 @@ def with_shipped(
         ReadSessionImpl.SPEC,
         ListSessionsImpl.SPEC,
         ReadWaitImpl.SPEC,
-        ListProjectsImpl.SPEC,
-        ReadProjectImpl.SPEC,
+        ListAgentProjectsImpl.SPEC,
+        ReadAgentProjectImpl.SPEC,
         ListAgentAutomationsImpl.SPEC,
         ReadAgentAutomationImpl.SPEC,
         DraftToolPolicyImpl.SPEC,
@@ -164,11 +164,11 @@ def with_shipped(
         OpenPullRequestImpl(agent_workspaces, intake),
         SubmitResultImpl(),
         SearchCorpusImpl(shipped.corpus),
-        ReadSessionImpl(sessions, steps, policies, projects),
-        ListSessionsImpl(sessions, projects),
+        ReadSessionImpl(sessions, steps, policies, agent_projects),
+        ListSessionsImpl(sessions, agent_projects),
         ReadWaitImpl(sessions, work, hosts, exec_relay),
-        ListProjectsImpl(projects),
-        ReadProjectImpl(projects),
+        ListAgentProjectsImpl(agent_projects),
+        ReadAgentProjectImpl(agent_projects),
         ListAgentAutomationsImpl(agent_automations),
         ReadAgentAutomationImpl(agent_automations),
         DraftToolPolicyImpl(policies, names, classes),

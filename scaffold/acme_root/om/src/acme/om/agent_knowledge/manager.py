@@ -2,8 +2,8 @@
 into it when its trigger matches, as data, and searched and read by its
 agent on demand. An agent may suggest an entry; only a person's review lets
 any session recall or read it, so one session cannot plant instructions
-for the next. A session reaches its tenant's entries of its own project and
-of no project, never another project's or another tenant's."""
+for the next. A session reaches its tenant's entries of its own agent project and
+of no agent project, never another agent project's or another tenant's."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -18,7 +18,7 @@ class AgentKnowledgeManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, title: str, trigger: tuple[str, ...], text: str
     ) -> AgentKnowledge:
         """An entry an agent suggests from its session, as its call's context
-        may, for the session's project, or for the whole tenant when the
+        may, for the session's agent project, or for the whole tenant when the
         session has none: it waits for a person's review and is recalled or
         read by no session before it."""
         ...
@@ -98,7 +98,7 @@ class AgentKnowledgeManagerInterface(ABC):
     async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> AgentKnowledge:
         """The reviewed entry of `slug` the session reaches, its version
         recorded as one the session reached, as a recall's is. One waiting
-        for its review, rejected, of another project, or of another tenant
+        for its review, rejected, of another agent project, or of another tenant
         is `NotFound`, as one that never existed is."""
         ...
 

@@ -1,6 +1,6 @@
 """Workspace bases on real Docker, kept on the stack's MinIO (ADR 1028), as
 the platform serves them: each case's base is the workspace base its session's
-project names, which a kind that takes it pins when the session is created
+agent project names, which a kind that takes it pins when the session is created
 (ADR 2051). The registry a setup reaches is a small HTTP server on this
 host, which counts each request: the setup reaches it through the shared
 bridge, by the host's name where Docker gives one and by the bridge's
@@ -10,7 +10,7 @@ A base is built once and every workspace on it starts from the same
 snapshot; a changed command builds another. The setup reaches the registry
 and the workspace, with no egress, does not. The setup's environment holds
 no platform credential, no tenant's secret, no session's content, and
-nothing of its project. A setup command that fails keeps nothing, and the
+nothing of its agent project. A setup command that fails keeps nothing, and the
 next prepare builds again. A setup installs a system package from the
 image's own package mirror, and a workspace on its base runs the program
 with every capability dropped.
@@ -31,7 +31,7 @@ from uuid import UUID
 
 import aioboto3
 import pytest
-from contracts.agent_workspaces import ProjectsTwin
+from contracts.agent_workspaces import AgentProjectsTwin
 from contracts.loops import ASSISTANT, Loop, loop_over
 
 from acme.infra.buckets import Buckets, BucketsInterface
@@ -145,7 +145,7 @@ pytestmark = [
 
 SEALED = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 TAKES = ASSISTANT.model_copy(update={"name": SOFTWARE_ENGINEER, "version": 8, "isolation": SEALED})
-"""A kind the platform names among those that take their project's
+"""A kind the platform names among those that take their agent project's
 workspace base: the software engineer at version 8, here with the assistant's loop, in
 a container with no egress."""
 
@@ -229,21 +229,21 @@ async def minio() -> AsyncIterator[BucketsS3Impl]:
 
 
 class OnDocker:
-    """A tenant whose sessions belong to one project, whose workspace base each
+    """A tenant whose sessions belong to one agent project, whose workspace base each
     case names."""
 
     def __init__(self, tmp_path: Path, buckets: BucketsS3Impl) -> None:
         self.infra = InfraOnDocker(tmp_path, buckets)
-        self.projects = ProjectsTwin(repository=None)
+        self.agent_projects = AgentProjectsTwin(repository=None)
         self.loop: Loop = loop_over(
-            tmp_path, kinds=(TAKES,), infra=self.infra, workspace_projects=self.projects
+            tmp_path, kinds=(TAKES,), infra=self.infra, workspace_agent_projects=self.agent_projects
         )
         self.sessions: list[UUID] = []
 
     async def start(self, spec: IsolationSpec) -> UUID:
-        """A session of the project once it names `spec`'s base as its
+        """A session of the agent project once it names `spec`'s base as its
         workspace base: the session pins it."""
-        self.projects.workspace_base = spec.base
+        self.agent_projects.workspace_base = spec.base
         session_id = await self.loop.start(TAKES.name)
         self.sessions.append(session_id)
         return session_id
@@ -346,8 +346,8 @@ async def test_the_setups_environment_holds_no_credential_and_no_session_content
 
     code, environment = await inside(workspace, "cat", "/opt/setup-env")
     assert code == 0 and "PATH=" in environment, "the image's own environment"
-    project = str(on_docker.projects.project_id)
-    for held in (credential, secret, content, "ACME_", TOKEN, project, str(session_id)):
+    agent_project = str(on_docker.agent_projects.agent_project_id)
+    for held in (credential, secret, content, "ACME_", TOKEN, agent_project, str(session_id)):
         assert held not in environment
 
 

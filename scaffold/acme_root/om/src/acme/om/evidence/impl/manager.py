@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.evidence.collector import collect, digest
@@ -34,7 +35,6 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.types.policy import Target
 
@@ -57,7 +57,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         relay: OutboxRelayInterface,
         executors: Executors,
         work_product: WorkProductInterface,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         options: EvidenceOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -66,24 +66,24 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         self._relay = relay
         self._executors = executors
         self._work_product = work_product
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._options = options
         self._clock = clock
 
     # The policy.
 
-    async def get_policy(self, ctx: TenantContext, project: str) -> ValidationPolicy:
+    async def get_policy(self, ctx: TenantContext, agent_project: str) -> ValidationPolicy:
         ctx.require(Permission.READ)
-        stored = await self._storage.read_policy(ctx.org_id, project)
+        stored = await self._storage.read_policy(ctx.org_id, agent_project)
         if stored is None:
-            raise NotFound(f"the project {project} declares no validation policy")
+            raise NotFound(f"the agent project {agent_project} declares no validation policy")
         return stored
 
     async def write_policy(self, ctx: TenantContext, policy: ValidationPolicy) -> ValidationPolicy:
         ctx.require(Permission.MANAGE_MEMBERS)
         if ctx.role is Role.SERVICE:
             raise NotAuthorized("a person declares a validation policy, never a service")
-        stored = await self._storage.read_policy(ctx.org_id, policy.project)
+        stored = await self._storage.read_policy(ctx.org_id, policy.agent_project)
         now = self._clock()
         if stored is None:
             created = ValidationPolicy.model_validate(
@@ -101,7 +101,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
                 landed = await self._storage.create_policy(ctx.org_id, created, rows)
             except UniqueKeyTaken as error:
                 raise PreconditionFailed(
-                    f"the policy of {policy.project} was written meanwhile"
+                    f"the policy of {policy.agent_project} was written meanwhile"
                 ) from error
             if not landed:
                 raise PreconditionFailed(f"validation policy {created.id} is written already")
@@ -111,7 +111,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             raise PreconditionFailed(
                 f"validation policy {stored.id} is at version {stored.version}"
             )
-        # The copy starts from the stored row: its id, its project, and its
+        # The copy starts from the stored row: its id, its agent project, and its
         # provenance stay.
         updated = stored.model_copy(
             update={
@@ -132,11 +132,11 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
     ) -> Target:
         ctx.require(Permission.READ)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         policy = (
             None
-            if project_id is None
-            else await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+            if agent_project_id is None
+            else await self._storage.read_policy(ctx.org_id, policy_key(agent_project_id))
         )
         return protection_target(policy, paths)
 
@@ -198,14 +198,16 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         delivery = await self._work_product.delivered(ctx, session_id)
         if delivery is None:
             raise PreconditionFailed(f"session {session_id} holds no work product to validate")
-        project_id = await self._projects.project_of(ctx, session_id)
-        if project_id is None:
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        if agent_project_id is None:
             raise PreconditionFailed(
-                f"session {session_id} belongs to no project, so no validation policy applies"
+                f"session {session_id} belongs to no agent project, so no validation policy applies"
             )
-        policy = await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+        policy = await self._storage.read_policy(ctx.org_id, policy_key(agent_project_id))
         if policy is None:
-            raise PreconditionFailed(f"the project {project_id} declares no validation policy")
+            raise PreconditionFailed(
+                f"the agent project {agent_project_id} declares no validation policy"
+            )
         request = execution_request(session_id, policy, delivery, purpose)
         if isinstance(request, str):
             raise PreconditionFailed(request)
@@ -216,7 +218,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         self,
         ctx: TenantContext,
         session_id: UUID,
-        project_id: UUID,
+        agent_project_id: UUID,
         check: str,
         version: str,
         source: str,
@@ -225,12 +227,16 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         kept = await self._storage.read_validations(ctx.org_id, session_id, None, 1)
         if kept:
             return kept[0]
-        policy = await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+        policy = await self._storage.read_policy(ctx.org_id, policy_key(agent_project_id))
         if policy is None:
-            raise PreconditionFailed(f"the project {project_id} declares no validation policy")
+            raise PreconditionFailed(
+                f"the agent project {agent_project_id} declares no validation policy"
+            )
         declared = next((each for each in policy.checks if each.name == check), None)
         if declared is None:
-            raise PreconditionFailed(f"the project {project_id} declares no check {check}")
+            raise PreconditionFailed(
+                f"the agent project {agent_project_id} declares no check {check}"
+            )
         # A check a requirement rates runs its declared trials, stopping
         # where its rule stops them, so its verdict reads a batch and never
         # one lucky run.
@@ -238,7 +244,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         rule = stopping_rules(naming).get(check)
         request = ExecutionRequest(
             session_id=session_id,
-            project=policy.project,
+            agent_project=policy.agent_project,
             purpose=RunPurpose.VALIDATION,
             version=version,
             source=source,
@@ -293,7 +299,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             report.results,
             executor=report.executor,
             session_id=request.session_id,
-            project=request.project,
+            agent_project=request.agent_project,
             purpose=request.purpose,
             validation_id=validation_id,
             now=now,
@@ -304,7 +310,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             id=validation_id,
             created_at=now,
             session_id=request.session_id,
-            project=request.project,
+            agent_project=request.agent_project,
             purpose=request.purpose,
             version=request.version,
             source=request.source,

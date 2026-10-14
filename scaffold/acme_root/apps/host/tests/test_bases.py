@@ -47,9 +47,9 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_projects.types.agent_project import SetupCommand
 from acme.om.agent_workspaces.impl.git import INCOMING
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
-from acme.om.projects.types.project import SetupCommand
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 
@@ -62,7 +62,7 @@ ON_BASE = IsolationSpec(
 )
 SECRET = "tok-0123456789abcdef"
 LONGEST = get_args(SetupCommand)[1].max_length
-"""The longest setup command a project's workspace base allows."""
+"""The longest setup command an agent project's workspace base allows."""
 
 
 async def _unsealed(data: bytes) -> None:
@@ -187,7 +187,7 @@ async def a_host(
     pool_token = await api.token(pool_id)
     agent = HostAgent(
         replace(api.settings(where / "home", None), enrollment_token=pool_token),
-        Ceilings(projects=None, min_isolation=HostMode.container, egress=egress),
+        Ceilings(agent_projects=None, min_isolation=HostMode.container, egress=egress),
         checks,
         api.client,
         executor,
@@ -262,7 +262,7 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     assert waits.value.clears
 
 
-async def test_a_setup_command_at_the_longest_a_project_allows_fails_and_the_wait_names_it(
+async def test_a_setup_command_at_the_longest_an_agent_project_allows_fails_and_the_wait_names_it(
     api: Stack, tmp_path: Path
 ) -> None:
     managers = api.container.managers

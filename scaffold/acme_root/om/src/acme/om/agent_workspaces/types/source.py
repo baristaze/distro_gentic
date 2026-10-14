@@ -1,4 +1,4 @@
-"""What a workspace's checkout is rebuilt from: the repository its project
+"""What a workspace's checkout is rebuilt from: the repository its agent project
 binds, the session's branch on it and what became of it, a snapshot of work
 the last loop left, and a write a call makes there."""
 
@@ -11,10 +11,10 @@ from acme.om.base import Platform
 
 
 class RepositoryBinding(Platform):
-    """The one repository a project binds: where its sessions' branches and
+    """The one repository an agent project binds: where its sessions' branches and
     pull requests live, and the branch a new one is cut from."""
 
-    project_id: UUID
+    agent_project_id: UUID
     repository: str = Field(min_length=1, max_length=500)  # as it is cloned
     # The branch a new one is cut from; None is the repository's own
     # default, its HEAD, as the repository answers it.

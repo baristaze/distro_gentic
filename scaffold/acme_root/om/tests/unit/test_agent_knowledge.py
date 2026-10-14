@@ -3,18 +3,18 @@ recalled, found, or read before a person reviews it, what a session
 recalls reaches its agent as data, quoted, whoever wrote it, a session
 recalls what its subject triggers as its first loop starts, before its
 first model call, and an agent searches and reads on demand what its
-session reaches: its project's entries, its tenant's, and the platform's
-own documentation, never another project's or another tenant's."""
+session reaches: its agent project's entries, its tenant's, and the platform's
+own documentation, never another agent project's or another tenant's."""
 
 import json
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.intake import Wired, wired
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS
-from contracts.project_storage import in_project
 from contracts.tools import (
     Tools,
     failure_of,
@@ -227,14 +227,14 @@ async def kept(platform: Wired, ctx: TenantContext, session_id: UUID, title: str
     return await platform.agent_knowledge.review(platform.owner, entry.id, keep=True)
 
 
-async def test_an_agent_reaches_its_projects_agent_knowledge_its_tenants_and_the_platforms(
+async def test_an_agent_reaches_its_agent_projects_agent_knowledge_its_tenants_and_the_platforms(
     platform: Wired, tmp_path: Path
 ) -> None:
     asking = Asking(platform, tmp_path)
     ours, theirs, alone = [await platform.start() for _ in range(3)]
-    projects = platform.storage.get_project_storage()
-    await in_project(projects, platform.owner.org_id, ours)
-    await in_project(projects, platform.owner.org_id, theirs, path="octo/other")
+    agent_projects = platform.storage.get_agent_project_storage()
+    await in_agent_project(agent_projects, platform.owner.org_id, ours)
+    await in_agent_project(agent_projects, platform.owner.org_id, theirs, path="octo/other")
     agent = await platform.agents_call(platform.owner)
     own = await kept(platform, agent, ours, "our database pool")
     other = await kept(platform, agent, theirs, "their database pool")
@@ -256,7 +256,7 @@ async def test_an_agent_reaches_its_projects_agent_knowledge_its_tenants_and_the
     )
     query = "database pool runbook shortcut note: why does a session wait"
     assert await asking.found(agent, ours, query) == {
-        "project:our database pool",
+        "agent_project:our database pool",
         "tenant:the database runbook",
         "platform:Sessions",
     }
@@ -292,8 +292,8 @@ async def test_an_agents_suggestion_waits_for_a_person_before_any_session_reads_
 ) -> None:
     asking = Asking(platform, tmp_path)
     ours, later = await platform.start(), await platform.start()
-    project = await in_project(
-        platform.storage.get_project_storage(), platform.owner.org_id, ours, later
+    agent_project = await in_agent_project(
+        platform.storage.get_agent_project_storage(), platform.owner.org_id, ours, later
     )
     agent = await platform.agents_call(platform.owner)
     response = await asking.call(
@@ -315,13 +315,13 @@ async def test_an_agents_suggestion_waits_for_a_person_before_any_session_reads_
         if e.slug == slug
     ]
     (suggestion,) = stored
-    assert (suggestion.project_id, suggestion.suggested_by) == (project, ours)
+    assert (suggestion.agent_project_id, suggestion.suggested_by) == (agent_project, ours)
     assert await asking.found(agent, later, "staging database pool") == set()
     assert await asking.text_of(agent, later, slug) is None
     assert await platform.agent_knowledge.recall(platform.service, later, "the database") == ()
     await platform.agent_knowledge.review(platform.person(), suggestion.id, keep=True)
     assert await asking.found(agent, later, "staging database pool") == {
-        "project:the staging database pool"
+        "agent_project:the staging database pool"
     }
     assert await asking.text_of(agent, later, slug) == PLANTED
     # A suggestion an agent writes is never a review: the tool has no other way.

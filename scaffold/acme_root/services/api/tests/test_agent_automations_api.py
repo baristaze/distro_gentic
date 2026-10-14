@@ -1,7 +1,7 @@
-"""A tenant's agent automations over the API: a person makes one in a project of
+"""A tenant's agent automations over the API: a person makes one in an agent project of
 the tenant, reads and lists them, and its creator edits it. A viewer makes
 none, and nobody but its creator edits one that runs as its creator, since
-it runs on the creator's authority. Another tenant's agent automation and project
+it runs on the creator's authority. Another tenant's agent automation and agent project
 are not found; a malformed agent automation, and one whose action kind no
 product declares, is refused whole. A product's own action, whose params
 nest lists and mappings, is made, read, and listed whole, and a writer its
@@ -25,13 +25,13 @@ from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
-PROJECT = {
+AGENT_PROJECT = {
     "name": "the weekly reports",
     "repository": {"host": "github.com", "path": "octo/reports"},
 }
 
 
-def agent_automation(project_id: str) -> dict[str, object]:
+def agent_automation(agent_project_id: str) -> dict[str, object]:
     return {
         "name": "triage a failed build",
         "trigger": {"kind": "event", "effects": ["ci_failed"]},
@@ -40,7 +40,7 @@ def agent_automation(project_id: str) -> dict[str, object]:
             "brief": "Find why the build failed and say so on the pull request.",
             "agent_kind": "assistant",
             "title": "a failed build",
-            "project_id": project_id,
+            "agent_project_id": agent_project_id,
         },
         "limits": {
             "cost_cap_micros": 5_000_000,
@@ -51,8 +51,8 @@ def agent_automation(project_id: str) -> dict[str, object]:
     }
 
 
-async def project_of(client: httpx.AsyncClient, owner: Headers) -> str:
-    made = await client.post("/v1/projects", headers=owner, json=PROJECT)
+async def agent_project_of(client: httpx.AsyncClient, owner: Headers) -> str:
+    made = await client.post("/v1/agent-projects", headers=owner, json=AGENT_PROJECT)
     assert made.status_code == 201, made.text
     return made.json()["id"]
 
@@ -62,7 +62,7 @@ async def test_a_person_makes_reads_lists_and_edits_an_agent_automation(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     member = await person(client, container, ajax.org_id, Role.MEMBER)
-    body = agent_automation(await project_of(client, ajax.owner))
+    body = agent_automation(await agent_project_of(client, ajax.owner))
     made = await client.post("/v1/agent-automations", headers=member, json=body)
     assert made.status_code == 201, made.text
     view = made.json()
@@ -88,7 +88,7 @@ async def test_only_its_creator_edits_one_that_runs_as_its_creator(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     member = await person(client, container, ajax.org_id, Role.MEMBER)
-    body = agent_automation(await project_of(client, ajax.owner))
+    body = agent_automation(await agent_project_of(client, ajax.owner))
     made = (await client.post("/v1/agent-automations", headers=member, json=body)).json()
     url = f"/v1/agent-automations/{made['id']}"
     taken = await client.put(url, headers=ajax.owner, json={**body, "name": "the owner's now"})
@@ -116,7 +116,7 @@ async def test_a_viewer_reads_agent_automations_and_makes_none(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     viewer = await person(client, container, ajax.org_id, Role.VIEWER)
-    body = agent_automation(await project_of(client, ajax.owner))
+    body = agent_automation(await agent_project_of(client, ajax.owner))
     refused(
         await client.post("/v1/agent-automations", headers=viewer, json=body), 403, "not_authorized"
     )
@@ -126,17 +126,17 @@ async def test_a_viewer_reads_agent_automations_and_makes_none(
     refused(ungranted, 403, "not_authorized")
 
 
-async def test_another_tenants_agent_automation_and_project_are_not_found(
+async def test_another_tenants_agent_automation_and_agent_project_are_not_found(
     client: httpx.AsyncClient, container: AppContainer
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     bravo = await tenant(client, container, "bravo")
-    body = agent_automation(await project_of(client, ajax.owner))
+    body = agent_automation(await agent_project_of(client, ajax.owner))
     made = (await client.post("/v1/agent-automations", headers=ajax.owner, json=body)).json()
     url = f"/v1/agent-automations/{made['id']}"
     refused(await client.get(url, headers=bravo.owner), 404, "not_found")
     refused(await client.put(url, headers=bravo.owner, json=body), 404, "not_found")
-    # A start in another tenant's project is refused before anything is saved.
+    # A start in another tenant's agent project is refused before anything is saved.
     refused(
         await client.post("/v1/agent-automations", headers=bravo.owner, json=body), 404, "not_found"
     )
@@ -148,14 +148,14 @@ async def test_a_malformed_agent_automation_is_refused_whole(
     client: httpx.AsyncClient, container: AppContainer
 ) -> None:
     ajax = await tenant(client, container, "ajax")
-    body = agent_automation(await project_of(client, ajax.owner))
+    body = agent_automation(await agent_project_of(client, ajax.owner))
     action, limits = dict(body["action"]), dict(body["limits"])  # type: ignore[arg-type]
     bad = [
         {**body, "trigger": {"kind": "schedule", "every": 30}},
         {**body, "trigger": {"kind": "schedule", "every": 3600, "effects": ["ci_failed"]}},
         {**body, "trigger": {"kind": "event", "every": 3600}},
         {**body, "action": {**action, "title": None}},
-        {**body, "action": {**action, "project_id": None}},
+        {**body, "action": {**action, "agent_project_id": None}},
         {**body, "action": {**action, "kind": "message_session"}},
         {**body, "action": {**action, "brief": None}},
         {**body, "action": {**action, "params": {"steps": 2}}},
@@ -209,7 +209,7 @@ async def test_a_products_action_with_nested_params_is_made_read_and_listed(
             ajax = await tenant(client, container, "ajax")
             params = {"steps": 2, "on": ["a", "b"], "where": {"region": ["north", "south"]}}
             body = {
-                **agent_automation(await project_of(client, ajax.owner)),
+                **agent_automation(await agent_project_of(client, ajax.owner)),
                 "action": {"kind": "sweep", "params": params},
             }
             made = await client.post("/v1/agent-automations", headers=ajax.owner, json=body)
@@ -252,7 +252,7 @@ async def test_a_writer_the_kinds_check_refuses_is_refused_with_its_reason(
             member = await person(client, container, ajax.org_id, Role.MEMBER)
             params = {"steps": 2, "on": ["a"], "where": {}}
             body = {
-                **agent_automation(await project_of(client, ajax.owner)),
+                **agent_automation(await agent_project_of(client, ajax.owner)),
                 "action": {"kind": "approved_sweep", "params": params},
             }
             taken = await client.post("/v1/agent-automations", headers=member, json=body)

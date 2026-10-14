@@ -99,11 +99,11 @@ beside the steps.
 
 ## EVD-05 Validation is declared, and its checks are protected
 
-**Principle.** Each project declares a validation policy: which checks
-must pass, at what grade, for which kinds of change, for a success to
-count. The checks, their fixtures, the policy itself, and every path
-that changes how tests are found or how the runtime starts are
-protected, by pattern: the agent cannot edit them, and a change that
+**Principle.** Each agent project declares a validation policy: which
+checks must pass, at what grade, for which kinds of change, for a
+success to count. The checks, their fixtures, the policy itself, and
+every path that changes how tests are found or how the runtime starts
+are protected, by pattern: the agent cannot edit them, and a change that
 touches one voids validation.
 
 **Source.** Evidence, Validation Policy and Protected Checks.

@@ -23,10 +23,10 @@ platform's bucket, cannot reach it.
 
 ## Decision
 
-**A kind chooses, and a project narrows.** A kind's isolation says its
-durability, `cache` or `snapshot`, and its base. The pin keeps both with
-the isolation, so every prepare of the session is held to them. A
-project that keeps its sessions' workspaces as caches
+**A kind chooses, and an agent project narrows.** A kind's isolation
+says its durability, `cache` or `snapshot`, and its base. The pin keeps
+both with the isolation, so every prepare of the session is held to
+them. An agent project that keeps its sessions' workspaces as caches
 (`workspace_snapshots` false) pins each of them a cache. A session that
 keeps no content at rest is refused a kind kept by snapshots when it is
 created: each snapshot of it would be refused, and its instance kept
@@ -82,7 +82,8 @@ the isolation later.
 **A hosted base is its host's to build.** A session inside its
 tenant's wall whose pin names a base starts from the base the host that
 prepares it builds and keeps in its own store
-([ADR 2051](2051-a-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
+([ADR
+2051](2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
 
 **A host advertises what it probed.** A host advertises
 `snapshot.<level>` only when that level's probe passed, a provider of its
@@ -106,7 +107,7 @@ shared Docker.
 
 ## Consequences
 
-- One migration: the pin's `durability` and `base`, a project's
+- One migration: the pin's `durability` and `base`, an agent project's
   `workspace_snapshots`, and the `workspace_snapshots` table.
 - A host's snapshots are not sealed: no key of the platform's crosses
   into the wall. They are the tenant's bytes on the tenant's machine, as

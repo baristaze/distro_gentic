@@ -2,7 +2,7 @@
 
 A decorator over the engine's agents manager, behind the same interface.
 A start, a spawn, and a hand-off of a session not yet made read the
-agent playbook the tenant pinned to its kind, in its project or else for the
+agent playbook the tenant pinned to its kind, in its agent project or else for the
 tenant, record that version as the session's pinned invocation, and send
 its brief as the session's standing text: so its gates hold from the
 session's first call, and its text renders whole in the system layer of
@@ -21,6 +21,7 @@ from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
 from acme.om.agent_playbooks.rules import skill_md
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybook, AgentPlaybookInvocation
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
@@ -38,7 +39,6 @@ from acme.om.agents.types.tree import AgentTree
 from acme.om.base import new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import ValidationFailed
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.steps.types.step import Step
 from acme.om.tools.tool import TakeSnapshot
 
@@ -49,19 +49,19 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
         inner: AgentsManagerInterface,
         storage: AgentPlaybookStorageInterface,
         session_rows: AgentSessionStorageInterface,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         options: AgentPlaybooksOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
         self._storage = storage
         self._session_rows = session_rows
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._options = options
         self._clock = clock
 
     async def start_session(self, ctx: TenantContext, start: Start) -> AgentSession:
-        # A start in a project wrote the session's project row before it.
+        # A start in an agent project wrote the session's agent project row before it.
         kind_manual = await self._kind_manual(ctx, start.id, start.kind, start.id)
         return await self._inner.start_session(ctx, _with(start, kind_manual))
 
@@ -76,7 +76,7 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
     async def spawn(
         self, ctx: TenantContext, parent_id: UUID, spawn: Spawn, fork: TakeSnapshot | None = None
     ) -> AgentSession:
-        # A child stands in its parent's project.
+        # A child stands in its parent's agent project.
         kind_manual = await self._kind_manual(ctx, spawn.id, spawn.kind, parent_id)
         return await self._inner.spawn(ctx, parent_id, _with(spawn, kind_manual), fork)
 
@@ -102,7 +102,7 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
     async def hand_off(
         self, ctx: TenantContext, session_id: UUID, handoff: Handoff
     ) -> AgentSession:
-        # A hand-over stands in the project of the session it came from.
+        # A hand-over stands in the agent project of the session it came from.
         kind_manual = await self._kind_manual(ctx, handoff.id, handoff.kind, session_id)
         return await self._inner.hand_off(ctx, session_id, _with(handoff, kind_manual))
 
@@ -125,7 +125,7 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
         when the session's row stands: the first may have stopped before
         its standing text, and the engine's standing step lands once.
         Empty when the session stands with none recorded, or its kind has
-        no pin. `origin` is the session whose project the new one stands
+        no pin. `origin` is the session whose agent project the new one stands
         in."""
         ctx.require(Permission.WRITE)
         recorded = [
@@ -161,12 +161,12 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
         return skill_md(agent_playbook)
 
     async def _pinned(self, ctx: TenantContext, kind: str, origin: UUID) -> AgentPlaybook | None:
-        """The version pinned to the kind in the origin's project, or else
+        """The version pinned to the kind in the origin's agent project, or else
         the tenant's."""
-        project_id = await self._projects.project_of(ctx, origin)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, origin)
         pin = None
-        if project_id is not None:
-            pin = await self._storage.read_pin(ctx.org_id, kind, project_id)
+        if agent_project_id is not None:
+            pin = await self._storage.read_pin(ctx.org_id, kind, agent_project_id)
         if pin is None:
             pin = await self._storage.read_pin(ctx.org_id, kind, None)
         if pin is None:

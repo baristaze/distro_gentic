@@ -62,14 +62,14 @@ async def invoke(
 
 @pins.get("", response_model=list[PinView])
 async def list_pins(ctx: Ctx, agent_playbooks: AgentPlaybooksService) -> list[PinView]:
-    """The tenant's pins, by kind, the tenant's before a project's."""
+    """The tenant's pins, by kind, the tenant's before an agent project's."""
     return await agent_playbooks.pins(ctx)
 
 
 @pins.put("", response_model=PinView)
 async def pin(ctx: Ctx, agent_playbooks: AgentPlaybooksService, body: PinRequest) -> PinView:
     """The name's latest version pinned to the kind as its kind manual, for the
-    tenant or one project; pinned again, the version then latest."""
+    tenant or one agent project; pinned again, the version then latest."""
     return await agent_playbooks.pin(ctx, body)
 
 
@@ -78,8 +78,8 @@ async def unpin(
     ctx: Ctx,
     agent_playbooks: AgentPlaybooksService,
     kind: Annotated[str, Query(min_length=1, max_length=MAX_KIND)],
-    project_id: UUID | None = None,
+    agent_project_id: UUID | None = None,
 ) -> PinView:
-    """The kind's pin for the tenant, or for one project, taken away. A
+    """The kind's pin for the tenant, or for one agent project, taken away. A
     session made with it keeps it."""
-    return await agent_playbooks.unpin(ctx, kind, project_id)
+    return await agent_playbooks.unpin(ctx, kind, agent_project_id)

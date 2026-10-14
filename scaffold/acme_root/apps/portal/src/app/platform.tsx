@@ -11,8 +11,8 @@ import { AgentKnowledgePage } from "../features/agent_knowledge/AgentKnowledgePa
 import { ModelsPage } from "../features/models/ModelsPage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
 import { AgentPlaybooksPage } from "../features/agent_playbooks/AgentPlaybooksPage";
-import { ProjectPage } from "../features/projects/ProjectPage";
-import { ProjectsPage } from "../features/projects/ProjectsPage";
+import { AgentProjectPage } from "../features/agent_projects/AgentProjectPage";
+import { AgentProjectsPage } from "../features/agent_projects/AgentProjectsPage";
 import { PLATFORM_TABS } from "../features/session/PaneTabs";
 import { SessionPage } from "../features/session/SessionPage";
 import { PLATFORM_GISTS } from "../features/session/toolGists";
@@ -32,7 +32,7 @@ import {
   KeyIcon,
   AgentKnowledgeIcon,
   OrgIcon,
-  ProjectIcon,
+  AgentProjectIcon,
   SignOnIcon,
   UsageIcon,
   UserIcon,
@@ -52,8 +52,8 @@ function useSuggestedCount(): number | null {
  * once went under Settings, and the calls waiting on a person are the
  * sessions that need one. A `:name` in the new address takes the old one's. */
 export const MOVED: readonly { from: string; to: string }[] = [
-  { from: "/projects", to: "/settings/projects" },
-  { from: "/projects/:projectId", to: "/settings/projects/:projectId" },
+  { from: "/agent-projects", to: "/settings/agent-projects" },
+  { from: "/agent-projects/:agentProjectId", to: "/settings/agent-projects/:agentProjectId" },
   { from: "/models", to: "/settings/models" },
   { from: "/agent-playbooks", to: "/settings/agent-playbooks" },
   { from: "/audit", to: "/settings/audit" },
@@ -63,7 +63,7 @@ export const MOVED: readonly { from: string; to: string }[] = [
 
 export const PLATFORM: PortalProduct = {
   routes: [
-    { path: "/", element: <HomePage />, handle: { about: "Home: a box to describe a task, the agent and the project it starts on, and starter prompts" } },
+    { path: "/", element: <HomePage />, handle: { about: "Home: a box to describe a task, the agent and the agent project it starts on, and starter prompts" } },
     {
       path: "/sessions",
       element: <SessionsPage />,
@@ -157,16 +157,16 @@ export const PLATFORM: PortalProduct = {
     },
     {
       group: "Agents",
-      id: "projects",
-      label: "Projects",
-      icon: <ProjectIcon />,
+      id: "agent_projects",
+      label: "Agent projects",
+      icon: <AgentProjectIcon />,
       about: "Each bound to its repository, and the credential it is read with",
       routes: [
-        { path: "/settings/projects", element: <ProjectsPage /> },
+        { path: "/settings/agent-projects", element: <AgentProjectsPage /> },
         {
-          path: "/settings/projects/:projectId",
-          element: <ProjectPage />,
-          handle: { about: "One project: its repository, the credential it is read with, its name, and its removal", params: { projectId: "the project's id" } },
+          path: "/settings/agent-projects/:agentProjectId",
+          element: <AgentProjectPage />,
+          handle: { about: "One agent project: its repository, the credential it is read with, its name, and its removal", params: { agentProjectId: "the agent project's id" } },
         },
       ],
     },
@@ -204,7 +204,7 @@ export const PLATFORM: PortalProduct = {
     },
   ],
   agents: [
-    { kind: "software_engineer", label: "Software engineer", about: "Changes code in the project's repository, validates it, and opens a pull request." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code in the agent project's repository, validates it, and opens a pull request." },
     { kind: "analysis", label: "Analysis", about: "Reads what a run produced and answers with findings; it changes nothing." },
     { kind: "planner", label: "Planner", about: "Turns findings into tasks, and hands engineering work to a software engineer." },
     {

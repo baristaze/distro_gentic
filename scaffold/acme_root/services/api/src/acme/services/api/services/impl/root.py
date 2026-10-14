@@ -38,6 +38,7 @@ from acme.services.api.services.agent_automations import AgentAutomationsService
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
 from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
 from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
+from acme.services.api.services.agent_projects import AgentProjectsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
@@ -47,6 +48,7 @@ from acme.services.api.services.impl.agent_billing import AgentBillingServiceImp
 from acme.services.api.services.impl.agent_fleet import AgentFleetServiceImpl
 from acme.services.api.services.impl.agent_knowledge import AgentKnowledgeServiceImpl
 from acme.services.api.services.impl.agent_playbooks import AgentPlaybooksServiceImpl
+from acme.services.api.services.impl.agent_projects import AgentProjectsServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
@@ -61,7 +63,6 @@ from acme.services.api.services.impl.leases import LeasesServiceImpl
 from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.park_alerts import ParkAlertsServiceImpl
-from acme.services.api.services.impl.projects import ProjectsServiceImpl
 from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.retention import RetentionServiceImpl
@@ -74,7 +75,6 @@ from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
-from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
@@ -108,7 +108,7 @@ class ServicesImpl(ServicesInterface):
         benchmarks: BenchmarksServiceInterface,
         spend_ledgers: SpendLedgersServiceInterface,
         evidence: EvidenceServiceInterface,
-        projects: ProjectsServiceInterface,
+        agent_projects: AgentProjectsServiceInterface,
         agent_knowledge: AgentKnowledgeServiceInterface,
         agent_playbooks: AgentPlaybooksServiceInterface,
         connectors: ConnectorsServiceInterface,
@@ -139,7 +139,7 @@ class ServicesImpl(ServicesInterface):
         self._benchmarks = benchmarks
         self._spend_ledgers = spend_ledgers
         self._evidence = evidence
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._agent_knowledge = agent_knowledge
         self._agent_playbooks = agent_playbooks
         self._connectors = connectors
@@ -216,8 +216,8 @@ class ServicesImpl(ServicesInterface):
     def get_evidence_service(self) -> EvidenceServiceInterface:
         return self._evidence
 
-    def get_projects_service(self) -> ProjectsServiceInterface:
-        return self._projects
+    def get_agent_projects_service(self) -> AgentProjectsServiceInterface:
+        return self._agent_projects
 
     def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface:
         return self._agent_knowledge
@@ -246,7 +246,7 @@ def build_services(
     watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
     *,
-    project_required: bool,
+    agent_project_required: bool,
     intake: IntakeManagerInterface,
     agent_automations: AgentAutomationsManagerInterface,
     park_alerts: ParkAlertsManagerInterface,
@@ -286,8 +286,8 @@ def build_services(
             managers.attribution,
             managers.loop,
             managers.windows,
-            managers.projects,
-            project_required=project_required,
+            managers.agent_projects,
+            agent_project_required=agent_project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
         agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
@@ -309,7 +309,7 @@ def build_services(
             managers.steps,
             intake,
         ),
-        projects=ProjectsServiceImpl(managers.projects, managers.agent_workspaces),
+        agent_projects=AgentProjectsServiceImpl(managers.agent_projects, managers.agent_workspaces),
         agent_knowledge=AgentKnowledgeServiceImpl(agent_knowledge),
         agent_playbooks=AgentPlaybooksServiceImpl(agent_playbooks),
         connectors=ConnectorsServiceImpl(connectors),

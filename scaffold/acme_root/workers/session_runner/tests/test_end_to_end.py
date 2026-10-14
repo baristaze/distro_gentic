@@ -10,12 +10,12 @@ runner takes the loop under a new epoch once the lease runs out, the lost
 run can append nothing more, and the call it left open is settled by its
 effect.
 
-A project's workspace base runs on real Docker and the stack's object store:
+An agent project's workspace base runs on real Docker and the stack's object store:
 the first software engineer session builds its base, whose setup installs a package
 from a registry on this host, and the next starts from the same base with
 no setup run, and imports the package with no egress.
 
-Every case runs in the first project `make seed` writes, its repository a
+Every case runs in the first agent project `make seed` writes, its repository a
 bare one on this host, and one session there meets every gate on its way
 to a success: its claim, its money, its audit, its result, and its seal.
 
@@ -120,7 +120,7 @@ MCP_PORT = int(os.environ.get("E2E_MCP_PORT", "8391"))
 MCP_TOKEN = "tok-e2e-47c1a0f95d3b"
 
 REPOSITORY = first_repository("ajax")
-"""The repository the seeded org's first project binds."""
+"""The repository the seeded org's first agent project binds."""
 
 
 def free_port() -> int:
@@ -165,11 +165,11 @@ class Stack:
     repositories: Path
     runners: list[Runner] = field(default_factory=lambda: [])
 
-    def repository(self, project_id: UUID) -> RepositoryBinding:
-        """The seeded project's binding as the runner clones it: from the
+    def repository(self, agent_project_id: UUID) -> RepositoryBinding:
+        """The seeded agent project's binding as the runner clones it: from the
         bare repository on this host."""
         url = f"file://{self.repositories}/{REPOSITORY.host}/{REPOSITORY.path}.git"
-        return RepositoryBinding(project_id=project_id, repository=url)
+        return RepositoryBinding(agent_project_id=agent_project_id, repository=url)
 
     def runner(self, name: str, script: list[Turn] | None = None, **env: str) -> Runner:
         """A runner process over the stack. With `script`, the scripted model
@@ -327,20 +327,20 @@ async def a_stack(tmp_path: Path, kinds: tuple[AgentKind, ...]) -> AsyncIterator
 class Person:
     ctx: TenantContext
     headers: dict[str, str]
-    project_id: UUID
+    agent_project_id: UUID
 
 
 async def owner_of(stack: Stack) -> Person:
     """The owner of an org seeded as `make seed` seeds one: its account on a
-    plan, its first project, its retention policy, and the published matrix,
+    plan, its first agent project, its retention policy, and the published matrix,
     so a session's calls pass the money gate and resolve by the matrix."""
     ctx, org = await stack.container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     seeded = await seed_platform(stack.container.storage, stack.container.managers, ctx, E2E_KINDS)
     headers = await sign_in_as(stack.client, "ann@example.test", org.id)
-    assert seeded.project is not None
-    return Person(ctx, headers, seeded.project.id)
+    assert seeded.agent_project is not None
+    return Person(ctx, headers, seeded.agent_project.id)
 
 
 def created(headers: dict[str, str]) -> dict[str, str]:
@@ -354,7 +354,7 @@ async def started(stack: Stack, person: Person, kind: str = "assistant") -> str:
         json={
             "kind": kind,
             "title": "the slow export",
-            "project_id": str(person.project_id),
+            "agent_project_id": str(person.agent_project_id),
         },
     )
     assert answered.status_code == 201, answered.text
@@ -558,7 +558,7 @@ async def test_a_tenants_server_is_connected_reviewed_attached_and_called_by_a_s
     attached = await stack.client.post(
         f"/v1/connectors/{connector_id}/attachments",
         headers=headers,
-        json={"kind": "assistant", "project_id": str(person.project_id)},
+        json={"kind": "assistant", "agent_project_id": str(person.agent_project_id)},
     )
     assert attached.status_code == 200, attached.text
     stack.runner(
@@ -669,12 +669,12 @@ FIXES_THE_REPORT = (
 """The software engineer's change: committed, and pushed to its session's branch."""
 
 
-async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success(
+async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_success(
     stack: Stack,
 ) -> None:
     person = await owner_of(stack)
-    project = policy_key(person.project_id)
-    await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
+    agent_project = policy_key(person.agent_project_id)
+    await stack.container.managers.evidence.write_policy(person.ctx, make_policy(agent_project))
     runner = stack.runner(
         "runner-gates",
         [validates(baseline=True), runs(*FIXES_THE_REPORT), validates(), submits("succeeded")],
@@ -772,7 +772,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
 
     # Its content is sealed, under the retention its snapshot holds.
     snapshot = await storage.get_retention_storage().read_snapshot(org_id, sid)
-    assert snapshot is not None and snapshot.project_id == person.project_id
+    assert snapshot is not None and snapshot.agent_project_id == person.agent_project_id
     lifetime = snapshot.policy.content_lifetime
     assert lifetime is not None and lifetime == CONTENT_LIFETIME and snapshot.at_rest
     raw = {
@@ -783,7 +783,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     assert all(not raw[step.id].content.blocks for step in saying)
     found["seal"] = (
         f"{len(saying)} of {len(opened)} steps sealed; content kept "
-        f"{lifetime.days} days, project {snapshot.project_id}"
+        f"{lifetime.days} days, agent project {snapshot.agent_project_id}"
     )
     print(json.dumps(found, indent=1))
 
@@ -920,7 +920,7 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     ]
 
 
-# A project's workspace base: built once, served to every session, sealed.
+# An agent project's workspace base: built once, served to every session, sealed.
 
 PACKAGE = "envpkg"
 WHEEL = f"{PACKAGE}-1.0-py3-none-any.whl"
@@ -1121,7 +1121,7 @@ def removed(deployment: str) -> None:
 
 
 @pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
-async def test_a_projects_workspace_base_is_built_once_and_its_software_engineer_imports_its_package_sealed(
+async def test_an_agent_projects_workspace_base_is_built_once_and_its_software_engineer_imports_its_package_sealed(
     shipped: Stack, registry: Registry
 ) -> None:
     person = await owner_of(shipped)
@@ -1133,7 +1133,7 @@ async def test_a_projects_workspace_base_is_built_once_and_its_software_engineer
         "registries": ["host.docker.internal"],
     }
     named = await shipped.client.put(
-        f"/v1/projects/{person.project_id}/workspace-base",
+        f"/v1/agent-projects/{person.agent_project_id}/workspace-base",
         headers=person.headers,
         json=workspace_base,
     )

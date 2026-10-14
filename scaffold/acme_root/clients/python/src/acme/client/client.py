@@ -26,6 +26,7 @@ from acme.client.types import (
     AgentKnowledgeStatus,
     AgentKnowledgeView,
     AgentPlaybookView,
+    AgentProjectView,
     AgentSessionPageView,
     AgentSessionView,
     ClaimantClaimView,
@@ -72,7 +73,6 @@ from acme.client.types import (
     PinView,
     PlatformSizeView,
     PreparedView,
-    ProjectView,
     PublishRequest,
     Role,
     SessionControl,
@@ -820,52 +820,56 @@ class ApiClient:
             raise ApiError(fetched.status_code, "download_refused", fetched.text[:200], None)
         return fetched.content
 
-    # A tenant's configuration: its projects and the credential each one's
+    # A tenant's configuration: its agent projects and the credential each one's
     # repository is read with, its agent automations, what its sessions recall and
     # follow, and its layer of tool policy.
 
-    async def create_project(
+    async def create_agent_project(
         self, name: str, host: str, path: str, *, idempotency_key: str | None = None
-    ) -> ProjectView:
-        """A project bound to the repository at `host`/`path`, which never
+    ) -> AgentProjectView:
+        """An agent project bound to the repository at `host`/`path`, which never
         moves. An owner's or an admin's. Always under an idempotency key."""
         made = await self.request(
             "POST",
-            "/v1/projects",
+            "/v1/agent-projects",
             json={"name": name, "repository": {"host": host, "path": path}},
             idempotency_key=idempotency_key or str(uuid4()),
         )
-        return ProjectView.model_validate(made)
+        return AgentProjectView.model_validate(made)
 
-    async def projects(
+    async def agent_projects(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
-    ) -> list[ProjectView]:
+    ) -> list[AgentProjectView]:
         params: dict[str, Any] = {"limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/projects", params=params)
-        return [ProjectView.model_validate(project) for project in found]
+        found = await self.request("GET", "/v1/agent-projects", params=params)
+        return [AgentProjectView.model_validate(agent_project) for agent_project in found]
 
-    async def project(self, project_id: UUID) -> ProjectView:
-        return ProjectView.model_validate(await self.request("GET", f"/v1/projects/{project_id}"))
+    async def agent_project(self, agent_project_id: UUID) -> AgentProjectView:
+        return AgentProjectView.model_validate(
+            await self.request("GET", f"/v1/agent-projects/{agent_project_id}")
+        )
 
-    async def rename_project(self, project_id: UUID, name: str) -> ProjectView:
-        renamed = await self.request("PATCH", f"/v1/projects/{project_id}", json={"name": name})
-        return ProjectView.model_validate(renamed)
+    async def rename_agent_project(self, agent_project_id: UUID, name: str) -> AgentProjectView:
+        renamed = await self.request(
+            "PATCH", f"/v1/agent-projects/{agent_project_id}", json={"name": name}
+        )
+        return AgentProjectView.model_validate(renamed)
 
-    async def remove_project(self, project_id: UUID) -> ProjectView:
-        """Refused with `project_in_use` while a session belongs to it."""
-        removed = await self.request("DELETE", f"/v1/projects/{project_id}")
-        return ProjectView.model_validate(removed)
+    async def remove_agent_project(self, agent_project_id: UUID) -> AgentProjectView:
+        """Refused with `agent_project_in_use` while a session belongs to it."""
+        removed = await self.request("DELETE", f"/v1/agent-projects/{agent_project_id}")
+        return AgentProjectView.model_validate(removed)
 
     async def put_fetch_credential(
-        self, project_id: UUID, username: str, password: str
+        self, agent_project_id: UUID, username: str, password: str
     ) -> FetchCredentialView:
-        """A read-only credential of the project's repository. The answer
+        """A read-only credential of the agent project's repository. The answer
         says who gave it when; nothing ever reads it back."""
         given = await self.request(
             "PUT",
-            f"/v1/projects/{project_id}/credential",
+            f"/v1/agent-projects/{agent_project_id}/credential",
             json={"username": username, "password": password},
         )
         return FetchCredentialView.model_validate(given)
@@ -1027,23 +1031,23 @@ class ApiClient:
         connector_id: UUID,
         kind: str,
         *,
-        project_id: UUID | None = None,
+        agent_project_id: UUID | None = None,
         deferred: bool = True,
     ) -> ConnectorView:
         body: dict[str, Any] = {"kind": kind, "deferred": deferred}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         attached = await self.request(
             "POST", f"/v1/connectors/{connector_id}/attachments", json=body
         )
         return ConnectorView.model_validate(attached)
 
     async def detach_connector(
-        self, connector_id: UUID, kind: str, *, project_id: UUID | None = None
+        self, connector_id: UUID, kind: str, *, agent_project_id: UUID | None = None
     ) -> ConnectorView:
         params: dict[str, Any] = {"kind": kind}
-        if project_id is not None:
-            params["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            params["agent_project_id"] = str(agent_project_id)
         detached = await self.request(
             "DELETE", f"/v1/connectors/{connector_id}/attachments", params=params
         )
@@ -1064,30 +1068,32 @@ class ApiClient:
         return InvocationView.model_validate(invoked)
 
     async def agent_playbook_pins(self) -> list[PinView]:
-        """The tenant's pins, by kind, the tenant's before a project's."""
+        """The tenant's pins, by kind, the tenant's before an agent project's."""
         return [
             PinView.model_validate(pin)
             for pin in await self.request("GET", "/v1/agent-playbook-pins")
         ]
 
     async def pin_agent_playbook(
-        self, kind: str, name: str, *, project_id: UUID | None = None
+        self, kind: str, name: str, *, agent_project_id: UUID | None = None
     ) -> PinView:
         """The name's latest version pinned to the kind as its kind manual, for the
-        tenant, or for one project; each session of the kind made from now
+        tenant, or for one agent project; each session of the kind made from now
         on holds it, and one made before keeps its own."""
         body: dict[str, Any] = {"kind": kind, "name": name}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         return PinView.model_validate(
             await self.request("PUT", "/v1/agent-playbook-pins", json=body)
         )
 
-    async def unpin_agent_playbook(self, kind: str, *, project_id: UUID | None = None) -> PinView:
-        """The kind's pin for the tenant, or for one project, taken away."""
+    async def unpin_agent_playbook(
+        self, kind: str, *, agent_project_id: UUID | None = None
+    ) -> PinView:
+        """The kind's pin for the tenant, or for one agent project, taken away."""
         params: dict[str, Any] = {"kind": kind}
-        if project_id is not None:
-            params["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            params["agent_project_id"] = str(agent_project_id)
         unpinned = await self.request("DELETE", "/v1/agent-playbook-pins", params=params)
         return PinView.model_validate(unpinned)
 
@@ -1113,15 +1119,15 @@ class ApiClient:
         kind: str,
         title: str,
         *,
-        project_id: UUID | None = None,
+        agent_project_id: UUID | None = None,
         idempotency_key: str | None = None,
     ) -> AgentSessionView:
         """A session on the latest version of `kind`, idle until a message
-        wakes it, in `project_id`: a stack outside a local one refuses a
+        wakes it, in `agent_project_id`: a stack outside a local one refuses a
         session in none. Always under an idempotency key."""
         body: dict[str, object] = {"kind": kind, "title": title}
-        if project_id is not None:
-            body["project_id"] = str(project_id)
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         started = await self.request(
             "POST",
             "/v1/agent-sessions",

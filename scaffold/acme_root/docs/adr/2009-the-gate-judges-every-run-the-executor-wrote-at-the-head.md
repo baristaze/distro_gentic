@@ -5,7 +5,7 @@
 ## Context
 
 The engine's result gate is a port: the platform supplies the one that
-knows what evidence is. A success counts only when the project's
+knows what evidence is. A success counts only when the agent project's
 validation policy passed at the committed head, on a clean tree, on
 results the executor wrote. The checks, their fixtures, and the policy
 itself are protected, and a change that touches one voids validation.
@@ -16,9 +16,9 @@ stored with a validation is one the gate would have to trust.
 ## Decision
 
 **The policy is a platform record.** A person who manages the tenant
-writes it, one per project, by a compare-and-set on its version, and
-each write is an event. No tool reaches it, so the agent cannot change
-it, and it protects the paths in the tree by pattern. A tool that
+writes it, one per agent project, by a compare-and-set on its version,
+and each write is an event. No tool reaches it, so the agent cannot
+change it, and it protects the paths in the tree by pattern. A tool that
 changes files reports the paths as its target, and a platform ceiling
 denies a call that names a protected one, whatever the kind's defaults
 and the tenant's layer allow. The root adds the ceiling to whatever

@@ -1,6 +1,6 @@
 """Storage of the evidence swimlane. Every operation takes org_id first.
 
-A project's validation policy is one row in `core`, written by a
+An agent project's validation policy is one row in `core`, written by a
 compare-and-set on its version with its outbox rows in one commit. The
 runs, the validations, and the hypotheses and findings are written once,
 in `activity`: the serving logins hold SELECT and INSERT on them, and the
@@ -22,8 +22,8 @@ class EvidenceStorageInterface(ABC):
     # The policies.
 
     @abstractmethod
-    async def read_policy(self, org_id: UUID, project: str) -> ValidationPolicy | None:
-        """The project's policy, or None when it has never written one."""
+    async def read_policy(self, org_id: UUID, agent_project: str) -> ValidationPolicy | None:
+        """The agent project's policy, or None when it has never written one."""
         ...
 
     @abstractmethod
@@ -32,7 +32,7 @@ class EvidenceStorageInterface(ABC):
     ) -> bool:
         """The create, with the rows that announce it, in one commit; False,
         with nothing landed, when the id is written already.
-        `UniqueKeyTaken` when the project holds another policy already."""
+        `UniqueKeyTaken` when the agent project holds another policy already."""
         ...
 
     @abstractmethod

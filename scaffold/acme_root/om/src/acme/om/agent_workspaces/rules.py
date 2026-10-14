@@ -88,7 +88,7 @@ def networks(cidrs: Sequence[str]) -> tuple[Network, ...]:
 
 
 def session_branch(session_id: UUID) -> str:
-    """The session's branch on its project's repository."""
+    """The session's branch on its agent project's repository."""
     return f"{BRANCH_PREFIX}/{session_id}"
 
 
@@ -113,9 +113,9 @@ def pinned_egress(
     kind: EgressPolicy, kind_name: str, allowlist: EgressAllowlist | None
 ) -> tuple[EgressMode, tuple[EgressRule, ...], str]:
     """The egress a new session pins, its rules, and where it came from. A
-    kind that takes no egress keeps none. Otherwise the project's allowlist
+    kind that takes no egress keeps none. Otherwise the agent project's allowlist
     decides: its rules, or open egress where it chose it, or none where it
-    names nothing. A session of no project keeps its kind's own: open egress
+    names nothing. A session of no agent project keeps its kind's own: open egress
     where the kind declares it, and the hosts it names, read-only, since a
     kind's hosts carry no method."""
     if kind.mode is EgressMode.NONE:
@@ -125,7 +125,9 @@ def pinned_egress(
             return EgressMode.OPEN, (), f"its kind {kind_name} declares open egress"
         rules = tuple(EgressRule(destination=host, methods=READ_ONLY) for host in kind.hosts)
         return EgressMode.ALLOWLIST, rules, f"its kind {kind_name} names its hosts, read-only"
-    source = f"project {allowlist.project_id}'s allowlist at version {allowlist.version}"
+    source = (
+        f"agent project {allowlist.agent_project_id}'s allowlist at version {allowlist.version}"
+    )
     if allowlist.open:
         return EgressMode.OPEN, (), f"{source}, open: {allowlist.reason}"
     if not allowlist.rules:
@@ -300,8 +302,8 @@ def _repository(name: str) -> str:
     return value.rstrip("/").removesuffix(".git")
 
 
-def project_key(binding: RepositoryBinding) -> str:
-    """The name a project's work product goes by in its evidence: its
+def agent_project_key(binding: RepositoryBinding) -> str:
+    """The name an agent project's work product goes by in its evidence: its
     repository's, as `host/owner/name`. The host goes without its port, so a
     forge served on one has a name too."""
     host, slash, path = _repository(binding.repository).lstrip("/").partition("/")
@@ -332,7 +334,7 @@ def body_refusal(body: str, binding: RepositoryBinding) -> str | None:
     element that loads one, and every URL in it, a link's included, is on
     the bound repository's own host. It is read as written and with its
     character references resolved, as a renderer reads it."""
-    own_host = project_key(binding).partition("/")[0]
+    own_host = agent_project_key(binding).partition("/")[0]
     for text in (body, html.unescape(body)):
         if FETCHED.search(text):
             return "a pull request's body carries no image, and no element that loads a URL"
@@ -350,8 +352,8 @@ def body_refusal(body: str, binding: RepositoryBinding) -> str | None:
 def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, branch: str) -> bool:
     """Whether a write is the session's own work product: a push to its own
     branch, or to a snapshot of it, and its own pull request, on the one
-    repository its project binds. Every other write acts outward, and so
-    does every write of a session whose project binds none."""
+    repository its agent project binds. Every other write acts outward, and so
+    does every write of a session whose agent project binds none."""
     if binding is None or not same_repository(write.repository, binding.repository):
         return False
     ref = write.ref.removeprefix("refs/heads/")
@@ -365,11 +367,11 @@ def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, b
 # The credentials a repository is reached with.
 
 
-def fetch_secret_name(project_id: UUID) -> str:
-    """The name the tenant's store keeps a project's fetch credential under:
-    apart from every declared secret's (`project-`) and every
+def fetch_secret_name(agent_project_id: UUID) -> str:
+    """The name the tenant's store keeps an agent project's fetch credential under:
+    apart from every declared secret's (`agent-project-`) and every
     provider key's (`provider-key-`)."""
-    return f"repository-fetch-{project_id.hex}"
+    return f"repository-fetch-{agent_project_id.hex}"
 
 
 def push_refusal(

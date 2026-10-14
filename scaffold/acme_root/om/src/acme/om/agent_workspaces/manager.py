@@ -4,11 +4,11 @@ prepare after is held to that pin. Before a loop, the session's branch is
 brought into the checkout, and a branch that vanished is rebuilt only when
 source control says why. Before an instance goes, the work it holds is
 pushed to a snapshot ref, and the next loop is told. A workspace's egress
-is its project's allowlist of destinations and methods, and what it never
+is its agent project's allowlist of destinations and methods, and what it never
 reaches it never reaches; a session's own branch and pull request on its
-project's repository are its work product, and every other write acts
+agent project's repository are its work product, and every other write acts
 outward. The platform reaches that repository with two credentials the
-agent never holds: the project's read-only fetch credential, where it reads
+agent never holds: the agent project's read-only fetch credential, where it reads
 what a session delivered, and a push token that writes the session's own
 branch and pull request, for one loop at most."""
 
@@ -39,9 +39,9 @@ class AgentWorkspacesManagerInterface(ABC):
     ) -> AgentSessionWorkspace | None:
         """Pins a new session's isolation before it is written: its kind's
         level, limits, and base at the version it starts on, the egress its
-        project allows now (`rules.pinned_egress`), and its kind's
-        durability, narrowed to a cache when its project keeps its
-        sessions' workspaces as caches. A kind that takes its project's
+        agent project allows now (`rules.pinned_egress`), and its kind's
+        durability, narrowed to a cache when its agent project keeps its
+        sessions' workspaces as caches. A kind that takes its agent project's
         workspace base starts from the base that workspace base names now, when
         it names one, in place of its own. Pinned once: a session pinned
         already is answered as stored. None, with nothing pinned, for a kind
@@ -75,12 +75,12 @@ class AgentWorkspacesManagerInterface(ABC):
         self, ctx: TenantContext, workspace: Workspace, epoch: int, *, restored: bool = False
     ) -> Workspace:
         """The prepared workspace, its checkout brought up to the session's
-        branch on the repository its project binds (`rules.branch_plan`), and
+        branch on the repository its agent project binds (`rules.branch_plan`), and
         what the loop is told of it in `changed`: the snapshot of every
         instance let go since a loop was last told, and a branch rebuilt
         after its pull request closed. A branch the remote held and lost with
         no known fate is `WorkspaceLost`, which parks the loop for a person,
-        and nothing is checked out from the default branch in its stead. A session whose project binds no
+        and nothing is checked out from the default branch in its stead. A session whose agent project binds no
         repository has no checkout. Every command in the checkout carries
         `epoch`, the one the run that prepares it held when it began.
 
@@ -104,10 +104,10 @@ class AgentWorkspacesManagerInterface(ABC):
     async def work_product(self, ctx: TenantContext, workspace: Workspace) -> WorkProduct:
         """The session's work product: its branch as the bound repository
         holds it, read outside the workspace (`RepositoryReaderInterface`),
-        with the repository's name as its project, the base its branch
+        with the repository's name as its agent project, the base its branch
         started from, its head, and the paths changed from the base; and
         dirty when the checkout holds work that is not there, uncommitted or
-        not pushed. `Unavailable` for a session whose project binds no
+        not pushed. `Unavailable` for a session whose agent project binds no
         repository: nothing says what its work product is, so no success
         counts on a guess."""
         ...
@@ -116,39 +116,41 @@ class AgentWorkspacesManagerInterface(ABC):
     async def checks_tree(
         self,
         ctx: TenantContext,
-        project_id: UUID,
+        agent_project_id: UUID,
         version: str,
         source: str,
         protected: tuple[str, ...],
-        source_project: UUID,
+        source_agent_project: UUID,
         base: str | None = None,
         untouched: tuple[str, ...] = (),
     ) -> bytes:
-        """Platform-internal: the tree a validation of the project runs on,
+        """Platform-internal: the tree a validation of the agent project runs on,
         as a tar, read from its bound repository outside every workspace
         with its fetch credential (`RepositoryReaderInterface.tree`): the
         commit `version`, with every path a `protected` pattern matches
-        taken from the commit `source` of the repository `source_project`
-        binds, read with that project's fetch credential: the project's
+        taken from the commit `source` of the repository `source_agent_project`
+        binds, read with that agent project's fetch credential: the agent project's
         own, or a hidden suite's of the same tenant. With `base`, every
         other path an `untouched` pattern matches is taken from the
-        project's own commit `base`. No credential and no history goes
-        with it. `Unavailable` when either project binds no repository, or
+        agent project's own commit `base`. No credential and no history goes
+        with it. `Unavailable` when either agent project binds no repository, or
         a commit cannot be read."""
         ...
 
     # Egress, and what acts outward.
 
     @abstractmethod
-    async def get_allowlist(self, ctx: TenantContext, project_id: UUID) -> EgressAllowlist | None:
-        """The project's allowlist, or None when it has written none."""
+    async def get_allowlist(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> EgressAllowlist | None:
+        """The agent project's allowlist, or None when it has written none."""
         ...
 
     @abstractmethod
     async def write_allowlist(
         self, ctx: TenantContext, allowlist: EgressAllowlist
     ) -> EgressAllowlist:
-        """Writes the project's allowlist, as one who manages the tenant's
+        """Writes the agent project's allowlist, as one who manages the tenant's
         members may: the first write creates it, and each later one is a
         compare-and-set on the version the caller read (`PreconditionFailed`
         when another landed first). Open egress is a choice it records with
@@ -173,7 +175,7 @@ class AgentWorkspacesManagerInterface(ABC):
         """Whether a write to source control acts outward, for the rule of
         two: every write but a push to the session's own branch or its
         snapshots, and its own pull request, on the one repository its
-        project binds. A tool that writes there sets its target's `outward`
+        agent project binds. A tool that writes there sets its target's `outward`
         from this."""
         ...
 
@@ -181,33 +183,33 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def put_fetch_credential(
-        self, ctx: TenantContext, project_id: UUID, credential: FetchCredential
+        self, ctx: TenantContext, agent_project_id: UUID, credential: FetchCredential
     ) -> RepositoryCredential:
         """Gives the platform a read-only credential of the repository the
-        tenant's project binds, as one who manages the tenant's members may;
+        tenant's agent project binds, as one who manages the tenant's members may;
         a later one replaces it. Its value goes to the tenant's store under
-        the project, and the record kept here says only who gave it and when.
+        the agent project, and the record kept here says only who gave it and when.
         The platform reads a session's work product with it (`work_product`),
-        and uses it nowhere else. `NotFound` for a project that binds no
+        and uses it nowhere else. `NotFound` for an agent project that binds no
         repository of the tenant's."""
         ...
 
     @abstractmethod
-    async def remove_fetch_credential(self, ctx: TenantContext, project_id: UUID) -> bool:
-        """Takes a project's fetch credential away, as one who manages the
+    async def remove_fetch_credential(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
+        """Takes an agent project's fetch credential away, as one who manages the
         tenant's members may: its value leaves the tenant's store before its
-        record goes. False when the project had none in this tenant. Asks
-        nothing of the project, so a removed project's credential goes too."""
+        record goes. False when the agent project had none in this tenant. Asks
+        nothing of the agent project, so a removed agent project's credential goes too."""
         ...
 
     @abstractmethod
     async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
         """A push token for the session's own branch on the repository its
-        project binds: it writes that branch, its snapshots, and its pull
+        agent project binds: it writes that branch, its snapshots, and its pull
         request, and nothing else, until its lifetime passes or the loop's
         workspace is prepared again or released, whichever is first. Only its
         digest is kept, and a new one replaces the last. `NotFound` for a
-        session never pinned, `Unavailable` for one whose project binds no
+        session never pinned, `Unavailable` for one whose agent project binds no
         repository."""
         ...
 

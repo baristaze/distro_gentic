@@ -110,13 +110,17 @@ async def test_a_validation_session_over_postgres_is_platform_work_with_no_model
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
     )
-    project_id = new_id()
+    agent_project_id = new_id()
     await platform.managers.evidence.write_policy(
-        platform.owner, make_policy(policy_key(project_id))
+        platform.owner, make_policy(policy_key(agent_project_id))
     )
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=project_id, check_name="unit", head="c" * 40, base="b" * 40
+        id=new_id(),
+        agent_project_id=agent_project_id,
+        check_name="unit",
+        head="c" * 40,
+        base="b" * 40,
     )
 
     session = await validations.start_validation(platform.owner, start)

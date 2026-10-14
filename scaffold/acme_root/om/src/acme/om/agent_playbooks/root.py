@@ -20,10 +20,10 @@ from acme.om.agent_playbooks.impl.agents import AgentsManagerKindManualImpl
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksManagerImpl, AgentPlaybooksOptions
 from acme.om.agent_playbooks.impl.tools import ToolsManagerAgentPlaybooksImpl
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents import AgentsManagerInterface
 from acme.om.base import utcnow
 from acme.om.levers.rules import reach_of
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.steps import StepsManagerInterface
 from acme.om.storage.root import StorageInterface
@@ -56,7 +56,7 @@ class AgentPlaybooksLayer:
             inner,
             self._storage.get_agent_playbook_storage(),
             self._storage.get_agent_session_storage(),
-            SessionProjectsBoundImpl(self._storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(self._storage.get_agent_project_storage()),
             self.options,
             self._clock,
         )
@@ -74,7 +74,7 @@ class AgentPlaybooksLayer:
                 self.options,
                 reach_of(managers.kinds),
                 managers.kinds,
-                SessionProjectsBoundImpl(self._storage.get_project_storage()),
+                SessionAgentProjectsBoundImpl(self._storage.get_agent_project_storage()),
                 self._clock,
             )
             self._built = (agent_playbooks, managers.steps)

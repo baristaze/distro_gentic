@@ -34,7 +34,7 @@ def execution_view(record: ExecutionRecord) -> ExecutionView:
         purpose=record.purpose,
         step_id=record.step_id,
         validation_id=record.validation_id,
-        project=record.project,
+        agent_project=record.agent_project,
         version=record.version,
         dirty=record.dirty,
         image=record.run_image.image,
@@ -57,7 +57,7 @@ def validation_view(validation: Validation) -> ValidationView:
         id=validation.id,
         created_at=validation.created_at,
         purpose=validation.purpose,
-        project=validation.project,
+        agent_project=validation.agent_project,
         version=validation.version,
         source=validation.source,
         executor=validation.executor,
@@ -125,7 +125,7 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
             workspace = None
         work = await self._intake.get_work(ctx, session_id)
         return WorkProductView(
-            project_id=None if workspace is None else workspace.project_id,
+            agent_project_id=None if workspace is None else workspace.agent_project_id,
             branch=None if workspace is None else workspace.branch,
             branch_seen=workspace is not None and workspace.branch_seen,
             work=[

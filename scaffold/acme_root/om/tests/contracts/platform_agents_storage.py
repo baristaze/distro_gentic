@@ -26,7 +26,7 @@ def make_validation() -> ValidationSession:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         check_name="report.totals",
         head="c" * 40,
         base="b" * 40,
@@ -112,7 +112,7 @@ class PlatformAgentsStorageContract:
         org = new_id()
         session = make_validation()
         assert await storage.create_validation(org, session, ())
-        gone = refused(session, "the project declares no check report.totals")
+        gone = refused(session, "the agent project declares no check report.totals")
         await storage.write_validation(org, gone, 1, ())
         assert await storage.read_validation(org, session.id) == gone
 

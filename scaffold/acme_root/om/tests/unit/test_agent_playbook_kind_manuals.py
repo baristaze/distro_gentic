@@ -11,10 +11,10 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import make_agent_project
 from contracts.doubles import context
 from contracts.histories import History
 from contracts.loops import ASSISTANT, SONNET, Loop, loop_over, reply, said, use
-from contracts.project_storage import make_project
 
 from acme.integrations.model_providers.anthropic import request_body
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
@@ -244,31 +244,40 @@ async def test_a_make_cut_off_past_the_sessions_row_and_retried_pins_its_kind_ma
         assert (invocation.version, invocation.pinned) == (1, True)
 
 
-async def test_a_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_its_kinds(
+async def test_an_agent_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_its_kinds(
     tmp_path: Path,
 ) -> None:
     loop, agent_playbooks = pinned(tmp_path)
     tenants = await agent_playbooks.publish(loop.owner, kind_manual())
-    projects = await agent_playbooks.publish(
+    agent_projects = await agent_playbooks.publish(
         loop.owner,
-        kind_manual(body="1. Answer from the project's ledger.").model_copy(
-            update={"name": "project-kind-manual"}
+        kind_manual(body="1. Answer from the agent project's ledger.").model_copy(
+            update={"name": "agent-project-kind-manual"}
         ),
     )
-    pinned_project = await loop.managers.projects.create_project(loop.owner, make_project())
-    other_project = await loop.managers.projects.create_project(
-        loop.owner, make_project("octo/other")
+    pinned_agent_project = await loop.managers.agent_projects.create_agent_project(
+        loop.owner, make_agent_project()
+    )
+    other_agent_project = await loop.managers.agent_projects.create_agent_project(
+        loop.owner, make_agent_project("octo/other")
     )
     await agent_playbooks.pin(loop.owner, ASSISTANT.name, tenants.name)
-    await agent_playbooks.pin(loop.owner, ASSISTANT.name, projects.name, pinned_project.id)
+    await agent_playbooks.pin(
+        loop.owner, ASSISTANT.name, agent_projects.name, pinned_agent_project.id
+    )
 
-    async def in_project(project_id: UUID) -> UUID:
+    async def in_agent_project(agent_project_id: UUID) -> UUID:
         start = Start(id=new_id(), kind=ASSISTANT.name, title="the ledger")
-        session = await loop.managers.projects.start_session(loop.owner, project_id, start)
+        session = await loop.managers.agent_projects.start_session(
+            loop.owner, agent_project_id, start
+        )
         return session.id
 
-    for project_id, expected in ((pinned_project.id, projects), (other_project.id, tenants)):
-        root = await in_project(project_id)
+    for agent_project_id, expected in (
+        (pinned_agent_project.id, agent_projects),
+        (other_agent_project.id, tenants),
+    ):
+        root = await in_agent_project(agent_project_id)
         loop.anthropic.add(reply(said("A sub-agent will find it.")))
         await loop.loops.run(loop.owner, root)
         asked_for = Spawn(id=new_id(), kind=ASSISTANT.name, title="a part", objective="Sum it.")
@@ -276,7 +285,7 @@ async def test_a_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_its_kin
         for session_id in (root, child.id):
             steps = await loop.history(session_id)
             (switched,) = [step for step in steps if step.type is StepType.SWITCHED]
-            assert switched.as_text() == skill_md(expected), (project_id, session_id)
+            assert switched.as_text() == skill_md(expected), (agent_project_id, session_id)
 
 
 # Check 3: a kind manual's gates narrow the session's policy and never widen it.

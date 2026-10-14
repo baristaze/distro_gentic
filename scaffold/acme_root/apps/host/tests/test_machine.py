@@ -362,7 +362,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     )
     host = HostAgent(
         settings,
-        Ceilings(projects=None, min_isolation=HostMode.vm, egress=None, readable=("/",)),
+        Ceilings(agent_projects=None, min_isolation=HostMode.vm, egress=None, readable=("/",)),
         probes(HostMode.vm),
         api.client,
         executor,

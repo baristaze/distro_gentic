@@ -15,7 +15,7 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const at = "2026-10-03T10:00:00Z";
 const EVENTS: Record<"a" | "b", EventView[]> = {
-  a: [{ seq: 1, kind: "projects.project.created", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id }],
+  a: [{ seq: 1, kind: "agent_projects.agent_project.created", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id }],
   b: [{ seq: 1, kind: "agent_knowledge.entry.created", target_id: "kb", produced_at: at, actor_id: PEOPLE.b.id }],
 };
 const usage = (org: "a" | "b", spent: number): BudgetUsageView => ({
@@ -31,7 +31,7 @@ const USAGE = { a: [usage("a", 2_500_000)], b: [usage("b", 9_000_000)] };
 function answer(call: Call): unknown {
   if (call.path.startsWith("/v1/events/recent?")) return EVENTS[net.org];
   if (call.path.startsWith("/v1/usage?")) return { items: USAGE[net.org], next_cursor: null };
-  if (call.path.startsWith("/v1/projects?")) return [];
+  if (call.path.startsWith("/v1/agent-projects?")) return [];
   return notFound(call.path);
 }
 
@@ -55,7 +55,7 @@ describe.each(["a", "b"] as const)("a member of org %s", (org) => {
     const table = container.querySelector("table[aria-label='Events']")!;
     expect(table.textContent).toContain(PEOPLE[org].display_name);
     expect(table.textContent).not.toContain(PEOPLE[other].display_name);
-    expect(table.textContent).toContain(org === "a" ? "project created" : "entry created");
+    expect(table.textContent).toContain(org === "a" ? "agent project created" : "entry created");
   });
 
   it("sees the org's own budgets", async () => {
@@ -70,7 +70,7 @@ describe.each(["a", "b"] as const)("a member of org %s", (org) => {
 describe("the org's audit, past one page and past a trim", () => {
   it("opens the audit on the newest events and pages older ones back to the floor", async () => {
     // Kept: 71 to 250, the floor at 70. Each read answers the newest below `before_seq`.
-    const event = (seq: number): EventView => ({ seq, kind: "projects.project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
+    const event = (seq: number): EventView => ({ seq, kind: "agent_projects.agent_project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
     net.answer = (call) => {
       if (call.path.startsWith("/v1/events/recent?")) {
         const query = new URLSearchParams(call.path.split("?")[1]);

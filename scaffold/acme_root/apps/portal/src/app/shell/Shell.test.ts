@@ -113,7 +113,7 @@ const SLOT: PortalProduct = {
     { id: "agent_knowledge", label: "Agent knowledge", icon: null, to: "/agent-knowledge", tip: "Agent knowledge", count: () => 2 },
   ],
   settings: [
-    { group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/settings/projects" }] },
+    { group: "Agents", id: "agent_projects", label: "Agent projects", icon: null, about: "Repositories", routes: [{ path: "/settings/agent-projects" }] },
     { group: "Security", id: "api-keys", label: "API keys", icon: null, about: "Keys a program calls with", routes: [{ path: "/settings/api-keys" }] },
   ],
   agents: [{ kind: "software_engineer", label: "Software engineer", about: "Changes code." }],
@@ -379,7 +379,7 @@ it("searches the whole app on Cmd-K: what is typed starts a session on Home, and
   const field = q<HTMLInputElement>("input[role='combobox']")!;
   expect(field.placeholder).toBe("Search sessions, settings, and actions");
   const options = () => [...container.querySelectorAll("[role='option']")].map((o) => o.querySelector(".acme-palette-label")?.textContent);
-  expect(options()).toEqual(expect.arrayContaining(["New session", "Agent automations", "Projects", "Tidy the docs"]));
+  expect(options()).toEqual(expect.arrayContaining(["New session", "Agent automations", "Agent projects", "Tidy the docs"]));
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Fix the build");
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -406,17 +406,17 @@ it("opens Settings on Cmd-comma", async () => {
 });
 
 it("puts Settings' own bar in the left bar's place inside Settings: back to the app, the search, and the sections by group", async () => {
-  await mount("/settings/projects");
+  await mount("/settings/agent-projects");
   expect(q("aside[aria-label='Sidebar']")).toBeNull();
   const bar = q("aside[aria-label='Settings sidebar']")!;
   const sections = () => [...bar.querySelectorAll("nav[aria-label='Settings'] a")].map((a) => [a.textContent, a.getAttribute("href")]);
   expect(sections()).toEqual([
     ["Overview", "/settings"],
-    ["Projects", "/settings/projects"],
+    ["Agent projects", "/settings/agent-projects"],
     ["API keys", "/settings/api-keys"],
   ]);
   expect([...bar.querySelectorAll("h2")].map((h) => h.textContent)).toEqual(["Agents", "Security"]);
-  expect(bar.querySelector("a[aria-current='page']")!.textContent).toBe("Projects");
+  expect(bar.querySelector("a[aria-current='page']")!.textContent).toBe("Agent projects");
 
   const search = bar.querySelector<HTMLInputElement>("input[type='search']")!;
   expect(search.placeholder).toBe("e.g. API keys");

@@ -24,11 +24,11 @@ from acme.integrations.events.slack import SlackImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import absent_model_providers
+from acme.om.agent_projects.types.agent_project import Repository
 from acme.om.base import EMPTY_UUID, utcnow
 from acme.om.intake.root import build_intake
 from acme.om.intake.types.event import FeedbackEvent
 from acme.om.intake.types.link import HandleKind
-from acme.om.projects.types.project import Repository
 from acme.services.api.container import AppContainer
 
 FIXTURES = Path(__file__).parents[3] / "integrations" / "tests" / "fixtures"

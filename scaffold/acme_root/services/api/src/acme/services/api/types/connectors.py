@@ -77,12 +77,12 @@ class ConnectorReviewRequest(RequestBody):
 
 
 class AttachRequest(RequestBody):
-    """A kind the connector joins, for one project's sessions or every
+    """A kind the connector joins, for one agent project's sessions or every
     session of the tenant, deferred until the agent loads it unless
     `deferred` is false."""
 
     kind: str = Field(min_length=1, max_length=64)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     deferred: bool = True
 
 
@@ -115,7 +115,7 @@ class ConnectorToolView(View):
 
 class AttachmentView(View):
     kind: str
-    project_id: UUID | None
+    agent_project_id: UUID | None
     deferred: bool
 
 

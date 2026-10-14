@@ -165,11 +165,11 @@ ran against, the run image, who ran it, its outcome, and what served
 each thing it relied on: the real thing, a **twin**, a test **double**, or
 nothing. A **hypothesis** and a **finding** link the runs that show them.
 
-A **validation policy** is a project's say over what counts as done: the
-checks a change must pass, and the **protected** paths no agent may
-change. A **validation** runs those checks on a fresh executor, apart
-from the agent, at the version delivered; the **result gate** counts a
-success only on its runs.
+A **validation policy** is an agent project's say over what counts as
+done: the checks a change must pass, and the **protected** paths no
+agent may change. A **validation** runs those checks on a fresh
+executor, apart from the agent, at the version delivered; the **result
+gate** counts a success only on its runs.
 
 ## Where work runs
 
@@ -216,8 +216,8 @@ The **planner** turns findings into tasks, and hands new work to an
 software engineer. The **platform assistant** answers the people who set
 up and run their part of the platform: it explains the product from its
 documentation and cites it, reads the tenant's sessions and what they
-wait on, its projects, and its agent automations, drafts the tool policy
-for a person to apply, and hands engineering work to a software
+wait on, its agent projects, and its agent automations, drafts the tool
+policy for a person to apply, and hands engineering work to a software
 engineer. It acts on a person's own permissions, and it has no
 workspace, no repository, and no shell. The **reviewer** reads a pull
 request through the forge, its files at its head and its checks, and
@@ -247,7 +247,7 @@ leaves uncommitted is pushed beside the branch before the machine goes.
 
 A session's **isolation** is fixed when the session is made, and every
 workspace it gets is held to it: a host that cannot give it says no, and
-the session waits rather than run on less. Its **egress** is its
+the session waits rather than run on less. Its **egress** is its agent
 project's allowlist: the places its workspace may reach and what it may
 do there, or open egress, chosen on purpose and recorded with why. No
 workspace ever reaches the platform's own machines.
@@ -303,13 +303,13 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
-- A project names its org and binds one repository. A session started
-  under a project belongs to it, of its own org, from before it exists
-  and never moved; a session it spawns or hands work to belongs to the
-  same. The API's start names the session's project, and outside
-  `local` refuses a session that names none. An agent automation's start
-  names its project too, and outside `local` one that names none starts
-  nothing.
+- An agent project names its org and binds one repository. A session
+  started under an agent project belongs to it, of its own org, from
+  before it exists and never moved; a session it spawns or hands work to
+  belongs to the same. The API's start names the session's agent
+  project, and outside `local` refuses a session that names none. An
+  agent automation's start names its agent project too, and outside
+  `local` one that names none starts nothing.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.
@@ -323,7 +323,7 @@ arrive twice, so the second copy gets the first one's answer.
   where it stopped.
 - A run, a validation, a hypothesis, and a finding belong to one session
   and name its org; they go when the session is purged. A validation
-  policy names its org and its project, one each.
+  policy names its org and its agent project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
 - A pool, its tokens, its hosts, their credentials, and a session's
@@ -339,7 +339,7 @@ arrive twice, so the second copy gets the first one's answer.
 - A validation session names its org, and its work is a queue item
   that names the session.
 - A session's workspace names its org and its session, one each, and an
-  egress allowlist its org and its project, one each.
+  egress allowlist its org and its agent project, one each.
 - The matrix and what its operators record of a model are the
   platform's, no org's. A session's pin to a version, and an org's own
   choice of fill, name their org, and go with it.
@@ -353,7 +353,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
-- [Projects](src/acme/om/projects/README.md)
+- [Agent projects](src/acme/om/agent_projects/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Agent billing](src/acme/om/agent_billing/README.md)

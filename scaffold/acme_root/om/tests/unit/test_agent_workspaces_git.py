@@ -19,7 +19,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from contracts.agent_workspaces import ProjectsTwin, PullRequestsTwin
+from contracts.agent_workspaces import AgentProjectsTwin, PullRequestsTwin
 from contracts.doubles import context
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -127,7 +127,7 @@ class Checkout:
         seed = tmp_path / "seed"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.remote)], check=True)
         subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
-        (seed / "README.md").write_text("the project\n")
+        (seed / "README.md").write_text("the agent project\n")
         (seed / "checks").mkdir()
         (seed / "checks" / "test_guard.py").write_text("def test_guard(): ...\n")
         git(seed, "add", "README.md", "checks")
@@ -138,7 +138,7 @@ class Checkout:
         # The forge pushes to the repository on disk, which asks no
         # credential of it.
         self.forge = IntegrationTwinImpl("forge", writes=True)
-        self.projects = ProjectsTwin(repository=str(self.remote))
+        self.agent_projects = AgentProjectsTwin(repository=str(self.remote))
         self.storage = storage or StorageMemoryImpl()
         self.keys: KeyServiceInterface | None = None
         self.transport_layer = transport_layer
@@ -156,7 +156,7 @@ class Checkout:
             self.storage,
             infra,
             agent_kinds=(WORKER,),
-            workspace_projects=self.projects,
+            workspace_agent_projects=self.agent_projects,
             pull_requests=self.pull_requests,
             source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
             transport_layer=self.transport_layer,
@@ -212,14 +212,14 @@ async def test_a_release_pushes_the_uncommitted_work_beside_the_branch(checkout:
     here = Path(workspace.location)
     assert git(here, "rev-parse", "--abbrev-ref", "HEAD") == branch, "cut for its first loop"
     assert git(here, "rev-parse", "HEAD") == checkout.main
-    (here / "README.md").write_text("the project, changed\n")
+    (here / "README.md").write_text("the agent project, changed\n")
     (here / "notes.txt").write_text("half done\n")
 
     await checkout.release(workspace)
 
     (ref,) = checkout.snapshots(branch)
     assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done"
-    assert git(checkout.remote, "show", f"{ref}:README.md") == "the project, changed"
+    assert git(checkout.remote, "show", f"{ref}:README.md") == "the agent project, changed"
     assert git(checkout.remote, "rev-parse", f"{ref}^") == checkout.main
     assert git(checkout.remote, "branch", "--list", branch) == "", "the branch was not moved"
     status = git(here, "status", "--porcelain").splitlines()
@@ -424,7 +424,7 @@ async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
     await checkout.managers.steps.begin_run(checkout.ctx, session_id)
     workspace = await checkout.prepare(session_id)
     (Path(workspace.location) / "notes.txt").write_text("the stale run's draft\n")
-    binding_of = checkout.projects.binding_of
+    binding_of = checkout.agent_projects.binding_of
 
     async def claimed_meanwhile(*args: Any, **kwargs: Any) -> object:
         # The session's next run claims it, and its first command lands.
@@ -433,7 +433,7 @@ async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
         await infra.get_transport().write_file(workspace, ".claimed", b"", epoch)
         return found
 
-    monkeypatch.setattr(checkout.projects, "binding_of", claimed_meanwhile)
+    monkeypatch.setattr(checkout.agent_projects, "binding_of", claimed_meanwhile)
     with pytest.raises(StaleCommand):
         await checkout.release(workspace)
 
@@ -586,12 +586,12 @@ async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Ch
     (here / "feature.txt").write_text("the feature\n")
     pushed = commit(here, "f")
     git(here, "push", "-q", "origin", branch)
-    (here / "README.md").write_text("the project, changed\n")
+    (here / "README.md").write_text("the agent project, changed\n")
 
     delivered = await checkout.managers.agent_workspaces.work_product(checkout.ctx, workspace)
 
-    # The repository's name, as a project's evidence is keyed.
-    assert delivered.project == str(checkout.remote).lower().lstrip("/").removesuffix(".git")
+    # The repository's name, as an agent project's evidence is keyed.
+    assert delivered.agent_project == str(checkout.remote).lower().lstrip("/").removesuffix(".git")
     assert (delivered.base, delivered.head) == (checkout.main, pushed)
     assert delivered.changed == ("feature.txt",), "what the repository holds, and no more"
     assert delivered.dirty, "the checkout holds work it has not delivered"

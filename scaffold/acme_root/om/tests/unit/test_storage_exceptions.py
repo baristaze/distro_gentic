@@ -24,6 +24,7 @@ from contracts import (
     agent_automation_storage,
     agent_knowledge_storage,
     agent_playbook_storage,
+    agent_project_storage,
     agent_session_storage,
     agent_storage,
     agent_workspace_storage,
@@ -49,7 +50,6 @@ from contracts import (
     placement_storage,
     platform_agents_storage,
     privacy_storage,
-    project_storage,
     retention_storage,
     spend_account_storage,
     spend_ledger_storage,
@@ -229,7 +229,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
     "PlatformAgentsStorageInterface": platform_agents_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
-    "ProjectStorageInterface": project_storage.CROSS_TENANT_CASES,
+    "AgentProjectStorageInterface": agent_project_storage.CROSS_TENANT_CASES,
     "ExecRelayStorageInterface": exec_relay_storage.CROSS_TENANT_CASES,
     "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
@@ -291,7 +291,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # its tenant: bookkeeping of the same step, for no principal.
         ("StepsManagerInterface", "purge_histories"),
         # And the session's authority, its tree, its artifacts, its
-        # workspace, and its project's row, named with the tenant, which the
+        # workspace, and its agent project's row, named with the tenant, which the
         # same purge takes before the session's row.
         ("AttributionManagerInterface", "purge_authority"),
         ("AgentsManagerInterface", "purge_tree"),
@@ -304,7 +304,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("AgentWorkspacesManagerInterface", "snapshot_hosts"),
         ("ExecRelayManagerInterface", "erase_purged"),
         ("EvidenceManagerInterface", "purge_session"),
-        ("ProjectsManagerInterface", "purge_session"),
+        ("AgentProjectsManagerInterface", "purge_session"),
         ("ExecRelayManagerInterface", "purge_session"),
         # And what ends with them on the queue: the commands of a purged
         # session, and the work on a revoked host's lane, its one claimant.

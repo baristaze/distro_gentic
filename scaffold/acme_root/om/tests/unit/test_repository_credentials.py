@@ -1,10 +1,10 @@
-"""The two credentials the platform reaches a project's repository with, and
+"""The two credentials the platform reaches an agent project's repository with, and
 the agent never holds, over the memory roots and the forge's twin. A push
 token writes its session's own branch, its snapshots, and its pull request
 alone, and ends with its loop's workspace or its lifetime; the software engineer
 opens its branch and pull request with one it never sees, and both are
 its session's work: the events on them find it. A fetch credential is
-kept in the tenant's store under its project, handed to the read of a
+kept in the tenant's store under its agent project, handed to the read of a
 session's work product alone, and goes with its tenant."""
 
 from collections.abc import Mapping
@@ -14,7 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.agent_workspaces import REPOSITORY, GitTwin, ProjectsTwin, ReaderTwin
+from contracts.agent_workspaces import REPOSITORY, AgentProjectsTwin, GitTwin, ReaderTwin
 from contracts.loops import Loop, live, loop_over, reply, said
 from contracts.platform_agents import CORPUS, calls
 from pydantic import SecretStr
@@ -78,20 +78,20 @@ WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 
 
 class Forged:
-    """A software engineer's platform: its project binds `REPOSITORY`, the forge is
+    """A software engineer's platform: its agent project binds `REPOSITORY`, the forge is
     the integration's twin, the workspace's HEAD is `HEAD`, and intake binds
     a session's work as the session runner wires it."""
 
     def __init__(self, tmp_path: Path, **roots: Any) -> None:
         self.forge = IntegrationTwinImpl("forge")
-        self.projects = ProjectsTwin()
+        self.agent_projects = AgentProjectsTwin()
         self.reader = ReaderTwin(head=HEAD)
         self.loop: Loop = loop_over(
             tmp_path,
             kinds=(SOFTWARE_ENGINEER,),
             platform_agents=PlatformAgents(corpus=CORPUS),
             intake=lambda: self.intake,
-            workspace_projects=self.projects,
+            workspace_agent_projects=self.agent_projects,
             workspace_git=GitTwin(head=HEAD),
             workspace_reader=self.reader,
             source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
@@ -150,7 +150,7 @@ def held_with(digest: str | None, expires_in: timedelta) -> AgentSessionWorkspac
         updated_at=now,
         created_by=new_id(),
         updated_by=new_id(),
-        project_id=new_id(),
+        agent_project_id=new_id(),
         level=IsolationMode.TWIN,
         egress=EgressMode.NONE,
         egress_source="its kind's",
@@ -167,8 +167,8 @@ def held_with(digest: str | None, expires_in: timedelta) -> AgentSessionWorkspac
 
 def test_a_push_token_writes_its_sessions_branch_and_pull_request_alone() -> None:
     held = held_with("d1", timedelta(minutes=5))
-    assert held.project_id is not None
-    binding = RepositoryBinding(project_id=held.project_id, repository=REPOSITORY)
+    assert held.agent_project_id is not None
+    binding = RepositoryBinding(agent_project_id=held.agent_project_id, repository=REPOSITORY)
     now = utcnow()
 
     def push(ref: str, repository: str = REPOSITORY) -> RepositoryWrite:
@@ -358,7 +358,7 @@ async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_
     agent_automations = build_agent_automations(
         platform.loop.storage,
         platform.loop.managers,
-        project_required=False,
+        agent_project_required=False,
         principal_context=live,
     )
     owner = platform.loop.owner
@@ -495,7 +495,7 @@ async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refus
     assert [opened.body for opened in platform.forge.pull_requests] == [own]
 
 
-# A fetch credential is the tenant's, kept under its project, and reaches
+# A fetch credential is the tenant's, kept under its agent project, and reaches
 # the read of a session's work product alone.
 
 
@@ -504,21 +504,23 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
 ) -> None:
     platform = Forged(tmp_path)
     workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
-    project_id = platform.projects.project_id
+    agent_project_id = platform.agent_projects.agent_project_id
     secrets = platform.loop.infra.get_secrets()
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
     with pytest.raises(NotAuthorized):
-        await workspaces.put_fetch_credential(platform.loop.colleague(), project_id, credential)
+        await workspaces.put_fetch_credential(
+            platform.loop.colleague(), agent_project_id, credential
+        )
     with pytest.raises(NotFound):
         await workspaces.put_fetch_credential(owner, new_id(), credential)
 
-    record = await workspaces.put_fetch_credential(owner, project_id, credential)
-    assert (record.id, record.version) == (project_id, 1)
+    record = await workspaces.put_fetch_credential(owner, agent_project_id, credential)
+    assert (record.id, record.version) == (agent_project_id, 1)
     assert PASSWORD not in record.model_dump_json(), "the record holds no value"
-    kept = await secrets.get(owner.org_id, rules.fetch_secret_name(project_id))
+    kept = await secrets.get(owner.org_id, rules.fetch_secret_name(agent_project_id))
     assert FetchCredential.model_validate_json(kept) == credential
     rotated = FetchCredential(username="reader", password=SecretStr("rotated"))
-    assert (await workspaces.put_fetch_credential(owner, project_id, rotated)).version == 2
+    assert (await workspaces.put_fetch_credential(owner, agent_project_id, rotated)).version == 2
 
     session_id = await platform.software_engineer()
     workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
@@ -532,7 +534,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
 
     monkeypatch.setattr(platform.loop.managers.tenancy, "tenant_expired", expired)
     assert await workspaces.purge_tenant(owner) >= 2
-    assert not await secrets.has(owner.org_id, rules.fetch_secret_name(project_id))
+    assert not await secrets.has(owner.org_id, rules.fetch_secret_name(agent_project_id))
     platform.reader.credentials.clear()
     with pytest.raises(NotFound):
         await workspaces.get_workspace(owner, session_id)
@@ -543,11 +545,11 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
 ) -> None:
     platform = Forged(tmp_path)
     workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
-    project_id = platform.projects.project_id
+    agent_project_id = platform.agent_projects.agent_project_id
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
-    await workspaces.put_fetch_credential(owner, project_id, credential)
+    await workspaces.put_fetch_credential(owner, agent_project_id, credential)
     await platform.loop.infra.get_secrets().delete(
-        owner.org_id, rules.fetch_secret_name(project_id)
+        owner.org_id, rules.fetch_secret_name(agent_project_id)
     )
 
     session_id = await platform.software_engineer()

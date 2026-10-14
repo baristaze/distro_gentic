@@ -42,12 +42,12 @@ export const keys = {
     all: ["invitation"] as const,
     list: (limit: number) => ["invitation", "list", limit] as const,
   },
-  // The tenant's projects, which a new session starts in. No push names a
-  // project, so the list is read on its own clock.
-  projects: {
-    all: ["project"] as const,
-    list: (limit: number) => ["project", "list", limit] as const,
-    one: (id: string) => ["project", id] as const,
+  // The tenant's agent projects, which a new session starts in. No push names an
+  // agent project, so the list is read on its own clock.
+  agentProjects: {
+    all: ["agent_project"] as const,
+    list: (limit: number) => ["agent_project", "list", limit] as const,
+    one: (id: string) => ["agent_project", id] as const,
   },
   // The records below are named by no push, so each is read on its own
   // clock and again after a write of the screen's own.

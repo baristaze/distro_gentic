@@ -31,10 +31,10 @@ with two; a dashboard, a list, or a cap that sums usage its own way.
 
 ## MNY-02 A window follows the tenant's time zone and the billing period
 
-**Principle.** Limits are budgets over a scope (person, project, team,
-tenant) and a window (hour, day, week, month, or custom). Days and weeks
-follow the tenant's time zone, months follow the billing period, and a
-change of time zone never manufactures budget.
+**Principle.** Limits are budgets over a scope (person, agent project,
+team, tenant) and a window (hour, day, week, month, or custom). Days and
+weeks follow the tenant's time zone, months follow the billing period,
+and a change of time zone never manufactures budget.
 
 **Source.** Money, Metering and Limits.
 

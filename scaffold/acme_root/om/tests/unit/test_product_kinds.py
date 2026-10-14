@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import SessionProjectsMemory, context
+from contracts.doubles import SessionAgentProjectsMemory, context
 from contracts.evidence import (
     CHECKOUT,
     CHECKOUT_KEY,
@@ -66,9 +66,9 @@ from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.rules import decide
 from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
-from acme.om.trust.owners import ProjectOwnerImpl, SecretOwnerInterface, SecretOwners
+from acme.om.trust.owners import AgentProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
-from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
+from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore, kept_as
 from acme.om.watch.impl.stream import StreamOptions, step_kinds
 from acme.om.watch.kinds import STEP, StreamKind
 from acme.om.watch.root import build_kind_streams, build_stream
@@ -497,21 +497,24 @@ async def test_a_products_secret_reaches_only_the_sessions_placed_on_its_owner(
     assert refusal == f"{INJECTED_TOKEN.name} is declared on another batch, " + (
         "and never reaches this session"
     )
-    assert crossing(INJECTED_TOKEN, declared, inside_wall=False, placed={PROJECT: ours})
+    assert crossing(INJECTED_TOKEN, declared, inside_wall=False, placed={AGENT_PROJECT: ours})
     # An owner the tenant does not hold, or of a kind nobody registered, owns nothing.
     for unowned in (on_pool(new_id()), on_pool(ours).model_copy(update={"owner_kind": "farm"})):
         with pytest.raises(NotFound):
             await trust.declare_secret(owner, unowned)
 
 
-def test_a_product_never_takes_over_the_projects_secrets() -> None:
+def test_a_product_never_takes_over_the_agent_projects_secrets() -> None:
     class Impostor(BatchPools):
-        kind = PROJECT
+        kind = AGENT_PROJECT
 
-    project = ProjectOwnerImpl(SessionProjectsMemory())
-    assert [owner.kind for owner in SecretOwners((project, BatchPools()))] == [PROJECT, BATCH]
+    agent_project = AgentProjectOwnerImpl(SessionAgentProjectsMemory())
+    assert [owner.kind for owner in SecretOwners((agent_project, BatchPools()))] == [
+        AGENT_PROJECT,
+        BATCH,
+    ]
     with pytest.raises(ValueError, match="registered twice"):
-        SecretOwners((project, Impostor()))
+        SecretOwners((agent_project, Impostor()))
 
 
 # A stream kind, bounded like the step's.
@@ -631,7 +634,7 @@ async def gate_reads(executor: str, script: dict[str, Any]) -> str:
     evidence.work.deliver(org.id, session, delivered())
     # A baseline came first, written apart from the executors the case compares.
     first, runs_at_base = make_validation(
-        session, version="base0", project=CHECKOUT_KEY, purpose=RunPurpose.BASELINE
+        session, version="base0", agent_project=CHECKOUT_KEY, purpose=RunPurpose.BASELINE
     )
     assert await evidence.storage.create_validation(org.id, first, runs_at_base)
     try:

@@ -88,12 +88,12 @@ class InvocationView(View):
 
 class PinRequest(RequestBody):
     """A kind manual: the name whose latest version is pinned to `kind`,
-    for the tenant's sessions of it, or with `project_id` those of one
-    project, where it wins over the tenant's."""
+    for the tenant's sessions of it, or with `agent_project_id` those of one
+    agent project, where it wins over the tenant's."""
 
     kind: str = Field(min_length=1, max_length=MAX_KIND)
     name: str = Field(min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
 
 
 class PinView(View):
@@ -102,7 +102,7 @@ class PinView(View):
 
     id: UUID
     kind: str
-    project_id: UUID | None
+    agent_project_id: UUID | None
     agent_playbook_id: UUID
     name: str
     version: int

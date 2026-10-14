@@ -64,7 +64,7 @@ describe("runs, work product, and usage", () => {
       image: "img",
       host: "h1",
       isolation: "container",
-      project: "p",
+      agent_project: "p",
       provenance: "twin",
       outcome: "failed",
       cases: { passed: 3, failed: 1, skipped: 0 },
@@ -88,7 +88,7 @@ describe("runs, work product, and usage", () => {
       workProductLines({
         branch: "agent/tidy",
         branch_seen: true,
-        project_id: null,
+        agent_project_id: null,
         report: { seq: 8, outcome: "succeeded", verified: false, accepted_at: at },
         work: [
           { kind: "pull_request", handle: "acme/docs#12", bound_at: at },

@@ -1,5 +1,5 @@
 """A hidden suite from a source of its own reaches the fresh executor: the
-harness asks for it by the project whose repository holds it, the platform
+harness asks for it by the agent project whose repository holds it, the platform
 reads the tree at the head with every path of the suite taken from that
 repository, and the suite's own files run there, whatever the head holds
 at those paths. Both repositories are on this disk, read by their URLs;
@@ -31,6 +31,7 @@ from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceBase
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
 from acme.om.agent_workspaces.impl.executor import (
     ARCHIVE,
     LOCK,
@@ -40,7 +41,6 @@ from acme.om.agent_workspaces.impl.executor import (
     Pin,
 )
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.agent_workspaces.projects import WorkspaceProjectsInterface
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id
@@ -95,7 +95,7 @@ SCORED_RUNNER = SUITE_RUNNER.replace(
     'score = {}\nexec(open("checks/score.py").read(), score)\n'
     'outcome = "passed" if score["passes"](totals["total"]) else "failed"',
 )
-"""A hidden suite's runner whose cases the project's own code scores, at a
+"""A hidden suite's runner whose cases the agent project's own code scores, at a
 path the scenario forbids."""
 SCORE = "def passes(total):\n    return total([2, 3]) == 5\n"
 GAMED = "def passes(total):\n    return True\n"
@@ -195,23 +195,31 @@ def served(work: Path) -> str:
     return f"file://{bare}"
 
 
-class Bound(WorkspaceProjectsInterface):
-    """Each project binds the repository on this disk the case gave it."""
+class Bound(WorkspaceAgentProjectsInterface):
+    """Each agent project binds the repository on this disk the case gave it."""
 
     def __init__(self, urls: Mapping[UUID, str]) -> None:
         self._urls = urls
 
-    async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+    async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return None
 
-    async def binding_of(self, ctx: TenantContext, project_id: UUID) -> RepositoryBinding | None:
-        url = self._urls.get(project_id)
-        return None if url is None else RepositoryBinding(project_id=project_id, repository=url)
+    async def binding_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> RepositoryBinding | None:
+        url = self._urls.get(agent_project_id)
+        return (
+            None
+            if url is None
+            else RepositoryBinding(agent_project_id=agent_project_id, repository=url)
+        )
 
-    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+    async def keeps_snapshots(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         return True
 
-    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> WorkspaceBase | None:
         return None
 
 
@@ -305,8 +313,8 @@ def seen(tree: Path, names: Sequence[str]) -> TwinReply:
 
 
 class Repositories:
-    """The scenario's project, whose base holds the defect, and the hidden
-    suite's own repository, bound to a project of the same tenant apart
+    """The scenario's agent project, whose base holds the defect, and the hidden
+    suite's own repository, bound to an agent project of the same tenant apart
     from it; the executor over the twins, with its tree read by the
     workspaces from both; and the harness over it."""
 
@@ -318,7 +326,7 @@ class Repositories:
         forbidden: tuple[str, ...] = ("hidden/**",),
     ) -> None:
         self.ctx = context(Role.OWNER, make_org())
-        self.project_id, self.suite_project_id = new_id(), new_id()
+        self.agent_project_id, self.suite_agent_project_id = new_id(), new_id()
         self.work = tmp_path / "project"
         self.work.mkdir()
         git(self.work, "init", "-q", "-b", "main")
@@ -330,13 +338,13 @@ class Repositories:
         self.suite_url = served(suite)
         self.scenario = Scenario(
             name="totals-drop",
-            project=str(self.project_id),
+            agent_project=str(self.agent_project_id),
             base=self.base,
             objective="Some carts total less than their items. Make every cart total right.",
             root_cause=("first item",),
             visible=("unit",),
             hidden=HiddenSuite(
-                project=str(self.suite_project_id),
+                agent_project=str(self.suite_agent_project_id),
                 source=self.source,
                 paths=("hidden/**",),
                 checks=(COMPLETE,),
@@ -367,7 +375,9 @@ class Repositories:
         managers = build_managers(
             StorageMemoryImpl(),
             self._infra,
-            workspace_projects=Bound({self.project_id: url, self.suite_project_id: self.suite_url}),
+            workspace_agent_projects=Bound(
+                {self.agent_project_id: url, self.suite_agent_project_id: self.suite_url}
+            ),
             workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
         executor = ExecutorAgentWorkspacesImpl(
@@ -383,7 +393,7 @@ class Repositories:
             self.ctx.org_id,
             session,
             WorkProduct(
-                project=str(self.project_id),
+                agent_project=str(self.agent_project_id),
                 base=self.base,
                 head=head,
                 changed=tuple(sorted(files)),
@@ -410,7 +420,7 @@ async def test_a_hidden_suite_from_a_source_of_its_own_runs_its_files_protected(
     repositories = Repositories(tmp_path)
 
     # A head that fixes the defect: the suite's own runner, which the
-    # project's repository never held, runs in the tree and passes.
+    # agent project's repository never held, runs in the tree and passes.
     fixed = await repositories.judge({"src/totals.py": FIX})
     assert [(run.check, run.version, run.passing) for run in fixed.hidden] == [
         (COMPLETE.name, fixed.head, True)

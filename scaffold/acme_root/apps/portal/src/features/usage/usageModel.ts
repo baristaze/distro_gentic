@@ -24,16 +24,16 @@ export function windowLine(kind: string, seconds: number | null): string {
   return WINDOWS[kind] ?? kind;
 }
 
-/** What a budget bounds, in words, naming a person or a project where the
+/** What a budget bounds, in words, naming a person or an agent project where the
  * screen knows it. */
-export function scopeLine(kind: string, key: string, nameOf: { person: (id: string) => string; project: (id: string) => string }): string {
+export function scopeLine(kind: string, key: string, nameOf: { person: (id: string) => string; agentProject: (id: string) => string }): string {
   switch (kind) {
     case "tenant":
       return "the org";
     case "person":
       return nameOf.person(key);
     case "project":
-      return `the project ${nameOf.project(key)}`;
+      return `the agent project ${nameOf.agentProject(key)}`;
     default:
       return `the ${kind} ${key}`;
   }

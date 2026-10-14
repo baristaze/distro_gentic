@@ -46,12 +46,12 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
             return [to_model(row, AgentKnowledge) for row in rows]
 
     async def read_reachable(
-        self, org_id: UUID, project_id: UUID | None, after: UUID | None, limit: int
+        self, org_id: UUID, agent_project_id: UUID | None, after: UUID | None, limit: int
     ) -> list[AgentKnowledge]:
         stmt = select(AgentKnowledgeEntries).where(
             AgentKnowledgeEntries.org_id == org_id,
             AgentKnowledgeEntries.status == AgentKnowledgeStatus.REVIEWED.value,
-            _reached_by(project_id),
+            _reached_by(agent_project_id),
         )
         if after is not None:
             stmt = stmt.where(AgentKnowledgeEntries.id > after)
@@ -61,7 +61,7 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
             return [to_model(row, AgentKnowledge) for row in rows]
 
     async def read_by_slug(
-        self, org_id: UUID, project_id: UUID | None, slug: str
+        self, org_id: UUID, agent_project_id: UUID | None, slug: str
     ) -> AgentKnowledge | None:
         stmt = (
             select(AgentKnowledgeEntries)
@@ -69,7 +69,7 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
                 AgentKnowledgeEntries.org_id == org_id,
                 AgentKnowledgeEntries.slug == slug,
                 AgentKnowledgeEntries.status == AgentKnowledgeStatus.REVIEWED.value,
-                _reached_by(project_id),
+                _reached_by(agent_project_id),
             )
             .order_by(AgentKnowledgeEntries.id)
             .limit(1)
@@ -146,11 +146,12 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
         return gone
 
 
-def _reached_by(project_id: UUID | None) -> ColumnElement[bool]:
-    """The entries a session of `project_id` reaches: those of no project,
-    and its project's own when it has one."""
-    if project_id is None:
-        return AgentKnowledgeEntries.project_id.is_(None)
+def _reached_by(agent_project_id: UUID | None) -> ColumnElement[bool]:
+    """The entries a session of `agent_project_id` reaches: those of no agent project,
+    and its agent project's own when it has one."""
+    if agent_project_id is None:
+        return AgentKnowledgeEntries.agent_project_id.is_(None)
     return or_(
-        AgentKnowledgeEntries.project_id.is_(None), AgentKnowledgeEntries.project_id == project_id
+        AgentKnowledgeEntries.agent_project_id.is_(None),
+        AgentKnowledgeEntries.agent_project_id == agent_project_id,
     )

@@ -50,7 +50,7 @@ class TriggerView(View):
 
 class ActionBody(RequestBody):
     """`start_session`: start a session of `agent_kind` titled `title` in the
-    tenant's project `project_id`, and invoke the tenant's `agent_playbook` of
+    tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
     that name into it first, its latest version at each firing, when one is
     named; a name with no version is refused. `message_session`: send the brief to the
     standing session `session_id`; an enabled one is refused, since nothing
@@ -62,7 +62,7 @@ class ActionBody(RequestBody):
     brief: str | None = Field(default=None, min_length=1, max_length=MAX_BRIEF)
     agent_kind: str | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     session_id: UUID | None = None
     params: dict[str, JsonValue] = Field(default_factory=lambda: {})
     agent_playbook: str | None = Field(
@@ -75,7 +75,7 @@ class ActionView(View):
     brief: str | None
     agent_kind: str | None
     title: str | None
-    project_id: UUID | None
+    agent_project_id: UUID | None
     session_id: UUID | None
     agent_playbook: str | None
     # The stored params are frozen, a nested list a tuple and a nested

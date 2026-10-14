@@ -15,7 +15,7 @@ from acme.om.exceptions import PreconditionFailed, TenantMismatch, UniqueKeyTake
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention.keys import KeyDestruction
 from acme.om.retention.storage import RetentionStorageInterface
-from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy, TenantRetention
+from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
@@ -45,9 +45,9 @@ def make_policy(version: int = 1, policy: RetentionPolicy | None = None) -> Tena
         created_by=by,
         updated_by=by,
         policy=policy or RetentionPolicy(content_lifetime=WEEK, shape_lifetime=MONTH),
-        projects=(
-            ProjectRetention(
-                project_id=new_id(),
+        agent_projects=(
+            AgentProjectRetention(
+                agent_project_id=new_id(),
                 policy=RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY),
             ),
         ),

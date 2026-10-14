@@ -28,6 +28,7 @@ from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -53,7 +54,6 @@ from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.park_alerts.manager import ParkAlertsManagerInterface
 from acme.om.park_alerts.root import build_park_alerts
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -248,14 +248,14 @@ def wired(
     *,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
-    project_required: bool = False,
+    agent_project_required: bool = False,
     actions: ProductActions = no_actions,
     credentials: Callable[
         [ModelProvidersInterface], CallCredentialsInterface
     ] = CallCredentialsPlatformImpl,
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
-    tenant's owner; a suite over Postgres hands in both. `project_required`
+    tenant's owner; a suite over Postgres hands in both. `agent_project_required`
     is the agent automations' as a stack outside `local` sets it, `actions` the
     product's own kinds of agent automation action, and `credentials` the key
     each of the loop's calls goes out on, the platform's unless said."""
@@ -339,7 +339,7 @@ def wired(
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         credentials(providers),
         infra.get_outages(),
@@ -373,7 +373,7 @@ def wired(
         agent_automations=build_agent_automations(
             storage,
             managers,
-            project_required=project_required,
+            agent_project_required=agent_project_required,
             principal_context=members,
             clock=clock,
             actions=actions,

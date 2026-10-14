@@ -1,4 +1,4 @@
-"""The workspaces over Postgres, as a process wires them: a project's
+"""The workspaces over Postgres, as a process wires them: an agent project's
 allowlist lands with the rows that announce it, a session pins it as it is
 created and its egress is read off that pin, a host that cannot give the
 pinned level parks the loop on the resource, and the work a loop left is
@@ -9,12 +9,13 @@ from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
-from contracts.agent_workspaces import GitTwin, ProjectsTwin, ReaderTwin
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
 from contracts.loops import ASSISTANT, loop_over, reply, said
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_workspaces.impl.manager import CREATED
 from acme.om.agent_workspaces.types.egress import (
     EgressAllowlist,
@@ -27,7 +28,6 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import build_managers
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
@@ -76,13 +76,17 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     return owner
 
 
-async def test_a_session_pins_its_projects_allowlist_and_its_egress_is_read_off_the_pin(
+async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_read_off_the_pin(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     owner = await an_owner(storage, tmp_path)
-    projects = ProjectsTwin()
+    agent_projects = AgentProjectsTwin()
     loop = loop_over(
-        tmp_path, storage=storage, owner=owner, kinds=(TWINNED,), workspace_projects=projects
+        tmp_path,
+        storage=storage,
+        owner=owner,
+        kinds=(TWINNED,),
+        workspace_agent_projects=agent_projects,
     )
     workspaces = loop.managers.agent_workspaces
     listed = EgressAllowlist(
@@ -91,14 +95,17 @@ async def test_a_session_pins_its_projects_allowlist_and_its_egress_is_read_off_
         updated_at=loop.clock(),
         created_by=owner.user_id,
         updated_by=owner.user_id,
-        project_id=projects.project_id,
+        agent_project_id=agent_projects.agent_project_id,
         rules=(EgressRule(destination="git.example.com", methods=(EgressMethod.GET,)),),
     )
     await workspaces.write_allowlist(owner, listed)
     session_id = await loop.start("twinned")
 
     pinned = await workspaces.get_workspace(owner, session_id)
-    assert (pinned.project_id, pinned.egress) == (projects.project_id, EgressMode.ALLOWLIST)
+    assert (pinned.agent_project_id, pinned.egress) == (
+        agent_projects.agent_project_id,
+        EgressMode.ALLOWLIST,
+    )
     events = await loop.managers.events.get_events(owner, 0, 100)
     assert CREATED in {event.kind for event in events}, "the write was announced"
 
@@ -133,7 +140,7 @@ async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
         result_gate=ResultGateEvidenceImpl(
             storage.get_evidence_storage(),
             WorkProductAbsentImpl(),
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
     )
     session_id = await loop.start("twinned")
@@ -158,7 +165,7 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
         storage=storage,
         owner=owner,
         kinds=(TWINNED,),
-        workspace_projects=ProjectsTwin(),
+        workspace_agent_projects=AgentProjectsTwin(),
         workspace_git=git,
         workspace_reader=ReaderTwin(),
     )

@@ -8,16 +8,17 @@ of](../../../../README.md).
 
 - **Entry**: a title, the words that trigger it, and what it says, with
   its state: suggested by an agent, reviewed by a person, or rejected. It
-  belongs to one project of its tenant, or to the whole tenant, and
-  carries a slug, its title's words and the end of its id, that an agent
-  reads it by, and what the [lever checks](../levers/README.md) found in
-  its words at its version.
+  belongs to one agent project of its tenant, or to the whole tenant,
+  and carries a slug, its title's words and the end of its id, that an
+  agent reads it by, and what the [lever checks](../levers/README.md)
+  found in its words at its version.
 - **Recall**: an entry's version a session recalled, or read by its slug.
 
 ## What can happen
 
 - **Suggest.** An agent suggests an entry from its session, for the
-  session's project, or for the whole tenant when the session has none.
+  session's agent project, or for the whole tenant when the session has
+  none.
 - **Write.** A person writes an entry in person, for the whole tenant; it
   is reviewed as it is written.
 - **Review.** A person keeps or rejects a suggestion, in person.
@@ -41,9 +42,9 @@ of](../../../../README.md).
 
 - **Nothing unreviewed is recalled or read.** A suggestion waits for a
   person, so one session cannot plant instructions for the next.
-- **A session reaches its project's entries and its tenant's alone.** An
-  entry of another project, or of another tenant, is never recalled,
-  found, or read, as one that never existed is not.
+- **A session reaches its agent project's entries and its tenant's
+  alone.** An entry of another agent project, or of another tenant, is
+  never recalled, found, or read, as one that never existed is not.
 - **Recalled agent knowledge is data.** It arrives as an event the agent
   reads quoted, whoever wrote it.
 - **A session does not rediscover its environment.** What its subject
@@ -55,8 +56,8 @@ The recall at start is the tools layer `root.AgentKnowledgeLayer`,
 around `prepare_workspace`, for a session with no model request yet
 (`AgentSession.speaker` is None). A root that runs loops wraps its tools
 in it, and hands `AgentKnowledgeLayer.manager` to `build_managers` as
-`agent_knowledge`, for the agents' tools. A session's project is read
-from the projects' rows (`SessionProjectsInterface`), never from a
-call's input; storage bounds every read to it (`read_reachable`,
-`read_by_slug`), and the manager checks it again (`rules.reaches`).
--->
+`agent_knowledge`, for the agents' tools. A session's agent project is
+read from the agent projects' rows (`SessionAgentProjectsInterface`),
+never from a call's input; storage bounds every read to it
+(`read_reachable`, `read_by_slug`), and the manager checks it again
+(`rules.reaches`). -->

@@ -34,6 +34,7 @@ from acme.om.agent_playbooks.types.agent_playbook import (
     AgentPlaybookDraft,
     AgentPlaybookGate,
 )
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.types.kind import TreeLimits
 from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
@@ -41,7 +42,6 @@ from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.context import Role
 from acme.om.exceptions import NotAuthorized, NotFound
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
@@ -342,7 +342,7 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
                 managers.pricing,
                 managers.agent_sessions,
                 managers.budgets,
-                SessionProjectsBoundImpl(storage.get_project_storage()),
+                SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 clock=clock,
             )
         )

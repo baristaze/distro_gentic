@@ -19,10 +19,10 @@ from typing import cast
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_session
 from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import DELIVERY, loop_over, reply, said
-from contracts.project_storage import in_project
 
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
@@ -956,7 +956,7 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
 
 
 # An instance a run makes for a session: made by a host of the session's
-# pool alone, held to the session's project, and purged by the host that
+# pool alone, held to the session's agent project, and purged by the host that
 # holds it.
 
 
@@ -980,7 +980,9 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     wall: Wall,
 ) -> None:
     managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
-    project_id = await in_project(wall.storage.get_project_storage(), owner.org_id, session_id)
+    agent_project_id = await in_agent_project(
+        wall.storage.get_agent_project_storage(), owner.org_id, session_id
+    )
     elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "nightly"), "host-3")
     stranger, _ = await managers.tenancy.bootstrap(
         request(), "Bolt", "bolt", "bob@bolt.test", "Bob"
@@ -999,7 +1001,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
         instance,
         session_id,
     )
-    assert payload.project_id == project_id, "held to the session's project"
+    assert payload.agent_project_id == agent_project_id, "held to the session's agent project"
     binding = await managers.exec_relay.prepared(
         request(), wall.other, row.id, PrepareAnswer(location="/srv/work/instance")
     )
@@ -1013,14 +1015,14 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     assert own is not None and own.host_id == wall.holder.host_id, "the session's own stays"
 
     # Its command goes to the host that made it, held to the session's
-    # project, and to no other.
+    # agent project, and to no other.
     workspace = Workspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
     sent = asyncio.ensure_future(transport(managers).run(workspace, command(1), seal=NO_SEAL))
     for outside in (wall.holder, elsewhere, foreign):
         assert await Host(managers, outside).claim() is None
     ran = await Host(managers, wall.other).claim_soon()
     exec_payload = ExecPayload.model_validate(ran.payload)
-    assert (exec_payload.session_id, exec_payload.project_id) == (instance, project_id)
+    assert (exec_payload.session_id, exec_payload.agent_project_id) == (instance, agent_project_id)
     await Host(managers, wall.other).finish(ran, stdout="ok")
     assert (await sent).stdout == "ok"
 

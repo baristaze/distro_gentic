@@ -12,6 +12,7 @@ from acme.om.agent_knowledge.types.agent_knowledge import (
     AgentKnowledgeRecall,
     AgentKnowledgeStatus,
 )
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, derived_id, new_id, utcnow
@@ -28,7 +29,6 @@ from acme.om.levers.rules import checked
 from acme.om.levers.types.lever import LeverFinding, LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "agent_knowledge.entry.created"
@@ -49,7 +49,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         self,
         storage: AgentKnowledgeStorageInterface,
         sessions: AgentSessionsManagerInterface,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: AgentKnowledgeOptions,
@@ -58,7 +58,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
     ) -> None:
         self._storage = storage
         self._sessions = sessions
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._tenancy = tenancy
         self._relay = relay
         self._options = options
@@ -70,14 +70,14 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
     ) -> AgentKnowledge:
         ctx.require(Permission.WRITE)
         await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         return await self._create(
             ctx,
             title,
             trigger,
             text,
             suggested_by=session_id,
-            project_id=project_id,
+            agent_project_id=agent_project_id,
             entry_id=new_id(),
         )
 
@@ -99,7 +99,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
             trigger,
             text,
             suggested_by=None,
-            project_id=None,
+            agent_project_id=None,
             entry_id=entry_id or new_id(),
         )
 
@@ -177,14 +177,14 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         self, ctx: TenantContext, session_id: UUID, about: str
     ) -> tuple[AgentKnowledge, ...]:
         ctx.require(Permission.WRITE)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         found: list[AgentKnowledge] = []
         after: UUID | None = None
         while len(found) < self._options.most:
             page = await self._storage.read_reachable(
-                ctx.org_id, project_id, after, self._options.page
+                ctx.org_id, agent_project_id, after, self._options.page
             )
-            found.extend(triggered((e for e in page if reaches(e, project_id)), about))
+            found.extend(triggered((e for e in page if reaches(e, agent_project_id)), about))
             if len(page) < self._options.page:
                 break
             after = page[-1].id
@@ -206,16 +206,16 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
     ) -> tuple[AgentKnowledge, ...]:
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         # Every entry the session reaches is read, a page at a time: a
         # tenant's reviewed agent knowledge is what its people kept by hand.
         reached: list[AgentKnowledge] = []
         after: UUID | None = None
         while True:
             page = await self._storage.read_reachable(
-                ctx.org_id, project_id, after, self._options.page
+                ctx.org_id, agent_project_id, after, self._options.page
             )
-            reached.extend(e for e in page if reaches(e, project_id))
+            reached.extend(e for e in page if reaches(e, agent_project_id))
             if len(page) < self._options.page:
                 break
             after = page[-1].id
@@ -225,9 +225,9 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
     async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> AgentKnowledge:
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
-        entry = await self._storage.read_by_slug(ctx.org_id, project_id, slug)
-        if entry is None or not reaches(entry, project_id):
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        entry = await self._storage.read_by_slug(ctx.org_id, agent_project_id, slug)
+        if entry is None or not reaches(entry, agent_project_id):
             raise NotFound(f"no agent knowledge {slug!r} this session reaches")
         # An entry read on demand is reached as a recalled one is: its
         # version is kept for the reading of the sessions that stalled.
@@ -248,7 +248,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         text: str,
         *,
         suggested_by: UUID | None,
-        project_id: UUID | None,
+        agent_project_id: UUID | None,
         entry_id: UUID,
     ) -> AgentKnowledge:
         now = self._clock()
@@ -265,7 +265,7 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
             status=AgentKnowledgeStatus.REVIEWED if by_person else AgentKnowledgeStatus.SUGGESTED,
             suggested_by=suggested_by,
             reviewed_by=ctx.user_id if by_person else None,
-            project_id=project_id,
+            agent_project_id=agent_project_id,
             slug=slug_of(title, entry_id),
             findings=self._findings(title, text),
         )

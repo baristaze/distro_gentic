@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.step_storage import make_message, make_request, make_response, make_tool_request
 
 from acme.om.agent_billing.rules import ANOMALY_UNLOCK
@@ -29,7 +29,7 @@ from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import Step
 from acme.services.api.container import AppContainer
-from acme.services.api.seed import first_project
+from acme.services.api.seed import first_agent_project
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -64,8 +64,12 @@ async def ajax(client: httpx.AsyncClient, container: AppContainer) -> Tenant:
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "owner@ajax.test", "Owner"
     )
-    project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
-    await container.storage.get_project_storage().create_project(org.id, project, ())
+    agent_project = first_agent_project(ctx, org.slug).model_copy(
+        update={"id": UUID(AGENT_PROJECT_ID)}
+    )
+    await container.storage.get_agent_project_storage().create_agent_project(
+        org.id, agent_project, ()
+    )
     headers = {Role.OWNER: await sign_in_as(client, "owner@ajax.test", org.id)}
     for role in (Role.ADMIN, Role.MEMBER, Role.VIEWER):
         email = f"{role.value}@ajax.test"
@@ -101,7 +105,11 @@ async def parked(
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(tenant[Role.MEMBER]),
-        json={"kind": "assistant", "title": "the dropped object", "project_id": PROJECT_ID},
+        json={
+            "kind": "assistant",
+            "title": "the dropped object",
+            "agent_project_id": AGENT_PROJECT_ID,
+        },
     )
     assert started.status_code == 201, started.text
     session_id = UUID(started.json()["id"])

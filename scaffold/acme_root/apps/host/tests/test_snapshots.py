@@ -135,7 +135,7 @@ async def a_host(
     pool_token = await api.token(pool_id)
     host = HostAgent(
         replace(api.settings(where / "home", None), enrollment_token=pool_token),
-        Ceilings(projects=None, min_isolation=HostMode.container, egress=frozenset()),
+        Ceilings(agent_projects=None, min_isolation=HostMode.container, egress=frozenset()),
         checks,
         api.client,
         executor,

@@ -109,7 +109,7 @@ async def test_a_push_or_a_pull_request_on_another_tenants_repository_is_refused
     writes = SourceControlForgeImpl(
         lambda name: forge, platform.storage.get_intake_storage().read_installation_org
     )
-    binding = RepositoryBinding(project_id=new_id(), repository=REPOSITORY)
+    binding = RepositoryBinding(agent_project_id=new_id(), repository=REPOSITORY)
 
     with pytest.raises(NotAuthorized, match="no installation of the forge this tenant connected"):
         await writes.push(platform.owner, binding, "refs/heads/agent/x", HEAD, b"")

@@ -1,5 +1,5 @@
-"""A tenant's budgets over the API: an owner sets one over a person, a
-project, or the tenant, in native tokens or reference cost, lists it, and
+"""A tenant's budgets over the API: an owner sets one over a person, an
+agent project, or the tenant, in native tokens or reference cost, lists it, and
 the gate holds every call charged to its scope to it. A member sets none
 and changes no amount; another tenant's budget is not found, a tenant key
 naming another tenant is refused, and a budget another tenant sets binds
@@ -47,14 +47,16 @@ async def funded(container: AppContainer, headers: Headers) -> TenantContext:
 
 
 async def asked(
-    container: AppContainer, ctx: TenantContext, tokens: int, project_id: UUID | None
+    container: AppContainer, ctx: TenantContext, tokens: int, agent_project_id: UUID | None
 ) -> Hold | Refusal:
     """A model call of a session of the caller's, charged to the scopes the
     session runner charges it to, whose worst case is `tokens`."""
     spender = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
     request = HoldRequest(
         spender_id=ctx.user_id,
-        scopes=scopes_of(ctx.org_id, new_id(), new_id(), spender, project_id=project_id),
+        scopes=scopes_of(
+            ctx.org_id, new_id(), new_id(), spender, agent_project_id=agent_project_id
+        ),
         exposure=Spend(cost_micros=1_000, tokens=tokens),
         own=None,
         purpose="main",
@@ -73,8 +75,8 @@ async def test_an_owner_sets_a_token_budget_lists_it_and_the_gate_holds_calls_to
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     ctx = await funded(container, ajax.owner)
-    project_id = new_id()
-    key = {"person": str(ctx.user_id), "project": str(project_id), "tenant": None}[kind]
+    agent_project_id = new_id()
+    key = {"person": str(ctx.user_id), "project": str(agent_project_id), "tenant": None}[kind]
     body = {"scope_kind": kind, "scope_key": key, "window_kind": "day", "tokens": 3_000}
 
     made = await client.post("/v1/budgets", headers=ajax.owner, json=body)
@@ -88,9 +90,9 @@ async def test_an_owner_sets_a_token_budget_lists_it_and_the_gate_holds_calls_to
     assert [b["id"] for b in listed.json()] == [budget["id"]]
     got = await client.get(f"/v1/budgets/{budget['id']}", headers=ajax.owner)
     assert got.json() == budget
-    past = await asked(container, ctx, 4_000, project_id)
+    past = await asked(container, ctx, 4_000, agent_project_id)
     assert breached(past, budget["id"]) == {AmountUnit.TOKENS}, "a call past it is refused"
-    within = await asked(container, ctx, 2_000, project_id)
+    within = await asked(container, ctx, 2_000, agent_project_id)
     assert isinstance(within, Hold), within
     assert budget["id"] in {str(line.budget_id) for line in within.lines}, "a fit is held on it"
 

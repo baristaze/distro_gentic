@@ -377,9 +377,9 @@ async def seed_notices_before(
                 await connection.execute(
                     text(
                         "INSERT INTO core.agent_session_workspaces (id, org_id, created_at,"
-                        " updated_at, created_by, updated_by, project_id, level, limits,"
+                        " updated_at, created_by, updated_by, agent_project_id, level, limits,"
                         " egress, rules, egress_source, branch, branch_seen, notices, version)"
-                        " VALUES (:id, :org, :at, :at, :by, :by, :project, :level,"
+                        " VALUES (:id, :org, :at, :at, :by, :by, :agent_project, :level,"
                         " CAST(:limits AS jsonb), :egress, CAST(:rules AS jsonb), :source,"
                         " :branch, false, CAST(:notices AS jsonb), 1)"
                     ),
@@ -388,7 +388,7 @@ async def seed_notices_before(
                         "org": org,
                         "at": workspace.created_at,
                         "by": workspace.created_by,
-                        "project": workspace.project_id,
+                        "agent_project": workspace.agent_project_id,
                         "level": workspace.level.value,
                         "limits": workspace.limits.model_dump_json(),
                         "egress": workspace.egress.value,
@@ -469,7 +469,7 @@ async def session_shape(url: str) -> list[tuple[object, ...]]:
         "SELECT column_name, is_nullable FROM information_schema.columns"
         " WHERE table_schema = 'core' AND table_name = 'validation_sessions'"
         " AND column_name IN"
-        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'project_id')"
+        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'agent_project_id')"
         " ORDER BY column_name",
     )
 
@@ -480,17 +480,17 @@ V0_2_0_SESSION_SHAPE = [
     ("head", "YES"),
     ("lab_id", "YES"),
     ("parameters", "YES"),
-    ("project_id", "YES"),
+    ("agent_project_id", "YES"),
 ]
 """The columns at the release before the station's columns left: all
 nullable, so both releases' rows fit."""
 
-SESSION_SHAPE = [("base", "NO"), ("head", "NO"), ("project_id", "NO")]
+SESSION_SHAPE = [("base", "NO"), ("head", "NO"), ("agent_project_id", "NO")]
 
 
 async def written_on_a_station(url: str, org: UUID) -> UUID:
     """A session as the release before the executor wrote it: a lab, a check
-    version, and parameters, and no project or commit."""
+    version, and parameters, and no agent project or commit."""
     session_id = new_id()
     actor = new_id()
     await in_tenant(
@@ -562,9 +562,9 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
         assert await in_tenant(
             core,
             org,
-            "SELECT project_id, head, base, lab_id, check_version, parameters"
+            "SELECT agent_project_id, head, base, lab_id, check_version, parameters"
             f" FROM core.validation_sessions WHERE id = '{session.id}'",
-        ) == [(session.project_id, session.head, session.base, None, None, None)]
+        ) == [(session.agent_project_id, session.head, session.base, None, None, None)]
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
@@ -590,7 +590,7 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
     for org in held:
         session = make_validation()
         assert await storage.create_validation(org, session, ())
-        gone[org] = refused(session, "the project declares no check report.totals")
+        gone[org] = refused(session, "the agent project declares no check report.totals")
         await storage.write_validation(org, gone[org], 1, ())
 
     await downgrade(DatabaseRole.CORE, core, BEFORE_REFUSAL)
@@ -610,7 +610,7 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
         assert (back.status, back.refusal) == (ValidationStatus.QUEUED, None)
 
 
-PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}
+PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "agent_project_id", "session_id"}
 """The fields of an action the release before product action kinds holds,
 which forbids any other."""
 

@@ -13,14 +13,14 @@ import pytest
 from contracts.loops import ASSISTANT, BUILDER, DELIVERY, Clock, call, loop_over, reply, said
 
 from acme.integrations.model_providers.calls import ModelCall
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agents.loop_rules import SPENDER_UNLOCK
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal
 from acme.om.context import TenantContext
 from acme.om.exceptions import GateParked, PlatformException, SpenderUnknown
 from acme.om.models.types.fill import Fill, ModelRole
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.root import Managers
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import StepType
@@ -39,7 +39,7 @@ class Parking(CallGateBudgetImpl):
         self,
         managers: Managers,
         clock: Clock,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         *,
         turn: PlatformException | None = None,
         job: PlatformException | None = None,
@@ -49,7 +49,7 @@ class Parking(CallGateBudgetImpl):
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,
-            projects,
+            agent_projects,
             clock=clock,
         )
         self.turn, self.job = turn, job
@@ -106,10 +106,10 @@ async def test_a_gate_that_parks_a_model_call_parks_the_loop_where_it_says(
 ) -> None:
     gates: list[Parking] = []
     storage = StorageMemoryImpl()
-    projects = SessionProjectsBoundImpl(storage.get_project_storage())
+    agent_projects = SessionAgentProjectsBoundImpl(storage.get_agent_project_storage())
 
     def parking(managers: Managers, clock: Clock) -> Parking:
-        gates.append(Parking(managers, clock, projects, turn=raised))
+        gates.append(Parking(managers, clock, agent_projects, turn=raised))
         return gates[-1]
 
     loop = loop_over(tmp_path, storage=storage, call_gate=parking)
@@ -138,10 +138,10 @@ async def test_a_gate_that_parks_a_spending_job_parks_the_loop_and_starts_nothin
 ) -> None:
     gates: list[Parking] = []
     storage = StorageMemoryImpl()
-    projects = SessionProjectsBoundImpl(storage.get_project_storage())
+    agent_projects = SessionAgentProjectsBoundImpl(storage.get_agent_project_storage())
 
     def parking(managers: Managers, clock: Clock) -> Parking:
-        gates.append(Parking(managers, clock, projects, job=raised))
+        gates.append(Parking(managers, clock, agent_projects, job=raised))
         return gates[-1]
 
     loop = loop_over(

@@ -11,9 +11,9 @@ is made of](../../../../README.md).
   all, whether nothing may be kept anywhere (zero retention), and the
   region. A lifetime counts from the session's creation. Left unset, a
   field narrows nothing.
-- **Project narrowing**: what one project of the tenant tightens. It
-  never loosens: a session of the project takes the tighter of the two,
-  field by field.
+- **Agent project narrowing**: what one agent project of the tenant
+  tightens. It never loosens: a session of the agent project takes the
+  tighter of the two, field by field.
 - **Snapshot**: one per session, taken as it is created. It holds the
   policy the session took, when its content and its shape expire, and
   what the sweep did when they did.
@@ -27,12 +27,13 @@ is made of](../../../../README.md).
 ## What can happen
 
 - **Declare a policy.** The tenant's owners and admins write it, with
-  each project's narrowing, by a compare-and-set on its version. A
-  project that names another region than its tenant's is refused, and so
-  is a lifetime past a century, in the policy or in a narrowing.
+  each agent project's narrowing, by a compare-and-set on its version.
+  An agent project that names another region than its tenant's is
+  refused, and so is a lifetime past a century, in the policy or in a
+  narrowing.
 - **Snapshot a session.** Taken before the session is written, so no
   session is ever without one. A session spawned or handed over belongs
-  to the project of the session it came from. A policy that keeps
+  to the agent project of the session it came from. A policy that keeps
   nothing at rest makes the session memory-only before its history
   begins.
 - **Sweep.** Once a pass, across tenants:

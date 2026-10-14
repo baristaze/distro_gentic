@@ -335,10 +335,10 @@ names in its request; a host handed work pinned to another pool.
 ## PLC-15 A host holds its owner's ceilings
 
 **Principle.** A host enforces limits its owner sets and the platform
-cannot raise: the projects it serves, its minimum isolation, its egress,
-the paths it lets a result read, whether it accepts people's commands,
-and the MCP servers it starts, each named whole. A compromised control
-plane still cannot widen what a host does.
+cannot raise: the agent projects it serves, its minimum isolation, its
+egress, the paths it lets a result read, whether it accepts people's
+commands, and the MCP servers it starts, each named whole. A compromised
+control plane still cannot widen what a host does.
 
 **Source.** Placement and Workspace Hosts, Workspace Hosts (Owner's
 ceilings); Deviations from the Guideline.
@@ -347,10 +347,10 @@ ceilings); Deviations from the Guideline.
 host; every message from the control plane that could change one.
 
 **Violation.** A ceiling kept or checked only in the control plane; a
-work item, a policy, or a setting from the control plane that serves another
-project, lowers the minimum isolation, widens egress or the readable
-paths, turns on people's commands, or names a program, an argument, or a
-variable for a server the host starts.
+work item, a policy, or a setting from the control plane that serves
+another agent project, lowers the minimum isolation, widens egress or
+the readable paths, turns on people's commands, or names a program, an
+argument, or a variable for a server the host starts.
 
 **Severity.** high
 

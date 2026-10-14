@@ -16,6 +16,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
@@ -34,7 +35,6 @@ from contracts.platform_agents import (
     platform_over,
     sub_agents_over,
 )
-from contracts.project_storage import in_project
 from contracts.tools import (
     HOST_SPEC,
     Tools,
@@ -150,7 +150,7 @@ from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
 ROOT = Path(__file__).resolve().parents[3]
-"""The root of this project, where its knowledge map is."""
+"""The root of this agent project, where its knowledge map is."""
 
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -175,7 +175,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         (),
         sessions=unbound,  # pyright: ignore[reportArgumentType]
         steps=unbound,  # pyright: ignore[reportArgumentType]
-        projects=unbound,  # pyright: ignore[reportArgumentType]
+        agent_projects=unbound,  # pyright: ignore[reportArgumentType]
         work=unbound,  # pyright: ignore[reportArgumentType]
         hosts=unbound,  # pyright: ignore[reportArgumentType]
         exec_relay=unbound,  # pyright: ignore[reportArgumentType]
@@ -495,15 +495,15 @@ async def test_the_software_engineers_success_needs_a_passing_validation_at_its_
     evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
 ) -> None:
     platform, executor, work = evidenced
-    projects = platform.storage.get_project_storage()
-    project_id = await in_project(projects, platform.owner.org_id)
-    policy = make_policy(policy_key(project_id))
+    agent_projects = platform.storage.get_agent_project_storage()
+    agent_project_id = await in_agent_project(agent_projects, platform.owner.org_id)
+    policy = make_policy(policy_key(agent_project_id))
     await platform.managers.evidence.write_policy(platform.owner, policy)
 
     # A baseline first, then no validation at its head, then a failing one:
     # no success counts, and a failure explained by the runs is an accepted end.
     executor.outcome = all_fail
-    failing = await a_software_engineer(platform, work, project_id)
+    failing = await a_software_engineer(platform, work, agent_project_id)
     platform.anthropic.add(
         reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
@@ -520,7 +520,7 @@ async def test_the_software_engineers_success_needs_a_passing_validation_at_its_
 
     # A passing validation at its head: the success is accepted, verified.
     executor.outcome = lambda check, trial: "passed"
-    passing = await a_software_engineer(platform, work, project_id)
+    passing = await a_software_engineer(platform, work, agent_project_id)
     platform.anthropic.add(
         reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.VALIDATE, "use_validate")),
@@ -555,15 +555,15 @@ RENDERED = {
     (
         kinds.SOFTWARE_ENGINEER,
         8,
-    ): "e0ebd4337f44f2b666a9ac87c692694ab6e181d0827c3f8c6f89d3f90e61e77d",
-    (kinds.ANALYSIS, 4): "c94610c01308fb29e151e946431dd622706a314ed7901ae2b8fcbc4f95c27a1c",
-    (kinds.PLANNER, 1): "7bf2a8de67d5c61b4947347bcfed8b7b50120beff54125446686a11272a36fa6",
+    ): "e95c4d517f6337704afffec7fb86aea679d475063686f797eba482db6033ab55",
+    (kinds.ANALYSIS, 4): "1b8dc15d3ef03802fe55eb09ceda1f7fd6f6270c997a6b9138f23ce0d329feba",
+    (kinds.PLANNER, 1): "79036b8634a53884d1b6f04f08ae7cdab7d45c793394811c693ca251843a2a73",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "a5930ae480ca5158fb24ad3d0256175d338a8ea78bbc73fb3de7141c9058bb14",
-    (kinds.REVIEWER, 1): "72365994c5f47eb73b8f0c65cc9483d80e5f12d4cd637b707911c8424aea4e08",
-    (kinds.OPS_ANALYST, 1): "0d02f035193f1a56484fb2c0da2521a7cd910a044f5f116598e5b15efcfda800",
+    ): "ad8ce54fb50244be1513ee6c985c0fa57af9d623a35ee99d7fa08c989e4318dd",
+    (kinds.REVIEWER, 1): "9d40afdd71b8b804b7a5f52efa074ed126898493987cc0557bc26f132f72909f",
+    (kinds.OPS_ANALYST, 1): "508d8625db0ad0f662b643a376b87e7a03649ee547f5563b8f5e24fce87f5b12",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -584,7 +584,9 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
     evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
 ) -> None:
     platform, _, work = evidenced
-    project_id = await in_project(platform.storage.get_project_storage(), platform.owner.org_id)
+    agent_project_id = await in_agent_project(
+        platform.storage.get_agent_project_storage(), platform.owner.org_id
+    )
     for kind in (
         SOFTWARE_ENGINEER_KIND,
         ANALYSIS_KIND,
@@ -595,7 +597,7 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
     ):
         before = len(platform.anthropic.calls)
         if kind is SOFTWARE_ENGINEER_KIND:
-            session_id = await a_software_engineer(platform, work, project_id)
+            session_id = await a_software_engineer(platform, work, agent_project_id)
         else:
             session_id = await platform.start(kind.name)
             await platform.say(session_id, "Go on.")
@@ -683,8 +685,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_session",
         "list_sessions",
         "read_wait",
-        "list_projects",
-        "read_project",
+        "list_agent_projects",
+        "read_agent_project",
         "list_agent_automations",
         "read_agent_automation",
         "draft_tool_policy",
@@ -704,8 +706,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_session",
         "list_sessions",
         "read_wait",
-        "list_projects",
-        "read_project",
+        "list_agent_projects",
+        "read_agent_project",
         "list_agent_automations",
         "read_agent_automation",
         "list_hosts",
@@ -1123,12 +1125,12 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@ajax.test", "Ann"
     )
-    project_id = new_id()
-    policy = make_policy(policy_key(project_id))
+    agent_project_id = new_id()
+    policy = make_policy(policy_key(agent_project_id))
     await platform.managers.evidence.write_policy(platform.owner, policy)
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+        id=new_id(), agent_project_id=agent_project_id, check_name="unit", head=HEAD, base=BASE
     )
 
     session = await validations.start_validation(platform.owner, start)
@@ -1181,18 +1183,18 @@ async def test_a_validation_session_whose_run_was_kept_finishes_without_running_
 ) -> None:
     executor = ScriptedExecutor(capabilities=frozenset())
     platform = platform_over(tmp_path, executor=executor)
-    project_id = new_id()
+    agent_project_id = new_id()
     await platform.managers.evidence.write_policy(
-        platform.owner, make_policy(policy_key(project_id))
+        platform.owner, make_policy(policy_key(agent_project_id))
     )
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+        id=new_id(), agent_project_id=agent_project_id, check_name="unit", head=HEAD, base=BASE
     )
     session = await validations.start_validation(platform.owner, start)
     # A worker that kept the run and died before it finished the session.
     kept = await platform.managers.evidence.run_check(
-        platform.owner, session.id, project_id, "unit", HEAD, BASE
+        platform.owner, session.id, agent_project_id, "unit", HEAD, BASE
     )
 
     finished = await validations.run_validation(platform.owner, session.id)
@@ -1201,7 +1203,7 @@ async def test_a_validation_session_whose_run_was_kept_finishes_without_running_
     assert len(executor.requests) == 1, "the retry ran nothing"
     with pytest.raises(PreconditionFailed, match="declares no check"):
         await platform.managers.evidence.run_check(
-            platform.owner, new_id(), project_id, "lint", HEAD, BASE
+            platform.owner, new_id(), agent_project_id, "lint", HEAD, BASE
         )
 
 
@@ -1222,17 +1224,17 @@ async def test_a_check_that_cannot_run_refuses_its_session_with_the_reason(
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@ajax.test", "Ann"
     )
-    project_id = new_id()
+    agent_project_id = new_id()
     evidence = platform.managers.evidence
-    await evidence.write_policy(platform.owner, make_policy(policy_key(project_id)))
+    await evidence.write_policy(platform.owner, make_policy(policy_key(agent_project_id)))
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+        id=new_id(), agent_project_id=agent_project_id, check_name="unit", head=HEAD, base=BASE
     )
     session = await validations.start_validation(platform.owner, start)
     # After the start, the policy drops the check, or asks of it what no
     # executor here offers.
-    policy = await evidence.get_policy(platform.owner, policy_key(project_id))
+    policy = await evidence.get_policy(platform.owner, policy_key(agent_project_id))
     checks = tuple(each.model_copy(update=change) for each in policy.checks)
     await evidence.write_policy(
         platform.owner, policy.model_copy(update={"checks": checks, "requirements": ()})
@@ -1258,13 +1260,13 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
     tmp_path: Path,
 ) -> None:
     platform = platform_over(tmp_path)
-    project_id = new_id()
+    agent_project_id = new_id()
     await platform.managers.evidence.write_policy(
-        platform.owner, make_policy(policy_key(project_id))
+        platform.owner, make_policy(policy_key(agent_project_id))
     )
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+        id=new_id(), agent_project_id=agent_project_id, check_name="unit", head=HEAD, base=BASE
     )
     session = await validations.start_validation(platform.owner, start)
 
@@ -1275,7 +1277,7 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
         await validations.start_validation(
             member_of(platform, Permission.READ), start.model_copy(update={"id": new_id()})
         )
-    # A project whose policy is another tenant's, or a check its policy does
+    # An agent project whose policy is another tenant's, or a check its policy does
     # not declare, is refused before anything is written.
     crossing = start.model_copy(update={"id": new_id()})
     with pytest.raises(NotFound, match="declares no validation policy"):

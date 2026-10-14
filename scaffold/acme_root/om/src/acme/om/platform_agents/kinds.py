@@ -21,7 +21,7 @@ engine runs every one of them the same way.
 - The platform assistant answers the people who run their part of the
   platform, on their own permissions: it reads the corpus, the agent knowledge
   base, and the tenant's live records (its sessions and what they wait
-  on, its projects, its agent automations), drafts configuration a person
+  on, its agent projects, its agent automations), drafts configuration a person
   applies, and hands engineering work to a software engineer. It has no
   workspace, repository, or shell.
 - The reviewer reads one pull request through the forge: its files and
@@ -94,8 +94,8 @@ READ_AGENT_KNOWLEDGE = "read_agent_knowledge"
 SUGGEST_AGENT_KNOWLEDGE = "suggest_agent_knowledge"
 LIST_SESSIONS = "list_sessions"
 READ_WAIT = "read_wait"
-LIST_PROJECTS = "list_projects"
-READ_PROJECT = "read_project"
+LIST_AGENT_PROJECTS = "list_agent_projects"
+READ_AGENT_PROJECT = "read_agent_project"
 LIST_AGENT_AUTOMATIONS = "list_agent_automations"
 READ_AGENT_AUTOMATION = "read_agent_automation"
 READ_PULL_REQUEST = "read_pull_request"
@@ -110,8 +110,8 @@ ASSISTANT_READERS = (
     READ_SESSION,
     LIST_SESSIONS,
     READ_WAIT,
-    LIST_PROJECTS,
-    READ_PROJECT,
+    LIST_AGENT_PROJECTS,
+    READ_AGENT_PROJECT,
     LIST_AGENT_AUTOMATIONS,
     READ_AGENT_AUTOMATION,
 )
@@ -155,7 +155,7 @@ SUB_AGENTS_TOOLSET = Toolset(
 RECORDS_TOOLSET = Toolset(
     name="records",
     version=1,
-    summary="Read the tenant's sessions and what they wait on, its projects, and its agent automations.",
+    summary="Read the tenant's sessions and what they wait on, its agent projects, and its agent automations.",
     tools=ASSISTANT_READERS,
 )
 HANDOFF_TOOLSET = Toolset(
@@ -408,15 +408,15 @@ kept while a session may still run it."""
 SOFTWARE_ENGINEER_V7 = revised(
     SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET)
 )
-"""The software engineer before its workspace started from its project's
+"""The software engineer before its workspace started from its agent project's
 workspace base: kept while a session may still run it."""
 
 WORKSPACE_BASE = (
-    "Your workspace has no network. What your work needs installed comes from your project's "
+    "Your workspace has no network. What your work needs installed comes from your agent project's "
     "environment, set up before you start. When the work needs a package your workspace "
     "lacks, do not try to install it: say which one in your result."
 )
-"""The software engineer's layer on its project's workspace base, so a missing package
+"""The software engineer's layer on its agent project's workspace base, so a missing package
 is named rather than fetched through a network it does not have."""
 
 SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
@@ -426,12 +426,12 @@ SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
 reads back with `read_artifact`, by the handle the notice names. Its
-workspace starts from its project's workspace base, when the project names
+workspace starts from its agent project's workspace base, when the agent project names
 one, and keeps no egress (`WORKSPACE_BASE_KINDS`)."""
 
 WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset({(SOFTWARE_ENGINEER, 8)})
 """The platform's kinds, by name and version, whose workspace starts from
-the workspace base its session's project names: the software engineer from version 8.
+the workspace base its session's agent project names: the software engineer from version 8.
 A later version that takes it joins here; the versions before it keep
 their own base. A product names its own beside these, in its slot
 (`root.ProductKinds.workspace_bases`)."""
@@ -550,7 +550,7 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
     isolation=NO_WORKSPACE,
 )
-"""The platform assistant before it read the tenant's sessions, projects,
+"""The platform assistant before it read the tenant's sessions, agent projects,
 and agent automations, and its agent knowledge: kept while a session may still run
 it."""
 
@@ -571,7 +571,7 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "document says, so the person can open it. Diagnose by reading first, "
         "never by guessing. Find sessions with list_sessions and read one with "
         "read_session; read what a waiting session waits on, its place in the work queue "
-        "and the hosts that run it, with read_wait; read projects and agent_automations, and an "
+        "and the hosts that run it, with read_wait; read agent projects and agent_automations, and an "
         "agent_automation's recent runs, the same way, and any other reader you hold. When "
         "something waits or is slow, say what it waits on as you read it, what clears it, "
         "who may clear it, and where they do. Draft a change to the tool policy with "
@@ -653,7 +653,7 @@ OPS_ANALYST_PROMPT = (
     "Read what a waiting session waits on with read_wait: its loop's place on the work "
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
-    "with read_spend, and its projects and agent automations with their readers. Explain only from "
+    "with read_spend, and its agent projects and agent automations with their readers. Explain only from "
     "what search_agent_knowledge finds, and cite the document of every passage you use. Diagnose "
     "by reading first, never by guessing: say what something waits on as you read it, what "
     "clears it, who may clear it, and where they do. When the fix is engineering, write it "
@@ -675,7 +675,7 @@ OPS_ANALYST_KIND = AgentKind(
 )
 """The ops analyst. It reads the tenant's operations on its person's own
 permissions: its sessions and what they wait on, its hosts and what they
-offer, its budgets and their spend, its projects and agent automations. Every
+offer, its budgets and their spend, its agent projects and agent automations. Every
 tool it holds reads, so it changes nothing; a fix it finds leaves as an
 objective a person hands to a software engineer."""
 

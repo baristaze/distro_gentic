@@ -95,14 +95,14 @@ class AgentPlaybookStoragePostgresImpl(PgStorageBase, AgentPlaybookStorageInterf
         await self._upsert(AgentPlaybookPins, org_id, pin, outbox_rows)
 
     async def read_pin(
-        self, org_id: UUID, kind: str, project_id: UUID | None
+        self, org_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> AgentPlaybookPin | None:
         stmt = select(AgentPlaybookPins).where(
             AgentPlaybookPins.org_id == org_id,
             AgentPlaybookPins.kind == kind,
-            AgentPlaybookPins.project_id.is_(None)
-            if project_id is None
-            else AgentPlaybookPins.project_id == project_id,
+            AgentPlaybookPins.agent_project_id.is_(None)
+            if agent_project_id is None
+            else AgentPlaybookPins.agent_project_id == agent_project_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -114,8 +114,8 @@ class AgentPlaybookStoragePostgresImpl(PgStorageBase, AgentPlaybookStorageInterf
             .where(AgentPlaybookPins.org_id == org_id)
             .order_by(
                 AgentPlaybookPins.kind,
-                AgentPlaybookPins.project_id.is_not(None),
-                AgentPlaybookPins.project_id,
+                AgentPlaybookPins.agent_project_id.is_not(None),
+                AgentPlaybookPins.agent_project_id,
             )
             .limit(limit)
         )

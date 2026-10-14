@@ -24,7 +24,7 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
     ) -> ValidationSessionView:
         start = ValidationStart(
             id=session_id,
-            project_id=body.project_id,
+            agent_project_id=body.agent_project_id,
             check_name=body.check,
             head=body.head,
             base=body.base,
@@ -44,10 +44,10 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             runs = await self._runs(ctx, session.id)
             record = next((each for each in runs if each.id == session.run_id), None)
         if record is not None:
-            # The run passes at the grade its project's policy asks of the
+            # The run passes at the grade its agent project's policy asks of the
             # check, never on a double or a dependency that was not there; a
             # rated check passes only as its requirements judge its trials.
-            policy = await self._evidence.get_policy(ctx, policy_key(session.project_id))
+            policy = await self._evidence.get_policy(ctx, policy_key(session.agent_project_id))
             kept = await self._evidence.get_validations(ctx, session.id, 1)
             order = {run: at for at, run in enumerate(kept[0].records)} if kept else {}
             batch = [each for each in runs if each.validation_id == record.validation_id]
@@ -60,7 +60,7 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             id=session.id,
             created_at=session.created_at,
             created_by=session.created_by,
-            project_id=session.project_id,
+            agent_project_id=session.agent_project_id,
             check=session.check_name,
             head=session.head,
             base=session.base,

@@ -17,9 +17,9 @@ from acme.infra.root import InfraInterface
 from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.base import utcnow
 from acme.om.privacy.impl.keys import SessionKeysImpl
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, ProductKinds, private_history
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -31,7 +31,7 @@ from acme.om.trust.impl.tools import ToolsManagerTrustedImpl
 from acme.om.trust.keys import ClientFactory, KeyProbeInterface, ProviderClientsInterface
 from acme.om.trust.manager import TrustManagerInterface
 from acme.om.trust.operator import TrustOperatorManagerInterface
-from acme.om.trust.owners import ProjectOwnerImpl, SecretOwners
+from acme.om.trust.owners import AgentProjectOwnerImpl, SecretOwners
 from acme.om.trust.placement import PlacementInterface
 
 
@@ -74,9 +74,9 @@ class TrustLayer:
     """`placement` answers where each session runs and on which machine
     credential; `probe` asks a provider about a key before it is saved; and
     `clients` builds a provider's client on a tenant's key. A session's
-    project, which keeps a project's secrets to it, is read from the
-    projects' rows. `product_kinds` is what a product adds: its secret owner kinds,
-    resolved after the project, as the project is."""
+    agent project, which keeps an agent project's secrets to it, is read from the
+    agent projects' rows. `product_kinds` is what a product adds: its secret owner kinds,
+    resolved after the agent project, as the agent project is."""
 
     def __init__(
         self,
@@ -121,7 +121,9 @@ class TrustLayer:
             self._placement,
             SecretOwners(
                 (
-                    ProjectOwnerImpl(SessionProjectsBoundImpl(storage.get_project_storage())),
+                    AgentProjectOwnerImpl(
+                        SessionAgentProjectsBoundImpl(storage.get_agent_project_storage())
+                    ),
                     *self._kinds.secret_owners,
                 )
             ),

@@ -18,14 +18,14 @@ from acme.infra.workspaces import (
 )
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces import rules
+from acme.om.agent_workspaces.agent_projects import (
+    PullRequestsInterface,
+    SourceControlInterface,
+    WorkspaceAgentProjectsInterface,
+)
 from acme.om.agent_workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
-from acme.om.agent_workspaces.projects import (
-    PullRequestsInterface,
-    SourceControlInterface,
-    WorkspaceProjectsInterface,
-)
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agent_workspaces.types.credential import (
     FetchCredential,
@@ -91,7 +91,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         kinds: AgentKindCatalog,
-        projects: WorkspaceProjectsInterface,
+        agent_projects: WorkspaceAgentProjectsInterface,
         pull_requests: PullRequestsInterface,
         git: WorkspaceGitInterface,
         reader: RepositoryReaderInterface,
@@ -107,7 +107,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         self._tenancy = tenancy
         self._relay = relay
         self._kinds = kinds
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._pull_requests = pull_requests
         self._git = git
         self._reader = reader
@@ -117,7 +117,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         self._held = held
         self._clock = clock
         # The kinds, by name and version, whose workspace starts from the
-        # workspace base its session's project names.
+        # workspace base its session's agent project names.
         self._workspace_bases = workspace_bases
         self._internal = rules.networks(options.internal_networks)
 
@@ -142,27 +142,27 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                 session.kind_version,
             )
             return None
-        project_id = await self._projects.project_of(ctx, session)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session)
         allowlist = (
             None
-            if project_id is None
-            else await self._storage.read_allowlist(ctx.org_id, project_id)
+            if agent_project_id is None
+            else await self._storage.read_allowlist(ctx.org_id, agent_project_id)
         )
         label = f"{kind.name} at version {kind.version}"
         durability = kind.isolation.durability
         if (
             durability is Durability.SNAPSHOT
-            and project_id is not None
-            and not await self._projects.keeps_snapshots(ctx, project_id)
+            and agent_project_id is not None
+            and not await self._agent_projects.keeps_snapshots(ctx, agent_project_id)
         ):
-            # Its project keeps its sessions' workspaces as caches, on
+            # Its agent project keeps its sessions' workspaces as caches, on
             # purpose: the kind's durability is narrowed, and the pin says
             # so.
             log.info(
-                "session %s of org %s: project %s keeps its workspaces as caches, so %s's is one",
+                "session %s of org %s: agent project %s keeps its workspaces as caches, so %s's is one",
                 session.id,
                 ctx.org_id,
-                project_id,
+                agent_project_id,
                 label,
             )
             durability = Durability.CACHE
@@ -175,14 +175,14 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                 f"and {label} keeps its workspace by snapshots"
             )
         spec = kind.isolation.model_copy(update={"durability": durability})
-        if project_id is not None and (kind.name, kind.version) in self._workspace_bases:
+        if agent_project_id is not None and (kind.name, kind.version) in self._workspace_bases:
             # Read once, here: the session keeps the base it pinned, and a
-            # later change of its project's workspace base reaches only the
+            # later change of its agent project's workspace base reaches only the
             # sessions created after it.
-            workspace_base = await self._projects.workspace_base_of(ctx, project_id)
+            workspace_base = await self._agent_projects.workspace_base_of(ctx, agent_project_id)
             if workspace_base is not None:
                 spec = spec.model_copy(update={"base": workspace_base})
-        return await self._land(ctx, session.id, spec, label, project_id, allowlist)
+        return await self._land(ctx, session.id, spec, label, agent_project_id, allowlist)
 
     async def get_workspace(self, ctx: TenantContext, session_id: UUID) -> AgentSessionWorkspace:
         ctx.require(Permission.READ)
@@ -229,7 +229,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         binding = None if restored else await self._binding(ctx, held)
         if binding is not None:
             # The platform reads the repository on its own host, with the
-            # project's fetch credential, and the checkout takes a bundle:
+            # agent project's fetch credential, and the checkout takes a bundle:
             # no credential enters the workspace.
             # A branch the repository never held may live on in its last
             # snapshot alone, which the cut then starts from. A loop not yet
@@ -239,7 +239,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             incoming = await self._reader.incoming(
                 binding,
                 held.branch,
-                await self._fetch_credential(ctx, binding.project_id),
+                await self._fetch_credential(ctx, binding.agent_project_id),
                 snapshot=last,
             )
             state = await self._git.sync(
@@ -346,12 +346,12 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         delivered = await self._reader.delivered(
             binding,
             held.branch,
-            await self._fetch_credential(ctx, binding.project_id),
+            await self._fetch_credential(ctx, binding.agent_project_id),
             cut=local.base,
         )
         try:
             return WorkProduct(
-                project=rules.project_key(binding),
+                agent_project=rules.agent_project_key(binding),
                 base=delivered.base,
                 head=delivered.head,
                 dirty=local.dirty or local.head != delivered.head,
@@ -365,29 +365,31 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     async def checks_tree(
         self,
         ctx: TenantContext,
-        project_id: UUID,
+        agent_project_id: UUID,
         version: str,
         source: str,
         protected: tuple[str, ...],
-        source_project: UUID,
+        source_agent_project: UUID,
         base: str | None = None,
         untouched: tuple[str, ...] = (),
     ) -> bytes:
         ctx.require(Permission.READ)
-        binding = await self._projects.binding_of(ctx, project_id)
+        binding = await self._agent_projects.binding_of(ctx, agent_project_id)
         if binding is None:
-            raise Unavailable(f"project {project_id} binds no repository to validate")
-        credential = await self._fetch_credential(ctx, project_id)
-        if source_project == project_id:
+            raise Unavailable(f"agent project {agent_project_id} binds no repository to validate")
+        credential = await self._fetch_credential(ctx, agent_project_id)
+        if source_agent_project == agent_project_id:
             return await self._reader.tree(
                 binding, version, source, protected, credential, base=base, untouched=untouched
             )
         # A source of its own: a hidden suite's repository, which no
-        # workspace of the project checks out.
-        held = await self._projects.binding_of(ctx, source_project)
+        # workspace of the agent project checks out.
+        held = await self._agent_projects.binding_of(ctx, source_agent_project)
         if held is None:
-            raise Unavailable(f"project {source_project} binds no repository to read a source from")
-        held_credential = await self._fetch_credential(ctx, source_project)
+            raise Unavailable(
+                f"agent project {source_agent_project} binds no repository to read a source from"
+            )
+        held_credential = await self._fetch_credential(ctx, source_agent_project)
         return await self._reader.tree(
             binding,
             version,
@@ -402,15 +404,17 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
 
     # Egress, and what acts outward.
 
-    async def get_allowlist(self, ctx: TenantContext, project_id: UUID) -> EgressAllowlist | None:
+    async def get_allowlist(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> EgressAllowlist | None:
         ctx.require(Permission.READ)
-        return await self._storage.read_allowlist(ctx.org_id, project_id)
+        return await self._storage.read_allowlist(ctx.org_id, agent_project_id)
 
     async def write_allowlist(
         self, ctx: TenantContext, allowlist: EgressAllowlist
     ) -> EgressAllowlist:
         ctx.require(Permission.MANAGE_MEMBERS)
-        stored = await self._storage.read_allowlist(ctx.org_id, allowlist.project_id)
+        stored = await self._storage.read_allowlist(ctx.org_id, allowlist.agent_project_id)
         now = self._clock()
         terms = {"rules": allowlist.rules, "open": allowlist.open, "reason": allowlist.reason}
         if stored is not None and _own_write(stored, allowlist, ctx):
@@ -433,10 +437,10 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                 landed = await self._storage.create_allowlist(ctx.org_id, created, rows)
             except UniqueKeyTaken as error:
                 raise PreconditionFailed(
-                    f"the allowlist of project {allowlist.project_id} was written meanwhile"
+                    f"the allowlist of agent project {allowlist.agent_project_id} was written meanwhile"
                 ) from error
             if not landed:
-                raced = await self._storage.read_allowlist(ctx.org_id, allowlist.project_id)
+                raced = await self._storage.read_allowlist(ctx.org_id, allowlist.agent_project_id)
                 if raced is not None and _own_write(raced, allowlist, ctx):
                     return raced
                 raise PreconditionFailed(f"egress allowlist {created.id} is written already")
@@ -481,18 +485,18 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     # The repository's credentials, which the agent never holds.
 
     async def put_fetch_credential(
-        self, ctx: TenantContext, project_id: UUID, credential: FetchCredential
+        self, ctx: TenantContext, agent_project_id: UUID, credential: FetchCredential
     ) -> RepositoryCredential:
         ctx.require(Permission.MANAGE_MEMBERS)
-        if await self._projects.binding_of(ctx, project_id) is None:
-            raise NotFound(f"project {project_id} binds no repository of this tenant")
+        if await self._agent_projects.binding_of(ctx, agent_project_id) is None:
+            raise NotFound(f"agent project {agent_project_id} binds no repository of this tenant")
         now = self._clock()
-        stored = await self._storage.read_credential(ctx.org_id, project_id)
+        stored = await self._storage.read_credential(ctx.org_id, agent_project_id)
         if stored is None:
             # The record lands before the value, so the purge finds every
             # value it must take out of the store.
             record = RepositoryCredential(
-                id=project_id,
+                id=agent_project_id,
                 created_at=now,
                 updated_at=now,
                 created_by=ctx.user_id,
@@ -500,7 +504,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             )
             if not await self._storage.create_credential(ctx.org_id, record):
                 raise PreconditionFailed(
-                    f"the fetch credential of {project_id} was given meanwhile"
+                    f"the fetch credential of {agent_project_id} was given meanwhile"
                 )
         else:
             record = stored.model_copy(
@@ -511,31 +515,31 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             {"username": credential.username, "password": credential.password.get_secret_value()}
         )
         await self._secrets.put(
-            ctx.org_id, rules.fetch_secret_name(project_id), value, deadline=ctx.deadline
+            ctx.org_id, rules.fetch_secret_name(agent_project_id), value, deadline=ctx.deadline
         )
         log.info(
-            "user %s of org %s gave project %s a fetch credential",
+            "user %s of org %s gave agent project %s a fetch credential",
             ctx.user_id,
             ctx.org_id,
-            project_id,
+            agent_project_id,
         )
         return record
 
-    async def remove_fetch_credential(self, ctx: TenantContext, project_id: UUID) -> bool:
+    async def remove_fetch_credential(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         ctx.require(Permission.MANAGE_MEMBERS)
-        if await self._storage.read_credential(ctx.org_id, project_id) is None:
+        if await self._storage.read_credential(ctx.org_id, agent_project_id) is None:
             return False
         # The value leaves the store first, so a record left by a failure
         # still names a value the purge takes out.
         await self._secrets.delete(
-            ctx.org_id, rules.fetch_secret_name(project_id), deadline=ctx.deadline
+            ctx.org_id, rules.fetch_secret_name(agent_project_id), deadline=ctx.deadline
         )
-        await self._storage.purge_credentials(ctx.org_id, [project_id])
+        await self._storage.purge_credentials(ctx.org_id, [agent_project_id])
         log.info(
-            "user %s of org %s took the fetch credential of project %s away",
+            "user %s of org %s took the fetch credential of agent project %s away",
             ctx.user_id,
             ctx.org_id,
-            project_id,
+            agent_project_id,
         )
         return True
 
@@ -663,24 +667,28 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         return epoch
 
     async def _fetch_credential(
-        self, ctx: TenantContext, project_id: UUID
+        self, ctx: TenantContext, agent_project_id: UUID
     ) -> FetchCredential | None:
-        """The project's fetch credential, from the tenant's store, for the
-        one read that asks; None when the project was given none."""
-        if await self._storage.read_credential(ctx.org_id, project_id) is None:
+        """The agent project's fetch credential, from the tenant's store, for the
+        one read that asks; None when the agent project was given none."""
+        if await self._storage.read_credential(ctx.org_id, agent_project_id) is None:
             return None
         try:
             value = await self._secrets.get(
-                ctx.org_id, rules.fetch_secret_name(project_id), deadline=ctx.deadline
+                ctx.org_id, rules.fetch_secret_name(agent_project_id), deadline=ctx.deadline
             )
         except InfraException as failed:
             if failed.code != SECRET_NOT_FOUND:
                 raise
-            raise Unavailable(f"the fetch credential of project {project_id} is gone") from None
+            raise Unavailable(
+                f"the fetch credential of agent project {agent_project_id} is gone"
+            ) from None
         try:
             return FetchCredential.model_validate_json(value)
         except ValidationError:
-            raise Unavailable(f"the fetch credential of project {project_id} is not one") from None
+            raise Unavailable(
+                f"the fetch credential of agent project {agent_project_id} is not one"
+            ) from None
 
     async def _land(
         self,
@@ -688,7 +696,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         session_id: UUID,
         spec: IsolationSpec,
         label: str,
-        project_id: UUID | None,
+        agent_project_id: UUID | None,
         allowlist: EgressAllowlist | None,
     ) -> AgentSessionWorkspace:
         """Writes the pin, once: one landed first is answered as it is."""
@@ -701,7 +709,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                project_id=project_id,
+                agent_project_id=agent_project_id,
                 level=spec.mode,
                 limits=spec.limits,
                 egress=egress,
@@ -734,9 +742,9 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     async def _binding(
         self, ctx: TenantContext, held: AgentSessionWorkspace
     ) -> RepositoryBinding | None:
-        if held.project_id is None:
+        if held.agent_project_id is None:
             return None
-        return await self._projects.binding_of(ctx, held.project_id)
+        return await self._agent_projects.binding_of(ctx, held.agent_project_id)
 
     async def _update(
         self,
@@ -799,10 +807,10 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     def _recorded(self, ctx: TenantContext, allowlist: EgressAllowlist) -> None:
         if allowlist.open:
             log.warning(
-                "user %s of org %s opened the egress of project %s: %s",
+                "user %s of org %s opened the egress of agent project %s: %s",
                 ctx.user_id,
                 ctx.org_id,
-                allowlist.project_id,
+                allowlist.agent_project_id,
                 allowlist.reason,
             )
 

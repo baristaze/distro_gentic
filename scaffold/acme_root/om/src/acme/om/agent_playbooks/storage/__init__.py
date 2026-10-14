@@ -55,21 +55,21 @@ class AgentPlaybookStorageInterface(ABC):
     ) -> None:
         """The pin by its id, written or rewritten, with the rows that
         announce it, in one commit. `UniqueKeyTaken` when the tenant pinned
-        the kind, in the project or in none, under another id; another
+        the kind, in the agent project or in none, under another id; another
         tenant's id is `TenantMismatch`."""
         ...
 
     @abstractmethod
     async def read_pin(
-        self, org_id: UUID, kind: str, project_id: UUID | None
+        self, org_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> AgentPlaybookPin | None:
-        """The kind's pin in the project, or the tenant's when `project_id`
+        """The kind's pin in the agent project, or the tenant's when `agent_project_id`
         is None: exactly that one, never the other."""
         ...
 
     @abstractmethod
     async def read_pins(self, org_id: UUID, limit: int) -> list[AgentPlaybookPin]:
-        """The tenant's pins, by kind, the tenant's before a project's."""
+        """The tenant's pins, by kind, the tenant's before an agent project's."""
         ...
 
     @abstractmethod

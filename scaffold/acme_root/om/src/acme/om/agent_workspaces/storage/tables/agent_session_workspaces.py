@@ -14,7 +14,7 @@ class AgentSessionWorkspaces(IdentifiableMixin, TrackableMixin, Base):
     its isolation pinned and what the cache knows between loops."""
 
     __tablename__ = "agent_session_workspaces"
-    project_id: Mapped[UUID | None]
+    agent_project_id: Mapped[UUID | None]
     level: Mapped[str]
     limits: Mapped[dict[str, Any]]
     egress: Mapped[str]

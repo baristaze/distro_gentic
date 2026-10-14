@@ -141,8 +141,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's key versions, then its privacy record: the
             # content sealed under them is noise from the first batch.
             "privacy": managers.privacy.purge_tenant,
-            # Each session's project row, then the tenant's projects.
-            "projects": managers.projects.purge_tenant,
+            # Each session's agent project row, then the tenant's agent projects.
+            "agent_projects": managers.agent_projects.purge_tenant,
             # Each session's retention snapshot, then the tenant's policy.
             "retention": managers.retention.purge_tenant,
             # What a call held and spent is not a purge of its tenant's: no

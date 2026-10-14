@@ -1,7 +1,7 @@
 """A tenant's connectors: its MCP servers, as toolsets of its agents. A
 person who manages the tenant connects a server, reads what it lists, and
 reviews the tools a session may call, in person; then attaches it to a
-kind, for one project or the whole tenant. A cloud server's credential is
+kind, for one agent project or the whole tenant. A cloud server's credential is
 written apart, with a PUT, and never comes back."""
 
 from uuid import UUID
@@ -88,7 +88,7 @@ async def attach(
     ctx: Ctx, connectors: ConnectorsService, connector_id: UUID, body: AttachRequest
 ) -> ConnectorView:
     """The connector attached to a kind: an attachment of that kind and
-    project already held is replaced."""
+    agent project already held is replaced."""
     return await connectors.attach(ctx, connector_id, body)
 
 
@@ -98,8 +98,8 @@ async def detach(
     connectors: ConnectorsService,
     connector_id: UUID,
     kind: str,
-    project_id: UUID | None = None,
+    agent_project_id: UUID | None = None,
 ) -> ConnectorView:
-    """The attachment of `kind` and `project_id` taken away. A session that
+    """The attachment of `kind` and `agent_project_id` taken away. A session that
     pinned the connector keeps it."""
-    return await connectors.detach(ctx, connector_id, kind, project_id)
+    return await connectors.detach(ctx, connector_id, kind, agent_project_id)

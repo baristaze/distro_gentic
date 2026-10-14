@@ -12,7 +12,7 @@ agent knowledge tools its manager, which answers once it is built:
     )
     agent_knowledge = layer.build(managers)
 
-A session's project is read from the projects' rows."""
+A session's agent project is read from the agent projects' rows."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -20,9 +20,9 @@ from datetime import datetime
 from acme.om.agent_knowledge.impl.manager import AgentKnowledgeManagerImpl, AgentKnowledgeOptions
 from acme.om.agent_knowledge.impl.tools import ToolsManagerRecallImpl
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.base import utcnow
 from acme.om.levers.rules import reach_of
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -38,7 +38,7 @@ def build_agent_knowledge(
     return AgentKnowledgeManagerImpl(
         storage.get_agent_knowledge_storage(),
         managers.agent_sessions,
-        SessionProjectsBoundImpl(storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         managers.tenancy,
         managers.outbox,
         options or AgentKnowledgeOptions(),

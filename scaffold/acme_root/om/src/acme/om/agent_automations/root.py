@@ -1,12 +1,12 @@
 """The agent automations swimlane over the engine's managers, as a root builds it.
 
     agent_automations = build_agent_automations(
-        storage, managers, project_required=True, actions=PRODUCT_KINDS.actions
+        storage, managers, agent_project_required=True, actions=PRODUCT_KINDS.actions
     )
 
-`project_required` refuses a start that names no project, when it is
+`agent_project_required` refuses a start that names no agent project, when it is
 saved and when it fires: every stack but a local one sets it, so a
-session an agent automation starts is held by its project's budget and
+session an agent automation starts is held by its agent project's budget and
 policies. `actions` are the product's own kinds of action
 (`ProductKinds.actions`): every process that writes or fires an
 agent automation hands it the same, and a kind named as one of the platform's,
@@ -74,7 +74,7 @@ def build_agent_automations(
     storage: StorageInterface,
     managers: Managers,
     *,
-    project_required: bool,
+    agent_project_required: bool,
     principal_context: PrincipalContext | None = None,
     options: AgentAutomationsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
@@ -90,11 +90,11 @@ def build_agent_automations(
         managers.tenancy,
         managers.outbox,
         managers.events,
-        managers.projects,
+        managers.agent_projects,
         agent_automation_principals(held, principal_context or members_context(managers.tenancy)),
         options or AgentAutomationsOptions(),
         clock,
-        project_required=project_required,
+        agent_project_required=agent_project_required,
         actions=AgentAutomationActions(actions(lambda: managers)),
         agent_playbooks=agent_playbooks,
     )

@@ -14,6 +14,7 @@ from acme.om.agent_playbooks.types.agent_playbook import (
     AgentPlaybookInvocation,
     AgentPlaybookPin,
 )
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents import AgentsManagerInterface
@@ -34,7 +35,6 @@ from acme.om.levers.rules import checked
 from acme.om.levers.types.lever import LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.steps.rules import message_step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.windows.types.policy import CompactionPolicy
@@ -52,7 +52,7 @@ class AgentPlaybooksOptions(Platform):
     # its pinned zone's. A longer one is published with a finding.
     session_bound: int = Field(default=CompactionPolicy().pinned_bound, gt=0)
     # The most pins one read answers: a tenant's kinds, each for the tenant
-    # and for each of its projects.
+    # and for each of its agent projects.
     pins_read: int = Field(default=1000, gt=0)
 
 
@@ -68,7 +68,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         options: AgentPlaybooksOptions,
         reach: LeverReach,
         kinds: AgentKindCatalog,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -80,7 +80,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         self._options = options
         self._reach = reach
         self._kinds = kinds
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._clock = clock
 
     async def publish(
@@ -192,12 +192,14 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         return invocation
 
     async def pin(
-        self, ctx: TenantContext, kind: str, name: str, project_id: UUID | None = None
+        self, ctx: TenantContext, kind: str, name: str, agent_project_id: UUID | None = None
     ) -> AgentPlaybookPin:
         self._may_pin(ctx)
         self._kinds.latest(kind)
-        if project_id is not None and not await self._projects.holds(ctx, project_id):
-            raise NotFound(f"project {project_id} not found")
+        if agent_project_id is not None and not await self._agent_projects.holds(
+            ctx, agent_project_id
+        ):
+            raise NotFound(f"agent project {agent_project_id} not found")
         agent_playbook = await self.get_agent_playbook(ctx, name)
         # The brief rides every request of the sessions it reaches, whole:
         # one past what a session's standing text holds is refused here,
@@ -209,7 +211,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
                 f" receives it, past the bound of {MAX_STANDING} a session's standing text holds"
             )
         now = self._clock()
-        held = await self._storage.read_pin(ctx.org_id, kind, project_id)
+        held = await self._storage.read_pin(ctx.org_id, kind, agent_project_id)
         pin = AgentPlaybookPin(
             id=new_id() if held is None else held.id,
             created_at=now if held is None else held.created_at,
@@ -217,7 +219,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
             updated_at=now,
             updated_by=ctx.user_id,
             kind=kind,
-            project_id=project_id,
+            agent_project_id=agent_project_id,
             agent_playbook_id=agent_playbook.id,
             name=agent_playbook.name,
             version=agent_playbook.version,
@@ -231,10 +233,10 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         return pin
 
     async def unpin(
-        self, ctx: TenantContext, kind: str, project_id: UUID | None = None
+        self, ctx: TenantContext, kind: str, agent_project_id: UUID | None = None
     ) -> AgentPlaybookPin:
         self._may_pin(ctx)
-        held = await self._storage.read_pin(ctx.org_id, kind, project_id)
+        held = await self._storage.read_pin(ctx.org_id, kind, agent_project_id)
         if held is None:
             raise NotFound(f"agent kind {kind} has no pinned agent playbook there")
         rows = (outbox_row(ctx, UNPINNED, held.id, {"kind": kind}),)

@@ -260,7 +260,8 @@ signals missing.
 
 **Check.** `distro-check` decides that no metric whose label names are a
 literal or a module constant is labelled by a tenant, a host, a session,
-a person, a request, a workspace, or a project; the rest is judged.
+a person, a request, a workspace, or an agent project; the rest is
+judged.
 
 ## FLT-13 One run's request id crosses the runner, the host, and its steps
 

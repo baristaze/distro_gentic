@@ -1,6 +1,6 @@
 """A workspace's durability as the platform runs it, over the memory roots,
 the twin provider, and the local buckets. A kind chooses `cache`, the
-default, or `snapshot`, and a project narrows it to a cache; a session that
+default, or `snapshot`, and an agent project narrows it to a cache; a session that
 keeps no content at rest is refused a workspace kept by snapshots. A cache
 takes no snapshot, and its next loop starts from its branch. A workspace a
 snapshot restores keeps the tree it holds: no branch is brought over it. A
@@ -18,10 +18,10 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.agent_workspaces import GitTwin, ProjectsTwin, ReaderTwin
+from contracts.agent_project_storage import make_agent_project
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
 from contracts.doubles import APP
 from contracts.loops import ASSISTANT, Asked, Found, Lookup, Loop, call, loop_over, reply, said
-from contracts.project_storage import make_project
 
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
@@ -38,6 +38,7 @@ from acme.infra.workspaces import (
     WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_projects.impl.retention import SessionAgentProjectBoundImpl
 from acme.om.agent_workspaces.impl.tools import PinnedToolsOptions, ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import session_branch
@@ -50,7 +51,6 @@ from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.privacy.types.session_privacy import StorageMode
-from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.retention.impl.keys import TenantKeysImpl
 from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
 from acme.om.retention.types.policy import RetentionPolicy
@@ -154,19 +154,19 @@ def prepares(twin: WorkspaceTwinImpl, monkeypatch: pytest.MonkeyPatch) -> list[b
     return started
 
 
-# Who chooses: a kind, narrowed by a project; refused without content at rest.
+# Who chooses: a kind, narrowed by an agent project; refused without content at rest.
 
 
-async def test_a_kept_kind_is_pinned_kept_and_a_project_that_keeps_caches_narrows_it(
+async def test_a_kept_kind_is_pinned_kept_and_an_agent_project_that_keeps_caches_narrows_it(
     tmp_path: Path,
 ) -> None:
     loop, _ = kept_loop(tmp_path)
     kept = await loop.start(KEEPER.name)
-    projects = loop.managers.projects
-    caches = await projects.create_project(
-        loop.owner, make_project().model_copy(update={"workspace_snapshots": False})
+    agent_projects = loop.managers.agent_projects
+    caches = await agent_projects.create_agent_project(
+        loop.owner, make_agent_project().model_copy(update={"workspace_snapshots": False})
     )
-    narrowed = await projects.start_session(
+    narrowed = await agent_projects.start_session(
         loop.owner, caches.id, Start(id=new_id(), kind=KEEPER.name, title="a cache")
     )
     workspaces = loop.managers.agent_workspaces
@@ -176,7 +176,7 @@ async def test_a_kept_kind_is_pinned_kept_and_a_project_that_keeps_caches_narrow
         pinned.durability is Durability.SNAPSHOT and pinned.spec().durability is Durability.SNAPSHOT
     )
     cached = await workspaces.get_workspace(loop.owner, narrowed.id)
-    assert cached.durability is Durability.CACHE, "its project keeps its workspaces as caches"
+    assert cached.durability is Durability.CACHE, "its agent project keeps its workspaces as caches"
 
 
 async def test_a_session_that_keeps_no_content_at_rest_is_refused_a_kept_workspace(
@@ -207,7 +207,9 @@ async def test_a_cache_sessions_release_takes_no_snapshot_and_its_next_loop_star
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     git = Syncs()
-    loop, twin = kept_loop(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop, twin = kept_loop(
+        tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+    )
     started = prepares(twin, monkeypatch)
     session_id = await loop.start(CACHER.name)
     branch = session_branch(session_id)
@@ -235,7 +237,9 @@ async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over
     would park for a person: nothing of the branch is brought over the
     restored tree, so the run goes on from what the snapshot holds."""
     git = Syncs()
-    loop, twin = kept_loop(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop, twin = kept_loop(
+        tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+    )
     started = prepares(twin, monkeypatch)
     session_id = await loop.start(KEEPER.name)
     branch = session_branch(session_id)
@@ -339,7 +343,7 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
         loop.managers.tenancy,
         loop.managers.events,
         loop.managers.outbox,
-        SessionProjectBoundImpl(loop.storage.get_project_storage()),
+        SessionAgentProjectBoundImpl(loop.storage.get_agent_project_storage()),
         RetentionOptions(),
         clock=lambda: later,
     )

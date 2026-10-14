@@ -33,7 +33,7 @@ platform's cloud. Each call crosses the wall as `exec`
 - **An instance of a session's**: a workspace a run makes for a session
   under an id of its own, for that run alone, on a host of the session's
   pool. Its binding names the session, whose pool routes it and whose
-  project the host's owner holds its work to.
+  agent project the host's owner holds its work to.
 - **A purge**: `workspace` work on the lane of the host that holds an
   instance, asking it to destroy the instance and its files.
 - **A snapshot**: `workspace` work on the lane of the host that holds a

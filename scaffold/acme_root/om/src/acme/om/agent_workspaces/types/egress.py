@@ -1,4 +1,4 @@
-"""A workspace's egress: a project's allowlist, which names destinations and
+"""A workspace's egress: an agent project's allowlist, which names destinations and
 the methods each takes, open egress as a choice recorded with its reason,
 and the answer one request gets. Egress opens outward only: nothing here
 opens a way in."""
@@ -57,14 +57,14 @@ class EgressRule(Platform):
 
 
 class EgressAllowlist(Identifiable, Trackable):
-    """A project's egress, one row a project: its rules, or open egress,
+    """An agent project's egress, one row an agent project: its rules, or open egress,
     chosen on purpose and recorded with its reason and who chose it. A
     session takes it when it is created and keeps that copy
     (`AgentSessionWorkspace`), so a later write reaches only later sessions."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("version",)
 
-    project_id: UUID
+    agent_project_id: UUID
     rules: tuple[EgressRule, ...] = ()
     open: bool = False  # egress to anywhere but the platform's insides
     reason: str | None = Field(default=None, min_length=1, max_length=500)

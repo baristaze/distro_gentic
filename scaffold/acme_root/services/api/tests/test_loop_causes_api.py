@@ -70,7 +70,7 @@ class Setup:
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    # Local, where a twin plays the workspace and a session needs no project
+    # Local, where a twin plays the workspace and a session needs no agent project
     # with a repository to clone: anywhere else a host holds the workspace.
     return build_container(tmp_path, agent_kinds=(BUILDER,), environment="local")
 

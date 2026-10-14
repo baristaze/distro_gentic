@@ -74,7 +74,7 @@ def delivered(tmp_path: Path) -> tuple[RepositoryBinding, str, str]:
     )
     git(tmp_path, "clone", "-q", "--bare", str(work), str(tmp_path / "served.git"))
     url = f"file://{tmp_path / 'served.git'}"
-    return RepositoryBinding(project_id=new_id(), repository=url), base, head
+    return RepositoryBinding(agent_project_id=new_id(), repository=url), base, head
 
 
 def members(tar: bytes) -> dict[str, bytes]:
@@ -149,7 +149,7 @@ def attributed(tmp_path: Path) -> tuple[RepositoryBinding, str, str]:
     )
     git(tmp_path, "clone", "-q", "--bare", str(work), str(tmp_path / "served.git"))
     url = f"file://{tmp_path / 'served.git'}"
-    return RepositoryBinding(project_id=new_id(), repository=url), base, head
+    return RepositoryBinding(agent_project_id=new_id(), repository=url), base, head
 
 
 RUNNER = b"#!/bin/sh\necho $Id$ $Format:%H$\n"

@@ -26,6 +26,6 @@ class AgentKnowledgeEntries(IdentifiableMixin, TrackableMixin, Base):
     reviewed_by: Mapped[UUID | None]
     title: Mapped[str]
     version: Mapped[int]
-    project_id: Mapped[UUID | None]
+    agent_project_id: Mapped[UUID | None]
     slug: Mapped[str | None]
     findings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB())

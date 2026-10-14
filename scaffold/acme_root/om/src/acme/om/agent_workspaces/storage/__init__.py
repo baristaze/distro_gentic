@@ -1,6 +1,6 @@
 """Storage of the workspaces swimlane: each session's workspace, its isolation
-pinned and what the cache knows between loops, each project's egress
-allowlist, and the record that a project's repository has a fetch
+pinned and what the cache knows between loops, each agent project's egress
+allowlist, and the record that an agent project's repository has a fetch
 credential. Every operation takes org_id first. A write after a create is a
 compare-and-set on the version; an allowlist lands with the outbox rows
 that announce it, in one commit."""
@@ -37,8 +37,8 @@ class AgentWorkspaceStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_allowlist(self, org_id: UUID, project_id: UUID) -> EgressAllowlist | None:
-        """The project's allowlist, or None when it has never written one."""
+    async def read_allowlist(self, org_id: UUID, agent_project_id: UUID) -> EgressAllowlist | None:
+        """The agent project's allowlist, or None when it has never written one."""
         ...
 
     @abstractmethod
@@ -47,7 +47,7 @@ class AgentWorkspaceStorageInterface(ABC):
     ) -> bool:
         """The create, with the rows that announce it, in one commit; False,
         with nothing landed, when the id is written already.
-        `UniqueKeyTaken` when the project holds another allowlist."""
+        `UniqueKeyTaken` when the agent project holds another allowlist."""
         ...
 
     @abstractmethod
@@ -64,15 +64,17 @@ class AgentWorkspaceStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_credential(self, org_id: UUID, project_id: UUID) -> RepositoryCredential | None:
-        """The record of the project's fetch credential, or None when it has
+    async def read_credential(
+        self, org_id: UUID, agent_project_id: UUID
+    ) -> RepositoryCredential | None:
+        """The record of the agent project's fetch credential, or None when it has
         none."""
         ...
 
     @abstractmethod
     async def create_credential(self, org_id: UUID, credential: RepositoryCredential) -> bool:
-        """The first record of a project's fetch credential; False, with
-        nothing landed, when the project has one already."""
+        """The first record of an agent project's fetch credential; False, with
+        nothing landed, when the agent project has one already."""
         ...
 
     @abstractmethod
@@ -90,8 +92,8 @@ class AgentWorkspaceStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def purge_credentials(self, org_id: UUID, project_ids: list[UUID]) -> int:
-        """The records of these projects' fetch credentials; returns how many
+    async def purge_credentials(self, org_id: UUID, agent_project_ids: list[UUID]) -> int:
+        """The records of these agent projects' fetch credentials; returns how many
         went."""
         ...
 

@@ -137,14 +137,14 @@ def allowlist(
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         rules=() if open_egress else named,
         open=open_egress,
         reason="the build fetches from the internet" if open_egress else None,
     )
 
 
-def test_a_project_decides_a_sessions_egress_and_a_kind_without_egress_keeps_none() -> None:
+def test_an_agent_project_decides_a_sessions_egress_and_a_kind_without_egress_keeps_none() -> None:
     open_kind = EgressPolicy(mode=EgressMode.OPEN)
     listed = allowlist()
     assert rules.pinned_egress(open_kind, "k", listed)[:2] == (EgressMode.ALLOWLIST, (SOURCE,))
@@ -155,7 +155,7 @@ def test_a_project_decides_a_sessions_egress_and_a_kind_without_egress_keeps_non
     assert rules.pinned_egress(closed, "k", allowlist(open_egress=True))[0] is EgressMode.NONE
 
 
-def test_a_session_of_no_project_keeps_its_kinds_egress_and_its_hosts_read_only() -> None:
+def test_a_session_of_no_agent_project_keeps_its_kinds_egress_and_its_hosts_read_only() -> None:
     assert rules.pinned_egress(EgressPolicy(mode=EgressMode.OPEN), "k", None)[0] is EgressMode.OPEN
     hosts = EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("git.example.com",))
     mode, named, _ = rules.pinned_egress(hosts, "k", None)
@@ -172,7 +172,7 @@ def test_open_egress_is_a_choice_recorded_with_its_reason() -> None:
             updated_at=now,
             created_by=actor,
             updated_by=actor,
-            project_id=new_id(),
+            agent_project_id=new_id(),
             open=True,
         )
 
@@ -251,7 +251,9 @@ def test_a_vanished_branch_is_rebuilt_only_when_its_fate_is_known(
 
 # Check 4: a session's own branch and pull request are its work product.
 
-BOUND = RepositoryBinding(project_id=new_id(), repository="https://git.example.com/ajax/app.git")
+BOUND = RepositoryBinding(
+    agent_project_id=new_id(), repository="https://git.example.com/ajax/app.git"
+)
 BRANCH = rules.session_branch(new_id())
 
 
@@ -325,9 +327,11 @@ def test_every_other_write_acts_outward(write: RepositoryWrite, why: str) -> Non
         ("/srv/git/ajax/app.git", "srv/git/ajax/app"),
     ],
 )
-def test_a_projects_work_product_is_named_by_its_repository(repository: str, key: str) -> None:
-    binding = RepositoryBinding(project_id=new_id(), repository=repository)
-    assert rules.project_key(binding) == key
+def test_an_agent_projects_work_product_is_named_by_its_repository(
+    repository: str, key: str
+) -> None:
+    binding = RepositoryBinding(agent_project_id=new_id(), repository=repository)
+    assert rules.agent_project_key(binding) == key
 
 
 def test_a_snapshot_ref_tells_when_it_was_taken() -> None:

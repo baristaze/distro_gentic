@@ -117,7 +117,7 @@ async def test_a_server_is_connected_reviewed_and_attached_and_its_credential_ne
     )
     assert attached.status_code == 200, attached.text
     assert attached.json()["attachments"] == [
-        {"kind": "ops_analyst", "project_id": None, "deferred": True}
+        {"kind": "ops_analyst", "agent_project_id": None, "deferred": True}
     ]
     detached = await client.delete(
         f"/v1/connectors/{connector['id']}/attachments",

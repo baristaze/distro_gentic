@@ -78,12 +78,12 @@ calls, and holds its workspace warm for a while after a loop.
   part of the platform, on their own permissions. It explains the
   product from its corpus and the agent knowledge base, and cites them.
   It diagnoses by reading the tenant's live records: its sessions, what
-  a session's park and its loop wait on, its projects, and its agent
-  automations with their recent runs. It drafts the tenant's tool policy
-  and shows the difference from what is live, and hands engineering work
-  to a software engineer. It has no workspace, repository, or shell. A
-  session keeps the version of the assistant it started on, so the one
-  before its readers is still shipped.
+  a session's park and its loop wait on, its agent projects, and its
+  agent automations with their recent runs. It drafts the tenant's tool
+  policy and shows the difference from what is live, and hands
+  engineering work to a software engineer. It has no workspace,
+  repository, or shell. A session keeps the version of the assistant it
+  started on, so the one before its readers is still shipped.
 - **The reviewer** reads one pull request through the forge's
   integration: its files and their patches, the checks at its head, and
   a file at its head. It notes each finding with a file, a line, and a
@@ -96,9 +96,9 @@ calls, and holds its workspace warm for a while after a loop.
   2058](../../../../../docs/adr/2058-a-reviewer-and-an-ops-analyst-ship-as-kinds-and-each-only-reads-what-it-judges.md)).
 - **The ops analyst** reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, its hosts and what
-  each offers, its budgets and what they spent, and its projects and
-  agent automations. Every tool it holds reads. A fix it finds leaves as
-  an objective a person hands to a software engineer.
+  each offers, its budgets and what they spent, and its agent projects
+  and agent automations. Every tool it holds reads. A fix it finds
+  leaves as an objective a person hands to a software engineer.
 - **A lead** is any kind whose toolsets include `sub_agents`: it starts
   the others, such as a software engineer on a change and the reviewer
   on its pull request, and answers with their reports. It holds every
@@ -106,23 +106,25 @@ calls, and holds its workspace warm for a while after a loop.
   parent's. It is no kind of its own here.
 - **The assistant's readers**, each a tool that reads through the asking
   person's own context: `list_sessions`, by status, park reason, and
-  project, newest first; `read_session`, where one stands, each call it
-  holds for approval with the roles that may decide it, and the
+  agent project, newest first; `read_session`, where one stands, each
+  call it holds for approval with the roles that may decide it, and the
   sub-agents it waits for; `read_wait`, its loop's item on the work queue
-  and the hosts it may run on; `list_projects` and `read_project`; and
-  `list_agent_automations` and `read_agent_automation`, with its recent
-  runs. Each answers a record's shape, never a session's content, and
-  bounds its list. A product adds readers of its own through its slot.
+  and the hosts it may run on; `list_agent_projects` and
+  `read_agent_project`; and `list_agent_automations` and
+  `read_agent_automation`, with its recent runs. Each answers a record's
+  shape, never a session's content, and bounds its list. A product adds
+  readers of its own through its slot.
 - **The corpus**: what the [knowledge map](../../../../../llms.txt) lists
   for the tenant's users, read once when the process starts. A document
   listed only for the platform's own people is not in it. Among it is
   [the object model](../../../../../docs/object-model.md): each entity,
   its states and what moves it, and every park reason with what clears
   it, who may, and the reader that shows it.
-- **A validation session**: one check of a project's policy, run on a
-  fresh executor with no agent. It holds the project, the check, the
-  delivered commit it runs at, and the base its checks, fixtures, and
-  runner come from, and, once its run is recorded, which run it was.
+- **A validation session**: one check of an agent project's policy, run
+  on a fresh executor with no agent. It holds the agent project, the
+  check, the delivered commit it runs at, and the base its checks,
+  fixtures, and runner come from, and, once its run is recorded, which
+  run it was.
 
 ## What can happen
 
@@ -158,7 +160,8 @@ calls, and holds its workspace warm for a while after a loop.
   of its lines. A match of more than one place is refused, so an edit
   never lands where the model did not mean, and so is a file past the
   bound one read takes, or one that is not text. A path the session's
-  project protects is refused at the call, as `write_file` refuses it.
+  agent project protects is refused at the call, as `write_file` refuses
+  it.
 - **Search the code.** `search_code` runs the workspace's own search,
   through the transport, wherever the workspace runs, never in the
   platform's process. Its answer is bounded in matches, in each match's
@@ -168,13 +171,13 @@ calls, and holds its workspace warm for a while after a loop.
   the reviewed entries the session reaches and the passages of the
   corpus that share the most of a query's words; `read_agent_knowledge`
   reads one whole by its slug, a corpus document by its path.
-  `suggest_agent_knowledge` suggests an entry for the session's project,
-  which waits for a person's review.
+  `suggest_agent_knowledge` suggests an entry for the session's agent
+  project, which waits for a person's review.
 - **Open a pull request.** The software engineer's `open_pull_request`
   takes a title and a body, and nothing else. The workspace's committed
-  head goes to the session's own branch on its project's repository,
-  with a push token the workspaces mint for the call and check before
-  each write ([ADR
+  head goes to the session's own branch on its agent project's
+  repository, with a push token the workspaces mint for the call and
+  check before each write ([ADR
   2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
   The model never sees the token, and names neither the branch nor the
   repository. A second call moves the branch and keeps the one pull
@@ -184,11 +187,11 @@ calls, and holds its workspace warm for a while after a loop.
   person's push on either finds the session ([intake](../intake/README.md)).
 - **Start a validation session.** A member who may write asks for a
   check at a delivered commit, with its checks from a base, as a CI job
-  asks through the API. A check its project's policy does not declare is
-  refused before anything is written, and so is a project whose policy
-  is another tenant's. Its `VALIDATION` work goes on the platform's own
-  lane of the [work queue](../work/README.md) in the same write, and the
-  platform's worker claims it.
+  asks through the API. A check its agent project's policy does not
+  declare is refused before anything is written, and so is an agent
+  project whose policy is another tenant's. Its `VALIDATION` work goes
+  on the platform's own lane of the [work queue](../work/README.md) in
+  the same write, and the platform's worker claims it.
 - **Run it.** The worker runs the check through the
   [evidence](../evidence/README.md) on a fresh executor: an instance
   nobody used, holding the delivered commit with the protected paths
@@ -248,7 +251,7 @@ calls, and holds its workspace warm for a while after a loop.
   and nothing is spent on it ([ADR
   2024](../../../../../docs/adr/2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
 - **A validation session never runs where an agent worked.** Its tree
-  is read from the project's repository by the platform, and its
+  is read from the agent project's repository by the platform, and its
   protected paths come from its base, whatever the delivered commit
   holds there.
 - **A finding lands on a line that is there.** Its file is read at the

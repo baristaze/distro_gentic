@@ -9,7 +9,7 @@ import type { NavEntry, SettingsEntry } from "../product";
 export const SEARCH_PLACEHOLDER = "Search sessions, settings, and actions";
 
 /** "Start a session: ‹text›", for what is typed: it opens Home with the text
- * in the composer, where the agent and the project are chosen. */
+ * in the composer, where the agent and the agent project are chosen. */
 export function startCommands(query: string, start: (text: string) => void): PaletteCommand[] {
   const text = query.trim();
   if (!text) return [];

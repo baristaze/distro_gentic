@@ -13,9 +13,9 @@ the kinds of thing [Acme is made of](../../../../README.md).
   definition they read, pinned by its hash, with the class and the effect
   they gave it and what the [lever checks](../levers/README.md) found in
   its description.
-- **Attachment**: a kind the connector is attached to, for one project or
-  for the whole tenant, deferred until the agent loads it unless it says
-  otherwise.
+- **Attachment**: a kind the connector is attached to, for one agent
+  project or for the whole tenant, deferred until the agent loads it
+  unless it says otherwise.
 - **Pin**: what a session holds of its tenant's connectors, written as its
   first run begins.
 

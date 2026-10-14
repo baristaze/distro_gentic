@@ -149,7 +149,7 @@ async def container_host_keeping(api: Stack, pool_id: UUID, where: Path) -> tupl
     """A host of the pool as the host's `main` wires one: a container per
     workspace on the local Docker, of the default image, and a store of
     its own that keeps their snapshots, which its probe showed. Its
-    ceilings take any project, and let nothing leave."""
+    ceilings take any agent project, and let nothing leave."""
     settings = replace(
         api.settings(where / "home", None), enrollment_token=await api.token(pool_id)
     )
@@ -169,7 +169,7 @@ async def container_host_keeping(api: Stack, pool_id: UUID, where: Path) -> tupl
     checks = replace(probes(HostMode.container), snapshots={HostMode.container: store.usable})
     host = HostAgent(
         settings,
-        Ceilings(projects=None, min_isolation=HostMode.container, egress=frozenset()),
+        Ceilings(agent_projects=None, min_isolation=HostMode.container, egress=frozenset()),
         checks,
         api.client,
         executor,

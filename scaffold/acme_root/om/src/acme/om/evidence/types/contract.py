@@ -26,7 +26,7 @@ and where the results stream goes."""
 
 
 class CheckDeclaration(Platform):
-    """A check as a project declares it: its name and version, the command
+    """A check as an agent project declares it: its name and version, the command
     template a runner is started with, its kind, the capabilities a place
     must offer to run it, the version of the results schema it writes, and
     the executor that runs it, by name: the platform's fresh executor,

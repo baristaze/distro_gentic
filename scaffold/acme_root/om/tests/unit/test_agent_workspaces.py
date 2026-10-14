@@ -2,7 +2,7 @@
 the scripted provider: its isolation pinned when the session is created and
 refused by a host that cannot give it, with the loop parked on the
 resource; its work pushed before its instance goes, the next loop told, and
-a vanished branch failing loudly; its egress its project's allowlist; and
+a vanished branch failing loudly; its egress its agent project's allowlist; and
 its own branch and pull request its work product."""
 
 import asyncio
@@ -12,16 +12,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from contracts.agent_project_storage import make_agent_project
 from contracts.agent_workspaces import (
     BASE,
     REPOSITORY,
+    AgentProjectsTwin,
     GitTwin,
-    ProjectsTwin,
     PullRequestsTwin,
     ReaderTwin,
 )
 from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
-from contracts.project_storage import make_project
 
 from acme.infra.workspaces import (
     EgressMode,
@@ -32,6 +32,7 @@ from acme.infra.workspaces import (
     Workspace,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
@@ -59,7 +60,6 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unavailable
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -84,7 +84,7 @@ def gate(storage: StorageInterface) -> ResultGateInterface:
     return ResultGateEvidenceImpl(
         storage.get_evidence_storage(),
         WorkProductAbsentImpl(),
-        SessionProjectsBoundImpl(storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
     )
 
 
@@ -185,7 +185,7 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop = loop_of(tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
     branch = session_branch(session_id)
     assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
@@ -219,7 +219,7 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
 
 async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path) -> None:
     git = GitTwin()
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop = loop_of(tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
     assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
     git.dirty, git.refuses_push = True, True
@@ -239,7 +239,7 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
     pull_requests = PullRequestsTwin()
     loop = loop_of(
         tmp_path,
-        workspace_projects=ProjectsTwin(),
+        workspace_agent_projects=AgentProjectsTwin(),
         workspace_git=git,
         pull_requests=pull_requests,
     )
@@ -276,7 +276,7 @@ async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop = loop_of(tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
     branch = session_branch(session_id)
     git.remote.add(branch)
@@ -294,7 +294,7 @@ async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_perso
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    loop = loop_of(tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
     branch = session_branch(session_id)
     git.remote.add(branch)
@@ -320,7 +320,7 @@ async def test_a_branch_gone_after_its_pull_request_merged_is_rebuilt_and_the_lo
     pull_requests = PullRequestsTwin()
     loop = loop_of(
         tmp_path,
-        workspace_projects=ProjectsTwin(),
+        workspace_agent_projects=AgentProjectsTwin(),
         workspace_git=git,
         pull_requests=pull_requests,
     )
@@ -339,7 +339,7 @@ async def test_a_branch_gone_after_its_pull_request_merged_is_rebuilt_and_the_lo
     assert "merged" in told.as_text() and branch in told.as_text()
 
 
-# Check 3: a session's egress is its project's allowlist, pinned, and what
+# Check 3: a session's egress is its agent project's allowlist, pinned, and what
 # is outside it, or inside the platform, is refused.
 
 
@@ -349,9 +349,9 @@ def ask(destination: str, address: str, method: EgressMethod | None) -> EgressRe
     )
 
 
-async def test_a_sessions_egress_is_its_projects_allowlist_as_pinned(tmp_path: Path) -> None:
-    projects = ProjectsTwin()
-    loop = loop_of(tmp_path, workspace_projects=projects)
+async def test_a_sessions_egress_is_its_agent_projects_allowlist_as_pinned(tmp_path: Path) -> None:
+    agent_projects = AgentProjectsTwin()
+    loop = loop_of(tmp_path, workspace_agent_projects=agent_projects)
     workspaces = loop.managers.agent_workspaces
     listed = EgressAllowlist(
         id=new_id(),
@@ -359,7 +359,7 @@ async def test_a_sessions_egress_is_its_projects_allowlist_as_pinned(tmp_path: P
         updated_at=loop.clock(),
         created_by=loop.owner.user_id,
         updated_by=loop.owner.user_id,
-        project_id=projects.project_id,
+        agent_project_id=agent_projects.agent_project_id,
         rules=(SOURCE, MIRROR),
     )
     written = await workspaces.write_allowlist(loop.owner, listed)
@@ -403,7 +403,7 @@ async def test_an_allowlist_write_retried_after_it_landed_returns_the_row_as_sto
         updated_at=loop.clock(),
         created_by=loop.owner.user_id,
         updated_by=loop.owner.user_id,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         rules=(SOURCE,),
     )
 
@@ -416,7 +416,7 @@ async def test_an_allowlist_write_retried_after_it_landed_returns_the_row_as_sto
     widened = created.model_copy(update={"rules": (SOURCE, MIRROR)})
     updated = await workspaces.write_allowlist(loop.owner, widened)
     assert await workspaces.write_allowlist(loop.owner, widened) == updated
-    stored = await workspaces.get_allowlist(loop.owner, listed.project_id)
+    stored = await workspaces.get_allowlist(loop.owner, listed.agent_project_id)
     assert stored == updated and updated.version == 2
 
     # Another write at a stale version is still refused.
@@ -434,21 +434,21 @@ async def test_only_one_who_manages_the_tenant_writes_an_allowlist(tmp_path: Pat
         updated_at=loop.clock(),
         created_by=member.user_id,
         updated_by=member.user_id,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         rules=(SOURCE,),
     )
     with pytest.raises(NotAuthorized):
         await loop.managers.agent_workspaces.write_allowlist(member, listed)
 
 
-# Check 4: a session's own branch and pull request on its project's bound
+# Check 4: a session's own branch and pull request on its agent project's bound
 # repository are its work product, and every other write acts outward.
 
 
 async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all_else_outward(
     tmp_path: Path,
 ) -> None:
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin())
+    loop = loop_of(tmp_path, workspace_agent_projects=AgentProjectsTwin())
     session_id = await loop.start("twinned")
     branch = session_branch(session_id)
     workspaces = loop.managers.agent_workspaces
@@ -466,7 +466,9 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
     assert await outward(WriteKind.OTHER, branch)
     assert await outward(WriteKind.PUSH, branch, "https://git.example.com/ajax/other.git")
 
-    unbound = loop_of(tmp_path / "unbound", workspace_projects=ProjectsTwin(repository=None))
+    unbound = loop_of(
+        tmp_path / "unbound", workspace_agent_projects=AgentProjectsTwin(repository=None)
+    )
     unbound_session = await unbound.start("twinned")
     own = RepositoryWrite(
         repository=REPOSITORY, kind=WriteKind.PUSH, ref=session_branch(unbound_session)
@@ -484,7 +486,10 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     git = GitTwin(head="c" * 40)
     reader = ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",))
     loop = loop_of(
-        tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git, workspace_reader=reader
+        tmp_path,
+        workspace_agent_projects=AgentProjectsTwin(),
+        workspace_git=git,
+        workspace_reader=reader,
     )
     assert isinstance(
         loop.managers.evidence._work_product,  # pyright: ignore[reportAttributeAccessIssue]
@@ -503,7 +508,7 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     held.hold(workspace, epoch=1)
     delivered = await products.delivered(loop.owner, session_id)
 
-    assert delivered is not None and delivered.project == "git.example.com/ajax/app"
+    assert delivered is not None and delivered.agent_project == "git.example.com/ajax/app"
     assert (delivered.base, delivered.head, delivered.dirty) == (BASE, "c" * 40, True)
     assert delivered.changed == ("checks/test_guard.py",), "as the repository holds it"
     git.dirty = False
@@ -513,7 +518,9 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     ahead = await products.delivered(loop.owner, session_id)
     assert ahead is not None and ahead.dirty, "a commit the repository lacks is not delivered"
 
-    unbound = loop_of(tmp_path / "unbound", workspace_projects=ProjectsTwin(repository=None))
+    unbound = loop_of(
+        tmp_path / "unbound", workspace_agent_projects=AgentProjectsTwin(repository=None)
+    )
     other = await unbound.start("twinned")
     loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
     with pytest.raises(Unavailable):
@@ -550,7 +557,7 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
     git = SlowPushGit()
     loop = loop_of(
         tmp_path,
-        workspace_projects=ProjectsTwin(),
+        workspace_agent_projects=AgentProjectsTwin(),
         workspace_git=git,
         workspace_reader=ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",)),
     )
@@ -586,10 +593,13 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
 async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_go(
     tmp_path: Path, prepares: bool
 ) -> None:
-    git, projects = SlowPushGit(), ProjectsTwin()
+    git, agent_projects = SlowPushGit(), AgentProjectsTwin()
     reader = ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",))
     host_a = loop_of(
-        tmp_path, workspace_projects=projects, workspace_git=git, workspace_reader=reader
+        tmp_path,
+        workspace_agent_projects=agent_projects,
+        workspace_git=git,
+        workspace_reader=reader,
     )
     (tmp_path / "b").mkdir()
     # Another runner host: its own provider, over the same storage.
@@ -597,7 +607,7 @@ async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_
         tmp_path / "b",
         storage=host_a.storage,
         owner=host_a.owner,
-        workspace_projects=projects,
+        workspace_agent_projects=agent_projects,
         workspace_git=git,
         workspace_reader=reader,
     )
@@ -624,38 +634,44 @@ async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_
     assert (session_id in provider(host_b).live) is prepares, "host B's is its own run's"
 
 
-# A session's project and its repository are the projects' rows.
+# A session's agent project and its repository are the agent projects' rows.
 
 
-async def test_a_session_started_in_a_project_works_on_the_projects_repository(
+async def test_a_session_started_in_an_agent_project_works_on_the_agent_projects_repository(
     tmp_path: Path,
 ) -> None:
     loop = loop_of(tmp_path)
-    project = await loop.managers.projects.create_project(loop.owner, make_project("octo/reports"))
+    agent_project = await loop.managers.agent_projects.create_agent_project(
+        loop.owner, make_agent_project("octo/reports")
+    )
     listed = EgressAllowlist(
         id=new_id(),
         created_at=loop.clock(),
         updated_at=loop.clock(),
         created_by=loop.owner.user_id,
         updated_by=loop.owner.user_id,
-        project_id=project.id,
+        agent_project_id=agent_project.id,
         rules=(SOURCE,),
     )
     await loop.managers.agent_workspaces.write_allowlist(loop.owner, listed)
 
-    session = await loop.managers.projects.start_session(
-        loop.owner, project.id, Start(id=new_id(), kind="twinned", title="a report")
+    session = await loop.managers.agent_projects.start_session(
+        loop.owner, agent_project.id, Start(id=new_id(), kind="twinned", title="a report")
     )
 
     pinned = await loop.managers.agent_workspaces.get_workspace(loop.owner, session.id)
-    assert (pinned.project_id, pinned.rules) == (project.id, (SOURCE,)), "its project's allowlist"
+    assert (pinned.agent_project_id, pinned.rules) == (agent_project.id, (SOURCE,)), (
+        "its agent project's allowlist"
+    )
     branch = session_branch(session.id)
     own = RepositoryWrite(
         repository="https://github.com/octo/reports.git", kind=WriteKind.PUSH, ref=branch
     )
     elsewhere = own.model_copy(update={"repository": "https://github.com/octo/other.git"})
     workspaces = loop.managers.agent_workspaces
-    assert not await workspaces.outward(loop.owner, session.id, own), "the project's repository"
+    assert not await workspaces.outward(loop.owner, session.id, own), (
+        "the agent project's repository"
+    )
     assert await workspaces.outward(loop.owner, session.id, elsewhere)
 
 

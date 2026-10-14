@@ -65,7 +65,7 @@ class ExecRelayManagerInterface(ABC):
         """Platform-internal: asks a host of the session's pool to make a new
         instance under `instance_id` to `spec`, for one run, as `workspace`
         work on the pool's lane, which any host of the pool may claim. The
-        instance carries the session: its pool routes it, and its project is
+        instance carries the session: its pool routes it, and its agent project is
         what the host's owner holds its work to. The host's answer binds the
         instance, as a prepare's binds a session. `ValidationFailed` for a
         session of the cloud."""

@@ -22,9 +22,13 @@ class EvidenceStorageMemoryImpl(MemoryStorageBase, EvidenceStorageInterface):
 
     # The policies.
 
-    async def read_policy(self, org_id: UUID, project: str) -> ValidationPolicy | None:
+    async def read_policy(self, org_id: UUID, agent_project: str) -> ValidationPolicy | None:
         return next(
-            (found for found in self._rows(self._policies, org_id) if found.project == project),
+            (
+                found
+                for found in self._rows(self._policies, org_id)
+                if found.agent_project == agent_project
+            ),
             None,
         )
 
@@ -34,9 +38,11 @@ class EvidenceStorageMemoryImpl(MemoryStorageBase, EvidenceStorageInterface):
         async with self._lock:
             if policy.id in self._policies:
                 return False
-            # One policy a project: the unique index the table holds.
-            if await self.read_policy(org_id, policy.project) is not None:
-                raise UniqueKeyTaken(f"validation_policies {policy.id}: the project holds a policy")
+            # One policy an agent project: the unique index the table holds.
+            if await self.read_policy(org_id, policy.agent_project) is not None:
+                raise UniqueKeyTaken(
+                    f"validation_policies {policy.id}: the agent project holds a policy"
+                )
             return self._insert(self._policies, org_id, policy, outbox_rows)
 
     async def write_policy(

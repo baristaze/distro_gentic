@@ -87,14 +87,14 @@ class AgentPlaybookInvocation(Identifiable, Created):
 
 class AgentPlaybookPin(Identifiable, Trackable):
     """A version a tenant pinned to a kind as its kind manual, for the tenant's
-    every session of the kind, or, with `project_id`, for those of one
-    project, where it wins over the tenant's. Each new session it reaches
+    every session of the kind, or, with `agent_project_id`, for those of one
+    agent project, where it wins over the tenant's. Each new session it reaches
     pins the version's brief as its standing text and its gates into its
-    policy. One pin a kind and a project; pinned again, it names the
+    policy. One pin a kind and an agent project; pinned again, it names the
     version then latest, and a session made before keeps its own."""
 
     kind: str = Field(min_length=1, max_length=MAX_KIND)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     agent_playbook_id: UUID
     name: Stored = Field(min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME)
     version: int = Field(ge=1)

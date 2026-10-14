@@ -1,7 +1,7 @@
 """What this product adds to the platform's kinds, declared once: its agent
 kinds, built from the platform's toolsets and its own, with the model size
 each asks of a model role, the warm grace each holds its workspace for,
-and the versions whose workspace starts from their project's workspace base;
+and the versions whose workspace starts from their agent project's workspace base;
 its tools and the classes they declare, the ceiling any of those
 classes holds (one that must always wait for a person, say), its work and
 claimant kinds, its secret owners, its stream kinds, its executors,

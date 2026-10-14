@@ -20,9 +20,9 @@ from uuid import UUID
 
 import pytest
 from api_support import seed_request
+from contracts.agent_project_storage import in_agent_project
 from contracts.checks_repository import UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
-from contracts.project_storage import in_project
 from host_support import Pace, Stack, directory_host, postgres, stack, started_host
 from runner_support import TOOLS, assistant
 
@@ -136,7 +136,7 @@ async def pool_host(api: Stack, pool_id: UUID, where: Path) -> Hosted:
         pool_id,
         replace(api.settings(where / "home", None), name="host-a"),
         Ceilings(
-            projects=None,
+            agent_projects=None,
             min_isolation=IsolationMode.directory,
             egress=None,
             readable=(str(root),),
@@ -177,7 +177,7 @@ async def pumped[T](call: Awaitable[T], hosts: dict[HostAgent, list[UUID]]) -> T
 
 @dataclass
 class Runner:
-    """The runner's root, the project's repository its projects bind, and
+    """The runner's root, the agent project's repository its agent projects bind, and
     the work product its sessions deliver to."""
 
     container: RunnerContainer
@@ -197,7 +197,7 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
         api.container.infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
         ports=PlatformPorts(
-            workspace_projects=OnDisk(repository),
+            workspace_agent_projects=OnDisk(repository),
             work_product=work,
             kinds=ProductKinds(agents=(KIND,), tools=lambda _managers: TOOLS),
         ),
@@ -208,7 +208,7 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
 async def delivered(
     run: Runner, api: Stack, pool_id: UUID, check: CheckDeclaration = UNIT
 ) -> tuple[UUID, str]:
-    """A session of the tenant pinned to the pool, in a project whose policy
+    """A session of the tenant pinned to the pool, in an agent project whose policy
     runs `check` from the base, and the head it delivered, whose cart the
     base's fixture passes."""
     container, repository = run.container, run.repository
@@ -218,8 +218,10 @@ async def delivered(
         owner, Start(id=new_id(), kind=KIND.name, title="Fix the cart's total")
     )
     await api.container.managers.hosts.place_session(owner, session.id, pool_id)
-    project_id = await in_project(container.storage.get_project_storage(), owner.org_id, session.id)
-    policy = make_policy(policy_key(project_id))
+    agent_project_id = await in_agent_project(
+        container.storage.get_agent_project_storage(), owner.org_id, session.id
+    )
+    policy = make_policy(policy_key(agent_project_id))
     await managers.evidence.write_policy(
         owner,
         ValidationPolicy.model_validate(
@@ -231,7 +233,7 @@ async def delivered(
         owner.org_id,
         session.id,
         WorkProduct(
-            project=policy.project,
+            agent_project=policy.agent_project,
             base=repository.base,
             head=head,
             dirty=False,
@@ -252,7 +254,7 @@ def gone(path: Path | str) -> bool:
 
 @pytest.fixture(autouse=True)
 def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The reader the runner's root builds, allowed to read the project's
+    """The reader the runner's root builds, allowed to read the agent project's
     repository from a path, as a deployed one is not."""
     monkeypatch.setattr(
         platform_root,
@@ -261,7 +263,7 @@ def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-# Check 1: a pinned project's work product is validated on a host of its pool,
+# Check 1: a pinned agent project's work product is validated on a host of its pool,
 # in an instance nobody used, the record hashes to its results, and the
 # gate confirms it.
 
@@ -277,7 +279,7 @@ async def over_postgres(tmp_path: Path) -> AsyncIterator[tuple[Stack, Runner]]:
 
 
 @pytest.mark.integration
-async def test_a_pinned_projects_delivery_is_validated_on_its_pools_host_and_the_gate_confirms_it(
+async def test_a_pinned_agent_projects_delivery_is_validated_on_its_pools_host_and_the_gate_confirms_it(
     over_postgres: tuple[Stack, Runner], tmp_path: Path
 ) -> None:
     api, run = over_postgres

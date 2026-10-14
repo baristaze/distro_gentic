@@ -52,7 +52,7 @@ refusal `action`.
 
 - The action's kind is a name, not an enum. A session's action carries
   the creator's brief and no params, and a product's carries its params
-  and no brief, project, or session.
+  and no brief, agent project, or session.
 - The run gains `work_id` and `outcome`, both nullable, in one
   migration. Its down migration removes the agent automations of a
   product's kind, with their runs, since the previous release reads them

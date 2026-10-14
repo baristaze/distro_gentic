@@ -10,11 +10,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project, make_agent_project
 from contracts.budget_storage import make_budget
 from contracts.evidence_storage import make_policy
 from contracts.intake import ACTING, WORKER, Wired, wired
 from contracts.loops import ASSISTANT, reply, said, use
-from contracts.project_storage import in_project, make_project
 from contracts.sub_agents import spawn
 from pydantic import ValidationError
 
@@ -36,6 +36,7 @@ from acme.om.agent_automations.types.agent_automation import (
 )
 from acme.om.agent_playbooks.rules import skill_md
 from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybookDraft, AgentPlaybookGate
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
@@ -58,7 +59,6 @@ from acme.om.intake.types.event import (
 )
 from acme.om.intake.types.link import HandleKind, Installation
 from acme.om.models.types.fill import MAIN, Eligibility
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import InputHeader, ParkReason
@@ -441,31 +441,33 @@ async def test_a_message_to_a_standing_session_is_refused_when_saved_and_never_a
     assert platform.anthropic.calls == []
 
 
-# A session an agent automation starts is in the project its action names.
+# A session an agent automation starts is in the agent project its action names.
 
 
-def started_in(project_id: UUID | None) -> Action:
-    return agent_automation().action.model_copy(update={"project_id": project_id})
+def started_in(agent_project_id: UUID | None) -> Action:
+    return agent_automation().action.model_copy(update={"agent_project_id": agent_project_id})
 
 
-async def test_an_agent_automations_session_starts_in_its_project_under_its_budget_and_policy(
+async def test_an_agent_automations_session_starts_in_its_agent_project_under_its_budget_and_policy(
     tmp_path: Path,
 ) -> None:
-    """The session is its project's from its first moment, so the project's
-    policy protects its paths, and the project's budget holds its calls:
-    the call gate the loop asks refuses a call past it, on the project's
+    """The session is its agent project's from its first moment, so the agent project's
+    policy protects its paths, and the agent project's budget holds its calls:
+    the call gate the loop asks refuses a call past it, on the agent project's
     line alone, though the tenant and the run's own budget have room."""
-    platform = wired(tmp_path, project_required=True)
+    platform = wired(tmp_path, agent_project_required=True)
     creator = platform.person(Role.ADMIN)
-    project = (await platform.managers.projects.create_project(creator, make_project())).id
-    await platform.managers.evidence.write_policy(creator, make_policy(policy_key(project)))
-    budget = make_budget(BudgetScopeKind.PROJECT, str(project), cost_micros=1)
+    agent_project = (
+        await platform.managers.agent_projects.create_agent_project(creator, make_agent_project())
+    ).id
+    await platform.managers.evidence.write_policy(creator, make_policy(policy_key(agent_project)))
+    budget = make_budget(BudgetScopeKind.PROJECT, str(agent_project), cost_micros=1)
     await platform.managers.budgets.create_budget(creator, budget)
-    await made(platform, creator, action=started_in(project))
+    await made(platform, creator, action=started_in(agent_project))
     (run,) = await fired(platform, comment())
     assert run.status is RunStatus.STARTED and run.session_id is not None
-    placed = await platform.managers.projects.project_of(platform.owner, run.session_id)
-    assert placed is not None and placed.id == project
+    placed = await platform.managers.agent_projects.agent_project_of(platform.owner, run.session_id)
+    assert placed is not None and placed.id == agent_project
     target = await platform.managers.evidence.protection(
         platform.owner, run.session_id, ["tests/test_grip.py"]
     )
@@ -475,7 +477,7 @@ async def test_an_agent_automations_session_starts_in_its_project_under_its_budg
         platform.managers.pricing,
         platform.managers.agent_sessions,
         platform.managers.budgets,
-        SessionProjectsBoundImpl(platform.storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(platform.storage.get_agent_project_storage()),
     )
     fills = await platform.managers.models.resolve_fill_set(
         platform.owner, run.session_id, ASSISTANT.roles, Eligibility()
@@ -489,17 +491,17 @@ async def test_an_agent_automations_session_starts_in_its_project_under_its_budg
             creator, run.session_id, spender, MAIN, fill, call, credential="platform"
         )
     (breach,) = refused.value.refusal.breaches
-    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(agent_project))
 
 
-async def test_outside_local_a_start_in_no_project_or_another_tenants_is_refused_when_saved(
+async def test_outside_local_a_start_in_no_agent_project_or_another_tenants_is_refused_when_saved(
     tmp_path: Path,
 ) -> None:
-    platform = wired(tmp_path, project_required=True)
+    platform = wired(tmp_path, agent_project_required=True)
     creator = platform.person(Role.ADMIN)
     with pytest.raises(ValidationFailed):
         await made(platform, creator)
-    theirs = await in_project(platform.storage.get_project_storage(), new_id())
+    theirs = await in_agent_project(platform.storage.get_agent_project_storage(), new_id())
     with pytest.raises(NotFound):
         await made(platform, creator, action=started_in(theirs))
     # Neither was saved: the event fires nothing.
@@ -507,12 +509,12 @@ async def test_outside_local_a_start_in_no_project_or_another_tenants_is_refused
 
 
 @pytest.mark.parametrize("trigger", ["event", "schedule"])
-async def test_outside_local_a_stored_start_in_no_project_starts_nothing_when_it_fires(
+async def test_outside_local_a_stored_start_in_no_agent_project_starts_nothing_when_it_fires(
     trigger: str, tmp_path: Path
 ) -> None:
-    """One saved before a project was required: its firing is a run refused
-    for its project, which starts no session and reserves nothing."""
-    platform = wired(tmp_path, project_required=True)
+    """One saved before an agent project was required: its firing is a run refused
+    for its agent project, which starts no session and reserves nothing."""
+    platform = wired(tmp_path, agent_project_required=True)
     creator = platform.person(Role.ADMIN)
     at = platform.clock.now
     stored = (scheduled(creator) if trigger == "schedule" else agent_automation()).model_copy(
@@ -526,7 +528,7 @@ async def test_outside_local_a_stored_start_in_no_project_starts_nothing_when_it
         (run,) = await fired(platform, comment())
     assert (run.status, run.refusal, run.session_id, run.reserved_micros) == (
         RunStatus.REFUSED,
-        Refusal.PROJECT,
+        Refusal.AGENT_PROJECT,
         None,
         0,
     )

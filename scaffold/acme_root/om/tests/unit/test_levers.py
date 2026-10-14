@@ -22,6 +22,7 @@ from acme.om.agent_playbooks.types.agent_playbook import (
     AgentPlaybookDraft,
     AgentPlaybookGate,
 )
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
@@ -52,7 +53,6 @@ from acme.om.levers.types.lever import (
     SessionLevers,
     SpinTally,
 )
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.tools.types.policy import Decision
 from acme.om.trust.types.shape import shape_of
@@ -163,7 +163,7 @@ def publisher(platform: Wired) -> AgentPlaybooksManagerImpl:
         AgentPlaybooksOptions(session_bound=BOUND),
         REACH.model_copy(update={"tools": REACH.tools | set(GATED)}),
         managers.kinds,
-        SessionProjectsBoundImpl(storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
     )
 
 

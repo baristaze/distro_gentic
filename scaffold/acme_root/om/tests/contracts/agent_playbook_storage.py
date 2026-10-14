@@ -1,7 +1,7 @@
 """The agent playbooks storage contract: every published version, written once
 with the findings read in it, none on one never checked, the agent playbooks
-each session invoked, and the versions pinned to kinds, one a kind in a
-project and one for the tenant, never confused. The cases named in
+each session invoked, and the versions pinned to kinds, one a kind in an
+agent project and one for the tenant, never confused. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -76,7 +76,7 @@ def make_invocation(
 
 
 def make_pin(
-    agent_playbook: AgentPlaybook, kind: str = "assistant", project_id: UUID | None = None
+    agent_playbook: AgentPlaybook, kind: str = "assistant", agent_project_id: UUID | None = None
 ) -> AgentPlaybookPin:
     now, by = utcnow(), new_id()
     return AgentPlaybookPin(
@@ -86,7 +86,7 @@ def make_pin(
         created_by=by,
         updated_by=by,
         kind=kind,
-        project_id=project_id,
+        agent_project_id=agent_project_id,
         agent_playbook_id=agent_playbook.id,
         name=agent_playbook.name,
         version=agent_playbook.version,
@@ -140,20 +140,26 @@ class AgentPlaybookStorageContract:
         assert await storage.create_invocation(org, kind_manual) == kind_manual
         assert await storage.read_invocations(org, kind_manual.session_id, 10) == [kind_manual]
 
-    async def test_a_kind_holds_one_pin_for_the_tenant_and_one_a_project_never_confused(
+    async def test_a_kind_holds_one_pin_for_the_tenant_and_one_an_agent_project_never_confused(
         self, storage: AgentPlaybookStorageInterface
     ) -> None:
-        org, project = new_id(), new_id()
+        org, agent_project = new_id(), new_id()
         agent_playbook = make_agent_playbook()
-        tenants, projects = make_pin(agent_playbook), make_pin(agent_playbook, project_id=project)
+        tenants, agent_projects = (
+            make_pin(agent_playbook),
+            make_pin(agent_playbook, agent_project_id=agent_project),
+        )
         other = make_pin(agent_playbook, kind="analysis")
-        for pin in (projects, other, tenants):
+        for pin in (agent_projects, other, tenants):
             await storage.put_pin(org, pin, ())
         assert await storage.read_pin(org, "assistant", None) == tenants
-        assert await storage.read_pin(org, "assistant", project) == projects
+        assert await storage.read_pin(org, "assistant", agent_project) == agent_projects
         assert await storage.read_pin(org, "assistant", new_id()) is None
-        assert await storage.read_pins(org, 10) == [other, tenants, projects]
-        for taken in (make_pin(agent_playbook), make_pin(agent_playbook, project_id=project)):
+        assert await storage.read_pins(org, 10) == [other, tenants, agent_projects]
+        for taken in (
+            make_pin(agent_playbook),
+            make_pin(agent_playbook, agent_project_id=agent_project),
+        ):
             with pytest.raises(UniqueKeyTaken):
                 await storage.put_pin(org, taken, ())
         moved = tenants.model_copy(update={"version": 2, "agent_playbook_id": new_id()})
@@ -162,7 +168,7 @@ class AgentPlaybookStorageContract:
         assert await storage.delete_pin(org, moved.id, ())
         assert not await storage.delete_pin(org, moved.id, ())
         assert await storage.read_pin(org, "assistant", None) is None
-        assert await storage.read_pin(org, "assistant", project) == projects
+        assert await storage.read_pin(org, "assistant", agent_project) == agent_projects
 
     async def test_put_pin_of_another_tenants_id_is_refused_and_its_slot_is_its_own(
         self, storage: AgentPlaybookStorageInterface

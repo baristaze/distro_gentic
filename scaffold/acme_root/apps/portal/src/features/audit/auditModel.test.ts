@@ -9,11 +9,11 @@ it("says a kind in words, with its area", () => {
 
 it("keeps the stream's order", () => {
   const rows = auditRows([
-    { seq: 1, kind: "projects.project.created", target_id: "p1", produced_at: "2026-10-03T10:00:00Z", actor_id: "u1" },
-    { seq: 2, kind: "projects.project.updated", target_id: "p1", produced_at: "2026-10-03T10:01:00Z", actor_id: "u1" },
+    { seq: 1, kind: "agent_projects.agent_project.created", target_id: "p1", produced_at: "2026-10-03T10:00:00Z", actor_id: "u1" },
+    { seq: 2, kind: "agent_projects.agent_project.updated", target_id: "p1", produced_at: "2026-10-03T10:01:00Z", actor_id: "u1" },
   ]);
   expect(rows.map((row) => [row.seq, row.what])).toEqual([
-    [1, "project created"],
-    [2, "project updated"],
+    [1, "agent project created"],
+    [2, "agent project updated"],
   ]);
 });

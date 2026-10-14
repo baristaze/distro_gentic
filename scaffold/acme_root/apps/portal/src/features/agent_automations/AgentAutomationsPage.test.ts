@@ -19,7 +19,7 @@ const agentAutomation = (org: "a" | "b", name: string): AgentAutomationView => (
   id: `au${org}`,
   name,
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -34,7 +34,7 @@ const HELD = { a: agentAutomation("a", "Ajax nightly"), b: agentAutomation("b", 
 function answer(call: Call): unknown {
   const held = HELD[net.org];
   if (call.method === "GET" && call.path.startsWith("/v1/agent-automations?")) return [held];
-  if (call.method === "GET" && call.path.startsWith("/v1/projects?")) return [];
+  if (call.method === "GET" && call.path.startsWith("/v1/agent-projects?")) return [];
   if (call.method === "GET" && call.path === "/v1/agent-automations/principal") return notFound(call.path);
   if (call.method === "PUT" && call.path === "/v1/agent-automations/principal") {
     return { id: "pr1", role: (call.body as { role: string }).role, granted_by: PEOPLE[net.org].id, created_at: "2026-10-03T10:00:00Z" };

@@ -24,7 +24,7 @@ const net = vi.hoisted(() => ({
   calls: [] as string[],
   history: null as unknown[] | null,
   environment: "local",
-  projects: [] as { id: string; name: string }[],
+  agentProjects: [] as { id: string; name: string }[],
   posts: [] as { path: string; body: unknown }[],
   /** What the session's record says past the fixture's: its status, its park. */
   over: {} as Partial<AgentSessionView>,
@@ -96,7 +96,7 @@ const RUN: ExecutionView = {
   image: "img",
   host: "h1",
   isolation: "container",
-  project: "p",
+  agent_project: "p",
   provenance: "twin",
   outcome: "passed",
   cases: { passed: 4, failed: 0, skipped: 0 },
@@ -109,7 +109,7 @@ function answer(path: string): unknown {
   const held = { ...HELD[net.org], ...net.over };
   if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as MeView;
   if (path.startsWith("/v1/agent-sessions?")) return { items: [held], next_cursor: null };
-  if (path.startsWith("/v1/projects?")) return net.projects;
+  if (path.startsWith("/v1/agent-projects?")) return net.agentProjects;
   if (path === "/v1/users/u2") return { id: "u2", display_name: "Ada", email: "ada@example.test", created_at: at };
   const [, , , id, part] = path.split("?")[0]!.split("/");
   if (id !== held.id) throw new ApiError(404, "not_found", "session not found", "req-1");
@@ -131,7 +131,7 @@ function answer(path: string): unknown {
       ],
     };
   if (part === "work-product")
-    return { branch: "fix-dates", branch_seen: true, project_id: null, report: null, work: [{ kind: "pull_request", handle: "forge/acme/first#7", bound_at: at }] };
+    return { branch: "fix-dates", branch_seen: true, agent_project_id: null, report: null, work: [{ kind: "pull_request", handle: "forge/acme/first#7", bound_at: at }] };
   if (part === "approvals") return net.held;
   if (part === "tool-calls") return { has_more: false, items: [] };
   if (part === "executions") return { items: [RUN], next_cursor: null };
@@ -197,7 +197,7 @@ afterEach(async () => {
   root = null;
   usePanesStore.setState({ panes: {} });
   localStorage.clear();
-  Object.assign(net, { environment: "local", projects: [], posts: [], over: {}, held: [] });
+  Object.assign(net, { environment: "local", agentProjects: [], posts: [], over: {}, held: [] });
 });
 
 describe("a second org's session", () => {

@@ -34,7 +34,7 @@ executor, so the check writes the records its evidence screen reads
 through the om, under the org's owner. `scene` makes what the software engineer's
 scene runs on: the org's first repository as a bare one under `<root>`
 (`portal_stack.py` clones from there), holding a parser whose test fails,
-and the validation policy of the org's first project. `tree` starts the
+and the validation policy of the org's first agent project. `tree` starts the
 scene's software engineer for the org's owner and writes its tree straight through
 storage, for what the scene does not reach, a sub-agent that asks its
 person: one answer that starts
@@ -363,10 +363,12 @@ async def prepare_scene(root: Path, slug: str) -> None:
         owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
-        projects = await container.managers.projects.list_projects(owner, None, 10)
-        if not projects:
-            raise SystemExit(f"org {slug} has no project")
-        policy = make_policy(policy_key(projects[0].id))
+        agent_projects = await container.managers.agent_projects.list_agent_projects(
+            owner, None, 10
+        )
+        if not agent_projects:
+            raise SystemExit(f"org {slug} has no agent project")
+        policy = make_policy(policy_key(agent_projects[0].id))
         await container.managers.evidence.write_policy(owner, policy)
     finally:
         await container.close()

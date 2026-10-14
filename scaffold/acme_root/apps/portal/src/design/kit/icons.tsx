@@ -145,8 +145,8 @@ export const KeyboardIcon = kitIcon(Keyboard);
 export const ExternalIcon = kitIcon(ExternalLink);
 /** A page: the documentation. */
 export const DocumentIcon = kitIcon(FileText);
-/** A folder with a branch: a project. */
-export const ProjectIcon = kitIcon(FolderGit2);
+/** A folder with a branch: an agent project. */
+export const AgentProjectIcon = kitIcon(FolderGit2);
 /** An arrow up: send. */
 export const SendIcon = kitIcon(ArrowUp);
 /** An i in a circle: what a field means. */

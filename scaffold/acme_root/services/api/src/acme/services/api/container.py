@@ -275,8 +275,8 @@ class AppContainer:
             executor=ports.executor,
             executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
-            session_projects=ports.session_projects,
-            workspace_projects=ports.workspace_projects,
+            agent_session_projects=ports.agent_session_projects,
+            workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
             agents_layer=agent_playbooks.agents,
         )
@@ -315,15 +315,15 @@ class AppContainer:
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             watch,
             trust.trust_operator,
-            # Outside a local stack, a session starts in a project.
-            project_required=settings.environment != LOCAL,
+            # Outside a local stack, a session starts in an agent project.
+            agent_project_required=settings.environment != LOCAL,
             intake=intake,
             # A person writes an agent automation here, so a product's action kind
             # is held to its shape when it is saved.
             agent_automations=build_agent_automations(
                 storage,
                 managers,
-                project_required=settings.environment != LOCAL,
+                agent_project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
                 agent_playbooks=lambda: agent_playbooks.build(managers),
             ),

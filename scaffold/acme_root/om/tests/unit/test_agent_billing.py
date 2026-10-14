@@ -13,11 +13,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.benchmark_storage import operator
 from contracts.budget_storage import make_budget
 from contracts.loops import ASSISTANT, BUILDER, DELIVERY, Lookup, call, reply, said, use
 from contracts.money import Money, money_over
-from contracts.project_storage import in_project
 
 from acme.integrations.exceptions import DeliveryRefused
 from acme.integrations.model_providers.calls import ModelCall
@@ -45,6 +45,7 @@ from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccount, ZoneChange
 from acme.om.agent_billing.types.spend_ledger import Charge, EntryKind, FundedHold, PricedAt
 from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UnitPlan, UnitPlanCatalog
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.loop_rules import SPENDER_UNLOCK
 from acme.om.agents.types.run import RunEnd
@@ -68,7 +69,6 @@ from acme.om.context import (
 )
 from acme.om.exceptions import BudgetRefused, GateParked, NotAuthorized, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import StepType
 from acme.om.tenancy import TenancyManagerInterface
@@ -190,7 +190,7 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
         book,
         money.loop.managers.agent_sessions,
         money.loop.managers.budgets,
-        SessionProjectsBoundImpl(money.loop.storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(money.loop.storage.get_agent_project_storage()),
     )
     usage = Usage(input=120_000, output=3_000)
     # Another process never held the call, and its site names no labels, so
@@ -335,17 +335,17 @@ async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
     assert isinstance(second, FundedHold) and second.draw.included == 5
 
 
-# A project's budget binds its sessions.
+# An agent project's budget binds its sessions.
 
 
 @pytest.mark.parametrize("gate", ["money", "engine"])
-async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
+async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
     gate: str, tmp_path: Path
 ) -> None:
-    """The call is charged to the project its session belongs to, as the
-    projects answer it: past the project's budget it is refused, with the
-    project's line its one breach, while the tenant's budget has room. A
-    session of no project is charged to none, and the same call is held."""
+    """The call is charged to the agent project its session belongs to, as the
+    agent projects answer it: past the agent project's budget it is refused, with the
+    agent project's line its one breach, while the tenant's budget has room. A
+    session of no agent project is charged to none, and the same call is held."""
     money = money_over(tmp_path)
     await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
@@ -356,13 +356,15 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
             loop.managers.pricing,
             loop.managers.agent_sessions,
             loop.managers.budgets,
-            SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
         )
     ours, loose = await loop.start(), await loop.start()
-    project = await in_project(loop.storage.get_project_storage(), owner.org_id, ours)
+    agent_project = await in_agent_project(
+        loop.storage.get_agent_project_storage(), owner.org_id, ours
+    )
     for kind, key, cap in (
         (BudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
-        (BudgetScopeKind.PROJECT, str(project), 1),
+        (BudgetScopeKind.PROJECT, str(agent_project), 1),
     ):
         await loop.managers.budgets.create_budget(owner, make_budget(kind, key, cost_micros=cap))
     fills = await loop.managers.models.resolve_fill_set(owner, ours, ASSISTANT.roles, Eligibility())
@@ -373,7 +375,7 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
     with pytest.raises(BudgetRefused) as refused:
         await calls.authorize(owner, ours, spender(owner), MAIN, fill, call, credential="platform")
     (breach,) = refused.value.refusal.breaches
-    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(agent_project))
 
     held = await calls.authorize(
         owner, loose, spender(owner), MAIN, fill, call, credential="platform"
@@ -385,12 +387,12 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
 
 
 @pytest.mark.parametrize("gate", ["money", "engine"])
-async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
+async def test_an_agent_projects_budget_refuses_a_job_its_tenants_has_room_for(
     gate: str, tmp_path: Path
 ) -> None:
     """A job that spends is held on the scopes a model call is: past its
-    project's budget it is refused, with the project's line its one breach;
-    a session of no project is held, and a job refused before it began
+    agent project's budget it is refused, with the agent project's line its one breach;
+    a session of no agent project is held, and a job refused before it began
     releases its hold whole."""
     money = money_over(tmp_path)
     await money.open(unit_plan="team")
@@ -402,14 +404,16 @@ async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
             loop.managers.pricing,
             loop.managers.agent_sessions,
             loop.managers.budgets,
-            SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
             clock=loop.clock,
         )
     ours, loose = await loop.start(), await loop.start()
-    project = await in_project(loop.storage.get_project_storage(), owner.org_id, ours)
+    agent_project = await in_agent_project(
+        loop.storage.get_agent_project_storage(), owner.org_id, ours
+    )
     for kind, key, cap in (
         (BudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
-        (BudgetScopeKind.PROJECT, str(project), 1),
+        (BudgetScopeKind.PROJECT, str(agent_project), 1),
     ):
         await loop.managers.budgets.create_budget(owner, make_budget(kind, key, cost_micros=cap))
     deadline = loop.clock() + timedelta(hours=2)
@@ -417,7 +421,7 @@ async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
     with pytest.raises(BudgetRefused) as refused:
         await calls.authorize_job(owner, ours, spender(owner), "compute", 3_600_000, deadline)
     (breach,) = refused.value.refusal.breaches
-    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(agent_project))
 
     held = await calls.authorize_job(owner, loose, spender(owner), "compute", 3_600_000, deadline)
     await calls.settle_job(owner, held, None, started=False)

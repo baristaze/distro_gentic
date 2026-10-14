@@ -35,24 +35,24 @@ agent automation's action calls that method, and no tool holds it.
 
 **A tenant pins an agent playbook to a kind as its kind manual.** It is
 the same noun, pinned instead of invoked. A pin names a kind, and
-optionally one project, where it wins over the tenant's. It names one
-version, the latest when it is pinned: a later publish moves nothing
+optionally one agent project, where it wins over the tenant's. It names
+one version, the latest when it is pinned: a later publish moves nothing
 until a person pins again, so a kind manual never changes without a
 person's act, and its size is checked once. Only a person in person who
-manages the tenant pins. A kind no session can start on, a project the
-tenant does not hold, a name with no version, and a brief past the
-standing text's bound, as a session receives it, are refused with
-nothing pinned.
+manages the tenant pins. A kind no session can start on, an agent
+project the tenant does not hold, a name with no version, and a brief
+past the standing text's bound, as a session receives it, are refused
+with nothing pinned.
 
 **A new session pins its kind manual as its standing text.** The agent
 playbooks layer wraps the agents manager, through the root's new
 `agents_layer`, so every way a session is made takes it: a start, a
-start in a project, an agent automation's start, a sub-agent's spawn,
-and a hand-over. The project is the session's own for a start, and its
-origin's for a spawn or a hand-over. The version is recorded as the
-session's invocation, marked pinned, before the engine makes the
-session, so its gates hold from the first call. A retry of the make
-pins the version it recorded, also when the first stopped after the
+start in an agent project, an agent automation's start, a sub-agent's
+spawn, and a hand-over. The agent project is the session's own for a
+start, and its origin's for a spawn or a hand-over. The version is
+recorded as the session's invocation, marked pinned, before the engine
+makes the session, so its gates hold from the first call. A retry of the
+make pins the version it recorded, also when the first stopped after the
 session's row: the layer sends that version's text again, and the
 engine's standing step lands once. A session that stands with none
 recorded is passed through untouched. So one made before a pin, or a
@@ -69,9 +69,9 @@ reached, since it reads the session's invocations.
 ## Consequences
 
 - One migration: the table `core.agent_playbook_pins`, one row a kind
-  and a project, the tenant's row among them, and a `pinned` column on
-  `core.agent_playbook_invocations`, false for every row before and for
-  every row the release before writes through a roll.
+  and an agent project, the tenant's row among them, and a `pinned`
+  column on `core.agent_playbook_invocations`, false for every row
+  before and for every row the release before writes through a roll.
 - `build_managers` takes `agents_layer`. The API, the session runner,
   and the maintenance worker each pass the agent playbooks layer's,
   since each makes sessions. A root without it makes sessions with no
@@ -80,5 +80,6 @@ reached, since it reads the session's invocations.
   that keeps the work in view. Nothing moves a running session to a new
   kind manual: ending it, or switching its standing text, is a person's
   act.
-- A pin names a project by its id. A project removed with a pin on it
-  leaves the pin behind, and no session ever starts there to read it.
+- A pin names an agent project by its id. An agent project removed with
+  a pin on it leaves the pin behind, and no session ever starts there to
+  read it.

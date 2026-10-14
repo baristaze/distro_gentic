@@ -13,7 +13,7 @@ const entry = (group: string, id: string, label: string, about = ""): SettingsEn
 const ENTRIES = [
   entry("Personal", "profile", "Profile", "Your name and the theme"),
   entry("Organization", "members", "Members", "Who is in the org"),
-  entry("Agents", "projects", "Projects", "Repositories and their credentials"),
+  entry("Agents", "agent_projects", "Agent projects", "Repositories and their credentials"),
   entry("Organization", "audit", "Audit", "What happened"),
   entry("Security", "api-keys", "API keys", "Keys a program calls with"),
   entry("Extras", "extras", "Extras", "What a product adds"),
@@ -24,7 +24,7 @@ it("groups the sections where each group first appears, keeping their order", ()
   expect(shape(settingsGroups(ENTRIES))).toEqual([
     ["Personal", ["profile"]],
     ["Organization", ["members", "audit"]],
-    ["Agents", ["projects"]],
+    ["Agents", ["agent_projects"]],
     ["Security", ["api-keys"]],
     ["Extras", ["extras"]],
   ]);
@@ -33,7 +33,7 @@ it("groups the sections where each group first appears, keeping their order", ()
 it("narrows by every word typed, in the name, the group, or what a section holds, and drops an empty group", () => {
   expect(shape(settingsGroups(ENTRIES, "api"))).toEqual([["Security", ["api-keys"]]]);
   expect(shape(settingsGroups(ENTRIES, "  ORGANIZATION  happened "))).toEqual([["Organization", ["audit"]]]);
-  expect(shape(settingsGroups(ENTRIES, "repositories"))).toEqual([["Agents", ["projects"]]]);
+  expect(shape(settingsGroups(ENTRIES, "repositories"))).toEqual([["Agents", ["agent_projects"]]]);
   expect(settingsGroups(ENTRIES, "nothing like it")).toEqual([]);
 });
 
@@ -51,6 +51,6 @@ it("opens the search on a bare slash typed outside a field", () => {
 });
 
 it("knows the addresses inside Settings", () => {
-  expect(["/settings", "/settings/", "/settings/projects/p1"].map(inSettings)).toEqual([true, true, true]);
+  expect(["/settings", "/settings/", "/settings/agent-projects/p1"].map(inSettings)).toEqual([true, true, true]);
   expect(["/", "/sessions", "/settingsx"].map(inSettings)).toEqual([false, false, false]);
 });

@@ -2,7 +2,7 @@
 repository holds it, read outside the workspace, never from what the agent
 says of it, with the checkout of the workspace this host holds telling
 only what was not delivered. A session whose workspace this host does not
-hold, or whose project binds no repository, has nothing read, and says
+hold, or whose agent project binds no repository, has nothing read, and says
 so, so no success counts on a guess."""
 
 from uuid import UUID

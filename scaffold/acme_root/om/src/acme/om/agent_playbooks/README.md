@@ -14,7 +14,7 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **Invocation**: a version brought into one session: by a principal,
   or the kind manual the session was made with, marked pinned.
 - **Pin**: a version a tenant set as a kind manual, for the tenant's
-  sessions of the kind or for one project's.
+  sessions of the kind or for one agent project's.
 
 ## What can happen
 
@@ -30,8 +30,8 @@ kinds of thing [Acme is made of](../../../../README.md).
   the agent automation chose the agent playbook then, as they wrote its
   brief.
 - **Pin** a name's latest version to a kind as its kind manual, and take
-  it away, by a person in person who manages the tenant. A pin for a
-  project wins over the tenant's.
+  it away, by a person in person who manages the tenant. A pin for an
+  agent project wins over the tenant's.
 - **Make a session with its kind manual.** A start, a spawn, or a
   hand-off of a session not yet made records its kind's pinned version
   as the session's pinned invocation, then sends the version's brief as

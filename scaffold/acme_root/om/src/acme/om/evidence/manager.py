@@ -1,7 +1,7 @@
 """The evidence swimlane: what makes a result. Every execution is a record
 of the version and the environment it ran in, with the provenance of each
 dependency; hypotheses and findings are records linked to the runs that
-show them. Each project declares a validation policy and the paths the
+show them. Each agent project declares a validation policy and the paths the
 agent may not change. Validation runs on a fresh executor, never in the
 agent's workspace, and the result gate (`impl/gate.py`) accepts a success
 only on the runs that executor wrote at the head delivered."""
@@ -22,14 +22,14 @@ class EvidenceManagerInterface(ABC):
     # The policy.
 
     @abstractmethod
-    async def get_policy(self, ctx: TenantContext, project: str) -> ValidationPolicy:
-        """The validation policy kept under `project`, a project's id
+    async def get_policy(self, ctx: TenantContext, agent_project: str) -> ValidationPolicy:
+        """The validation policy kept under `agent_project`, an agent project's id
         (`rules.policy_key`); `NotFound` when it declares none."""
         ...
 
     @abstractmethod
     async def write_policy(self, ctx: TenantContext, policy: ValidationPolicy) -> ValidationPolicy:
-        """Declares or changes a project's policy, as a person who manages
+        """Declares or changes an agent project's policy, as a person who manages
         the tenant: a service, and so an agent, is `NotAuthorized`. A write
         after the create names the version it read (`PreconditionFailed`
         otherwise), and the version is the manager's."""
@@ -40,8 +40,8 @@ class EvidenceManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
     ) -> Target:
         """What a call of the session that changes `paths` acts on, for
-        policy to read: whether the policy of the session's project, as the
-        projects answer it, protects any of them. A session of no project,
+        policy to read: whether the policy of the session's agent project, as the
+        agent projects answer it, protects any of them. A session of no agent project,
         or of one with no policy, has nothing protected. A tool that changes
         files reports it as its target, and the platform's ceiling denies
         the call (`rules.PROTECTED_CEILING`), or refuses the call itself."""
@@ -90,10 +90,10 @@ class EvidenceManagerInterface(ABC):
         policy requires. Each executor the checks name runs its own
         validation, in name order, and each is answered.
         The checks, fixtures, and runner come from the base. The policy is
-        the session's project's, as the projects answer it, never one the
+        the session's agent project's, as the agent projects answer it, never one the
         work product names. Refused before anything runs
         (`PreconditionFailed`) when the session holds no work product,
-        belongs to no project, its project declares no policy, its
+        belongs to no agent project, its agent project declares no policy, its
         tree is dirty, its change touches a protected path, nothing is asked
         for, or no executor here can run a check. Results that do not hash
         to what an executor wrote, or that do not read as the contract says,
@@ -105,12 +105,12 @@ class EvidenceManagerInterface(ABC):
         self,
         ctx: TenantContext,
         session_id: UUID,
-        project_id: UUID,
+        agent_project_id: UUID,
         check: str,
         version: str,
         source: str,
     ) -> Validation:
-        """Platform-internal: one check the project's policy declares, run
+        """Platform-internal: one check the agent project's policy declares, run
         on a fresh executor at `version`, with the checks, fixtures, and
         runner from `source`, for `session_id`, a session with no agent (a
         validation session). It runs once, or, when a requirement rates it,
@@ -118,7 +118,7 @@ class EvidenceManagerInterface(ABC):
         it wrote is kept as `validate` keeps it. A session runs its check
         once: asked again, it answers the validation it kept and runs
         nothing. Refused before anything runs
-        (`PreconditionFailed`) when the project declares no policy, the
+        (`PreconditionFailed`) when the agent project declares no policy, the
         policy declares no such check, or the executor cannot run it; its
         results are refused as `validate` refuses them."""
         ...

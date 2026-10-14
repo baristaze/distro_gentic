@@ -43,10 +43,10 @@ refused, never run on the runner instead.
 **The ceilings live on the host.** Its owner writes them in a file on
 the host, which the host reads at startup and holds frozen. No answer of
 the platform carries them, and no item changes them. Every item is read
-as an ask: its project, its isolation, its egress, the paths it reads,
-and whether it is a person's command. A field the item leaves out is
-read as the widest ask. The host refuses an item past any ceiling, or at
-a mode it did not probe, before anything runs.
+as an ask: its agent project, its isolation, its egress, the paths it
+reads, and whether it is a person's command. A field the item leaves out
+is read as the widest ask. The host refuses an item past any ceiling, or
+at a mode it did not probe, before anything runs.
 
 ## Consequences
 
@@ -62,8 +62,8 @@ a mode it did not probe, before anything runs.
 - A host whose answer to a rotation is lost is ended by its next call
   past the grace, and its owner enrolls it again.
 - A compromised control plane can still describe an item wrongly, such
-  as its project. The host runs an item at no more than it asked, so a
-  wrong isolation or egress widens nothing.
+  as its agent project. The host runs an item at no more than it asked,
+  so a wrong isolation or egress widens nothing.
 - Today's payloads name where an item runs and nothing of what it asks,
   so a host refuses every command and every workspace it would prepare
   until their producers name their asks.

@@ -99,12 +99,12 @@ API, an agent automation, or a mapped user addressing the agent.
 
 ## WAL-05 A secret is resolved where it is used
 
-**Principle.** An environment secret is declared by name on a project,
-with the variable a command sees and a scope. The platform stores names
-only. Where it can, the executor brokers the secret outside the
-workspace; otherwise the machine that executes the call resolves it from
-its own store, short-lived and scoped, injects it into that one process,
-redacts it everywhere, and audits its use by name.
+**Principle.** An environment secret is declared by name on an agent
+project, with the variable a command sees and a scope. The platform
+stores names only. Where it can, the executor brokers the secret outside
+the workspace; otherwise the machine that executes the call resolves it
+from its own store, short-lived and scoped, injects it into that one
+process, redacts it everywhere, and audits its use by name.
 
 **Source.** Trust, Secrets by Placement.
 
@@ -235,19 +235,19 @@ revoke.
 ## WAL-11 Retention is a snapshot that tightening reaches and loosening never
 
 **Principle.** Retention policy is declared per tenant and narrowed per
-project: the content's lifetime, the shape's lifetime, the storage mode,
-zero retention, and region. A session takes a snapshot of the policy
-when it is created. Tightening reaches existing sessions at the next
-sweep; loosening never reaches back.
+agent project: the content's lifetime, the shape's lifetime, the storage
+mode, zero retention, and region. A session takes a snapshot of the
+policy when it is created. Tightening reaches existing sessions at the
+next sweep; loosening never reaches back.
 
 **Source.** Data, Retention, and the Wall.
 
-**Look for.** The retention policy's fields, and where a project narrows
-them; the session's snapshot; what a policy change does to existing
-sessions.
+**Look for.** The retention policy's fields, and where an agent project
+narrows them; the session's snapshot; what a policy change does to
+existing sessions.
 
-**Violation.** A project setting that widens its tenant's policy; a
-session with no snapshot, or one that reads the live policy; a
+**Violation.** An agent project setting that widens its tenant's policy;
+a session with no snapshot, or one that reads the live policy; a
 tightening existing sessions never get; a loosening applied to existing
 sessions.
 

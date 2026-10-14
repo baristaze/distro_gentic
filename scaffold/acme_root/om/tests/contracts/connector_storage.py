@@ -79,13 +79,15 @@ def make_connector(name: str = "words") -> Connector:
     )
 
 
-def reviewed(connector: Connector, project_id: UUID | None = None) -> Connector:
+def reviewed(connector: Connector, agent_project_id: UUID | None = None) -> Connector:
     return connector.model_copy(
         update={
             "tools": (make_tool(),),
             "review": connector.review + 1,
             "reviewed_by": new_id(),
-            "attachments": (ConnectorAttachment(kind="software_engineer", project_id=project_id),),
+            "attachments": (
+                ConnectorAttachment(kind="software_engineer", agent_project_id=agent_project_id),
+            ),
             "version": connector.version + 1,
         }
     )

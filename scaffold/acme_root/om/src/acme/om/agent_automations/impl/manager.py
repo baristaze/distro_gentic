@@ -24,6 +24,7 @@ from acme.om.agent_automations.types.agent_automation import (
 )
 from acme.om.agent_playbooks import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybook
+from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents import AgentsManagerInterface
@@ -40,7 +41,6 @@ from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, Valid
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
@@ -81,25 +81,25 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         events: EventsManagerInterface,
-        projects: ProjectsManagerInterface,
+        agent_projects: AgentProjectsManagerInterface,
         principal_context: PrincipalContext,
         options: AgentAutomationsOptions,
         clock: Callable[[], datetime] = utcnow,
         *,
-        project_required: bool,
+        agent_project_required: bool,
         actions: AgentAutomationActions | None = None,
         agent_playbooks: Callable[[], AgentPlaybooksManagerInterface] | None = None,
     ) -> None:
-        """`project_required` refuses a start that names no project: what
-        every stack but a local one sets, so no per-project policy is
+        """`agent_project_required` refuses a start that names no agent project: what
+        every stack but a local one sets, so no per-agent-project policy is
         skipped by a session an agent automation starts. `actions` are the
         product's own kinds of action; None declares none. `agent_playbooks`
         answers the agent playbooks a start invokes; None keeps none, so a start
         that names one is refused when it is saved and when it fires."""
         self._storage = storage
         self._agents = agents
-        self._projects = projects
-        self._project_required = project_required
+        self._agent_projects = agent_projects
+        self._project_required = agent_project_required
         self._sessions = sessions
         self._budgets = budgets
         self._tenancy = tenancy
@@ -119,7 +119,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             raise NotAuthorized("an agent automation is made by a person, never by an agent's call")
         await self._check_principal(ctx, agent_automation)
         await self._check_kind(ctx, agent_automation)
-        await self._check_project(ctx, agent_automation)
+        await self._check_agent_project(ctx, agent_automation)
         await self._check_agent_playbook(ctx, agent_automation)
         now = self._clock()
         made = AgentAutomation.model_validate(
@@ -151,7 +151,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             )
         await self._check_principal(ctx, agent_automation)
         await self._check_kind(ctx, agent_automation)
-        await self._check_project(ctx, agent_automation)
+        await self._check_agent_project(ctx, agent_automation)
         await self._check_agent_playbook(ctx, agent_automation)
         # The editor is its creator from here on: one that runs as its
         # creator is its creator's to edit, and one that runs as the
@@ -308,12 +308,12 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         self, ctx: TenantContext, agent_automation: AgentAutomation, run: AgentAutomationRun
     ) -> AgentAutomationRun:
         """Asks the limits, and runs the action of a run they start. A start
-        that names no project where one is required, and an agent automation whose
+        that names no agent project where one is required, and an agent automation whose
         principal cannot act, are refused before the limits hold anything."""
-        if self._outside_projects(agent_automation):
-            # Saved before a project was required, or under a local stack:
-            # its session would take no project's budget or policy.
-            return await self._refuse(ctx, run, Refusal.PROJECT)
+        if self._outside_agent_projects(agent_automation):
+            # Saved before an agent project was required, or under a local stack:
+            # its session would take no agent project's budget or policy.
+            return await self._refuse(ctx, run, Refusal.AGENT_PROJECT)
         if self._unknown_kind(agent_automation):
             # Its product's kind left this process's registry since it was
             # saved: nothing would act on it.
@@ -380,12 +380,12 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             kind=action.agent_kind,
             title=action.title,
         )
-        # In its project from its first moment, so the project's budget
+        # In its agent project from its first moment, so the agent project's budget
         # and policies hold every call it makes.
         session = (
             await self._agents.start_session(creator, start)
-            if action.project_id is None
-            else await self._projects.start_session(creator, action.project_id, start)
+            if action.agent_project_id is None
+            else await self._agent_projects.start_session(creator, action.agent_project_id, start)
         )
         budget = Budget(
             id=derived_id(run.id, run.created_at, "budget"),
@@ -638,25 +638,27 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             raise NotFound(f"no agent playbook {name} is kept in this process")
         return await self._agent_playbooks().get_agent_playbook(ctx, name)
 
-    async def _check_project(self, ctx: TenantContext, agent_automation: AgentAutomation) -> None:
-        """A start's project is one of the caller's tenant: another tenant's
+    async def _check_agent_project(
+        self, ctx: TenantContext, agent_automation: AgentAutomation
+    ) -> None:
+        """A start's agent project is one of the caller's tenant: another tenant's
         is `NotFound`, as one that never existed is. One that names none is
-        `ValidationFailed` where a session starts in a project."""
-        project_id = agent_automation.action.project_id
-        if project_id is not None:
-            await self._projects.get_project(ctx, project_id)
-        elif self._outside_projects(agent_automation):
+        `ValidationFailed` where a session starts in an agent project."""
+        agent_project_id = agent_automation.action.agent_project_id
+        if agent_project_id is not None:
+            await self._agent_projects.get_agent_project(ctx, agent_project_id)
+        elif self._outside_agent_projects(agent_automation):
             raise ValidationFailed(
-                "an agent automation's session starts in a project: name its project_id"
+                "an agent automation's session starts in an agent project: name its agent_project_id"
             )
 
-    def _outside_projects(self, agent_automation: AgentAutomation) -> bool:
-        """A start that names no project where a session starts in one."""
+    def _outside_agent_projects(self, agent_automation: AgentAutomation) -> bool:
+        """A start that names no agent project where a session starts in one."""
         action = agent_automation.action
         return (
             self._project_required
             and action.kind == ActionKind.START_SESSION
-            and action.project_id is None
+            and action.agent_project_id is None
         )
 
     async def _runs_as(

@@ -62,7 +62,7 @@ def test_a_server_inside_the_wall_is_connected_reviewed_attached_and_detached(
     assert attached.exit_code == 0, attached.output
     shown = json.loads(stack.acme("connector", "list", "--json").output)
     assert [(c["id"], c["attachments"]) for c in shown] == [
-        (connector_id, [{"kind": "assistant", "project_id": None, "deferred": True}])
+        (connector_id, [{"kind": "assistant", "agent_project_id": None, "deferred": True}])
     ]
     listed = stack.acme("connector", "list")
     assert listed.output == f"{connector_id}  tracker  host:tracker  review 1, 1 tools\n"

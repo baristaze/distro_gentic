@@ -3,7 +3,7 @@
 // it. A trigger is an event that passes its filters or a schedule; an action
 // starts a session or messages a standing one; the limits bound what its
 // runs spend and how often they start. No React, no fetch.
-import type { AgentAutomationRequest, AgentAutomationView, ProjectView, Role } from "@acme/client";
+import type { AgentAutomationRequest, AgentAutomationView, AgentProjectView, Role } from "@acme/client";
 import { costLine, microsOf } from "../../app/recordModel";
 
 export const NAME_MAX = 200;
@@ -81,11 +81,11 @@ export function platformAction(kind: string): kind is AgentAutomationDraft["acti
   return kind === "start_session" || kind === "message_session";
 }
 
-export function actionLine(action: AgentAutomationView["action"], projects: readonly Pick<ProjectView, "id" | "name">[]): string {
+export function actionLine(action: AgentAutomationView["action"], agentProjects: readonly Pick<AgentProjectView, "id" | "name">[]): string {
   if (!platformAction(action.kind)) return `run the product's action ${action.kind}`;
   if (action.kind === "message_session") return `message the session ${action.session_id ?? ""}`.trim();
-  const project = action.project_id ? (projects.find((each) => each.id === action.project_id)?.name ?? "a project") : null;
-  return `start a session of the kind ${action.agent_kind ?? ""}${project ? ` in ${project}` : ""}${action.agent_playbook ? `, invoking ${action.agent_playbook}` : ""}`;
+  const agentProject = action.agent_project_id ? (agentProjects.find((each) => each.id === action.agent_project_id)?.name ?? "an agent project") : null;
+  return `start a session of the kind ${action.agent_kind ?? ""}${agentProject ? ` in ${agentProject}` : ""}${action.agent_playbook ? `, invoking ${action.agent_playbook}` : ""}`;
 }
 
 export function limitsLine(limits: AgentAutomationView["limits"]): string {
@@ -104,12 +104,12 @@ export interface AgentAutomationRow {
 
 export const RUNS_AS_LABEL: Record<AgentAutomationView["runs_as"], string> = { creator: "its maker", agent_automation_principal: "the agent automation principal" };
 
-export function agentAutomationRow(agentAutomation: AgentAutomationView, projects: readonly Pick<ProjectView, "id" | "name">[]): AgentAutomationRow {
+export function agentAutomationRow(agentAutomation: AgentAutomationView, agentProjects: readonly Pick<AgentProjectView, "id" | "name">[]): AgentAutomationRow {
   return {
     id: agentAutomation.id,
     name: agentAutomation.name,
     trigger: triggerLine(agentAutomation.trigger),
-    action: actionLine(agentAutomation.action, projects),
+    action: actionLine(agentAutomation.action, agentProjects),
     runsAs: RUNS_AS_LABEL[agentAutomation.runs_as],
     enabled: agentAutomation.enabled,
   };
@@ -153,7 +153,7 @@ export interface AgentAutomationDraft {
   actionKind: "start_session" | "message_session";
   agentKind: string;
   title: string;
-  projectId: string;
+  agentProjectId: string;
   sessionId: string;
   /** The agent playbook a start invokes into its session first, by name; empty for none. */
   agentPlaybook: string;
@@ -182,7 +182,7 @@ export const EMPTY_DRAFT: AgentAutomationDraft = {
   actionKind: "start_session",
   agentKind: "",
   title: "",
-  projectId: "",
+  agentProjectId: "",
   sessionId: "",
   agentPlaybook: "",
   brief: "",
@@ -231,7 +231,7 @@ export function draftOf(agentAutomation: AgentAutomationView): AgentAutomationDr
     actionKind: action.kind,
     agentKind: action.agent_kind ?? "",
     title: action.title ?? "",
-    projectId: action.project_id ?? "",
+    agentProjectId: action.agent_project_id ?? "",
     sessionId: action.session_id ?? "",
     agentPlaybook: action.agent_playbook ?? "",
     brief: action.brief ?? "",
@@ -268,10 +268,10 @@ export type KeptFields = Pick<AgentAutomationView, "own_events"> & { limits: Pic
 
 /** The request a draft makes, or the first reason it may not be saved. An
  * edit carries what the form does not show as it stood. Where a session
- * must start in a project, a start names one. */
+ * must start in an agent project, a start names one. */
 export function agentAutomationRequest(
   draft: AgentAutomationDraft,
-  { kept = null, projectRequired = false }: { kept?: KeptFields | null; projectRequired?: boolean } = {},
+  { kept = null, agentProjectRequired = false }: { kept?: KeptFields | null; agentProjectRequired?: boolean } = {},
 ): { request: AgentAutomationRequest } | { problem: string } {
   const name = draft.name.trim();
   if (!name) return { problem: "Give the agent automation a name." };
@@ -301,14 +301,14 @@ export function agentAutomationRequest(
     if (agentKind.length > KIND_MAX) return { problem: `A kind is at most ${KIND_MAX} characters.` };
     if (!title) return { problem: "Give the sessions it starts a title." };
     if (title.length > TITLE_MAX) return { problem: `A title is at most ${TITLE_MAX} characters.` };
-    if (projectRequired && !draft.projectId) return { problem: "Choose the project its sessions work in." };
+    if (agentProjectRequired && !draft.agentProjectId) return { problem: "Choose the agent project its sessions work in." };
     const agentPlaybook = draft.agentPlaybook.trim();
     if (agentPlaybook && !AGENT_PLAYBOOK_NAME.test(agentPlaybook)) return { problem: "An agent playbook's name is lowercase words joined by hyphens, as it was published." };
-    action = { kind: "start_session", brief, agent_kind: agentKind, title, project_id: draft.projectId || null, session_id: null, ...(agentPlaybook ? { agent_playbook: agentPlaybook } : {}) };
+    action = { kind: "start_session", brief, agent_kind: agentKind, title, agent_project_id: draft.agentProjectId || null, session_id: null, ...(agentPlaybook ? { agent_playbook: agentPlaybook } : {}) };
   } else {
     const sessionId = draft.sessionId.trim();
     if (!UUID.test(sessionId)) return { problem: "Name the standing session by its id." };
-    action = { kind: "message_session", brief, agent_kind: null, title: null, project_id: null, session_id: sessionId };
+    action = { kind: "message_session", brief, agent_kind: null, title: null, agent_project_id: null, session_id: sessionId };
   }
   const costCap = microsOf(draft.costCap);
   if (costCap === null) return { problem: "Set the most its runs spend in a period, as an amount above zero." };

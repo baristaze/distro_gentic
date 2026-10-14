@@ -136,29 +136,31 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   is `400`, and another tenant's confirmation `403`.
   (`/v1/agent-sessions/{session_id}/cost-approval`,
   `/v1/budgets/{budget_id}/raises`, `/v1/agent-billing/payments`, ADR 2060)
-- **Projects.** An owner or an admin creates a project bound to its
-  repository, under an Idempotency-Key, renames it, and removes it while
-  no session belongs to it (`409 project_in_use` otherwise); any member
-  lists and reads them. The repository never moves. An owner or an admin
-  sets the workspace base its sessions' workspaces start from, an image,
-  its setup commands, and the registries the setup reaches, or takes it
-  away; a session keeps the one it started on. Its fetch credential
-  is written and never read back: the answer says who gave it when, and
-  it leaves the tenant's store with its project. (`/v1/projects`,
-  `/v1/projects/{project_id}`, `.../workspace-base`, `.../credential`)
+- **Agent projects.** An owner or an admin creates an agent project
+  bound to its repository, under an Idempotency-Key, renames it, and
+  removes it while no session belongs to it (`409 agent_project_in_use`
+  otherwise); any member lists and reads them. The repository never
+  moves. An owner or an admin sets the workspace base its sessions'
+  workspaces start from, an image, its setup commands, and the
+  registries the setup reaches, or takes it away; a session keeps the
+  one it started on. Its fetch credential is written and never read
+  back: the answer says who gave it when, and it leaves the tenant's
+  store with its agent project. (`/v1/agent-projects`,
+  `/v1/agent-projects/{agent_project_id}`, `.../workspace-base`,
+  `.../credential`)
 - **Validation sessions.** A member who may write starts one, under an
-  Idempotency-Key, as a CI job asks for one: a check its project's policy
-  declares, at a delivered head, with its checks from a base. The
+  Idempotency-Key, as a CI job asks for one: a check its agent project's
+  policy declares, at a delivered head, with its checks from a base. The
   platform's worker runs it once on a fresh executor, or, for a check a
   requirement rates, its declared trials, which pass only together. Any
   member reads it, and once its run is recorded, its verdict and the run
   (the last trial's, for a rated check). A check that cannot run there for
   good, one the policy no longer declares or no executor can run, reads
   `refused`, with its reason and no run, so a CI job stops waiting. So
-  does one whose work fails on its last attempt, with the error's class. A
-  project with no policy in the tenant is `404`, as another tenant's is,
-  and a check the policy does not declare is `422`. (`/v1/validation-sessions`,
-  `/v1/validation-sessions/{session_id}`)
+  does one whose work fails on its last attempt, with the error's class.
+  An agent project with no policy in the tenant is `404`, as another
+  tenant's is, and a check the policy does not declare is `422`.
+  (`/v1/validation-sessions`, `/v1/validation-sessions/{session_id}`)
 - **Agent knowledge and agent playbooks.** The entries in a state, the
   suggestions waiting on a review among them, and one entry; a person
   writes one in person, under an Idempotency-Key, edits it on the
@@ -167,15 +169,15 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   Idempotency-Key, and the latest version of a name is read. A person
   invokes the latest version into a session they may instruct, once a
   version. A person who manages the tenant pins one to a kind as its
-  kind manual, for the tenant or one project, lists the pins, and takes
-  one away; each session of the kind started after holds it as its
+  kind manual, for the tenant or one agent project, lists the pins, and
+  takes one away; each session of the kind started after holds it as its
   standing text. (`/v1/agent-knowledge`,
   `/v1/agent-knowledge/{entry_id}`, `.../review`, `/v1/agent-playbooks`,
   `/v1/agent-playbooks/{name}`, `.../invocations`,
   `/v1/agent-playbook-pins`)
 - **AgentAutomations.** A person makes one in person, under an
-  Idempotency-Key, in a project of the tenant; any member lists and
-  reads them; its creator edits one that runs as its creator, and a
+  Idempotency-Key, in an agent project of the tenant; any member lists
+  and reads them; its creator edits one that runs as its creator, and a
   person whose role holds the grant one that runs as the agent
   automation principal. The principal's grant is read and set beside
   them. (`/v1/agent-automations`,

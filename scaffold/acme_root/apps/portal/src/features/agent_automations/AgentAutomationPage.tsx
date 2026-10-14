@@ -76,7 +76,7 @@ export function AgentAutomationPage() {
                 label="Edit agent automation"
                 draft={vm.draft}
                 setDraft={vm.setDraft}
-                projectOptions={vm.projectOptions}
+                agentProjectOptions={vm.agentProjectOptions}
                 problem={vm.problem}
                 busy={vm.saving}
                 submitLabel="Save"

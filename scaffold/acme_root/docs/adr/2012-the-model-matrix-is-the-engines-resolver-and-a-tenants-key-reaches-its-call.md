@@ -68,8 +68,8 @@ provider's own authentication error, refuses a tenant's key: it is marked
 refused and its value kept, so every session that needs it parks on the
 provider, naming the key, until the tenant saves a new one. Any other
 credential error, such as a permission the key lacks, a region it
-refuses, or a model its project cannot reach, parks only the session that
-met it, naming a permission.
+refuses, or a model its agent project cannot reach, parks only the
+session that met it, naming a permission.
 
 ## Consequences
 

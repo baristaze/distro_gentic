@@ -1,7 +1,7 @@
 """The connectors swimlane: a tenant's MCP servers, as toolsets of its
 agents. A person connects a server, reviews the tools of it a session may
 call, each pinned by the hash of its definition, and attaches it to a kind,
-for one project or for the whole tenant. A session of that kind holds it as
+for one agent project or for the whole tenant. A session of that kind holds it as
 a toolset, deferred unless attached otherwise, pinned as its first run
 began: a later review or attachment reaches the next session, and a tool a
 person withdraws or reviews again stops at its next call in every
@@ -82,17 +82,17 @@ class ConnectorsManagerInterface(ABC):
     async def attach(
         self, ctx: TenantContext, connector_id: UUID, attachment: ConnectorAttachment
     ) -> Connector:
-        """The connector attached to a kind, for a project of the tenant or
-        for every session: an attachment of that kind and project already
+        """The connector attached to a kind, for an agent project of the tenant or
+        for every session: an attachment of that kind and agent project already
         held is replaced. A kind no catalog holds, or one whose toolsets
         share the connector's name, is `ValidationFailed`."""
         ...
 
     @abstractmethod
     async def detach(
-        self, ctx: TenantContext, connector_id: UUID, kind: str, project_id: UUID | None
+        self, ctx: TenantContext, connector_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> Connector:
-        """The attachment of that kind and project taken away; one the
+        """The attachment of that kind and agent project taken away; one the
         connector does not hold is `NotFound`. A session that pinned the
         connector keeps it."""
         ...

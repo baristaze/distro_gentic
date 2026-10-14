@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
@@ -198,7 +198,11 @@ async def test_a_pinned_session_reads_waiting_until_a_host_of_its_pool_is_online
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(owner),
-        json={"kind": "assistant", "title": "the dropped object", "project_id": PROJECT_ID},
+        json={
+            "kind": "assistant",
+            "title": "the dropped object",
+            "agent_project_id": AGENT_PROJECT_ID,
+        },
     )
     # Open to the org, so the viewer sees it: what the viewer lacks is the write.
     shared = await client.put(

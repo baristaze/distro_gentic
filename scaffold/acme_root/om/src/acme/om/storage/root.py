@@ -6,6 +6,7 @@ from acme.om.agent_automations.storage import AgentAutomationStorageInterface
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
+from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
@@ -30,7 +31,6 @@ from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
-from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
@@ -81,7 +81,7 @@ class StorageInterface(ABC):
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
 
     @abstractmethod
-    def get_project_storage(self) -> ProjectStorageInterface: ...
+    def get_agent_project_storage(self) -> AgentProjectStorageInterface: ...
 
     @abstractmethod
     def get_retention_storage(self) -> RetentionStorageInterface: ...

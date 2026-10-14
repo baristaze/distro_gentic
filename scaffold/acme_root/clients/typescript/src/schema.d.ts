@@ -815,19 +815,19 @@ export interface paths {
         };
         /**
          * List Pins
-         * @description The tenant's pins, by kind, the tenant's before a project's.
+         * @description The tenant's pins, by kind, the tenant's before an agent project's.
          */
         get: operations["list_pins_v1_agent_playbook_pins_get"];
         /**
          * Pin
          * @description The name's latest version pinned to the kind as its kind manual, for the
-         *     tenant or one project; pinned again, the version then latest.
+         *     tenant or one agent project; pinned again, the version then latest.
          */
         put: operations["pin_v1_agent_playbook_pins_put"];
         post?: never;
         /**
          * Unpin
-         * @description The kind's pin for the tenant, or for one project, taken away. A
+         * @description The kind's pin for the tenant, or for one agent project, taken away. A
          *     session made with it keeps it.
          */
         delete: operations["unpin_v1_agent_playbook_pins_delete"];
@@ -893,6 +893,101 @@ export interface paths {
          */
         post: operations["invoke_v1_agent_playbooks__name__invocations_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Projects
+         * @description The tenant's agent projects by id, after the id `after` names.
+         */
+        get: operations["list_agent_projects_v1_agent_projects_get"];
+        put?: never;
+        /**
+         * Create Agent Project
+         * @description An agent project bound to its repository, which never moves.
+         */
+        post: operations["create_agent_project_v1_agent_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Project */
+        get: operations["get_agent_project_v1_agent_projects__agent_project_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove Agent Project
+         * @description The agent project as it stood, with its fetch credential gone. 409
+         *     `agent_project_in_use` while a session belongs to it.
+         */
+        delete: operations["remove_agent_project_v1_agent_projects__agent_project_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Agent Project */
+        patch: operations["rename_agent_project_v1_agent_projects__agent_project_id__patch"];
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Fetch Credential
+         * @description A read-only credential of the agent project's repository; a later one
+         *     replaces it. The answer says who gave it when, never its value.
+         */
+        put: operations["put_fetch_credential_v1_agent_projects__agent_project_id__credential_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-projects/{agent_project_id}/workspace-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Workspace Base
+         * @description The workspace base the agent project's sessions' workspaces start from; a later
+         *     one replaces it. Each session keeps the one it started on, and a changed
+         *     one is built again for the sessions created after it.
+         */
+        put: operations["set_workspace_base_v1_agent_projects__agent_project_id__workspace_base_put"];
+        post?: never;
+        /**
+         * Remove Workspace Base
+         * @description The agent project with no workspace base: its sessions created after it start
+         *     from their kind's own workspace.
+         */
+        delete: operations["remove_workspace_base_v1_agent_projects__agent_project_id__workspace_base_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2102,12 +2197,12 @@ export interface paths {
         /**
          * Attach
          * @description The connector attached to a kind: an attachment of that kind and
-         *     project already held is replaced.
+         *     agent project already held is replaced.
          */
         post: operations["attach_v1_connectors__connector_id__attachments_post"];
         /**
          * Detach
-         * @description The attachment of `kind` and `project_id` taken away. A session that
+         * @description The attachment of `kind` and `agent_project_id` taken away. A session that
          *     pinned the connector keeps it.
          */
         delete: operations["detach_v1_connectors__connector_id__attachments_delete"];
@@ -3342,101 +3437,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Projects
-         * @description The tenant's projects by id, after the id `after` names.
-         */
-        get: operations["list_projects_v1_projects_get"];
-        put?: never;
-        /**
-         * Create Project
-         * @description A project bound to its repository, which never moves.
-         */
-        post: operations["create_project_v1_projects_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{project_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Project */
-        get: operations["get_project_v1_projects__project_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Remove Project
-         * @description The project as it stood, with its fetch credential gone. 409
-         *     `project_in_use` while a session belongs to it.
-         */
-        delete: operations["remove_project_v1_projects__project_id__delete"];
-        options?: never;
-        head?: never;
-        /** Rename Project */
-        patch: operations["rename_project_v1_projects__project_id__patch"];
-        trace?: never;
-    };
-    "/v1/projects/{project_id}/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Put Fetch Credential
-         * @description A read-only credential of the project's repository; a later one
-         *     replaces it. The answer says who gave it when, never its value.
-         */
-        put: operations["put_fetch_credential_v1_projects__project_id__credential_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{project_id}/workspace-base": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Workspace Base
-         * @description The workspace base the project's sessions' workspaces start from; a later
-         *     one replaces it. Each session keeps the one it started on, and a changed
-         *     one is built again for the sessions created after it.
-         */
-        put: operations["set_workspace_base_v1_projects__project_id__workspace_base_put"];
-        post?: never;
-        /**
-         * Remove Workspace Base
-         * @description The project with no workspace base: its sessions created after it start
-         *     from their kind's own workspace.
-         */
-        delete: operations["remove_workspace_base_v1_projects__project_id__workspace_base_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/provider-keys": {
         parameters: {
             query?: never;
@@ -3665,7 +3665,7 @@ export interface paths {
         /**
          * Start Validation
          * @description A session queued for the platform's worker, which runs its check once.
-         *     404 when the tenant holds no validation policy for the project; 422
+         *     404 when the tenant holds no validation policy for the agent project; 422
          *     when the policy declares no such check.
          */
         post: operations["start_validation_v1_validation_sessions_post"];
@@ -3775,7 +3775,7 @@ export interface components {
         /**
          * ActionBody
          * @description `start_session`: start a session of `agent_kind` titled `title` in the
-         *     tenant's project `project_id`, and invoke the tenant's `agent_playbook` of
+         *     tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
          *     that name into it first, its latest version at each firing, when one is
          *     named; a name with no version is refused. `message_session`: send the brief to the
          *     standing session `session_id`; an enabled one is refused, since nothing
@@ -3788,6 +3788,8 @@ export interface components {
             agent_kind?: string | null;
             /** Agent Playbook */
             agent_playbook?: string | null;
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Brief */
             brief?: string | null;
             /** Kind */
@@ -3796,8 +3798,6 @@ export interface components {
             params?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Project Id */
-            project_id?: string | null;
             /** Session Id */
             session_id?: string | null;
             /** Title */
@@ -3809,6 +3809,8 @@ export interface components {
             agent_kind: string | null;
             /** Agent Playbook */
             agent_playbook: string | null;
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Brief */
             brief: string | null;
             /** Kind */
@@ -3817,8 +3819,6 @@ export interface components {
             params: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Project Id */
-            project_id: string | null;
             /** Session Id */
             session_id: string | null;
             /** Title */
@@ -4061,6 +4061,61 @@ export interface components {
             version: number;
         };
         /**
+         * AgentProjectRetentionBody
+         * @description What one agent project of the tenant narrows; it never widens the tenant's.
+         */
+        AgentProjectRetentionBody: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
+            policy: components["schemas"]["RetentionPolicyBody"];
+        };
+        /** AgentProjectRetentionView */
+        AgentProjectRetentionView: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
+            policy: components["schemas"]["RetentionPolicyView"];
+        };
+        /** AgentProjectView */
+        AgentProjectView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            workspace_base: components["schemas"]["AgentWorkspaceBaseView"] | null;
+            /** Workspace Snapshots */
+            workspace_snapshots: boolean;
+        };
+        /**
          * AgentRefView
          * @description The agent that wrote a message: its kind and the session it runs in.
          *     The session is one of the same tree, which a reader of this session
@@ -4144,7 +4199,7 @@ export interface components {
         };
         /**
          * AgentWorkspaceBaseBody
-         * @description The workspace base a project's sessions' workspaces start from: the
+         * @description The workspace base an agent project's sessions' workspaces start from: the
          *     image, the commands that set it up, run once in order, and the package
          *     registries the setup reaches. A setup that names a registry runs with
          *     open egress; one that names none reaches nothing. Registries serve a
@@ -4339,11 +4394,13 @@ export interface components {
         };
         /**
          * AttachRequest
-         * @description A kind the connector joins, for one project's sessions or every
+         * @description A kind the connector joins, for one agent project's sessions or every
          *     session of the tenant, deferred until the agent loads it unless
          *     `deferred` is false.
          */
         AttachRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /**
              * Deferred
              * @default true
@@ -4351,17 +4408,15 @@ export interface components {
             deferred: boolean;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id?: string | null;
         };
         /** AttachmentView */
         AttachmentView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Deferred */
             deferred: boolean;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id: string | null;
         };
         /**
          * BenchmarkResultRequest
@@ -5028,9 +5083,27 @@ export interface components {
             up_to_micros: number;
         };
         /**
+         * CreateAgentProjectRequest
+         * @description An agent project and the one repository it binds, which never moves; whether
+         *     a kind that keeps its workspace by snapshots keeps it so here, False
+         *     keeping each of its sessions' workspaces a cache; and the workspace base
+         *     its sessions' workspaces start from, if it names one.
+         */
+        CreateAgentProjectRequest: {
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryBody"];
+            workspace_base?: components["schemas"]["AgentWorkspaceBaseBody"] | null;
+            /**
+             * Workspace Snapshots
+             * @default true
+             */
+            workspace_snapshots: boolean;
+        };
+        /**
          * CreateBudgetRequest
          * @description A budget over a scope and a window, in reference cost (millionths),
-         *     native tokens, or both. A person's and a project's scope is keyed by its
+         *     native tokens, or both. A person's and an agent project's scope is keyed by its
          *     id; a tenant's is the tenant itself, so its key is left out or names the
          *     tenant. A span window has a length in seconds, and no other window has.
          */
@@ -5070,24 +5143,6 @@ export interface components {
             name: string;
             /** Region */
             region: string;
-        };
-        /**
-         * CreateProjectRequest
-         * @description A project and the one repository it binds, which never moves; whether
-         *     a kind that keeps its workspace by snapshots keeps it so here, False
-         *     keeping each of its sessions' workspaces a cache; and the workspace base
-         *     its sessions' workspaces start from, if it names one.
-         */
-        CreateProjectRequest: {
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryBody"];
-            workspace_base?: components["schemas"]["AgentWorkspaceBaseBody"] | null;
-            /**
-             * Workspace Snapshots
-             * @default true
-             */
-            workspace_snapshots: boolean;
         };
         /**
          * CreateTeamOrgRequest
@@ -5519,6 +5574,8 @@ export interface components {
         ExecutionView: {
             /** Abort */
             abort: string | null;
+            /** Agent Project */
+            agent_project: string;
             cases: components["schemas"]["CasesView"];
             /** Check */
             check: string;
@@ -5545,8 +5602,6 @@ export interface components {
             /** Isolation */
             isolation: string;
             outcome: components["schemas"]["RunOutcome"];
-            /** Project */
-            project: string;
             provenance: components["schemas"]["Provenance"];
             purpose: components["schemas"]["RunPurpose"];
             /**
@@ -5574,7 +5629,7 @@ export interface components {
         };
         /**
          * FetchCredentialRequest
-         * @description A read-only credential of the project's repository, as source control
+         * @description A read-only credential of the agent project's repository, as source control
          *     takes it over HTTPS. It goes to the tenant's store and is never read
          *     back.
          */
@@ -5589,15 +5644,15 @@ export interface components {
         };
         /**
          * FetchCredentialView
-         * @description That the project's repository has a fetch credential, and who gave it
+         * @description That the agent project's repository has a fetch credential, and who gave it
          *     when. Never its value.
          */
         FetchCredentialView: {
             /**
-             * Project Id
+             * Agent Project Id
              * Format: uuid
              */
-            project_id: string;
+            agent_project_id: string;
             /**
              * Updated At
              * Format: date-time
@@ -7376,16 +7431,16 @@ export interface components {
         /**
          * PinRequest
          * @description A kind manual: the name whose latest version is pinned to `kind`,
-         *     for the tenant's sessions of it, or with `project_id` those of one
-         *     project, where it wins over the tenant's.
+         *     for the tenant's sessions of it, or with `agent_project_id` those of one
+         *     agent project, where it wins over the tenant's.
          */
         PinRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Kind */
             kind: string;
             /** Name */
             name: string;
-            /** Project Id */
-            project_id?: string | null;
         };
         /**
          * PinView
@@ -7398,6 +7453,8 @@ export interface components {
              * Format: uuid
              */
             agent_playbook_id: string;
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7417,8 +7474,6 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
-            /** Project Id */
-            project_id: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -7603,61 +7658,6 @@ export interface components {
             steerer?: string | null;
         };
         /**
-         * ProjectRetentionBody
-         * @description What one project of the tenant narrows; it never widens the tenant's.
-         */
-        ProjectRetentionBody: {
-            policy: components["schemas"]["RetentionPolicyBody"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectRetentionView */
-        ProjectRetentionView: {
-            policy: components["schemas"]["RetentionPolicyView"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectView */
-        ProjectView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            workspace_base: components["schemas"]["AgentWorkspaceBaseView"] | null;
-            /** Workspace Snapshots */
-            workspace_snapshots: boolean;
-        };
-        /**
          * Provenance
          * @description From the strongest to the weakest.
          * @enum {string}
@@ -7756,8 +7756,8 @@ export interface components {
             /** Tokens */
             tokens?: number | null;
         };
-        /** RenameProjectRequest */
-        RenameProjectRequest: {
+        /** RenameAgentProjectRequest */
+        RenameAgentProjectRequest: {
             /** Name */
             name: string;
         };
@@ -7912,18 +7912,18 @@ export interface components {
          *     or, with no `If-Match`, as the tenant's first.
          */
         RetentionRequest: {
+            /** Agent Projects */
+            agent_projects?: components["schemas"]["AgentProjectRetentionBody"][];
             policy?: components["schemas"]["RetentionPolicyBody"];
-            /** Projects */
-            projects?: components["schemas"]["ProjectRetentionBody"][];
         };
         /**
          * RetentionView
          * @description The tenant's policy; version 0, the loosest, until its first write.
          */
         RetentionView: {
+            /** Agent Projects */
+            agent_projects: components["schemas"]["AgentProjectRetentionView"][];
             policy: components["schemas"]["RetentionPolicyView"];
-            /** Projects */
-            projects: components["schemas"]["ProjectRetentionView"][];
             /**
              * Updated At
              * Format: date-time
@@ -8089,14 +8089,14 @@ export interface components {
          *     key alone and the platform's revocation is the destruction.
          */
         SessionRetentionView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Content Expired At */
             content_expired_at: string | null;
             /** Content Expires At */
             content_expires_at: string | null;
             destruction: components["schemas"]["KeyDestructionView"] | null;
             policy: components["schemas"]["RetentionPolicyView"];
-            /** Project Id */
-            project_id: string | null;
             /**
              * Session Id
              * Format: uuid
@@ -8521,14 +8521,14 @@ export interface components {
         /**
          * StartSessionRequest
          * @description A session to start on the latest version of a kind the product runs,
-         *     in a project of the caller's tenant. Outside a local stack a session
-         *     starts in a project or not at all.
+         *     in an agent project of the caller's tenant. Outside a local stack a session
+         *     starts in an agent project or not at all.
          */
         StartSessionRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id?: string | null;
             /** Title */
             title: string;
         };
@@ -8548,22 +8548,22 @@ export interface components {
         };
         /**
          * StartValidationRequest
-         * @description A check the project's policy declares, to run at `head`, the delivered
+         * @description A check the agent project's policy declares, to run at `head`, the delivered
          *     commit, with the checks, fixtures, and runner taken from `base`. Each is
          *     a commit's full id, never a name that moves.
          */
         StartValidationRequest: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
             /** Base */
             base: string;
             /** Check */
             check: string;
             /** Head */
             head: string;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
         };
         /**
          * StepPageView
@@ -9189,7 +9189,7 @@ export interface components {
          *     and where it stands. Once its run is recorded, `passed` is the verdict
          *     and `run` is that run; both are null while it waits. The run passes
          *     when it passed, at least one of its cases did, and what served it meets
-         *     the strictest grade the project's policy asks of the check, a twin when
+         *     the strictest grade the agent project's policy asks of the check, a twin when
          *     no requirement names it: a run on a double, or with a dependency that
          *     was not there, never passes. A check a requirement rates runs its
          *     declared trials and passes only as that requirement judges them
@@ -9199,6 +9199,11 @@ export interface components {
          *     `reason` says why it could not run, and `run` is null.
          */
         ValidationSessionView: {
+            /**
+             * Agent Project Id
+             * Format: uuid
+             */
+            agent_project_id: string;
             /** Base */
             base: string;
             /** Check */
@@ -9224,11 +9229,6 @@ export interface components {
             id: string;
             /** Passed */
             passed: boolean | null;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
             /** Reason */
             reason: string | null;
             run: components["schemas"]["ExecutionView"] | null;
@@ -9246,6 +9246,8 @@ export interface components {
          *     the results it wrote, and its runs.
          */
         ValidationView: {
+            /** Agent Project */
+            agent_project: string;
             /**
              * Created At
              * Format: date-time
@@ -9258,8 +9260,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Project */
-            project: string;
             purpose: components["schemas"]["RunPurpose"];
             /** Records */
             records: string[];
@@ -9320,18 +9320,18 @@ export interface components {
         };
         /**
          * WorkProductView
-         * @description What a session delivered: its project, its branch and whether the
+         * @description What a session delivered: its agent project, its branch and whether the
          *     remote has held it, the pull requests and branches bound to it, and its
          *     latest accepted result. A session that never had a workspace has no
          *     branch.
          */
         WorkProductView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
             /** Branch */
             branch: string | null;
             /** Branch Seen */
             branch_seen: boolean;
-            /** Project Id */
-            project_id: string | null;
             report: components["schemas"]["ReportView"] | null;
             /** Work */
             work: components["schemas"]["WorkHandleView"][];
@@ -11153,7 +11153,7 @@ export interface operations {
         parameters: {
             query: {
                 kind: string;
-                project_id?: string | null;
+                agent_project_id?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -11285,6 +11285,302 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvocationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_projects_v1_agent_projects_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_project_v1_agent_projects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAgentProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_project_v1_agent_projects__agent_project_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_agent_project_v1_agent_projects__agent_project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_agent_project_v1_agent_projects__agent_project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameAgentProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_fetch_credential_v1_agent_projects__agent_project_id__credential_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_workspace_base_v1_agent_projects__agent_project_id__workspace_base_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentWorkspaceBaseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_workspace_base_v1_agent_projects__agent_project_id__workspace_base_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectView"];
                 };
             };
             /** @description Validation Error */
@@ -13783,7 +14079,7 @@ export interface operations {
         parameters: {
             query: {
                 kind: string;
-                project_id?: string | null;
+                agent_project_id?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -16458,302 +16754,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParkAlertView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_projects_v1_projects_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_project_v1_projects_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_v1_projects__project_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_project_v1_projects__project_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rename_project_v1_projects__project_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenameProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_fetch_credential_v1_projects__project_id__credential_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FetchCredentialRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FetchCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_workspace_base_v1_projects__project_id__workspace_base_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentWorkspaceBaseBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_workspace_base_v1_projects__project_id__workspace_base_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
                 };
             };
             /** @description Validation Error */

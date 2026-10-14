@@ -3,7 +3,7 @@ into a session, whose brief arrives as the caller's message, and pinned to
 a kind as its kind manual, listed, and taken away. A name with no version is
 refused with the API's reason."""
 
-from api_support import OWNER, PROJECT_ID
+from api_support import AGENT_PROJECT_ID, OWNER
 from cli_support import Stack
 
 AGENT_PLAYBOOK = {
@@ -24,7 +24,9 @@ def published(stack: Stack) -> None:
 
 
 def started(stack: Stack) -> str:
-    result = stack.acme("session", "start", "assistant", "the ledger", "--project", PROJECT_ID)
+    result = stack.acme(
+        "session", "start", "assistant", "the ledger", "--agent-project", AGENT_PROJECT_ID
+    )
     assert result.exit_code == 0, result.output
     return result.output.split()[1]
 
@@ -50,18 +52,23 @@ def test_a_agent_playbook_is_pinned_to_a_kind_listed_and_taken_away(stack: Stack
     published(stack)
     pinned = stack.acme("agent-playbook", "pin", "assistant", AGENT_PLAYBOOK["name"])
     assert pinned.exit_code == 0, pinned.output
-    assert pinned.output == f"pinned assistant  {AGENT_PLAYBOOK['name']} 1  every project\n"
+    assert pinned.output == f"pinned assistant  {AGENT_PLAYBOOK['name']} 1  every agent project\n"
     narrowed = stack.acme(
-        "agent-playbook", "pin", "assistant", AGENT_PLAYBOOK["name"], "--project", PROJECT_ID
+        "agent-playbook",
+        "pin",
+        "assistant",
+        AGENT_PLAYBOOK["name"],
+        "--agent-project",
+        AGENT_PROJECT_ID,
     )
     assert narrowed.exit_code == 0, narrowed.output
     listed = stack.acme("agent-playbook", "pins")
     assert listed.output.splitlines() == [
-        f"assistant  {AGENT_PLAYBOOK['name']} 1  every project",
-        f"assistant  {AGENT_PLAYBOOK['name']} 1  project {PROJECT_ID}",
+        f"assistant  {AGENT_PLAYBOOK['name']} 1  every agent project",
+        f"assistant  {AGENT_PLAYBOOK['name']} 1  agent project {AGENT_PROJECT_ID}",
     ]
     unpinned = stack.acme("agent-playbook", "unpin", "assistant")
     assert unpinned.exit_code == 0, unpinned.output
     assert stack.acme("agent-playbook", "pins").output.splitlines() == [
-        f"assistant  {AGENT_PLAYBOOK['name']} 1  project {PROJECT_ID}"
+        f"assistant  {AGENT_PLAYBOOK['name']} 1  agent project {AGENT_PROJECT_ID}"
     ]

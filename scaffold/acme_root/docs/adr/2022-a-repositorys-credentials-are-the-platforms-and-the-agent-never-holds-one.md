@@ -8,20 +8,20 @@ The spec holds that a workspace never holds a platform credential
 (Trust), and that the one credential the platform issues a host is a
 push token minted per session, short-lived and scoped to the session's
 branch, never the integration's own (Workspace Hosts). The Result Gate
-reads what a session delivered from the repository its project binds, so
-a private repository needs a credential where that read runs. The
-software engineer delivers through its branch and its pull request, so
-something has to write them. An agent's workspace runs what a model
+reads what a session delivered from the repository its agent project
+binds, so a private repository needs a credential where that read runs.
+The software engineer delivers through its branch and its pull request,
+so something has to write them. An agent's workspace runs what a model
 wrote: whatever it holds, a model can print, send, or push with.
 
 ## Decision
 
-**A fetch credential per project, in the tenant's store.** A person who
-manages the tenant's members gives a project's repository one read-only
-credential, a user name and a password or token. Its value goes to the
-tenant's secret store under the project. The workspaces keep a record
-beside it, one row a project, saying only who gave it and when. A later
-one replaces it.
+**A fetch credential per agent project, in the tenant's store.** A
+person who manages the tenant's members gives an agent project's
+repository one read-only credential, a user name and a password or
+token. Its value goes to the tenant's secret store under the agent
+project. The workspaces keep a record beside it, one row an agent
+project, saying only who gave it and when. A later one replaces it.
 
 **The reader resolves it, outside every workspace.** The read of a
 session's work product takes the credential from the store and hands it
@@ -31,8 +31,8 @@ command line, in a file, in a message, or in a workspace.
 
 **A push token per loop, checked by the platform.** The software
 engineer's `open_pull_request` tool asks the workspaces for a token,
-minted for the session's branch on its project's repository. Only its
-digest is kept, on the session's workspace, with its expiry. It ends
+minted for the session's branch on its agent project's repository. Only
+its digest is kept, on the session's workspace, with its expiry. It ends
 when its lifetime passes, when the loop's workspace is prepared again or
 released, or when a newer one is minted. The platform checks it before
 each write: it writes the session's own branch, its snapshots, and its
@@ -46,8 +46,8 @@ the repository, and the base are the platform's records.
 
 ## Consequences
 
-- A private repository's work product is read once its project has a
-  fetch credential, and reads as unavailable without one. The result
+- A private repository's work product is read once its agent project has
+  a fetch credential, and reads as unavailable without one. The result
   gate then fails closed.
 - No credential a model could reach outlives its loop.
 - The tenant's purge takes each value out of the store before its

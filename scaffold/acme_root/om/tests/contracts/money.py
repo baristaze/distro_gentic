@@ -16,11 +16,11 @@ from acme.om.agent_billing.prices import PriceBookInterface
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UNIT_PLANS, UnitPlanCatalog
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
 from acme.om.context import Role, TenantContext
 from acme.om.models.layer import ModelsLayer
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -115,7 +115,7 @@ def money_over(
             book,
             managers.agent_sessions,
             managers.budgets,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
             version=None if models_layer is None else models_layer.version,
             tier=None if models_layer is None else models_layer.tier,
             clock=clock,

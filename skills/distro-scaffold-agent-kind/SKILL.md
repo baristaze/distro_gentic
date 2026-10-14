@@ -93,7 +93,7 @@ The shape of a kind is the four profiles in
    `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
    `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
    every process's entry point hands its root as `PlatformPorts.kinds`.
-   A version of its kind whose workspace starts from its project's
+   A version of its kind whose workspace starts from its agent project's
    workspace base, as the platform's software engineer does from version
    8, is named by its name and version in `workspace_bases`.
    A class of the product's that must always wait for a person takes its

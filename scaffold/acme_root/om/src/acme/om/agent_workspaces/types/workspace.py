@@ -1,6 +1,6 @@
 """A session's workspace as the platform keeps it between loops. Its isolation
 is pinned when the session is created and never changes: the level, the
-limits, the egress its project allowed then, whether snapshots keep it, and
+limits, the egress its agent project allowed then, whether snapshots keep it, and
 the base it starts from. The rest is what the cache knows of the durable
 state it is rebuilt from: the session's branch, whether the remote has held
 it, the last snapshot of its work, and what the next loop must be told of
@@ -30,7 +30,7 @@ class AgentSessionWorkspace(Identifiable, Trackable):
     the pin when the session is created, the rest as its loops run."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
-        "project_id",
+        "agent_project_id",
         "level",
         "limits",
         "egress",
@@ -47,17 +47,17 @@ class AgentSessionWorkspace(Identifiable, Trackable):
         "version",
     )
 
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     level: IsolationMode
     limits: ResourceLimits = ResourceLimits()
     egress: EgressMode
     rules: tuple[EgressRule, ...] = ()
-    # Where its egress came from, as a person reads it: its project's
+    # Where its egress came from, as a person reads it: its agent project's
     # allowlist at its version, with the reason open egress was chosen, or
     # its kind's own.
     egress_source: str = Field(min_length=1, max_length=1000)
     # Whether a snapshot of the whole workspace keeps it between runs, or it
-    # is a cache alone: its kind's, narrowed by its project.
+    # is a cache alone: its kind's, narrowed by its agent project.
     durability: Durability = Durability.CACHE
     base: WorkspaceBase | None = None  # its kind's; None, the provider's own image
     branch: str = Field(min_length=1, max_length=200)

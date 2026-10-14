@@ -29,7 +29,7 @@
       },
       "ActionBody": {
         "additionalProperties": false,
-        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`, and invoke the tenant's `agent_playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
+        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
         "properties": {
           "agent_kind": {
             "anyOf": [
@@ -58,6 +58,18 @@
             ],
             "title": "Agent Playbook"
           },
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "brief": {
             "anyOf": [
               {
@@ -82,18 +94,6 @@
             },
             "title": "Params",
             "type": "object"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
           },
           "session_id": {
             "anyOf": [
@@ -151,6 +151,18 @@
             ],
             "title": "Agent Playbook"
           },
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "brief": {
             "anyOf": [
               {
@@ -172,18 +184,6 @@
             },
             "title": "Params",
             "type": "object"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
           },
           "session_id": {
             "anyOf": [
@@ -214,7 +214,7 @@
           "brief",
           "agent_kind",
           "title",
-          "project_id",
+          "agent_project_id",
           "session_id",
           "agent_playbook",
           "params"
@@ -725,6 +725,107 @@
         "title": "AgentPlaybookView",
         "type": "object"
       },
+      "AgentProjectRetentionBody": {
+        "additionalProperties": false,
+        "description": "What one agent project of the tenant narrows; it never widens the tenant's.",
+        "properties": {
+          "agent_project_id": {
+            "format": "uuid",
+            "title": "Agent Project Id",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyBody"
+          }
+        },
+        "required": [
+          "agent_project_id",
+          "policy"
+        ],
+        "title": "AgentProjectRetentionBody",
+        "type": "object"
+      },
+      "AgentProjectRetentionView": {
+        "properties": {
+          "agent_project_id": {
+            "format": "uuid",
+            "title": "Agent Project Id",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyView"
+          }
+        },
+        "required": [
+          "agent_project_id",
+          "policy"
+        ],
+        "title": "AgentProjectRetentionView",
+        "type": "object"
+      },
+      "AgentProjectView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/RepositoryView"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "workspace_base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentWorkspaceBaseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspace_snapshots": {
+            "title": "Workspace Snapshots",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "repository",
+          "workspace_snapshots",
+          "workspace_base",
+          "created_at",
+          "created_by",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "AgentProjectView",
+        "type": "object"
+      },
       "AgentRefView": {
         "description": "The agent that wrote a message: its kind and the session it runs in.\nThe session is one of the same tree, which a reader of this session\nreads too: a sub-agent's report names the child, a child's objective\nits parent.",
         "properties": {
@@ -904,7 +1005,7 @@
       },
       "AgentWorkspaceBaseBody": {
         "additionalProperties": false,
-        "description": "The workspace base a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
+        "description": "The workspace base an agent project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
         "properties": {
           "image": {
             "maxLength": 255,
@@ -1326,8 +1427,20 @@
       },
       "AttachRequest": {
         "additionalProperties": false,
-        "description": "A kind the connector joins, for one project's sessions or every\nsession of the tenant, deferred until the agent loads it unless\n`deferred` is false.",
+        "description": "A kind the connector joins, for one agent project's sessions or every\nsession of the tenant, deferred until the agent loads it unless\n`deferred` is false.",
         "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "deferred": {
             "default": true,
             "title": "Deferred",
@@ -1338,18 +1451,6 @@
             "minLength": 1,
             "title": "Kind",
             "type": "string"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
           }
         },
         "required": [
@@ -1360,15 +1461,7 @@
       },
       "AttachmentView": {
         "properties": {
-          "deferred": {
-            "title": "Deferred",
-            "type": "boolean"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "project_id": {
+          "agent_project_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -1378,12 +1471,20 @@
                 "type": "null"
               }
             ],
-            "title": "Project Id"
+            "title": "Agent Project Id"
+          },
+          "deferred": {
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
           }
         },
         "required": [
           "kind",
-          "project_id",
+          "agent_project_id",
           "deferred"
         ],
         "title": "AttachmentView",
@@ -2792,9 +2893,45 @@
         "title": "CostApprovalRequest",
         "type": "object"
       },
+      "CreateAgentProjectRequest": {
+        "additionalProperties": false,
+        "description": "An agent project and the one repository it binds, which never moves; whether\na kind that keeps its workspace by snapshots keeps it so here, False\nkeeping each of its sessions' workspaces a cache; and the workspace base\nits sessions' workspaces start from, if it names one.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/RepositoryBody"
+          },
+          "workspace_base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspace_snapshots": {
+            "default": true,
+            "title": "Workspace Snapshots",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "repository"
+        ],
+        "title": "CreateAgentProjectRequest",
+        "type": "object"
+      },
       "CreateBudgetRequest": {
         "additionalProperties": false,
-        "description": "A budget over a scope and a window, in reference cost (millionths),\nnative tokens, or both. A person's and a project's scope is keyed by its\nid; a tenant's is the tenant itself, so its key is left out or names the\ntenant. A span window has a length in seconds, and no other window has.",
+        "description": "A budget over a scope and a window, in reference cost (millionths),\nnative tokens, or both. A person's and an agent project's scope is keyed by its\nid; a tenant's is the tenant itself, so its key is left out or names the\ntenant. A span window has a length in seconds, and no other window has.",
         "properties": {
           "cost_micros": {
             "anyOf": [
@@ -2924,42 +3061,6 @@
           "region"
         ],
         "title": "CreatePoolRequest",
-        "type": "object"
-      },
-      "CreateProjectRequest": {
-        "additionalProperties": false,
-        "description": "A project and the one repository it binds, which never moves; whether\na kind that keeps its workspace by snapshots keeps it so here, False\nkeeping each of its sessions' workspaces a cache; and the workspace base\nits sessions' workspaces start from, if it names one.",
-        "properties": {
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "repository": {
-            "$ref": "#/components/schemas/RepositoryBody"
-          },
-          "workspace_base": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "workspace_snapshots": {
-            "default": true,
-            "title": "Workspace Snapshots",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "repository"
-        ],
-        "title": "CreateProjectRequest",
         "type": "object"
       },
       "CreateTeamOrgRequest": {
@@ -3774,6 +3875,10 @@
             ],
             "title": "Abort"
           },
+          "agent_project": {
+            "title": "Agent Project",
+            "type": "string"
+          },
           "cases": {
             "$ref": "#/components/schemas/CasesView"
           },
@@ -3817,10 +3922,6 @@
           },
           "outcome": {
             "$ref": "#/components/schemas/RunOutcome"
-          },
-          "project": {
-            "title": "Project",
-            "type": "string"
           },
           "provenance": {
             "$ref": "#/components/schemas/Provenance"
@@ -3867,7 +3968,7 @@
           "purpose",
           "step_id",
           "validation_id",
-          "project",
+          "agent_project",
           "version",
           "dirty",
           "image",
@@ -3904,7 +4005,7 @@
       },
       "FetchCredentialRequest": {
         "additionalProperties": false,
-        "description": "A read-only credential of the project's repository, as source control\ntakes it over HTTPS. It goes to the tenant's store and is never read\nback.",
+        "description": "A read-only credential of the agent project's repository, as source control\ntakes it over HTTPS. It goes to the tenant's store and is never read\nback.",
         "properties": {
           "password": {
             "format": "password",
@@ -3930,11 +4031,11 @@
         "type": "object"
       },
       "FetchCredentialView": {
-        "description": "That the project's repository has a fetch credential, and who gave it\nwhen. Never its value.",
+        "description": "That the agent project's repository has a fetch credential, and who gave it\nwhen. Never its value.",
         "properties": {
-          "project_id": {
+          "agent_project_id": {
             "format": "uuid",
-            "title": "Project Id",
+            "title": "Agent Project Id",
             "type": "string"
           },
           "updated_at": {
@@ -3953,7 +4054,7 @@
           }
         },
         "required": [
-          "project_id",
+          "agent_project_id",
           "version",
           "updated_at",
           "updated_by"
@@ -7644,8 +7745,20 @@
       },
       "PinRequest": {
         "additionalProperties": false,
-        "description": "A kind manual: the name whose latest version is pinned to `kind`,\nfor the tenant's sessions of it, or with `project_id` those of one\nproject, where it wins over the tenant's.",
+        "description": "A kind manual: the name whose latest version is pinned to `kind`,\nfor the tenant's sessions of it, or with `agent_project_id` those of one\nagent project, where it wins over the tenant's.",
         "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "kind": {
             "maxLength": 200,
             "minLength": 1,
@@ -7658,18 +7771,6 @@
             "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
             "title": "Name",
             "type": "string"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
           }
         },
         "required": [
@@ -7686,6 +7787,18 @@
             "format": "uuid",
             "title": "Agent Playbook Id",
             "type": "string"
+          },
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
           },
           "created_at": {
             "format": "date-time",
@@ -7710,18 +7823,6 @@
             "title": "Name",
             "type": "string"
           },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -7740,7 +7841,7 @@
         "required": [
           "id",
           "kind",
-          "project_id",
+          "agent_project_id",
           "agent_playbook_id",
           "name",
           "version",
@@ -8157,107 +8258,6 @@
         "title": "PrincipalRequest",
         "type": "object"
       },
-      "ProjectRetentionBody": {
-        "additionalProperties": false,
-        "description": "What one project of the tenant narrows; it never widens the tenant's.",
-        "properties": {
-          "policy": {
-            "$ref": "#/components/schemas/RetentionPolicyBody"
-          },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id",
-          "policy"
-        ],
-        "title": "ProjectRetentionBody",
-        "type": "object"
-      },
-      "ProjectRetentionView": {
-        "properties": {
-          "policy": {
-            "$ref": "#/components/schemas/RetentionPolicyView"
-          },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id",
-          "policy"
-        ],
-        "title": "ProjectRetentionView",
-        "type": "object"
-      },
-      "ProjectView": {
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "created_by": {
-            "format": "uuid",
-            "title": "Created By",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "repository": {
-            "$ref": "#/components/schemas/RepositoryView"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "updated_by": {
-            "format": "uuid",
-            "title": "Updated By",
-            "type": "string"
-          },
-          "workspace_base": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AgentWorkspaceBaseView"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "workspace_snapshots": {
-            "title": "Workspace Snapshots",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "repository",
-          "workspace_snapshots",
-          "workspace_base",
-          "created_at",
-          "created_by",
-          "updated_at",
-          "updated_by"
-        ],
-        "title": "ProjectView",
-        "type": "object"
-      },
       "Provenance": {
         "description": "From the strongest to the weakest.",
         "enum": [
@@ -8462,7 +8462,7 @@
         "title": "RaiseRequest",
         "type": "object"
       },
-      "RenameProjectRequest": {
+      "RenameAgentProjectRequest": {
         "additionalProperties": false,
         "properties": {
           "name": {
@@ -8475,7 +8475,7 @@
         "required": [
           "name"
         ],
-        "title": "RenameProjectRequest",
+        "title": "RenameAgentProjectRequest",
         "type": "object"
       },
       "RenewRequest": {
@@ -8841,16 +8841,16 @@
         "additionalProperties": false,
         "description": "The tenant's whole policy, written over the version `If-Match` names,\nor, with no `If-Match`, as the tenant's first.",
         "properties": {
-          "policy": {
-            "$ref": "#/components/schemas/RetentionPolicyBody"
-          },
-          "projects": {
+          "agent_projects": {
             "items": {
-              "$ref": "#/components/schemas/ProjectRetentionBody"
+              "$ref": "#/components/schemas/AgentProjectRetentionBody"
             },
             "maxItems": 500,
-            "title": "Projects",
+            "title": "Agent Projects",
             "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyBody"
           }
         },
         "title": "RetentionRequest",
@@ -8859,15 +8859,15 @@
       "RetentionView": {
         "description": "The tenant's policy; version 0, the loosest, until its first write.",
         "properties": {
+          "agent_projects": {
+            "items": {
+              "$ref": "#/components/schemas/AgentProjectRetentionView"
+            },
+            "title": "Agent Projects",
+            "type": "array"
+          },
           "policy": {
             "$ref": "#/components/schemas/RetentionPolicyView"
-          },
-          "projects": {
-            "items": {
-              "$ref": "#/components/schemas/ProjectRetentionView"
-            },
-            "title": "Projects",
-            "type": "array"
           },
           "updated_at": {
             "format": "date-time",
@@ -8886,7 +8886,7 @@
         },
         "required": [
           "policy",
-          "projects",
+          "agent_projects",
           "version",
           "updated_at",
           "updated_by"
@@ -9169,6 +9169,18 @@
       "SessionRetentionView": {
         "description": "One session's snapshot: the policy it took, when its content and its\nshape expire, and when each did. `destruction` is the key service's\nreport of the key it destroyed, none when the service holds the tenant's\nkey alone and the platform's revocation is the destruction.",
         "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "content_expired_at": {
             "anyOf": [
               {
@@ -9206,18 +9218,6 @@
           "policy": {
             "$ref": "#/components/schemas/RetentionPolicyView"
           },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
           "session_id": {
             "format": "uuid",
             "title": "Session Id",
@@ -9250,7 +9250,7 @@
         },
         "required": [
           "session_id",
-          "project_id",
+          "agent_project_id",
           "policy",
           "content_expires_at",
           "shape_expires_at",
@@ -10149,15 +10149,9 @@
       },
       "StartSessionRequest": {
         "additionalProperties": false,
-        "description": "A session to start on the latest version of a kind the product runs,\nin a project of the caller's tenant. Outside a local stack a session\nstarts in a project or not at all.",
+        "description": "A session to start on the latest version of a kind the product runs,\nin an agent project of the caller's tenant. Outside a local stack a session\nstarts in an agent project or not at all.",
         "properties": {
-          "kind": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Kind",
-            "type": "string"
-          },
-          "project_id": {
+          "agent_project_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -10167,7 +10161,13 @@
                 "type": "null"
               }
             ],
-            "title": "Project Id"
+            "title": "Agent Project Id"
+          },
+          "kind": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
           },
           "title": {
             "maxLength": 200,
@@ -10215,8 +10215,13 @@
       },
       "StartValidationRequest": {
         "additionalProperties": false,
-        "description": "A check the project's policy declares, to run at `head`, the delivered\ncommit, with the checks, fixtures, and runner taken from `base`. Each is\na commit's full id, never a name that moves.",
+        "description": "A check the agent project's policy declares, to run at `head`, the delivered\ncommit, with the checks, fixtures, and runner taken from `base`. Each is\na commit's full id, never a name that moves.",
         "properties": {
+          "agent_project_id": {
+            "format": "uuid",
+            "title": "Agent Project Id",
+            "type": "string"
+          },
           "base": {
             "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
             "title": "Base",
@@ -10231,15 +10236,10 @@
             "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
             "title": "Head",
             "type": "string"
-          },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
           }
         },
         "required": [
-          "project_id",
+          "agent_project_id",
           "check",
           "head",
           "base"
@@ -11677,8 +11677,13 @@
         "type": "object"
       },
       "ValidationSessionView": {
-        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. A check a requirement rates runs its\ndeclared trials and passes only as that requirement judges them\ntogether, so one lucky trial never passes it; `run` is its last trial.\n`reason` says why it did not pass, and is null otherwise. A session\nwhose check cannot run here, for good, is `refused`: it never passes,\n`reason` says why it could not run, and `run` is null.",
+        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the agent project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. A check a requirement rates runs its\ndeclared trials and passes only as that requirement judges them\ntogether, so one lucky trial never passes it; `run` is its last trial.\n`reason` says why it did not pass, and is null otherwise. A session\nwhose check cannot run here, for good, is `refused`: it never passes,\n`reason` says why it could not run, and `run` is null.",
         "properties": {
+          "agent_project_id": {
+            "format": "uuid",
+            "title": "Agent Project Id",
+            "type": "string"
+          },
           "base": {
             "title": "Base",
             "type": "string"
@@ -11729,11 +11734,6 @@
             ],
             "title": "Passed"
           },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          },
           "reason": {
             "anyOf": [
               {
@@ -11763,7 +11763,7 @@
           "id",
           "created_at",
           "created_by",
-          "project_id",
+          "agent_project_id",
           "check",
           "head",
           "base",
@@ -11788,6 +11788,10 @@
       "ValidationView": {
         "description": "One pass of the policy's checks on a fresh executor: the version it\nran at and the version its checks came from, who ran it, the hash of\nthe results it wrote, and its runs.",
         "properties": {
+          "agent_project": {
+            "title": "Agent Project",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -11800,10 +11804,6 @@
           "id": {
             "format": "uuid",
             "title": "Id",
-            "type": "string"
-          },
-          "project": {
-            "title": "Project",
             "type": "string"
           },
           "purpose": {
@@ -11834,7 +11834,7 @@
           "id",
           "created_at",
           "purpose",
-          "project",
+          "agent_project",
           "version",
           "source",
           "executor",
@@ -11924,8 +11924,20 @@
         "type": "object"
       },
       "WorkProductView": {
-        "description": "What a session delivered: its project, its branch and whether the\nremote has held it, the pull requests and branches bound to it, and its\nlatest accepted result. A session that never had a workspace has no\nbranch.",
+        "description": "What a session delivered: its agent project, its branch and whether the\nremote has held it, the pull requests and branches bound to it, and its\nlatest accepted result. A session that never had a workspace has no\nbranch.",
         "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
           "branch": {
             "anyOf": [
               {
@@ -11940,18 +11952,6 @@
           "branch_seen": {
             "title": "Branch Seen",
             "type": "boolean"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
           },
           "report": {
             "anyOf": [
@@ -11972,7 +11972,7 @@
           }
         },
         "required": [
-          "project_id",
+          "agent_project_id",
           "branch",
           "branch_seen",
           "work",
@@ -16880,7 +16880,7 @@
     },
     "/v1/agent-playbook-pins": {
       "delete": {
-        "description": "The kind's pin for the tenant, or for one project, taken away. A\nsession made with it keeps it.",
+        "description": "The kind's pin for the tenant, or for one agent project, taken away. A\nsession made with it keeps it.",
         "operationId": "unpin_v1_agent_playbook_pins_delete",
         "parameters": [
           {
@@ -16896,7 +16896,7 @@
           },
           {
             "in": "query",
-            "name": "project_id",
+            "name": "agent_project_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -16908,7 +16908,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Project Id"
+              "title": "Agent Project Id"
             }
           },
           {
@@ -16988,7 +16988,7 @@
         ]
       },
       "get": {
-        "description": "The tenant's pins, by kind, the tenant's before a project's.",
+        "description": "The tenant's pins, by kind, the tenant's before an agent project's.",
         "operationId": "list_pins_v1_agent_playbook_pins_get",
         "parameters": [
           {
@@ -17072,7 +17072,7 @@
         ]
       },
       "put": {
-        "description": "The name's latest version pinned to the kind as its kind manual, for the\ntenant or one project; pinned again, the version then latest.",
+        "description": "The name's latest version pinned to the kind as its kind manual, for the\ntenant or one agent project; pinned again, the version then latest.",
         "operationId": "pin_v1_agent_playbook_pins_put",
         "parameters": [
           {
@@ -17483,6 +17483,801 @@
         "summary": "Invoke",
         "tags": [
           "agent_playbooks"
+        ]
+      }
+    },
+    "/v1/agent-projects": {
+      "get": {
+        "description": "The tenant's agent projects by id, after the id `after` names.",
+        "operationId": "list_agent_projects_v1_agent_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentProjectView"
+                  },
+                  "title": "Response List Agent Projects V1 Agent Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Projects",
+        "tags": [
+          "agent_projects"
+        ]
+      },
+      "post": {
+        "description": "An agent project bound to its repository, which never moves.",
+        "operationId": "create_agent_project_v1_agent_projects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Agent Project",
+        "tags": [
+          "agent_projects"
+        ]
+      }
+    },
+    "/v1/agent-projects/{agent_project_id}": {
+      "delete": {
+        "description": "The agent project as it stood, with its fetch credential gone. 409\n`agent_project_in_use` while a session belongs to it.",
+        "operationId": "remove_agent_project_v1_agent_projects__agent_project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Agent Project",
+        "tags": [
+          "agent_projects"
+        ]
+      },
+      "get": {
+        "operationId": "get_agent_project_v1_agent_projects__agent_project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Project",
+        "tags": [
+          "agent_projects"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_agent_project_v1_agent_projects__agent_project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameAgentProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Agent Project",
+        "tags": [
+          "agent_projects"
+        ]
+      }
+    },
+    "/v1/agent-projects/{agent_project_id}/credential": {
+      "put": {
+        "description": "A read-only credential of the agent project's repository; a later one\nreplaces it. The answer says who gave it when, never its value.",
+        "operationId": "put_fetch_credential_v1_agent_projects__agent_project_id__credential_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FetchCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FetchCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Fetch Credential",
+        "tags": [
+          "agent_projects"
+        ]
+      }
+    },
+    "/v1/agent-projects/{agent_project_id}/workspace-base": {
+      "delete": {
+        "description": "The agent project with no workspace base: its sessions created after it start\nfrom their kind's own workspace.",
+        "operationId": "remove_workspace_base_v1_agent_projects__agent_project_id__workspace_base_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Workspace Base",
+        "tags": [
+          "agent_projects"
+        ]
+      },
+      "put": {
+        "description": "The workspace base the agent project's sessions' workspaces start from; a later\none replaces it. Each session keeps the one it started on, and a changed\none is built again for the sessions created after it.",
+        "operationId": "set_workspace_base_v1_agent_projects__agent_project_id__workspace_base_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Workspace Base",
+        "tags": [
+          "agent_projects"
         ]
       }
     },
@@ -24226,7 +25021,7 @@
     },
     "/v1/connectors/{connector_id}/attachments": {
       "delete": {
-        "description": "The attachment of `kind` and `project_id` taken away. A session that\npinned the connector keeps it.",
+        "description": "The attachment of `kind` and `agent_project_id` taken away. A session that\npinned the connector keeps it.",
         "operationId": "detach_v1_connectors__connector_id__attachments_delete",
         "parameters": [
           {
@@ -24250,7 +25045,7 @@
           },
           {
             "in": "query",
-            "name": "project_id",
+            "name": "agent_project_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -24262,7 +25057,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Project Id"
+              "title": "Agent Project Id"
             }
           },
           {
@@ -24342,7 +25137,7 @@
         ]
       },
       "post": {
-        "description": "The connector attached to a kind: an attachment of that kind and\nproject already held is replaced.",
+        "description": "The connector attached to a kind: an attachment of that kind and\nagent project already held is replaced.",
         "operationId": "attach_v1_connectors__connector_id__attachments_post",
         "parameters": [
           {
@@ -31353,801 +32148,6 @@
         ]
       }
     },
-    "/v1/projects": {
-      "get": {
-        "description": "The tenant's projects by id, after the id `after` names.",
-        "operationId": "list_projects_v1_projects_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "after",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "After"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ProjectView"
-                  },
-                  "title": "Response List Projects V1 Projects Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Projects",
-        "tags": [
-          "projects"
-        ]
-      },
-      "post": {
-        "description": "A project bound to its repository, which never moves.",
-        "operationId": "create_project_v1_projects_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "idempotency-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 255,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProjectRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Project",
-        "tags": [
-          "projects"
-        ]
-      }
-    },
-    "/v1/projects/{project_id}": {
-      "delete": {
-        "description": "The project as it stood, with its fetch credential gone. 409\n`project_in_use` while a session belongs to it.",
-        "operationId": "remove_project_v1_projects__project_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remove Project",
-        "tags": [
-          "projects"
-        ]
-      },
-      "get": {
-        "operationId": "get_project_v1_projects__project_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Project",
-        "tags": [
-          "projects"
-        ]
-      },
-      "patch": {
-        "operationId": "rename_project_v1_projects__project_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RenameProjectRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rename Project",
-        "tags": [
-          "projects"
-        ]
-      }
-    },
-    "/v1/projects/{project_id}/credential": {
-      "put": {
-        "description": "A read-only credential of the project's repository; a later one\nreplaces it. The answer says who gave it when, never its value.",
-        "operationId": "put_fetch_credential_v1_projects__project_id__credential_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FetchCredentialRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FetchCredentialView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Put Fetch Credential",
-        "tags": [
-          "projects"
-        ]
-      }
-    },
-    "/v1/projects/{project_id}/workspace-base": {
-      "delete": {
-        "description": "The project with no workspace base: its sessions created after it start\nfrom their kind's own workspace.",
-        "operationId": "remove_workspace_base_v1_projects__project_id__workspace_base_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remove Workspace Base",
-        "tags": [
-          "projects"
-        ]
-      },
-      "put": {
-        "description": "The workspace base the project's sessions' workspaces start from; a later\none replaces it. Each session keeps the one it started on, and a changed\none is built again for the sessions created after it.",
-        "operationId": "set_workspace_base_v1_projects__project_id__workspace_base_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Workspace Base",
-        "tags": [
-          "projects"
-        ]
-      }
-    },
     "/v1/provider-keys": {
       "get": {
         "description": "The tenant's keys, the newest first, a rotated or refused one among\nthem; never a value.",
@@ -33388,7 +33388,7 @@
     },
     "/v1/validation-sessions": {
       "post": {
-        "description": "A session queued for the platform's worker, which runs its check once.\n404 when the tenant holds no validation policy for the project; 422\nwhen the policy declares no such check.",
+        "description": "A session queued for the platform's worker, which runs its check once.\n404 when the tenant holds no validation policy for the agent project; 422\nwhen the policy declares no such check.",
         "operationId": "start_validation_v1_validation_sessions_post",
         "parameters": [
           {

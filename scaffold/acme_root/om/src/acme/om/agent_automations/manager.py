@@ -1,6 +1,6 @@
 """The agent automations swimlane: events turned into bounded work. A
 trigger, an event with filters or a schedule, leads to an action: start
-a session in a project of the tenant, or message a standing one. An
+a session in an agent project of the tenant, or message a standing one. An
 agent automation runs as its creator or as the tenant's agent automation
 principal, inside limits of its own: a cost cap, a rate, a concurrency,
 and whether to queue when limited. It ignores the events its own
@@ -29,9 +29,9 @@ class AgentAutomationsManagerInterface(ABC):
         going for itself. Its creator is the caller, whom it runs as. One
         that runs as the agent automation principal is `NotAuthorized` before a
         principal is granted, and to a caller whose role is below the
-        grant. A start's project is the tenant's: another tenant's is
+        grant. A start's agent project is the tenant's: another tenant's is
         `NotFound`, as one that never existed is. Where a session starts in
-        a project (every stack but a local one), a start that names none is
+        an agent project (every stack but a local one), a start that names none is
         `ValidationFailed`, and one stored with none is refused at each
         firing, starting nothing. A product's action names a kind a product
         declares, with params of its shape, or is `ValidationFailed`; an

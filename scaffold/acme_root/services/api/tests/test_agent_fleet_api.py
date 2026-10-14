@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, build_container, enrol_operator
+from api_support import AGENT_PROJECT_ID, build_container, enrol_operator
 from contracts.agent_session_storage import parked
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -70,7 +70,11 @@ async def a_session_that_was_told(client: httpx.AsyncClient, owner: dict[str, st
     started = await client.post(
         "/v1/agent-sessions",
         headers={**owner, "Idempotency-Key": str(uuid4())},
-        json={"kind": "assistant", "title": "the dropped order", "project_id": PROJECT_ID},
+        json={
+            "kind": "assistant",
+            "title": "the dropped order",
+            "agent_project_id": AGENT_PROJECT_ID,
+        },
     )
     assert started.status_code == 201, started.text
     session_id = started.json()["id"]

@@ -130,7 +130,7 @@ class RepositoryReaderInterface(ABC):
         delivered nothing, from where it was `cut`: the commit the checkout
         says its branch meets the default branch at, when the default
         branch's history holds it, and the default branch's tip otherwise.
-        A private repository is read with the project's fetch `credential`,
+        A private repository is read with the agent project's fetch `credential`,
         which reaches only the read's own git and the repository's URL.
         `Unavailable` when the repository cannot be read."""
         ...

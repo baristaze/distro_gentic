@@ -26,8 +26,8 @@ from pydantic import Field
 
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
 from acme.infra.workspaces import Workspace
+from acme.om.agent_workspaces.agent_projects import SourceControlInterface
 from acme.om.agent_workspaces.git import WorkspaceGitInterface
-from acme.om.agent_workspaces.projects import SourceControlInterface
 from acme.om.agent_workspaces.types.source import (
     BranchState,
     Checkout,

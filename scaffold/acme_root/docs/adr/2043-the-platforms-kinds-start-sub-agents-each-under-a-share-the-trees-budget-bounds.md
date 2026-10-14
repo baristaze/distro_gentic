@@ -66,10 +66,11 @@ cap, bounds the whole tree, whatever its shares add up to. A share below
 the tree's budget lets several children run before the tree refuses the
 next call. With no budget on the tree, its sub-agents can spend at most
 ten times the largest share, 600, besides what the root spends, and
-every call still passes whatever budget its person, its project, and its
-tenant hold. Shares do not nest: a child's calls are charged to its own
-session, the tree, its person, its project, and the tenant, never to its
-parent's session. So a parent's share never pays for its children.
+every call still passes whatever budget its person, its agent project,
+and its tenant hold. Shares do not nest: a child's calls are charged to
+its own session, the tree, its person, its agent project, and the
+tenant, never to its parent's session. So a parent's share never pays
+for its children.
 
 ## Consequences
 
@@ -80,8 +81,8 @@ parent's session. So a parent's share never pays for its children.
   share, the tree up to its budget.
 - A tree with no budget of its own can spend up to 600 through its
   sub-agents. A tenant that wants less sets a budget on the person, the
-  project, or the tenant, or a run cap on the agent automation that
-  starts it.
+  agent project, or the tenant, or a run cap on the agent automation
+  that starts it.
 - A session on the software engineer's version 4 or analysis's version 2
   keeps its tools and starts no sub-agent.
 - A product's kind may now spawn analysis too, under its share.

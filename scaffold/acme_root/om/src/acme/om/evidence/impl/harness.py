@@ -129,7 +129,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
     ) -> tuple[tuple[ExecutionRecord, ...], tuple[Break, ...]]:
         """The hidden suite at the head, on a fresh executor, from its own
         source, which no workspace holds: the executor fetches it for this
-        run alone, from the repository its project binds, and every path
+        run alone, from the repository its agent project binds, and every path
         its patterns match comes from there, whatever the head holds there.
         Every other path the scenario forbids comes from its base, and the
         executor holds each file of them the tree holds read-only while the
@@ -146,11 +146,11 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
                 return (), (Break(link=Link.HIDDEN, reason=refusal),)
         request = ExecutionRequest(
             session_id=session_id,
-            project=scenario.project,
+            agent_project=scenario.agent_project,
             purpose=RunPurpose.VALIDATION,
             version=work_product.head,
             source=scenario.hidden.source,
-            source_project=scenario.hidden.project,
+            source_agent_project=scenario.hidden.agent_project,
             protected=scenario.hidden.paths,
             base=scenario.base,
             untouched=scenario.forbidden,
@@ -166,7 +166,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
                 report.results,
                 executor=report.executor,
                 session_id=session_id,
-                project=scenario.project,
+                agent_project=scenario.agent_project,
                 purpose=RunPurpose.VALIDATION,
                 validation_id=verdict_id,
                 now=self._clock(),

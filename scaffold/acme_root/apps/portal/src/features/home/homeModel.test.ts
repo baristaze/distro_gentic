@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { NO_PROJECT } from "../sessions/sessionsModel";
-import { chosenAgent, chosenProject, composerStart, TITLE_CUT, titleFromPrompt } from "./homeModel";
+import { NO_AGENT_PROJECT } from "../sessions/sessionsModel";
+import { chosenAgent, chosenAgentProject, composerStart, TITLE_CUT, titleFromPrompt } from "./homeModel";
 
 const agents = [
   { kind: "software_engineer", label: "Software engineer", about: "Changes code." },
@@ -17,26 +17,26 @@ describe("home's composer", () => {
   });
 
   it("starts the chosen agent on the prompt's title, and sends the whole prompt", () => {
-    const draft = { prompt: " Fix the test\nwith care ", kind: "software_engineer", projectId: "p1" };
+    const draft = { prompt: " Fix the test\nwith care ", kind: "software_engineer", agentProjectId: "p1" };
     expect(composerStart(draft, { required: true, count: 1 })).toEqual({
-      request: { title: "Fix the test", kind: "software_engineer", project_id: "p1" },
+      request: { title: "Fix the test", kind: "software_engineer", agent_project_id: "p1" },
       text: "Fix the test\nwith care",
     });
-    expect(composerStart({ ...draft, projectId: "" }, { required: false, count: 0 })).toEqual({
+    expect(composerStart({ ...draft, agentProjectId: "" }, { required: false, count: 0 })).toEqual({
       request: { title: "Fix the test", kind: "software_engineer" },
       text: "Fix the test\nwith care",
     });
   });
 
-  it("says why it cannot start: no prompt, no agent, or no project where one is required", () => {
-    expect(composerStart({ prompt: "  ", kind: "software_engineer", projectId: "" }, { required: false, count: 0 })).toEqual({
+  it("says why it cannot start: no prompt, no agent, or no agent project where one is required", () => {
+    expect(composerStart({ prompt: "  ", kind: "software_engineer", agentProjectId: "" }, { required: false, count: 0 })).toEqual({
       problem: "Describe the task first.",
     });
-    expect(composerStart({ prompt: "Fix it", kind: "", projectId: "" }, { required: false, count: 0 })).toEqual({
+    expect(composerStart({ prompt: "Fix it", kind: "", agentProjectId: "" }, { required: false, count: 0 })).toEqual({
       problem: "Choose the agent that works on it.",
     });
-    expect(composerStart({ prompt: "Fix it", kind: "software_engineer", projectId: "" }, { required: true, count: 0 })).toEqual({
-      problem: NO_PROJECT,
+    expect(composerStart({ prompt: "Fix it", kind: "software_engineer", agentProjectId: "" }, { required: true, count: 0 })).toEqual({
+      problem: NO_AGENT_PROJECT,
     });
   });
 
@@ -47,15 +47,15 @@ describe("home's composer", () => {
     expect(chosenAgent([], null)).toBeNull();
   });
 
-  it("shows the chosen project, else the first where one is required, else none", () => {
-    const projects = [
+  it("shows the chosen agent project, else the first where one is required, else none", () => {
+    const agentProjects = [
       { id: "p1", name: "Docs" },
       { id: "p2", name: "Site" },
     ];
-    expect(chosenProject(projects, true, null)?.id).toBe("p1");
-    expect(chosenProject(projects, false, null)).toBeNull();
-    expect(chosenProject(projects, false, "p2")?.id).toBe("p2");
-    expect(chosenProject(projects, true, "")).toBeNull();
-    expect(chosenProject(null, true, null)).toBeNull();
+    expect(chosenAgentProject(agentProjects, true, null)?.id).toBe("p1");
+    expect(chosenAgentProject(agentProjects, false, null)).toBeNull();
+    expect(chosenAgentProject(agentProjects, false, "p2")?.id).toBe("p2");
+    expect(chosenAgentProject(agentProjects, true, "")).toBeNull();
+    expect(chosenAgentProject(null, true, null)).toBeNull();
   });
 });

@@ -56,13 +56,13 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
+from contracts.agent_project_storage import in_agent_project, make_binding
 from contracts.budget_storage import make_budget
 from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.factories import make_org
 from contracts.loops import live, reply, said
-from contracts.project_storage import in_project, make_binding
 from contracts.step_storage import make_message
 
 SESSIONS_GUIDE = Document(
@@ -211,7 +211,9 @@ def platform_over(
         agent_automations=lambda: agent_automations[0],
         intake=None if forge is None else lambda: intakes[0],
     )
-    agent_automations.append(build_agent_automations(storage, managers, project_required=False))
+    agent_automations.append(
+        build_agent_automations(storage, managers, agent_project_required=False)
+    )
     if forge is not None:
         intakes.append(build_intake(storage, managers, integrations=integrations))
     owner = owner or context(Role.OWNER, make_org())
@@ -254,14 +256,16 @@ def citing(claim: Claim) -> Later:
 
 
 async def a_software_engineer(
-    platform: Platform, work: WorkProductMemoryImpl, project_id: UUID
+    platform: Platform, work: WorkProductMemoryImpl, agent_project_id: UUID
 ) -> UUID:
-    """A software engineer session of the project, whose work product changed `src/`
+    """A software engineer session of the agent project, whose work product changed `src/`
     and is committed, and whose policy requires its unit check there."""
     session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
-    binding = make_binding(session_id, project_id)
-    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
-    work_product = WorkProduct(project="reports", base="b1", head="c2", changed=("src/report.py",))
+    binding = make_binding(session_id, agent_project_id)
+    await platform.storage.get_agent_project_storage().bind_session(platform.owner.org_id, binding)
+    work_product = WorkProduct(
+        agent_project="reports", base="b1", head="c2", changed=("src/report.py",)
+    )
     work.deliver(platform.owner.org_id, session_id, work_product)
     await platform.say(session_id, "The weekly report misses its total. Fix it.")
     return session_id
@@ -274,7 +278,7 @@ def sub_agents_over(
     tmp_path: Path, *, storage: StorageInterface | None = None
 ) -> tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl]:
     """The platform with the shipped software engineer on the twin, and analysis with
-    no workspace: a sub-agent belongs to its parent's project, whose
+    no workspace: a sub-agent belongs to its parent's agent project, whose
     repository no suite can fetch, and the case's sub-agents read none."""
     executor = ScriptedExecutor(capabilities=frozenset())
     work = WorkProductMemoryImpl()
@@ -323,16 +327,16 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     """The shipped software engineer takes its baseline, then starts two analysis
     sub-agents in one turn and parks on them. Each report wakes it: it reads
     the first and waits on the second, reads the second, validates its
-    head, and ends through its result gate. Each sub-agent runs under its share in the root's project,
+    head, and ends through its result gate. Each sub-agent runs under its share in the root's agent project,
     and what the whole tree spent and holds stays within the root's budget,
     which is far below the shares added up."""
-    projects = platform.storage.get_project_storage()
-    project_id = await in_project(projects, platform.owner.org_id)
+    agent_projects = platform.storage.get_agent_project_storage()
+    agent_project_id = await in_agent_project(agent_projects, platform.owner.org_id)
     await platform.managers.evidence.write_policy(
-        platform.owner, make_policy(policy_key(project_id))
+        platform.owner, make_policy(policy_key(agent_project_id))
     )
     executor.outcome = lambda check, trial: "passed"
-    root = await a_software_engineer(platform, work, project_id)
+    root = await a_software_engineer(platform, work, agent_project_id)
     budget = await platform.managers.budgets.create_budget(
         platform.owner,
         make_budget(BudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP),
@@ -376,8 +380,12 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     for child in (first, second):
         scope = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
         assert [b.amount for b in budgets.items if b.scope == scope] == [ANALYSIS_SHARE]
-        project = await platform.managers.projects.project_of(platform.owner, child.id)
-        assert project is not None and project.id == project_id, "in its root's project"
+        agent_project = await platform.managers.agent_projects.agent_project_of(
+            platform.owner, child.id
+        )
+        assert agent_project is not None and agent_project.id == agent_project_id, (
+            "in its root's agent project"
+        )
 
     # The first reports: the root wakes, reads it, and waits on the second.
     platform.anthropic.add(reply(said("A week with no rows drops the total (report.log:12).")))

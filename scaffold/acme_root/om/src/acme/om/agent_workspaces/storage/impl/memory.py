@@ -37,9 +37,11 @@ class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageIn
                 )
             self._put(self._workspaces, org_id, workspace)
 
-    async def read_allowlist(self, org_id: UUID, project_id: UUID) -> EgressAllowlist | None:
+    async def read_allowlist(self, org_id: UUID, agent_project_id: UUID) -> EgressAllowlist | None:
         found = [
-            row for row in self._rows(self._allowlists, org_id) if row.project_id == project_id
+            row
+            for row in self._rows(self._allowlists, org_id)
+            if row.agent_project_id == agent_project_id
         ]
         return found[0] if found else None
 
@@ -49,10 +51,10 @@ class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageIn
         async with self._lock:
             if allowlist.id in self._allowlists:
                 return False
-            # One allowlist a project: the unique index the table holds.
-            if await self.read_allowlist(org_id, allowlist.project_id) is not None:
+            # One allowlist an agent project: the unique index the table holds.
+            if await self.read_allowlist(org_id, allowlist.agent_project_id) is not None:
                 raise UniqueKeyTaken(
-                    f"egress_allowlists {allowlist.id}: the project holds an allowlist"
+                    f"egress_allowlists {allowlist.id}: the agent project holds an allowlist"
                 )
             return self._insert(self._allowlists, org_id, allowlist, outbox_rows)
 
@@ -71,8 +73,10 @@ class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageIn
                 )
             self._put(self._allowlists, org_id, allowlist, outbox_rows)
 
-    async def read_credential(self, org_id: UUID, project_id: UUID) -> RepositoryCredential | None:
-        return self._get(self._credentials, org_id, project_id)
+    async def read_credential(
+        self, org_id: UUID, agent_project_id: UUID
+    ) -> RepositoryCredential | None:
+        return self._get(self._credentials, org_id, agent_project_id)
 
     async def create_credential(self, org_id: UUID, credential: RepositoryCredential) -> bool:
         async with self._lock:
@@ -93,10 +97,12 @@ class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageIn
     async def read_credentials(self, org_id: UUID, limit: int) -> list[RepositoryCredential]:
         return list(self._rows(self._credentials, org_id))[:limit]
 
-    async def purge_credentials(self, org_id: UUID, project_ids: list[UUID]) -> int:
+    async def purge_credentials(self, org_id: UUID, agent_project_ids: list[UUID]) -> int:
         async with self._lock:
             gone = [
-                row.id for row in self._rows(self._credentials, org_id) if row.id in project_ids
+                row.id
+                for row in self._rows(self._credentials, org_id)
+                if row.id in agent_project_ids
             ]
             for row_id in gone:
                 del self._credentials[row_id]

@@ -65,28 +65,29 @@ class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInte
         self, org_id: UUID, pin: AgentPlaybookPin, outbox_rows: tuple[OutboxRow, ...]
     ) -> None:
         async with self._lock:
-            # One pin a kind and a project in a tenant, the tenant's own among
+            # One pin a kind and an agent project in a tenant, the tenant's own among
             # them: the unique index the table holds, its nulls not distinct.
             if any(
-                (held.kind, held.project_id) == (pin.kind, pin.project_id) and held.id != pin.id
+                (held.kind, held.agent_project_id) == (pin.kind, pin.agent_project_id)
+                and held.id != pin.id
                 for held in self._rows(self._pins, org_id)
             ):
                 raise UniqueKeyTaken(f"agent_playbook_pins {pin.id}: the kind is pinned")
             self._put(self._pins, org_id, pin, outbox_rows)
 
     async def read_pin(
-        self, org_id: UUID, kind: str, project_id: UUID | None
+        self, org_id: UUID, kind: str, agent_project_id: UUID | None
     ) -> AgentPlaybookPin | None:
         for held in self._rows(self._pins, org_id):
-            if (held.kind, held.project_id) == (kind, project_id):
+            if (held.kind, held.agent_project_id) == (kind, agent_project_id):
                 return held
         return None
 
     async def read_pins(self, org_id: UUID, limit: int) -> list[AgentPlaybookPin]:
         rows = self._rows(self._pins, org_id)
-        return sorted(rows, key=lambda p: (p.kind, p.project_id is not None, str(p.project_id)))[
-            :limit
-        ]
+        return sorted(
+            rows, key=lambda p: (p.kind, p.agent_project_id is not None, str(p.agent_project_id))
+        )[:limit]
 
     async def delete_pin(
         self, org_id: UUID, pin_id: UUID, outbox_rows: tuple[OutboxRow, ...]

@@ -27,7 +27,7 @@ with that repository's credential. The tar is
 written from the composed tree's blobs as stored, so no `.gitattributes`
 in the tree leaves a file out of it or changes a file's bytes.
 
-A private repository is read with its project's fetch credential. It
+A private repository is read with its agent project's fetch credential. It
 reaches git through the environment of the commands that ask the
 repository, as a header for the repository's URL alone: never on a command
 line, in a file, or in any message, and never in a workspace."""

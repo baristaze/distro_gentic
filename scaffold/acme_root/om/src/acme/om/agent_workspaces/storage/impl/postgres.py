@@ -59,9 +59,9 @@ class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInte
                 )
             await session.commit()
 
-    async def read_allowlist(self, org_id: UUID, project_id: UUID) -> EgressAllowlist | None:
+    async def read_allowlist(self, org_id: UUID, agent_project_id: UUID) -> EgressAllowlist | None:
         stmt = select(EgressAllowlists).where(
-            EgressAllowlists.org_id == org_id, EgressAllowlists.project_id == project_id
+            EgressAllowlists.org_id == org_id, EgressAllowlists.agent_project_id == agent_project_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -102,9 +102,11 @@ class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInte
                 db.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await db.commit()
 
-    async def read_credential(self, org_id: UUID, project_id: UUID) -> RepositoryCredential | None:
+    async def read_credential(
+        self, org_id: UUID, agent_project_id: UUID
+    ) -> RepositoryCredential | None:
         stmt = select(RepositoryCredentials).where(
-            RepositoryCredentials.id == project_id, RepositoryCredentials.org_id == org_id
+            RepositoryCredentials.id == agent_project_id, RepositoryCredentials.org_id == org_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -149,11 +151,11 @@ class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInte
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, RepositoryCredential) for row in rows]
 
-    async def purge_credentials(self, org_id: UUID, project_ids: list[UUID]) -> int:
-        if not project_ids:
+    async def purge_credentials(self, org_id: UUID, agent_project_ids: list[UUID]) -> int:
+        if not agent_project_ids:
             return 0
         stmt = delete(RepositoryCredentials).where(
-            RepositoryCredentials.org_id == org_id, RepositoryCredentials.id.in_(project_ids)
+            RepositoryCredentials.org_id == org_id, RepositoryCredentials.id.in_(agent_project_ids)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             gone = deleted(await session.execute(stmt))

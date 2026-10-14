@@ -98,7 +98,7 @@ class SetupItem(RootModel[str]):
 
 class AgentWorkspaceBaseBody(BaseModel):
     """
-    The workspace base a project's sessions' workspaces start from: the
+    The workspace base an agent project's sessions' workspaces start from: the
     image, the commands that set it up, run once in order, and the package
     registries the setup reaches. A setup that names a registry runs with
     open egress; one that names none reaches nothing. Registries serve a
@@ -210,22 +210,22 @@ class AskRequest(BaseModel):
 
 class AttachRequest(BaseModel):
     """
-    A kind the connector joins, for one project's sessions or every
+    A kind the connector joins, for one agent project's sessions or every
     session of the tenant, deferred until the agent loads it unless
     `deferred` is false.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     deferred: Annotated[bool | None, Field(title='Deferred')] = True
     kind: Annotated[str, Field(max_length=64, min_length=1, title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
 
 
 class AttachmentView(BaseModel):
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     deferred: Annotated[bool, Field(title='Deferred')]
     kind: Annotated[str, Field(title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
 
 
 class BudgetScopeKind(StrEnum):
@@ -816,7 +816,7 @@ class ExtendLeaseRequest(BaseModel):
 
 class FetchCredentialRequest(BaseModel):
     """
-    A read-only credential of the project's repository, as source control
+    A read-only credential of the agent project's repository, as source control
     takes it over HTTPS. It goes to the tenant's store and is never read
     back.
     """
@@ -829,10 +829,10 @@ class FetchCredentialRequest(BaseModel):
 
 class FetchCredentialView(BaseModel):
     """
-    That the project's repository has a fetch credential, and who gave it
+    That the agent project's repository has a fetch credential, and who gave it
     when. Never its value.
     """
-    project_id: Annotated[UUID, Field(title='Project Id')]
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]
@@ -1498,15 +1498,15 @@ class Permission(StrEnum):
 class PinRequest(BaseModel):
     """
     A kind manual: the name whose latest version is pinned to `kind`,
-    for the tenant's sessions of it, or with `project_id` those of one
-    project, where it wins over the tenant's.
+    for the tenant's sessions of it, or with `agent_project_id` those of one
+    agent project, where it wins over the tenant's.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
     name: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Name')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
 
 
 class PinView(BaseModel):
@@ -1515,12 +1515,12 @@ class PinView(BaseModel):
     made after it was pinned holds it; one made before keeps its own.
     """
     agent_playbook_id: Annotated[UUID, Field(title='Agent Playbook Id')]
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     name: Annotated[str, Field(title='Name')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]
@@ -1715,7 +1715,7 @@ class RaiseRequest(BaseModel):
     tokens: Annotated[Tokens2 | None, Field(title='Tokens')] = None
 
 
-class RenameProjectRequest(BaseModel):
+class RenameAgentProjectRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2216,14 +2216,14 @@ class Role2(RootModel[str]):
 class StartSessionRequest(BaseModel):
     """
     A session to start on the latest version of a kind the product runs,
-    in a project of the caller's tenant. Outside a local stack a session
-    starts in a project or not at all.
+    in an agent project of the caller's tenant. Outside a local stack a session
+    starts in an agent project or not at all.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
 
@@ -2243,17 +2243,17 @@ class StartUploadRequest(BaseModel):
 
 class StartValidationRequest(BaseModel):
     """
-    A check the project's policy declares, to run at `head`, the delivered
+    A check the agent project's policy declares, to run at `head`, the delivered
     commit, with the checks, fixtures, and runner taken from `base`. Each is
     a commit's full id, never a name that moves.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     base: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Base')]
     check: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Check')]
     head: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Head')]
-    project_id: Annotated[UUID, Field(title='Project Id')]
 
 
 class StepType(StrEnum):
@@ -2559,10 +2559,10 @@ class ValidationView(BaseModel):
     ran at and the version its checks came from, who ran it, the hash of
     the results it wrote, and its runs.
     """
+    agent_project: Annotated[str, Field(title='Agent Project')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     executor: Annotated[str, Field(title='Executor')]
     id: Annotated[UUID, Field(title='Id')]
-    project: Annotated[str, Field(title='Project')]
     purpose: RunPurpose
     records: Annotated[list[UUID], Field(title='Records')]
     results_sha256: Annotated[str, Field(title='Results Sha256')]
@@ -2630,14 +2630,14 @@ class WorkHandleView(BaseModel):
 
 class WorkProductView(BaseModel):
     """
-    What a session delivered: its project, its branch and whether the
+    What a session delivered: its agent project, its branch and whether the
     remote has held it, the pull requests and branches bound to it, and its
     latest accepted result. A session that never had a workspace has no
     branch.
     """
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     branch: Annotated[str | None, Field(title='Branch')]
     branch_seen: Annotated[bool, Field(title='Branch Seen')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     report: ReportView | None
     work: Annotated[list[WorkHandleView], Field(title='Work')]
 
@@ -2652,7 +2652,7 @@ class WorkStatus(StrEnum):
 class ActionBody(BaseModel):
     """
     `start_session`: start a session of `agent_kind` titled `title` in the
-    tenant's project `project_id`, and invoke the tenant's `agent_playbook` of
+    tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
     that name into it first, its latest version at each firing, when one is
     named; a name with no version is refused. `message_session`: send the brief to the
     standing session `session_id`; an enabled one is refused, since nothing
@@ -2665,10 +2665,10 @@ class ActionBody(BaseModel):
     )
     agent_kind: Annotated[AgentKind | None, Field(title='Agent Kind')] = None
     agent_playbook: Annotated[AgentPlaybook | None, Field(title='Agent Playbook')] = None
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     brief: Annotated[Brief | None, Field(title='Brief')] = None
     kind: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Kind')]
     params: Annotated[dict[str, JsonValue] | None, Field(title='Params')] = None
-    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     session_id: Annotated[UUID | None, Field(title='Session Id')] = None
     title: Annotated[Title | None, Field(title='Title')] = None
 
@@ -2676,10 +2676,10 @@ class ActionBody(BaseModel):
 class ActionView(BaseModel):
     agent_kind: Annotated[str | None, Field(title='Agent Kind')]
     agent_playbook: Annotated[str | None, Field(title='Agent Playbook')]
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     brief: Annotated[str | None, Field(title='Brief')]
     kind: Annotated[str, Field(title='Kind')]
     params: Annotated[dict[str, JsonValue], Field(title='Params')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     session_id: Annotated[UUID | None, Field(title='Session Id')]
     title: Annotated[str | None, Field(title='Title')]
 
@@ -2754,6 +2754,18 @@ class AgentAutomationView(BaseModel):
     trigger: TriggerView
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class AgentProjectView(BaseModel):
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    name: Annotated[str, Field(title='Name')]
+    repository: RepositoryView
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+    workspace_base: AgentWorkspaceBaseView | None
+    workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
 
 
 class AgentSessionView(BaseModel):
@@ -2973,10 +2985,26 @@ class ControlRequest(BaseModel):
     snapshot_id: Annotated[UUID | None, Field(title='Snapshot Id')] = None
 
 
+class CreateAgentProjectRequest(BaseModel):
+    """
+    An agent project and the one repository it binds, which never moves; whether
+    a kind that keeps its workspace by snapshots keeps it so here, False
+    keeping each of its sessions' workspaces a cache; and the workspace base
+    its sessions' workspaces start from, if it names one.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
+    repository: RepositoryBody
+    workspace_base: AgentWorkspaceBaseBody | None = None
+    workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
+
+
 class CreateBudgetRequest(BaseModel):
     """
     A budget over a scope and a window, in reference cost (millionths),
-    native tokens, or both. A person's and a project's scope is keyed by its
+    native tokens, or both. A person's and an agent project's scope is keyed by its
     id; a tenant's is the tenant itself, so its key is left out or names the
     tenant. A span window has a length in seconds, and no other window has.
     """
@@ -2989,22 +3017,6 @@ class CreateBudgetRequest(BaseModel):
     tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
     window_kind: WindowKind
     window_seconds: Annotated[WindowSeconds | None, Field(title='Window Seconds')] = None
-
-
-class CreateProjectRequest(BaseModel):
-    """
-    A project and the one repository it binds, which never moves; whether
-    a kind that keeps its workspace by snapshots keeps it so here, False
-    keeping each of its sessions' workspaces a cache; and the workspace base
-    its sessions' workspaces start from, if it names one.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
-    repository: RepositoryBody
-    workspace_base: AgentWorkspaceBaseBody | None = None
-    workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
 
 
 class CrossingBody(BaseModel):
@@ -3055,6 +3067,7 @@ class ExecutionView(BaseModel):
     a baseline or a validation run names its validation.
     """
     abort: Annotated[str | None, Field(title='Abort')]
+    agent_project: Annotated[str, Field(title='Agent Project')]
     cases: CasesView
     check: Annotated[str, Field(title='Check')]
     check_version: Annotated[str, Field(title='Check Version')]
@@ -3066,7 +3079,6 @@ class ExecutionView(BaseModel):
     image: Annotated[str, Field(title='Image')]
     isolation: Annotated[str, Field(title='Isolation')]
     outcome: RunOutcome
-    project: Annotated[str, Field(title='Project')]
     provenance: Provenance
     purpose: RunPurpose
     started_at: Annotated[AwareDatetime, Field(title='Started At')]
@@ -3598,18 +3610,6 @@ class PlacementView(BaseModel):
     waiting: Annotated[bool, Field(title='Waiting')]
 
 
-class ProjectView(BaseModel):
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    id: Annotated[UUID, Field(title='Id')]
-    name: Annotated[str, Field(title='Name')]
-    repository: RepositoryView
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    updated_by: Annotated[UUID, Field(title='Updated By')]
-    workspace_base: AgentWorkspaceBaseView | None
-    workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
-
-
 class ProviderKeyView(BaseModel):
     """
     What the tenant sees of a key: its reference, who added it and when,
@@ -3674,11 +3674,11 @@ class SessionRetentionView(BaseModel):
     report of the key it destroyed, none when the service holds the tenant's
     key alone and the platform's revocation is the destruction.
     """
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')]
     content_expired_at: Annotated[AwareDatetime | None, Field(title='Content Expired At')]
     content_expires_at: Annotated[AwareDatetime | None, Field(title='Content Expires At')]
     destruction: KeyDestructionView | None
     policy: RetentionPolicyView
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
     session_id: Annotated[UUID, Field(title='Session Id')]
     shape_expired_at: Annotated[AwareDatetime | None, Field(title='Shape Expired At')]
     shape_expires_at: Annotated[AwareDatetime | None, Field(title='Shape Expires At')]
@@ -3892,7 +3892,7 @@ class ValidationSessionView(BaseModel):
     and where it stands. Once its run is recorded, `passed` is the verdict
     and `run` is that run; both are null while it waits. The run passes
     when it passed, at least one of its cases did, and what served it meets
-    the strictest grade the project's policy asks of the check, a twin when
+    the strictest grade the agent project's policy asks of the check, a twin when
     no requirement names it: a run on a double, or with a dependency that
     was not there, never passes. A check a requirement rates runs its
     declared trials and passes only as that requirement judges them
@@ -3901,6 +3901,7 @@ class ValidationSessionView(BaseModel):
     whose check cannot run here, for good, is `refused`: it never passes,
     `reason` says why it could not run, and `run` is null.
     """
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
     base: Annotated[str, Field(title='Base')]
     check: Annotated[str, Field(title='Check')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
@@ -3909,7 +3910,6 @@ class ValidationSessionView(BaseModel):
     head: Annotated[str, Field(title='Head')]
     id: Annotated[UUID, Field(title='Id')]
     passed: Annotated[bool | None, Field(title='Passed')]
-    project_id: Annotated[UUID, Field(title='Project Id')]
     reason: Annotated[str | None, Field(title='Reason')]
     run: ExecutionView | None
     status: ValidationStatus
@@ -3967,6 +3967,22 @@ class AgentPlaybookView(BaseModel):
     name: Annotated[str, Field(title='Name')]
     published_by: Annotated[UUID, Field(title='Published By')]
     version: Annotated[int, Field(title='Version')]
+
+
+class AgentProjectRetentionBody(BaseModel):
+    """
+    What one agent project of the tenant narrows; it never widens the tenant's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyBody
+
+
+class AgentProjectRetentionView(BaseModel):
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyView
 
 
 class AgentSessionPageView(BaseModel):
@@ -4203,22 +4219,6 @@ class MembershipPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
-class ProjectRetentionBody(BaseModel):
-    """
-    What one project of the tenant narrows; it never widens the tenant's.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    policy: RetentionPolicyBody
-    project_id: Annotated[UUID, Field(title='Project Id')]
-
-
-class ProjectRetentionView(BaseModel):
-    policy: RetentionPolicyView
-    project_id: Annotated[UUID, Field(title='Project Id')]
-
-
 class RetentionRequest(BaseModel):
     """
     The tenant's whole policy, written over the version `If-Match` names,
@@ -4227,16 +4227,16 @@ class RetentionRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_projects: Annotated[list[AgentProjectRetentionBody] | None, Field(max_length=500, title='Agent Projects')] = None
     policy: RetentionPolicyBody | None = None
-    projects: Annotated[list[ProjectRetentionBody] | None, Field(max_length=500, title='Projects')] = None
 
 
 class RetentionView(BaseModel):
     """
     The tenant's policy; version 0, the loosest, until its first write.
     """
+    agent_projects: Annotated[list[AgentProjectRetentionView], Field(title='Agent Projects')]
     policy: RetentionPolicyView
-    projects: Annotated[list[ProjectRetentionView], Field(title='Projects')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
     version: Annotated[int, Field(title='Version')]

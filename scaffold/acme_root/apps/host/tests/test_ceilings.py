@@ -13,10 +13,10 @@ from acme.apps.host.ceilings import Ceilings, HostServer, ask_of, load, refusals
 from acme.apps.host.config import BadSetting
 from acme.client.types import ClaimedWorkView, IsolationMode
 
-PROJECT = uuid4()
+AGENT_PROJECT = uuid4()
 PROBED = frozenset({IsolationMode.container, IsolationMode.directory})
 CEILINGS = Ceilings(
-    projects=frozenset({PROJECT}),
+    agent_projects=frozenset({AGENT_PROJECT}),
     min_isolation=IsolationMode.container,
     egress=frozenset({"github.com:443"}),
     readable=("/srv/work",),
@@ -24,7 +24,7 @@ CEILINGS = Ceilings(
 )
 FITS: dict[str, Any] = {
     "host_id": str(uuid4()),
-    "project_id": str(PROJECT),
+    "agent_project_id": str(AGENT_PROJECT),
     "isolation": "container",
     "egress": ["github.com:443"],
     "reads": ["/srv/work/repo/README.md"],
@@ -54,19 +54,19 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
     with pytest.raises(BadSetting):
         load(path)
     path.write_text(
-        f'projects = ["{PROJECT}"]\nmin_isolation = "vm"\negress = "open"\n'
+        f'agent_projects = ["{AGENT_PROJECT}"]\nmin_isolation = "vm"\negress = "open"\n'
         'readable = ["/srv/work/"]\npeople_commands = true\nitems_at_once = 8\n'
     )
     assert load(path) == Ceilings(
-        projects=frozenset({PROJECT}),
+        agent_projects=frozenset({AGENT_PROJECT}),
         min_isolation=IsolationMode.vm,
         egress=None,
         readable=("/srv/work",),
         people_commands=True,
         items_at_once=8,
     )
-    path.write_text('projects = "all"\n')
-    assert load(path) == Ceilings(projects=None)
+    path.write_text('agent_projects = "all"\n')
+    assert load(path) == Ceilings(agent_projects=None)
     for wrong in (
         'readable = ["srv"]\n',
         'min_isolation = "none"\n',
@@ -122,7 +122,7 @@ def test_an_item_within_every_ceiling_runs() -> None:
 @pytest.mark.parametrize(
     ("change", "reason"),
     [
-        ({"project_id": str(uuid4())}, "a project this host does not serve"),
+        ({"agent_project_id": str(uuid4())}, "an agent project this host does not serve"),
         ({"isolation": "directory"}, "isolation directory below this host's minimum"),
         ({"isolation": "vm"}, "isolation vm this host did not probe"),
         ({"egress": ["github.com:443", "example.test:443"]}, "egress beyond this host's allowlist"),
@@ -137,7 +137,7 @@ def test_each_ceiling_refuses_what_passes_it(change: dict[str, Any], reason: str
 
 def test_an_item_that_says_too_little_is_read_as_the_widest_ask() -> None:
     assert refused({"host_id": str(uuid4())}) == [
-        "a project this host does not serve",
+        "an agent project this host does not serve",
         "no isolation named",
         "egress beyond this host's allowlist",
         "a read outside this host's readable paths",
@@ -163,7 +163,7 @@ def test_nothing_an_item_carries_widens_a_ceiling() -> None:
     widening = {
         **FITS,
         "by_person": True,
-        "ceilings": {"projects": "all", "people_commands": True},
+        "ceilings": {"agent_projects": "all", "people_commands": True},
         "min_isolation": "directory",
         "people_commands": True,
         "readable": ["/"],

@@ -34,26 +34,27 @@ class AgentKnowledgeStorageMemoryImpl(MemoryStorageBase, AgentKnowledgeStorageIn
         return [e for e in rows if after is None or e.id > after][:limit]
 
     async def read_reachable(
-        self, org_id: UUID, project_id: UUID | None, after: UUID | None, limit: int
+        self, org_id: UUID, agent_project_id: UUID | None, after: UUID | None, limit: int
     ) -> list[AgentKnowledge]:
         rows = [
             e
             for e in self._rows(self._entries, org_id)
-            if e.status is AgentKnowledgeStatus.REVIEWED and e.project_id in (None, project_id)
+            if e.status is AgentKnowledgeStatus.REVIEWED
+            and e.agent_project_id in (None, agent_project_id)
         ]
         return sorted((e for e in rows if after is None or e.id > after), key=lambda e: e.id)[
             :limit
         ]
 
     async def read_by_slug(
-        self, org_id: UUID, project_id: UUID | None, slug: str
+        self, org_id: UUID, agent_project_id: UUID | None, slug: str
     ) -> AgentKnowledge | None:
         found = [
             e
             for e in self._rows(self._entries, org_id)
             if e.slug == slug
             and e.status is AgentKnowledgeStatus.REVIEWED
-            and e.project_id in (None, project_id)
+            and e.agent_project_id in (None, agent_project_id)
         ]
         return min(found, key=lambda e: e.id) if found else None
 

@@ -11,13 +11,14 @@ relay that reaches the host inside it:
     managers = build_managers(storage, infra, ..., attached_toolsets=layer.attached)
     connectors = layer.build(managers)
 
-A session's project is read from the projects' rows."""
+A session's agent project is read from the agent projects' rows."""
 
 from collections.abc import Callable
 from datetime import datetime
 
 from acme.infra.root import InfraInterface
 from acme.integrations.mcp import McpClientInterface
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.attached import Attached, AttachedToolsetsInterface
 from acme.om.base import utcnow
@@ -27,7 +28,6 @@ from acme.om.connectors.impl.toolsets import ConnectorToolsetsImpl, HostCall
 from acme.om.connectors.manager import ConnectorsManagerInterface
 from acme.om.context import TenantContext
 from acme.om.levers.rules import reach_of
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.mcp import McpToolImpl
@@ -49,7 +49,7 @@ def build_connectors(
         client,
         infra.get_secrets(),
         managers.kinds,
-        SessionProjectsBoundImpl(storage.get_project_storage()),
+        SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         managers.tenancy,
         managers.outbox,
         options or ConnectorsOptions(),
@@ -117,7 +117,7 @@ class ConnectorsLayer:
             toolsets = ConnectorToolsetsImpl(
                 self._storage.get_connector_storage(),
                 managers.kinds,
-                SessionProjectsBoundImpl(self._storage.get_project_storage()),
+                SessionAgentProjectsBoundImpl(self._storage.get_agent_project_storage()),
                 self._placement,
                 self._client,
                 self._infra.get_secrets(),

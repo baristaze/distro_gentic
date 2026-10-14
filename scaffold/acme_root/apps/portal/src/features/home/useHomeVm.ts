@@ -4,38 +4,38 @@ import { runtimeConfig } from "../../app/config";
 import { errorMessage } from "../../app/errorMessage";
 import { useSlot } from "../../app/slot";
 import { useSendMessage, useStartSession } from "../../queries/agentSessions";
-import { useProjects } from "../../queries/projects";
+import { useAgentProjects } from "../../queries/agentProjects";
 import { useMe } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
-import { NO_PROJECT, projectRequired } from "../sessions/sessionsModel";
-import { chosenAgent, chosenProject, composerStart } from "./homeModel";
+import { NO_AGENT_PROJECT, agentProjectRequired } from "../sessions/sessionsModel";
+import { chosenAgent, chosenAgentProject, composerStart } from "./homeModel";
 
 /** Home's composer: a prompt, the agent the slot offers (its first by
- * default), and the project it works in. Send starts the session, sends it
+ * default), and the agent project it works in. Send starts the session, sends it
  * the prompt, and opens it. A member who may not write reads the prompt's
  * examples and starts nothing. */
 export function useHomeVm(initialPrompt: string) {
   const slot = useSlot();
   const me = useMe();
   const mayWrite = me.data?.permissions.includes("write") ?? false;
-  const projects = useProjects(mayWrite);
-  const required = projectRequired(runtimeConfig().environment);
+  const agentProjects = useAgentProjects(mayWrite);
+  const required = agentProjectRequired(runtimeConfig().environment);
   const start = useStartSession();
   const send = useSendMessage();
   const navigate = useNavigate();
   const notify = useNoticesStore((s) => s.notify);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [kind, setKind] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   const agent = chosenAgent(slot.agents, kind);
-  const project = chosenProject(projects.data ?? null, required, projectId);
-  const count = projects.data?.length ?? 0;
+  const agentProject = chosenAgentProject(agentProjects.data ?? null, required, agentProjectId);
+  const count = agentProjects.data?.length ?? 0;
 
   const submit = () => {
     if (start.isPending || send.isPending) return;
-    const made = composerStart({ prompt, kind: agent?.kind ?? "", projectId: project?.id ?? "" }, { required, count });
+    const made = composerStart({ prompt, kind: agent?.kind ?? "", agentProjectId: agentProject?.id ?? "" }, { required, count });
     if ("problem" in made) {
       setProblem(made.problem);
       return;
@@ -68,16 +68,16 @@ export function useHomeVm(initialPrompt: string) {
     agent,
     setKind,
     required,
-    projects: projects.data ?? [],
-    project,
-    setProjectId,
+    agentProjects: agentProjects.data ?? [],
+    agentProject,
+    setAgentProjectId,
     // What the composer says: the last start's problem, or why none can start.
     problem:
       problem ??
-      (projects.error
-        ? errorMessage(projects.error, "The projects could not be read.")
-        : required && projects.data !== undefined && count === 0
-          ? NO_PROJECT
+      (agentProjects.error
+        ? errorMessage(agentProjects.error, "The agent projects could not be read.")
+        : required && agentProjects.data !== undefined && count === 0
+          ? NO_AGENT_PROJECT
           : null),
     submit,
     starting: start.isPending || send.isPending,

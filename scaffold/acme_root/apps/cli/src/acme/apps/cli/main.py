@@ -431,17 +431,17 @@ FOLLOW_SECONDS = 1.0
 def start_session(
     kind: Annotated[str, typer.Argument(help="The agent kind the session runs.")],
     title: Annotated[str, typer.Argument(help="What the session is about.")],
-    project: Annotated[
+    agent_project: Annotated[
         UUID | None,
-        typer.Option(help="The project it works in; a stack outside local refuses none."),
+        typer.Option(help="The agent project it works in; a stack outside local refuses none."),
     ] = None,
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Start a session on a kind, in a project. It is idle until a message wakes it."""
+    """Start a session on a kind, in an agent project. It is idle until a message wakes it."""
 
     async def go(client: ApiClient) -> None:
-        started = await client.start_agent_session(kind, title, project_id=project)
+        started = await client.start_agent_session(kind, title, agent_project_id=agent_project)
         if as_json:
             typer.echo(started.model_dump_json(indent=2))
         else:
@@ -575,14 +575,14 @@ def steps(
 
 # A tenant's configuration
 
-project_app = typer.Typer(
-    help="A project: the repository a session works on, and its fetch credential.",
+agent_project_app = typer.Typer(
+    help="An agent project: the repository a session works on, and its fetch credential.",
     no_args_is_help=True,
 )
-app.add_typer(project_app, name="project")
+app.add_typer(agent_project_app, name="agent-project")
 
-ProjectId = Annotated[
-    UUID, typer.Argument(help="The project's id, as `project create` printed it.")
+AgentProjectId = Annotated[
+    UUID, typer.Argument(help="The agent project's id, as `agent_project create` printed it.")
 ]
 
 
@@ -594,20 +594,20 @@ def repository_of(spelled: str) -> tuple[str, str]:
     return host, path
 
 
-@project_app.command("create")
-def create_project(
-    name: Annotated[str, typer.Argument(help="What the project is called.")],
+@agent_project_app.command("create")
+def create_agent_project(
+    name: Annotated[str, typer.Argument(help="What the agent project is called.")],
     repository: Annotated[
         str, typer.Argument(help="The repository it binds, never moved: github.com/octo/reports.")
     ],
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Create a project bound to its repository. An owner's or an admin's."""
+    """Create an agent project bound to its repository. An owner's or an admin's."""
     host, path = repository_of(repository)
 
     async def go(client: ApiClient) -> None:
-        made = await client.create_project(name, host, path)
+        made = await client.create_agent_project(name, host, path)
         if as_json:
             typer.echo(made.model_dump_json(indent=2))
         else:
@@ -616,12 +616,12 @@ def create_project(
     run(go, api)
 
 
-@project_app.command("list")
-def list_projects(as_json: Json = False, api: Api = None) -> None:
-    """The org's projects, one a line."""
+@agent_project_app.command("list")
+def list_agent_projects(as_json: Json = False, api: Api = None) -> None:
+    """The org's agent projects, one a line."""
 
     async def go(client: ApiClient) -> None:
-        found = await client.projects()
+        found = await client.agent_projects()
         if as_json:
             typer.echo(json.dumps([p.model_dump(mode="json") for p in found], indent=2))
             return
@@ -631,9 +631,9 @@ def list_projects(as_json: Json = False, api: Api = None) -> None:
     run(go, api)
 
 
-@project_app.command("credential")
+@agent_project_app.command("credential")
 def put_fetch_credential(
-    project_id: ProjectId,
+    agent_project_id: AgentProjectId,
     username: Annotated[str, typer.Option(help="The user name the repository's host takes.")],
     password: Annotated[
         str,
@@ -646,12 +646,12 @@ def put_fetch_credential(
     ],
     api: Api = None,
 ) -> None:
-    """Give the project's repository a read-only fetch credential. It is
+    """Give the agent project's repository a read-only fetch credential. It is
     written and never read back."""
 
     async def go(client: ApiClient) -> None:
-        given = await client.put_fetch_credential(project_id, username, password)
-        typer.echo(f"fetch credential {given.version} of {given.project_id} is set")
+        given = await client.put_fetch_credential(agent_project_id, username, password)
+        typer.echo(f"fetch credential {given.version} of {given.agent_project_id} is set")
 
     run(go, api)
 
@@ -717,8 +717,9 @@ ConnectorId = Annotated[
     UUID, typer.Argument(help="The connector's id, as `connector connect` printed it.")
 ]
 ConnectorKind = Annotated[str, typer.Argument(help="The agent kind, such as software_engineer.")]
-ProjectOption = Annotated[
-    UUID | None, typer.Option("--project", help="One project's sessions alone; none for every one.")
+AgentProjectOption = Annotated[
+    UUID | None,
+    typer.Option("--agent-project", help="One agent project's sessions alone; none for every one."),
 ]
 
 
@@ -846,7 +847,7 @@ def review_connector(
 def attach_connector(
     connector_id: ConnectorId,
     kind: ConnectorKind,
-    project: ProjectOption = None,
+    agent_project: AgentProjectOption = None,
     held: Annotated[
         bool, typer.Option(help="In the registry from the start, not waiting for a load.")
     ] = False,
@@ -856,7 +857,7 @@ def attach_connector(
 
     async def go(client: ApiClient) -> None:
         attached = await client.attach_connector(
-            connector_id, kind, project_id=project, deferred=not held
+            connector_id, kind, agent_project_id=agent_project, deferred=not held
         )
         typer.echo(f"{attached.name} is attached to {kind}")
 
@@ -865,13 +866,16 @@ def attach_connector(
 
 @connector_app.command("detach")
 def detach_connector(
-    connector_id: ConnectorId, kind: ConnectorKind, project: ProjectOption = None, api: Api = None
+    connector_id: ConnectorId,
+    kind: ConnectorKind,
+    agent_project: AgentProjectOption = None,
+    api: Api = None,
 ) -> None:
     """Take the connector from a kind's next sessions. A session that holds it
     keeps it."""
 
     async def go(client: ApiClient) -> None:
-        detached = await client.detach_connector(connector_id, kind, project_id=project)
+        detached = await client.detach_connector(connector_id, kind, agent_project_id=agent_project)
         typer.echo(f"{detached.name} is detached from {kind}")
 
     run(go, api)
@@ -889,14 +893,20 @@ AgentPlaybookName = Annotated[
     str, typer.Argument(help="The agent playbook's name; its latest version.")
 ]
 KindName = Annotated[str, typer.Argument(help="The agent kind.")]
-PinProject = Annotated[
+PinAgentProject = Annotated[
     UUID | None,
-    typer.Option("--project", help="One project's sessions alone, not the org's every one."),
+    typer.Option(
+        "--agent-project", help="One agent project's sessions alone, not the org's every one."
+    ),
 ]
 
 
 def pin_line(pin: PinView) -> str:
-    scope = "every project" if pin.project_id is None else f"project {pin.project_id}"
+    scope = (
+        "every agent project"
+        if pin.agent_project_id is None
+        else f"agent project {pin.agent_project_id}"
+    )
     return f"{pin.kind}  {pin.name} {pin.version}  {scope}"
 
 
@@ -917,23 +927,27 @@ def invoke_agent_playbook(
 def pin_agent_playbook(
     kind: KindName,
     name: AgentPlaybookName,
-    project: PinProject = None,
+    agent_project: PinAgentProject = None,
     as_json: Json = False,
     api: Api = None,
 ) -> None:
     """Pin an agent playbook to a kind as its kind manual, in person. Each session of the
     kind started from now on holds it as its standing text; one started
     before keeps its own."""
-    pinned = run(lambda client: client.pin_agent_playbook(kind, name, project_id=project), api)
+    pinned = run(
+        lambda client: client.pin_agent_playbook(kind, name, agent_project_id=agent_project), api
+    )
     typer.echo(pinned.model_dump_json(indent=2) if as_json else f"pinned {pin_line(pinned)}")
 
 
 @agent_playbook_app.command("unpin")
 def unpin_agent_playbook(
-    kind: KindName, project: PinProject = None, as_json: Json = False, api: Api = None
+    kind: KindName, agent_project: PinAgentProject = None, as_json: Json = False, api: Api = None
 ) -> None:
     """Take a kind manual away, in person. A session started with it keeps it."""
-    unpinned = run(lambda client: client.unpin_agent_playbook(kind, project_id=project), api)
+    unpinned = run(
+        lambda client: client.unpin_agent_playbook(kind, agent_project_id=agent_project), api
+    )
     typer.echo(unpinned.model_dump_json(indent=2) if as_json else f"unpinned {pin_line(unpinned)}")
 
 

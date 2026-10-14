@@ -1,4 +1,4 @@
-"""What the acceptance suites share: a scenario on the `checkout` project, an
+"""What the acceptance suites share: a scenario on the `checkout` agent project, an
 executor whose visible check fails at the base and passes once the change
 is in, and a scripted run, the path a session takes through the evidence,
 one step at a time, so each case can leave a link out."""
@@ -35,16 +35,16 @@ BASE = "base0"
 HEAD = "c0ffee"
 
 TREE = frozenset({"src/export.py", "src/pages.py", "tests/test_export.py", "service/app.py"})
-"""The project's repository at the base: what a session's workspace checks
+"""The agent project's repository at the base: what a session's workspace checks
 out."""
 
 SUITE = "suites/orders-vanish@1"
 SUITES = {SUITE: frozenset({"complete_suite.py"})}
 """Each hidden suite's own source and the files it holds: a store apart
-from the project's repository, which the executor fetches from only when
+from the agent project's repository, which the executor fetches from only when
 it runs the suite, and no workspace holds."""
-SUITE_PROJECT = "checkout-suites"
-"""The project whose repository holds the hidden suites, apart from the
+SUITE_AGENT_PROJECT = "checkout-suites"
+"""The agent project whose repository holds the hidden suites, apart from the
 scenario's."""
 
 COMPLETE = CheckDeclaration(
@@ -57,13 +57,13 @@ COMPLETE = CheckDeclaration(
 
 EXPORT = Scenario(
     name="orders-vanish",
-    project="checkout",
+    agent_project="checkout",
     base=BASE,
     objective="Some orders never reach the nightly export. Make every one of them reach it.",
     root_cause=("page boundary",),
     visible=("unit",),
     hidden=HiddenSuite(
-        project=SUITE_PROJECT,
+        agent_project=SUITE_AGENT_PROJECT,
         source=SUITE,
         paths=("complete_suite.py",),
         checks=(COMPLETE,),
@@ -71,7 +71,7 @@ EXPORT = Scenario(
     ),
     forbidden=("tests/**", "service/**"),
 )
-"""The defect is a page boundary the objective never names. The project's
+"""The defect is a page boundary the objective never names. The agent project's
 `unit` check shows it at the base; the hidden `export-complete` suite
 judges the fix by behavior, from a source of its own; the checks and the
 service under test are off limits."""
@@ -82,7 +82,7 @@ def surfaces(**extra: Mapping[str, str]) -> dict[Surface, dict[str, str]]:
     read = {
         Surface.PROMPT: {"kind": "You deliver the work, and submit it with its evidence."},
         Surface.AGENT_KNOWLEDGE: {"export": "The export runs nightly over every order."},
-        Surface.TOOL_SOURCE: {"validate": "Runs the project's checks on a fresh executor."},
+        Surface.TOOL_SOURCE: {"validate": "Runs the agent project's checks on a fresh executor."},
         Surface.PULL_REQUEST: {"description": "Every order reaches the export again."},
     }
     for name, items in extra.items():
@@ -96,7 +96,7 @@ class DefectExecutor(ScriptedExecutor):
     fails, and the hidden suite passes unless `hidden_passes` says not. It
     finds the hidden suite only in the suite's own source, with its paths
     protected and the scenario's forbidden paths taken from its base: asked
-    for it any other way, as from the project's tree or with the head's
+    for it any other way, as from the agent project's tree or with the head's
     copy of what scores it, its check fails."""
 
     broken: frozenset[str] = frozenset({BASE})
@@ -106,7 +106,7 @@ class DefectExecutor(ScriptedExecutor):
         broken = request.version in self.broken
         hidden = (
             self.hidden_passes
-            and request.source_project == SUITE_PROJECT
+            and request.source_agent_project == SUITE_AGENT_PROJECT
             and request.source in SUITES
             and request.protected == EXPORT.hidden.paths
             and (request.base, request.untouched) == (EXPORT.base, EXPORT.forbidden)
@@ -160,7 +160,7 @@ class ScriptedRun:
         )
 
     def deliver(self, head: str = BASE, changed: tuple[str, ...] = ()) -> None:
-        work_product = WorkProduct(project="checkout", base=BASE, head=head, changed=changed)
+        work_product = WorkProduct(agent_project="checkout", base=BASE, head=head, changed=changed)
         self.evidence.work.deliver(self.ctx.org_id, self.session, work_product)
 
     async def baseline(self) -> Validation:

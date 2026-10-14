@@ -1,5 +1,5 @@
 """The workspace storage contract: each session's pinned workspace, each
-project's egress allowlist, and the record of a project's fetch
+agent project's egress allowlist, and the record of an agent project's fetch
 credential. The cases named in `CROSS_TENANT_CASES` are the
 tenant fence's evidence: each one presents another tenant's identifier and
 asserts that nothing is found and nothing changes."""
@@ -55,17 +55,19 @@ def make_workspace() -> AgentSessionWorkspace:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         level=IsolationMode.CONTAINER,
         limits=ResourceLimits(cpus=2, memory_mb=4096),
         egress=EgressMode.ALLOWLIST,
         rules=(RULE,),
-        egress_source="a project's allowlist at version 1",
+        egress_source="an agent project's allowlist at version 1",
         branch=f"sessions/{session}",
     )
 
 
-def make_allowlist(*, project_id: UUID | None = None, open_egress: bool = False) -> EgressAllowlist:
+def make_allowlist(
+    *, agent_project_id: UUID | None = None, open_egress: bool = False
+) -> EgressAllowlist:
     now = utcnow()
     actor = new_id()
     return EgressAllowlist(
@@ -74,7 +76,7 @@ def make_allowlist(*, project_id: UUID | None = None, open_egress: bool = False)
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        project_id=project_id or new_id(),
+        agent_project_id=agent_project_id or new_id(),
         rules=() if open_egress else (RULE,),
         open=open_egress,
         reason="the build reaches the public internet" if open_egress else None,
@@ -178,21 +180,21 @@ class AgentWorkspaceStorageContract:
             )
         assert await storage.read_workspace(org_a, workspace.id) == workspace
 
-    # A project's allowlist.
+    # An agent project's allowlist.
 
     async def test_an_allowlist_round_trips(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
     ) -> None:
         org = new_id()
         allowlist = make_allowlist()
-        assert await storage.read_allowlist(org, allowlist.project_id) is None
+        assert await storage.read_allowlist(org, allowlist.agent_project_id) is None
         assert await storage.create_allowlist(org, allowlist, rows)
-        assert await storage.read_allowlist(org, allowlist.project_id) == allowlist
+        assert await storage.read_allowlist(org, allowlist.agent_project_id) == allowlist
         opened = make_allowlist(open_egress=True)
         assert await storage.create_allowlist(org, opened, rows)
-        assert await storage.read_allowlist(org, opened.project_id) == opened
+        assert await storage.read_allowlist(org, opened.agent_project_id) == opened
 
-    async def test_a_project_holds_one_allowlist(
+    async def test_an_agent_project_holds_one_allowlist(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
     ) -> None:
         org = new_id()
@@ -201,9 +203,9 @@ class AgentWorkspaceStorageContract:
         assert not await storage.create_allowlist(org, first, rows)
         with pytest.raises(UniqueKeyTaken):
             await storage.create_allowlist(
-                org, make_allowlist(project_id=first.project_id, open_egress=True), rows
+                org, make_allowlist(agent_project_id=first.agent_project_id, open_egress=True), rows
             )
-        assert await storage.read_allowlist(org, first.project_id) == first
+        assert await storage.read_allowlist(org, first.agent_project_id) == first
 
     async def test_create_allowlist_under_another_tenant_is_not_read_here(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
@@ -211,18 +213,18 @@ class AgentWorkspaceStorageContract:
         org_a, org_b = new_id(), new_id()
         allowlist = make_allowlist()
         assert await storage.create_allowlist(org_a, allowlist, rows)
-        assert await storage.read_allowlist(org_b, allowlist.project_id) is None
-        # Another tenant's project of the same id is its own.
-        theirs = make_allowlist(project_id=allowlist.project_id, open_egress=True)
+        assert await storage.read_allowlist(org_b, allowlist.agent_project_id) is None
+        # Another tenant's agent project of the same id is its own.
+        theirs = make_allowlist(agent_project_id=allowlist.agent_project_id, open_egress=True)
         assert await storage.create_allowlist(org_b, theirs, rows)
-        assert await storage.read_allowlist(org_a, allowlist.project_id) == allowlist
+        assert await storage.read_allowlist(org_a, allowlist.agent_project_id) == allowlist
 
     async def test_read_allowlist_of_another_tenant_finds_nothing(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
     ) -> None:
         allowlist = make_allowlist()
         assert await storage.create_allowlist(new_id(), allowlist, rows)
-        assert await storage.read_allowlist(new_id(), allowlist.project_id) is None
+        assert await storage.read_allowlist(new_id(), allowlist.agent_project_id) is None
 
     async def test_write_allowlist_is_a_compare_and_set(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
@@ -234,10 +236,10 @@ class AgentWorkspaceStorageContract:
             update={"rules": (), "open": True, "reason": "a recorded choice", "version": 2}
         )
         await storage.write_allowlist(org, opened, 1, rows)
-        assert await storage.read_allowlist(org, allowlist.project_id) == opened
+        assert await storage.read_allowlist(org, allowlist.agent_project_id) == opened
         with pytest.raises(PreconditionFailed):
             await storage.write_allowlist(org, opened.model_copy(update={"version": 3}), 1, rows)
-        assert await storage.read_allowlist(org, allowlist.project_id) == opened
+        assert await storage.read_allowlist(org, allowlist.agent_project_id) == opened
 
     async def test_write_allowlist_of_another_tenant_changes_nothing(
         self, storage: AgentWorkspaceStorageInterface, rows: tuple[OutboxRow, ...]
@@ -249,7 +251,7 @@ class AgentWorkspaceStorageContract:
             await storage.write_allowlist(
                 org_b, allowlist.model_copy(update={"version": 2}), 1, rows
             )
-        assert await storage.read_allowlist(org_a, allowlist.project_id) == allowlist
+        assert await storage.read_allowlist(org_a, allowlist.agent_project_id) == allowlist
 
     # The sweep.
 
@@ -336,13 +338,13 @@ class AgentWorkspaceStorageContract:
         assert await storage.purge_tenant(gone, 10) == 2
         assert await storage.purge_tenant(gone, 10) == 0
         assert await storage.read_workspace(kept, stays.id) == stays
-        assert await storage.read_allowlist(kept, listed.project_id) == listed
+        assert await storage.read_allowlist(kept, listed.agent_project_id) == listed
 
 
-def make_credential(project_id: UUID | None = None) -> RepositoryCredential:
+def make_credential(agent_project_id: UUID | None = None) -> RepositoryCredential:
     now, actor = utcnow(), new_id()
     return RepositoryCredential(
-        id=project_id or new_id(),
+        id=agent_project_id or new_id(),
         created_at=now,
         updated_at=now,
         created_by=actor,
@@ -351,8 +353,8 @@ def make_credential(project_id: UUID | None = None) -> RepositoryCredential:
 
 
 class RepositoryCredentialContract:
-    """The record of a project's fetch credential: one a project, under the
-    project's id, and the tenant's alone."""
+    """The record of an agent project's fetch credential: one an agent project, under the
+    agent project's id, and the tenant's alone."""
 
     @pytest.fixture
     def storage(self) -> AgentWorkspaceStorageInterface:

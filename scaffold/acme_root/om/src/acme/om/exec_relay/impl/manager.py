@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from acme.infra.observability import OUTCOMES
 from acme.infra.workspaces import IsolationSpec
+from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
 from acme.om.context import AppType, Permission, RequestContext, TenantContext
@@ -66,7 +67,6 @@ from acme.om.placement.types.work import (
     WorkspaceOperation,
     WorkspacePayload,
 )
-from acme.om.projects import ProjectsManagerInterface
 from acme.om.retention.crossing import Crossing, CrossingKind, CrossingRefused, verified
 from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
@@ -143,7 +143,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         steps: StepsManagerInterface,
         tenancy: TenancyManagerInterface,
         hosts: HostsManagerInterface,
-        projects: ProjectsManagerInterface,
+        agent_projects: AgentProjectsManagerInterface,
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
         options: ExecRelayOptions,
@@ -157,7 +157,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self._steps = steps
         self._tenancy = tenancy
         self._hosts = hosts
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._relay = relay
         self._seal = seal
         self._options = options
@@ -348,7 +348,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if binding is not None and await self._holds(ctx, session_id, binding.host_id):
             held_by = binding.host_id
         isolation, egress, _ = asks(spec, "")
-        project = await self._projects.project_of(ctx, session_id)
+        agent_project = await self._agent_projects.agent_project_of(ctx, session_id)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=placed.pool.id,
@@ -357,7 +357,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             spec=spec,
             isolation=isolation,
             egress=egress,
-            project_id=None if project is None else project.id,
+            agent_project_id=None if agent_project is None else agent_project.id,
             snapshot=snapshot,
         )
         item_id = await self._enqueue_workspace(ctx, session_id, payload)
@@ -925,14 +925,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         instance_of: UUID | None,
     ) -> None:
         """A prepare of the workspace under `target` on the pool's lane, held
-        to the project of the session it is for."""
+        to the agent project of the session it is for."""
         # Where on the host it is made is the host's to choose, so a prepare
         # reads no path of the host's. One that may build its base first
         # asks for what the base's setup reaches.
         isolation, egress, _ = asks(spec, "")
         if setup_reaches(spec):
             egress = None
-        project = await self._projects.project_of(ctx, instance_of or target)
+        agent_project = await self._agent_projects.agent_project_of(ctx, instance_of or target)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=pool_id,
@@ -940,7 +940,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             spec=spec,
             isolation=isolation,
             egress=egress,
-            project_id=None if project is None else project.id,
+            agent_project_id=None if agent_project is None else agent_project.id,
             instance_of=instance_of,
         )
         await self._enqueue_workspace(ctx, target, payload)
@@ -1130,11 +1130,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         """The item's queue row, on the lane of the host that holds the
         workspace. An unsafe one is claimed once: a lost lease fails it in
         the queue's own sweep, never back to the queue. It names the
-        project of `owner`, the session the workspace is or was made for,
+        agent project of `owner`, the session the workspace is or was made for,
         which a host's owner may hold its work to, and whether a person sent
         it by hand, which the owner may refuse."""
         isolation, egress, reads = asks(item.spec, item.location)
-        project = await self._projects.project_of(ctx, owner)
+        agent_project = await self._agent_projects.agent_project_of(ctx, owner)
         payload = ExecPayload(
             host_id=item.host_id,
             item_id=item.id,
@@ -1147,7 +1147,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             egress=egress,
             reads=reads,
             by_person=by_person,
-            project_id=None if project is None else project.id,
+            agent_project_id=None if agent_project is None else agent_project.id,
         )
         now = self._clock()
         await self._work.enqueue(

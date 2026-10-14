@@ -45,7 +45,7 @@ export function AgentAutomationsPage() {
             label="New agent automation"
             draft={vm.draft}
             setDraft={vm.setDraft}
-            projectOptions={vm.projectOptions}
+            agentProjectOptions={vm.agentProjectOptions}
             problem={vm.problem}
             busy={vm.creating}
             submitLabel="Make the agent automation"

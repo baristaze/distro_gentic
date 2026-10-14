@@ -8,21 +8,21 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_project_storage import in_agent_project
 from contracts.evidence import ScriptedExecutor, checkout_policy, delivered
 from contracts.evidence_storage import make_record
 from contracts.loops import loop_over, reply, said
-from contracts.project_storage import in_project
 from contracts.tools import result_text
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import build_managers
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import AcceptedResult, LoopOutcome, ToolResponseHeader
@@ -84,15 +84,17 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
         result_gate=ResultGateEvidenceImpl(
             storage.get_evidence_storage(),
             work,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         executor=ScriptedExecutor(),
         work_product=work,
     )
     evidence = loop.managers.evidence
     session_id = await loop.start("delivery")
-    project = await in_project(storage.get_project_storage(), owner.org_id, session_id)
-    await evidence.write_policy(owner, checkout_policy(project=project))
+    agent_project = await in_agent_project(
+        storage.get_agent_project_storage(), owner.org_id, session_id
+    )
+    await evidence.write_policy(owner, checkout_policy(agent_project=agent_project))
     run = make_record(session_id, step_id=new_id())
     await evidence.record_run(owner, run)
     work.deliver(owner.org_id, session_id, delivered())

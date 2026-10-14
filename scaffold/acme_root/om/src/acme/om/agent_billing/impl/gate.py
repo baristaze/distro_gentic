@@ -28,6 +28,7 @@ from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLed
 from acme.om.agent_billing.types.spend_account import SpendAccount
 from acme.om.agent_billing.types.spend_ledger import Approval, FundedHold, PricedAt, Turned
 from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import Platform, new_id, utcnow
@@ -56,7 +57,6 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.models.types.fill import Fill, ModelRole
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import (
     UNLABELLED,
@@ -271,8 +271,8 @@ class MoneyGateImpl(MoneyGateInterface):
 class MoneyCallGateImpl(CallGateInterface):
     """The face the windows and the loop read, over the money gate. A model
     call's worst case is priced from the price table in force and held with
-    the row it was read from, on every scope the call serves: the project
-    `projects` reads of its session among them. Its usage is billed from
+    the row it was read from, on every scope the call serves: the agent project
+    `agent_projects` reads of its session among them. Its usage is billed from
     that same row, after the next version is read and in another process
     too. Every settled call counts its tokens and its spend under the
     matrix version `version` reads of its session at the hold, and the unit plan
@@ -291,7 +291,7 @@ class MoneyCallGateImpl(CallGateInterface):
         prices: PriceBookInterface,
         sessions: AgentSessionsManagerInterface,
         budgets: BudgetsManagerInterface,
-        projects: SessionProjectsInterface,
+        agent_projects: SessionAgentProjectsInterface,
         *,
         version: PinnedVersion | None = None,
         tier: PlanTierOf | None = None,
@@ -301,7 +301,7 @@ class MoneyCallGateImpl(CallGateInterface):
         self._prices = prices
         self._sessions = sessions
         self._budgets = budgets
-        self._projects = projects
+        self._agent_projects = agent_projects
         self._version = version
         self._tier = tier
         self._clock = clock
@@ -319,7 +319,7 @@ class MoneyCallGateImpl(CallGateInterface):
         credential: str,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         spend = await spend_labels(self._version, self._tier, ctx, session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
@@ -328,7 +328,7 @@ class MoneyCallGateImpl(CallGateInterface):
         request = HoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
             ),
             exposure=call_exposure(call_shape(call, fill), price),
             session_id=session_id,
@@ -403,11 +403,11 @@ class MoneyCallGateImpl(CallGateInterface):
         deadline: datetime,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
         request = HoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
             ),
             exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
             session_id=session_id,

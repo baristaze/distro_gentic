@@ -26,6 +26,7 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agent_projects.types.agent_project import AgentProject, Repository
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.events.types.event import Event
@@ -42,7 +43,6 @@ from acme.om.intake.types.event import (
     FeedbackEvent,
     WorkNames,
 )
-from acme.om.projects.types.project import Project, Repository
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.deliveries import DeliveryConsumer, DeliveryOptions
 from acme.workers.maintenance.main import build_consumer
@@ -193,10 +193,10 @@ def feedback_body(org_id: str, event: FeedbackEvent) -> bytes:
     ).encode()
 
 
-async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
-    """A project of the tenant, which an agent automation's session starts in."""
+async def an_agent_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
+    """An agent project of the tenant, which an agent automation's session starts in."""
     now = utcnow()
-    project = Project(
+    agent_project = AgentProject(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -205,10 +205,10 @@ async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
         name="the checkout service",
         repository=Repository(host="github.com", path="ajax/checkout"),
     )
-    return (await container.managers.projects.create_project(ctx, project)).id
+    return (await container.managers.agent_projects.create_agent_project(ctx, agent_project)).id
 
 
-def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> AgentAutomation:
+def triage(ctx: TenantContext, agent_project_id: UUID | None, limits: Limits) -> AgentAutomation:
     """An agent automation that starts a triage session on a failing check."""
     now = utcnow()
     return AgentAutomation(
@@ -224,13 +224,13 @@ def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> Agent
             brief="Find why.",
             agent_kind="triage",
             title="CI",
-            project_id=project_id,
+            agent_project_id=agent_project_id,
         ),
         limits=limits,
     )
 
 
-async def test_outside_a_local_stack_an_agent_automation_starts_in_a_project(
+async def test_outside_a_local_stack_an_agent_automation_starts_in_an_agent_project(
     tmp_path: Path,
 ) -> None:
     container = build_container(tmp_path)
@@ -247,7 +247,7 @@ async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
     ctx = await sign_in(container)
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
-    agent_automation = triage(ctx, await a_project(container, ctx), limits)
+    agent_automation = triage(ctx, await an_agent_project(container, ctx), limits)
     await container.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),
@@ -277,7 +277,7 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     ctx = await sign_in(container)
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True)
-    agent_automation = triage(ctx, await a_project(container, ctx), limits)
+    agent_automation = triage(ctx, await an_agent_project(container, ctx), limits)
     await container.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),

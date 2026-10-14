@@ -3,8 +3,8 @@ its subject triggers or a search finds, an entry's slug, and an entry as
 the input that brings it into a session. Values in, values out.
 
 Only a reviewed entry is ever recalled or read, and only by a session of
-its tenant whose project is the entry's, or by any session of the tenant
-for an entry of no project. A recalled entry arrives as an event: data the
+its tenant whose agent project is the entry's, or by any session of the tenant
+for an entry of no agent project. A recalled entry arrives as an event: data the
 engine quotes and labels, never an instruction, whoever wrote it."""
 
 import re
@@ -36,12 +36,12 @@ def recallable(entry: AgentKnowledge) -> bool:
     return entry.status is AgentKnowledgeStatus.REVIEWED and entry.reviewed_by is not None
 
 
-def reaches(entry: AgentKnowledge, project_id: UUID | None) -> bool:
-    """Whether a session of the entry's tenant whose project is `project_id`
-    (None for a session of no project) may recall or read it: a person
-    reviewed it, and it is the session's project's or the whole tenant's,
-    never another project's."""
-    return recallable(entry) and entry.project_id in (None, project_id)
+def reaches(entry: AgentKnowledge, agent_project_id: UUID | None) -> bool:
+    """Whether a session of the entry's tenant whose agent project is `agent_project_id`
+    (None for a session of no agent project) may recall or read it: a person
+    reviewed it, and it is the session's agent project's or the whole tenant's,
+    never another agent project's."""
+    return recallable(entry) and entry.agent_project_id in (None, agent_project_id)
 
 
 def triggered(entries: Iterable[AgentKnowledge], about: str) -> list[AgentKnowledge]:

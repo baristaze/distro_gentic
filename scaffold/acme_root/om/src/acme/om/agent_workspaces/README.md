@@ -12,23 +12,24 @@ rebuilt from.
 
 - **A session's workspace**, one per session, under the session's id. It
   holds the isolation **pinned** when the session was created: the
-  level, the limits, and the egress its project allowed then, with where
-  that egress came from, and its **durability** and base: its kind's,
-  a cache where its project keeps its sessions' workspaces as caches,
-  and, for a kind that takes it, the base its project's workspace base
-  names. It
+  level, the limits, and the egress its agent project allowed then, with
+  where that egress came from, and its **durability** and base: its
+  kind's, a cache where its agent project keeps its sessions' workspaces
+  as caches, and, for a kind that takes it, the base its agent project's
+  workspace base names. It
   also holds what the cache knows between
   loops: the session's branch, whether the remote has held it, the last
   snapshot of its work, and what the next loop is told.
-- **A project's fetch credential**, one per project: a read-only
-  credential of the repository it binds. Its value is in the tenant's
-  store; the record here says who gave it, and when.
+- **An agent project's fetch credential**, one per agent project: a
+  read-only credential of the repository it binds. Its value is in the
+  tenant's store; the record here says who gave it, and when.
 - **A session's push token**, as its digest and its expiry on the
   session's workspace: the one token that writes the session's branch
   and its pull request.
-- **A project's egress allowlist**, one per project: the destinations a
-  workspace reaches and the methods each takes, or open egress, chosen
-  on purpose and recorded with its reason and who chose it.
+- **An agent project's egress allowlist**, one per agent project: the
+  destinations a workspace reaches and the methods each takes, or open
+  egress, chosen on purpose and recorded with its reason and who chose
+  it.
 - **Where each snapshot of a session lives**, one record per snapshot
   it keeps, a fork's copy included: the platform's bucket, or the store
   of a host of the session's pool, by its reference, the digest the host
@@ -46,14 +47,15 @@ rebuilt from.
 
 - **Pin.** A session is pinned as it is created, before the engine
   writes it: its kind's level and limits at the version it starts on,
-  and its project's allowlist as it stands. A kind that takes no egress
-  keeps none, whatever its project allows. A session of no project keeps
-  its kind's own egress. A later write of the allowlist reaches only the
-  sessions created after it. A kind that takes its project's workspace base
-  pins the base the workspace base names then, and keeps it: a changed
-  workspace base reaches only the sessions created after it, and the first
-  of them builds it where its workspace runs
-  ([ADR 2051](../../../../../docs/adr/2051-a-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
+  and its agent project's allowlist as it stands. A kind that takes no
+  egress keeps none, whatever its agent project allows. A session of no
+  agent project keeps its kind's own egress. A later write of the
+  allowlist reaches only the sessions created after it. A kind that
+  takes its agent project's workspace base pins the base the workspace
+  base names then, and keeps it: a changed workspace base reaches only
+  the sessions created after it, and the first of them builds it where
+  its workspace runs ([ADR
+  2051](../../../../../docs/adr/2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
 - **Prepare.** Before a loop's first model call, the workspace is
   prepared to the pin, whatever the loop asks. The host refuses what it
   cannot give before its provider is reached, and the provider refuses
@@ -61,9 +63,10 @@ rebuilt from.
   again after a wait, and no weaker workspace is made ([ADR
   2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
   Then the checkout is brought up to the session's branch on the
-  repository its project binds, from a bundle the platform reads on its
-  own host with the project's fetch credential; the checkout fetches
-  nothing itself ([ADR 2023](../../../../../docs/adr/2023-a-workspaces-repository-comes-in-and-its-work-goes-out-as-bundles-the-platform-makes.md)).
+  repository its agent project binds, from a bundle the platform reads
+  on its own host with the agent project's fetch credential; the
+  checkout fetches nothing itself ([ADR
+  2023](../../../../../docs/adr/2023-a-workspaces-repository-comes-in-and-its-work-goes-out-as-bundles-the-platform-makes.md)).
 - **The branch.** One the remote holds is tracked, fast-forwarded to
   what the remote holds, and one never pushed is kept. Where nothing
   holds it, it is cut from its last snapshot, or from the default branch
@@ -91,26 +94,28 @@ rebuilt from.
   egress allows the rest, and an allowlist allows a destination and port
   it names, by a method that rule takes.
 - **Outward.** A push to the session's own branch or its snapshots, and
-  its own pull request, on the one repository its project binds, are its
-  work product. Every other write acts outward, for the rule of two.
+  its own pull request, on the one repository its agent project binds,
+  are its work product. Every other write acts outward, for the rule of
+  two.
 - **Give a fetch credential.** A person who manages the tenant's members
-  gives a project's repository one, and a later one replaces it. It is
-  never read back. When its project is removed, its value leaves the
-  tenant's store before its record goes.
+  gives an agent project's repository one, and a later one replaces it.
+  It is never read back. When its agent project is removed, its value
+  leaves the tenant's store before its record goes.
 - **Mint a push token, and write with it.** A token is minted for the
-  session's branch on its project's repository. It writes that branch,
-  its snapshots, and its pull request, and nothing else, through source
-  control, which writes with the integration's own credential, through
-  the installation of the forge that holds the repository, and only when
-  the session's own tenant connected it. It ends
+  session's branch on its agent project's repository. It writes that
+  branch, its snapshots, and its pull request, and nothing else, through
+  source control, which writes with the integration's own credential,
+  through the installation of the forge that holds the repository, and
+  only when the session's own tenant connected it. It ends
   when its lifetime passes, when the loop's workspace is prepared again
   or released, or when a newer one is minted.
 - **Run a delivery's checks.** The platform's executor
   (`impl/executor.py`) makes a container with no egress for the run, on
   the workspace base the session pinned when it names one, such as its
-  project's workspace base, so the checks find what its setup installed
-  ([ADR 2062](../../../../../docs/adr/2062-a-validations-checks-run-on-the-base-its-session-pinned-with-no-egress.md)).
-  It writes in the tree the platform read from the project's
+  agent project's workspace base, so the checks find what its setup
+  installed ([ADR
+  2062](../../../../../docs/adr/2062-a-validations-checks-run-on-the-base-its-session-pinned-with-no-egress.md)).
+  It writes in the tree the platform read from the agent project's
   repository: the delivered commit, with every protected path from the
   base, and no credential and no history. It runs each check's template
   there, reads back and hashes the results within their bound, and
@@ -179,7 +184,7 @@ rebuilt from.
 
 ## How another namespace composes it
 
-- The root names the kinds whose pin takes their project's
+- The root names the kinds whose pin takes their agent project's
   workspace base, each by name and version: the platform's
   (`WORKSPACE_BASE_KINDS`), and those a product's slot names
   (`ProductKinds.workspace_bases`).
@@ -196,17 +201,18 @@ rebuilt from.
   process (`placed.PlacedWorkspacesInterface`, the exec relay's): it is
   held to the same pin, and its loop waits on the resource until a host
   holds it.
-- A session's project and the repository it binds are the projects'
-  rows, read through `WorkspaceProjectsInterface`; a repository is read
-  over HTTPS on the platform's host (`impl/reader.py`), with the tags in
-  its branches' history, and a branch cut from its own default branch.
-  The read reaches only where a workspace may: a host any of whose
-  addresses is in a network no workspace reaches is refused before
-  anything is fetched, git is held to the addresses checked, and no
-  redirect is followed. The root walls off what the options name; in
-  `local`, a repository on disk is read too. A gone branch's fate
-  comes from `PullRequestsInterface`, whose null knows none, so a branch
-  gone for any reason parks the loop for a person.
+- A session's agent project and the repository it binds are the agent
+  projects' rows, read through `WorkspaceAgentProjectsInterface`; a
+  repository is read over HTTPS on the platform's host
+  (`impl/reader.py`), with the tags in its branches' history, and a
+  branch cut from its own default branch. The read reaches only where a
+  workspace may: a host any of whose addresses is in a network no
+  workspace reaches is refused before anything is fetched, git is held
+  to the addresses checked, and no redirect is followed. The root walls
+  off what the options name; in `local`, a repository on disk is read
+  too. A gone branch's fate comes from `PullRequestsInterface`, whose
+  null knows none, so a branch gone for any reason parks the loop for a
+  person.
 - Outside `local`, the evidence's executor is this namespace's: the root
   builds it over infra's provider and transport for a session of the
   cloud, and over the exec relay's instances
@@ -222,13 +228,13 @@ rebuilt from.
   repository of the platform's own with nothing of the agent's config,
   refs, or replacements (`impl/reader.py`), giving the base, the head,
   and the paths changed; and dirty when the checkout this host holds has
-  work that is not there. A private repository is read with its
+  work that is not there. A private repository is read with its agent
   project's fetch credential, handed to that git alone.
 - The software engineer's pull request goes through
   `AgentWorkspacesManagerInterface.open_pull_request`, which checks the push
   token, refuses a body with an image or a URL off the repository's host,
   since the forge renders it, bundles the committed head out of the
-  workspace this host holds, and writes through `SourceControlInterface` (`projects.py`): the
-  one head, to the session's branch alone, forward only. The root wires
-  the forge's (`impl/forge.py`), and with none every write is
-  unavailable.
+  workspace this host holds, and writes through `SourceControlInterface`
+  (`agent_projects.py`): the one head, to the session's branch alone,
+  forward only. The root wires the forge's (`impl/forge.py`), and with
+  none every write is unavailable.

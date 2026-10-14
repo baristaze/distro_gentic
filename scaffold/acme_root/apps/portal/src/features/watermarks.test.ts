@@ -13,7 +13,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type ProjectView } from "@acme/client";
+import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type AgentProjectView } from "@acme/client";
 import { useSessionStore } from "../store/session";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
@@ -26,7 +26,7 @@ const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at
 const ME = { app: "portal", role: "owner", permissions: ["read", "write", "manage_members", "manage_keys"], user, org } as unknown as MeView;
 const page = <T>(items: T[]) => ({ items, next_cursor: null });
 
-const PROJECT: ProjectView = {
+const AGENT_PROJECT: AgentProjectView = {
   id: "p1",
   name: "Storefront",
   repository: { host: "github.com", path: "your-org/storefront" },
@@ -41,7 +41,7 @@ const AGENT_AUTOMATION: AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -83,7 +83,7 @@ const SESSION = {
 } as AgentSessionView;
 
 /** A param of a screen's address, as a fixture's id. */
-const PARAMS: Record<string, string> = { sessionId: "s1", agentAutomationId: "a1", entryId: "k1", projectId: "p1" };
+const PARAMS: Record<string, string> = { sessionId: "s1", agentAutomationId: "a1", entryId: "k1", agentProjectId: "p1" };
 
 function answer(path: string): unknown {
   const [bare = "", query = ""] = path.split("?");
@@ -97,8 +97,8 @@ function answer(path: string): unknown {
   if (bare === "/v1/agent-sessions") return query.includes("status=parked") ? page([]) : page([SESSION]);
   if (bare === "/v1/agent-knowledge") return query.includes("status=reviewed") ? [ENTRY] : [];
   if (bare === "/v1/agent-knowledge/k1") return ENTRY;
-  if (bare === "/v1/projects") return [PROJECT];
-  if (bare === "/v1/projects/p1") return PROJECT;
+  if (bare === "/v1/agent-projects") return [AGENT_PROJECT];
+  if (bare === "/v1/agent-projects/p1") return AGENT_PROJECT;
   if (bare === "/v1/agent-automations") return [AGENT_AUTOMATION];
   if (bare === "/v1/agent-automations/a1") return AGENT_AUTOMATION;
   if (bare === "/v1/provider-keys" || bare === "/v1/matrix/options" || bare === "/v1/matrix/choices" || bare === "/v1/events/recent") return [];
@@ -198,8 +198,8 @@ it("mounts every platform screen, and finds no text field on any without a water
   }
   expect(bare).toEqual([]);
   // The record forms did open: a screen that drew none would pass for nothing.
-  expect(seen.get("/settings/projects")).toEqual(expect.arrayContaining(["Name", "Repository"]));
-  expect(seen.get("/settings/projects/p1")).toEqual(expect.arrayContaining(["User", "Password or token"]));
+  expect(seen.get("/settings/agent-projects")).toEqual(expect.arrayContaining(["Name", "Repository"]));
+  expect(seen.get("/settings/agent-projects/p1")).toEqual(expect.arrayContaining(["User", "Password or token"]));
   expect(seen.get("/settings/models")).toEqual(expect.arrayContaining(["New key to Anthropic", "New key to OpenAI"]));
   expect(seen.get("/settings/agent-playbooks")).toEqual(expect.arrayContaining(["Agent playbook name", "Description", "Steps (Markdown)", "Gates, one a line"]));
   expect(seen.get("/settings/members")).toContain("Invite by email");

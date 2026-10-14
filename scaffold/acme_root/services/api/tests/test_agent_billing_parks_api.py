@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import (
-    PROJECT_ID,
+    AGENT_PROJECT_ID,
     add_member,
     build_container,
     enrol_operator,
@@ -158,7 +158,7 @@ class Case:
         made = await self.client.post(
             "/v1/agent-sessions",
             headers=created(person),
-            json={"kind": "steward", "title": "t", "project_id": PROJECT_ID},
+            json={"kind": "steward", "title": "t", "agent_project_id": AGENT_PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]

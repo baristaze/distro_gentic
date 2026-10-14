@@ -15,6 +15,7 @@ from acme.services.api.services import (
     AgentFleetServiceInterface,
     AgentKnowledgeServiceInterface,
     AgentPlaybooksServiceInterface,
+    AgentProjectsServiceInterface,
     AgentSessionsServiceInterface,
     BenchmarksServiceInterface,
     BudgetsServiceInterface,
@@ -29,7 +30,6 @@ from acme.services.api.services import (
     MatrixServiceInterface,
     MediaServiceInterface,
     ParkAlertsServiceInterface,
-    ProjectsServiceInterface,
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
     RetentionServiceInterface,
@@ -146,8 +146,8 @@ def spend_ledgers_service(connection: HTTPConnection) -> SpendLedgersServiceInte
     return services_of(connection).get_spend_ledgers_service()
 
 
-def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
-    return services_of(connection).get_projects_service()
+def agent_projects_service(connection: HTTPConnection) -> AgentProjectsServiceInterface:
+    return services_of(connection).get_agent_projects_service()
 
 
 def agent_knowledge_service(connection: HTTPConnection) -> AgentKnowledgeServiceInterface:
@@ -199,7 +199,7 @@ MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
 ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
 SpendLedgersService = Annotated[SpendLedgersServiceInterface, Depends(spend_ledgers_service)]
-ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
+AgentProjectsService = Annotated[AgentProjectsServiceInterface, Depends(agent_projects_service)]
 AgentKnowledgeService = Annotated[AgentKnowledgeServiceInterface, Depends(agent_knowledge_service)]
 ConnectorsService = Annotated[ConnectorsServiceInterface, Depends(connectors_service)]
 AgentPlaybooksService = Annotated[AgentPlaybooksServiceInterface, Depends(agent_playbooks_service)]

@@ -22,6 +22,8 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import wakes_after
 from acme.om.agents.impl.loop import LoopOptions
@@ -33,8 +35,6 @@ from acme.om.models.credentials import PLATFORM_CREDENTIAL, CallClient, CallCred
 from acme.om.models.impl.resolver import ModelResolverTableImpl, ResolverOptions
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.types.fill import Fill, ModelRole
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.root import Managers
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
@@ -51,14 +51,14 @@ class Told(CallGateBudgetImpl):
     """The budgets' gate, keeping the credential each hold was asked for."""
 
     def __init__(
-        self, managers: Managers, clock: Clock, projects: SessionProjectsInterface
+        self, managers: Managers, clock: Clock, agent_projects: SessionAgentProjectsInterface
     ) -> None:
         super().__init__(
             managers.budget_gate,
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,
-            projects,
+            agent_projects,
             clock=clock,
         )
         self.credentials: list[str] = []
@@ -129,10 +129,10 @@ def keyed_loop(tmp_path: Path, layer: ModelsLayer) -> tuple[Loop, Told]:
     that keeps what it was told."""
     gates: list[Told] = []
     storage = StorageMemoryImpl()
-    projects = SessionProjectsBoundImpl(storage.get_project_storage())
+    agent_projects = SessionAgentProjectsBoundImpl(storage.get_agent_project_storage())
 
     def told(managers: Managers, clock: Clock) -> Told:
-        gates.append(Told(managers, clock, projects))
+        gates.append(Told(managers, clock, agent_projects))
         return gates[-1]
 
     loop = loop_over(tmp_path, storage=storage, call_gate=told, models_layer=layer)

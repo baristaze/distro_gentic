@@ -109,7 +109,7 @@ as_user env DOCKER_HOST="unix://${RUNTIME}/docker.sock" docker info --format \
 echo "==> the host started while the platform is down comes back on its own"
 in_box /opt/acme-host/current/bin/python -c \
   "import os, socket; socket.socket(socket.AF_UNIX).bind('/run/docker.sock'); os.chmod('/run/docker.sock', 0o666)"
-in_box sh -c 'printf "%s\n" "projects = \"all\"" "min_isolation = \"container\"" \
+in_box sh -c 'printf "%s\n" "agent_projects = \"all\"" "min_isolation = \"container\"" \
   "egress = []" "readable = []" "people_commands = false" "items_at_once = 1" \
   > /etc/acme-host/ceilings.toml'
 in_box systemctl start acme-host

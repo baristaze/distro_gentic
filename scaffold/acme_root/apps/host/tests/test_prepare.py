@@ -74,8 +74,8 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     await relay.ask_prepare(api.owner, session_id, DIRECTORY)
-    # Its owner takes no project's work: the ceilings refuse the prepare.
-    closed = Ceilings(projects=frozenset(), min_isolation=HostMode.directory, egress=None)
+    # Its owner takes no agent project's work: the ceilings refuse the prepare.
+    closed = Ceilings(agent_projects=frozenset(), min_isolation=HostMode.directory, egress=None)
     host, root = await directory_host(api, pool.id, tmp_path, ceilings=closed)
 
     assert await host.claim_once() is not None
@@ -119,7 +119,7 @@ async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and
     # Its owner lets nothing leave, and the prepare's fields say nothing
     # does; its spec, as the wire hands it over, opens egress to anywhere.
     wire = Widened(api.transport)
-    closed = Ceilings(projects=None, min_isolation=HostMode.directory, egress=frozenset())
+    closed = Ceilings(agent_projects=None, min_isolation=HostMode.directory, egress=frozenset())
     host, root = await directory_host(
         replace(api, transport=wire), pool.id, tmp_path, ceilings=closed
     )

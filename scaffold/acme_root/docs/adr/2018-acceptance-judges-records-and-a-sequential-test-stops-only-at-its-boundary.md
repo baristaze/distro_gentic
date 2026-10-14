@@ -37,7 +37,7 @@ the hidden suite passes there; no forbidden path changed; and no surface
 the agent reads names the hidden suite. The harness runs the hidden
 suite itself and keeps its runs with the verdict, since the session's
 evidence is a surface the agent reads. The suite lives in a source of its
-own, never in the project's repository: a protected path is
+own, never in the agent project's repository: a protected path is
 write-denied, not read-denied, so a suite in the tree the workspace
 checks out is one the agent can read and fit its fix to. The executor
 fetches it only to run it, and a scenario that keeps it at its base is

@@ -1,7 +1,7 @@
-"""A project's repository on this disk, for the suites that run a
+"""An agent project's repository on this disk, for the suites that run a
 delivery's checks for real: its base holds a cart, the runner its `unit`
 check runs, and the fixture the runner reads; a delivered head is cut from
-the base and served bare beside it, and every project binds it."""
+the base and served bare beside it, and every agent project binds it."""
 
 import os
 import subprocess
@@ -10,7 +10,7 @@ from uuid import UUID
 
 from acme.infra.workspaces import WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agent_workspaces.projects import WorkspaceProjectsInterface
+from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.context import TenantContext
 from acme.om.evidence.types.contract import CheckDeclaration
@@ -83,7 +83,7 @@ def commit(repo: Path, files: dict[str, str]) -> str:
 
 
 class Repository:
-    """A project's repository on this disk, served bare: its base holds the
+    """An agent project's repository on this disk, served bare: its base holds the
     cart, the runner, and the fixture."""
 
     def __init__(self, root: Path) -> None:
@@ -105,20 +105,24 @@ class Repository:
         return head
 
 
-class OnDisk(WorkspaceProjectsInterface):
-    """Every project binds the repository on this disk."""
+class OnDisk(WorkspaceAgentProjectsInterface):
+    """Every agent project binds the repository on this disk."""
 
     def __init__(self, repository: Repository) -> None:
         self._url = f"file://{repository.served}"
 
-    async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+    async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return None
 
-    async def binding_of(self, ctx: TenantContext, project_id: UUID) -> RepositoryBinding | None:
-        return RepositoryBinding(project_id=project_id, repository=self._url)
+    async def binding_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> RepositoryBinding | None:
+        return RepositoryBinding(agent_project_id=agent_project_id, repository=self._url)
 
-    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+    async def keeps_snapshots(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         return True
 
-    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> WorkspaceBase | None:
         return None

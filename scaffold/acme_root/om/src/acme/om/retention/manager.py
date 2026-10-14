@@ -2,8 +2,8 @@
 their shape, the snapshot each session takes of that as it is created, and
 the sweep that holds every session to its snapshot.
 
-A tenant declares one policy, and each of its projects may narrow it. A
-session takes the policy of its project as a snapshot, before its row is
+A tenant declares one policy, and each of its agent projects may narrow it. A
+session takes the policy of its agent project as a snapshot, before its row is
 written. A tightening of the tenant's policy reaches every session at the
 next sweep; a loosening reaches none. When a session's content expires,
 the sweep destroys its key in the tenant's key service, revokes it through
@@ -24,7 +24,7 @@ from acme.om.retention.types.snapshot import SessionRetention
 class RetentionManagerInterface(ABC):
     @abstractmethod
     async def get_policy(self, ctx: TenantContext) -> TenantRetention:
-        """The tenant's policy with its projects' narrowings; the loosest, at
+        """The tenant's policy with its agent projects' narrowings; the loosest, at
         version 0 and never stored, when it has declared none."""
         ...
 
@@ -32,7 +32,7 @@ class RetentionManagerInterface(ABC):
     async def write_policy(self, ctx: TenantContext, policy: TenantRetention) -> TenantRetention:
         """Writes the tenant's policy, as one who manages its members may: a
         compare-and-set on the version the caller read, 0 for the first
-        (`PreconditionFailed` when another landed first). A project that
+        (`PreconditionFailed` when another landed first). An agent project that
         names another region than its tenant's is `ValidationFailed`.
         Announced. Sessions created from now on take it; existing ones take
         what it tightens at the next sweep, and nothing it loosens."""
@@ -41,8 +41,8 @@ class RetentionManagerInterface(ABC):
     @abstractmethod
     async def take_snapshot(self, ctx: TenantContext, session: AgentSession) -> SessionRetention:
         """The snapshot of `session`, taken before the session is written: the
-        policy its project takes now, and its expiries from now. A session
-        spawned or handed over belongs to the project of the session it came
+        policy its agent project takes now, and its expiries from now. A session
+        spawned or handed over belongs to the agent project of the session it came
         from. Taken again, the first is answered."""
         ...
 

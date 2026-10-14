@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import (
-    PROJECT_ID,
+    AGENT_PROJECT_ID,
     build_container,
     client_over,
     seed_request,
@@ -31,7 +31,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
 from acme.om.context import Role
 from acme.services.api.container import AppContainer
-from acme.services.api.seed import first_project
+from acme.services.api.seed import first_agent_project
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -59,14 +59,18 @@ async def session_saying(
     client: httpx.AsyncClient,
     container: AppContainer,
     owner: Headers,
-    project_id: str = PROJECT_ID,
+    agent_project_id: str = AGENT_PROJECT_ID,
 ) -> str:
     """A session with a whole turn: what a person said, the model's call and
     answer, and a tool's call and result."""
     started = await client.post(
         "/v1/agent-sessions",
         headers={**owner, "Idempotency-Key": str(uuid4())},
-        json={"kind": "assistant", "title": "the dropped object", "project_id": project_id},
+        json={
+            "kind": "assistant",
+            "title": "the dropped object",
+            "agent_project_id": agent_project_id,
+        },
     )
     assert started.status_code == 201, started.text
     session_id = started.json()["id"]
@@ -257,16 +261,18 @@ async def test_a_lifetime_past_a_century_is_refused_and_the_sweep_still_reaches_
 ) -> None:
     """A lifetime is added to a session's creation date, which ends in year
     9999: one past a century is refused with its field named, at the tenant
-    and at a project, and nothing is stored. A century is held, and the sweep
+    and at an agent project, and nothing is stored. A century is held, and the sweep
     erases another tenant's expired content."""
     ours = await session_saying(client, container, owner)
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Bravo", "bravo", "owner@bravo.test", "Bravo"
     )
-    project = first_project(ctx, org.slug).model_copy(update={"id": new_id()})
-    await container.storage.get_project_storage().create_project(org.id, project, ())
+    agent_project = first_agent_project(ctx, org.slug).model_copy(update={"id": new_id()})
+    await container.storage.get_agent_project_storage().create_agent_project(
+        org.id, agent_project, ()
+    )
     bravo = await sign_in_as(client, "owner@bravo.test", org.id)
-    theirs = await session_saying(client, container, bravo, str(project.id))
+    theirs = await session_saying(client, container, bravo, str(agent_project.id))
     kept_nothing = await client.put(
         "/v1/retention/policy", headers=bravo, json={"policy": {"storage_mode": "memory_only"}}
     )
@@ -283,7 +289,10 @@ async def test_a_lifetime_past_a_century_is_refused_and_the_sweep_still_reaches_
             narrowed = await client.put(
                 "/v1/retention/policy",
                 headers=owner,
-                json={"policy": {}, "projects": [{"project_id": PROJECT_ID, "policy": policy}]},
+                json={
+                    "policy": {},
+                    "agent_projects": [{"agent_project_id": AGENT_PROJECT_ID, "policy": policy}],
+                },
             )
             refused(narrowed, 422, "validation_failed")
             assert field in narrowed.text, narrowed.text

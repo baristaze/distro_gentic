@@ -70,8 +70,8 @@ PLATFORM_ACTIONS = frozenset(kind.value for kind in ActionKind)
 
 class Action(Platform):
     """What a firing does: start a session of `agent_kind` with the brief, in
-    the tenant's project `project_id`; send the brief to a standing
-    session, which keeps the project it has, and which is refused while
+    the tenant's agent project `agent_project_id`; send the brief to a standing
+    session, which keeps the agent project it has, and which is refused while
     it is enabled, since no budget on a session ends with a run (ADR
     2036); or a product's own action,
     which its kind runs with `params`. The brief is the creator's word; the
@@ -85,7 +85,7 @@ class Action(Platform):
     brief: Stored | None = Field(default=None, min_length=1, max_length=MAX_BRIEF)
     agent_kind: Stored | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     session_id: UUID | None = None
     params: FrozenMapping = Field(default_factory=dict, validate_default=True)
     agent_playbook: Stored | None = Field(
@@ -105,8 +105,8 @@ class Action(Platform):
             raise ValueError("a start names its agent kind and title, and a message does not")
         if starts == (self.session_id is not None):
             raise ValueError("a message names its standing session, and a start does not")
-        if not starts and self.project_id is not None:
-            raise ValueError("a message names no project: its session keeps its own")
+        if not starts and self.agent_project_id is not None:
+            raise ValueError("a message names no agent project: its session keeps its own")
         if not starts and self.agent_playbook is not None:
             raise ValueError(
                 "a start invokes an agent playbook into its session, and a message none"
@@ -135,7 +135,7 @@ class Action(Platform):
             self.brief,
             self.agent_kind,
             self.title,
-            self.project_id,
+            self.agent_project_id,
             self.session_id,
             self.agent_playbook,
         )
@@ -233,7 +233,7 @@ class Refusal(StrEnum):
     QUEUE_FULL = "queue_full"  # a limit stopped it, and `queue_depth` runs wait already
     PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
     ACTION = "action"  # its action was refused: a kind no product declares, a session gone
-    PROJECT = "project"  # its start names no project, where a session starts in one
+    AGENT_PROJECT = "agent_project"  # its start names no agent project, where one is needed
     UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 
 

@@ -4,9 +4,9 @@ import { runtimeConfig } from "../../app/config";
 import { errorMessage } from "../../app/errorMessage";
 import { personName } from "../../app/recordModel";
 import { useAgentAutomation, useUpdateAgentAutomation } from "../../queries/agentAutomations";
-import { useProjects } from "../../queries/projects";
+import { useAgentProjects } from "../../queries/agentProjects";
 import { useMe, useUsers } from "../../queries/tenancy";
-import { projectChoice, projectRequired } from "../sessions/sessionsModel";
+import { agentProjectChoice, agentProjectRequired } from "../sessions/sessionsModel";
 import { actionLine, agentAutomationRequest, draftOf, limitsLine, platformAction, RUNS_AS_LABEL, triggerLine, type AgentAutomationDraft } from "./agentAutomationsModel";
 
 /** One agent automation: what fires it, what it does, its limits, and whose
@@ -17,16 +17,16 @@ export function useAgentAutomationVm(id: string) {
   const me = useMe();
   const users = useUsers();
   const agentAutomation = useAgentAutomation(id);
-  const projects = useProjects();
+  const agentProjects = useAgentProjects();
   const update = useUpdateAgentAutomation(id);
-  const required = projectRequired(runtimeConfig().environment);
+  const required = agentProjectRequired(runtimeConfig().environment);
   const [draft, setDraft] = useState<AgentAutomationDraft | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const view = agentAutomation.data;
   const submit = () => {
     if (!view || !draft) return;
-    const made = agentAutomationRequest(draft, { kept: view, projectRequired: required });
+    const made = agentAutomationRequest(draft, { kept: view, agentProjectRequired: required });
     if ("problem" in made) {
       setProblem(made.problem);
       return;
@@ -48,7 +48,7 @@ export function useAgentAutomationVm(id: string) {
           name: view.name,
           enabled: view.enabled,
           trigger: triggerLine(view.trigger),
-          action: actionLine(view.action, projects.data ?? []),
+          action: actionLine(view.action, agentProjects.data ?? []),
           brief: view.action.brief,
           limits: limitsLine(view.limits),
           runsAs: RUNS_AS_LABEL[view.runs_as],
@@ -71,7 +71,7 @@ export function useAgentAutomationVm(id: string) {
     cancel: () => setDraft(null),
     draft,
     setDraft,
-    projectOptions: projectChoice(projects.data ?? null, required).options,
+    agentProjectOptions: agentProjectChoice(agentProjects.data ?? null, required).options,
     problem,
     submit,
     saving: update.isPending,

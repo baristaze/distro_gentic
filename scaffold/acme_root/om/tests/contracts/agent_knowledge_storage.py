@@ -1,7 +1,7 @@
 """The agent knowledge storage contract: a tenant's entries by their state, each
 change conditioned on the version read, with the findings read in it, and
-the reviewed ones a session of a project reaches, whole or by slug: its
-project's and those of no project, never another project's; and the
+the reviewed ones a session of an agent project reaches, whole or by slug: its
+agent project's and those of no agent project, never another agent project's; and the
 versions each session recalled, one recall of an entry a session. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
@@ -40,7 +40,8 @@ case in this module that presents another tenant's."""
 
 
 def make_entry(
-    status: AgentKnowledgeStatus = AgentKnowledgeStatus.SUGGESTED, project_id: UUID | None = None
+    status: AgentKnowledgeStatus = AgentKnowledgeStatus.SUGGESTED,
+    agent_project_id: UUID | None = None,
 ) -> AgentKnowledge:
     now = utcnow()
     actor = new_id()
@@ -57,7 +58,7 @@ def make_entry(
         text="The staging database drops connections under load; rerun once.",
         status=status,
         reviewed_by=actor if status is AgentKnowledgeStatus.REVIEWED else None,
-        project_id=project_id,
+        agent_project_id=agent_project_id,
         slug=slug_of(title, entry_id),
         findings=(
             LeverFinding(
@@ -197,7 +198,7 @@ class AgentKnowledgeStorageContract:
         await storage.create_recalls(new_id(), (make_recall(session_id, make_entry()),))
         assert await storage.read_recalls(new_id(), session_id, 10) == []
 
-    async def test_a_session_reaches_its_projects_entries_and_the_tenants_alone(
+    async def test_a_session_reaches_its_agent_projects_entries_and_the_tenants_alone(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
         org, ours, theirs = new_id(), new_id(), new_id()
@@ -234,17 +235,19 @@ class AgentKnowledgeStorageContract:
     async def test_read_reachable_of_another_tenant_finds_nothing(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
-        project = new_id()
-        await storage.create_entry(new_id(), make_entry(AgentKnowledgeStatus.REVIEWED, project), ())
+        agent_project = new_id()
+        await storage.create_entry(
+            new_id(), make_entry(AgentKnowledgeStatus.REVIEWED, agent_project), ()
+        )
         await storage.create_entry(new_id(), make_entry(AgentKnowledgeStatus.REVIEWED), ())
-        assert await storage.read_reachable(new_id(), project, None, 10) == []
+        assert await storage.read_reachable(new_id(), agent_project, None, 10) == []
         assert await storage.read_reachable(new_id(), None, None, 10) == []
 
     async def test_read_by_slug_of_another_tenant_finds_nothing(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
-        project = new_id()
-        entry = make_entry(AgentKnowledgeStatus.REVIEWED, project)
+        agent_project = new_id()
+        entry = make_entry(AgentKnowledgeStatus.REVIEWED, agent_project)
         await storage.create_entry(new_id(), entry, ())
         assert entry.slug is not None
-        assert await storage.read_by_slug(new_id(), project, entry.slug) is None
+        assert await storage.read_by_slug(new_id(), agent_project, entry.slug) is None

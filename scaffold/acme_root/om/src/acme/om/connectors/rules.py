@@ -163,15 +163,17 @@ def reviewed(
     return tuple(sorted(bound, key=lambda tool: tool.name))
 
 
-def attached_to(connector: Connector, kind: str, project_id: UUID | None) -> tuple[bool, bool]:
+def attached_to(
+    connector: Connector, kind: str, agent_project_id: UUID | None
+) -> tuple[bool, bool]:
     """Whether a connector is attached to a session of `kind` in
-    `project_id`, by the tenant or by the session's project, and whether
+    `agent_project_id`, by the tenant or by the session's agent project, and whether
     it waits for a load there: deferred unless an attachment that reaches
     the session holds it from the start."""
     reaching = [
         each
         for each in connector.attachments
-        if each.kind == kind and each.project_id in (None, project_id)
+        if each.kind == kind and each.agent_project_id in (None, agent_project_id)
     ]
     return bool(reaching), all(each.deferred for each in reaching)
 
@@ -179,13 +181,13 @@ def attached_to(connector: Connector, kind: str, project_id: UUID | None) -> tup
 def pinned(
     connectors: Iterable[Connector],
     kind: str,
-    project_id: UUID | None,
+    agent_project_id: UUID | None,
     *,
     inside_wall: bool,
     parent: AgentSessionConnectors | None,
     child: bool,
 ) -> tuple[PinnedConnector, ...]:
-    """What a session of `kind` in `project_id` pins of its tenant's
+    """What a session of `kind` in `agent_project_id` pins of its tenant's
     connectors: each attached to its kind for it, reviewed, and run on
     its side of the wall (a host connector inside it, a cloud one outside),
     by name. A sub-agent pins only what its parent pinned too, at the same
@@ -196,7 +198,7 @@ def pinned(
     )
     held: list[PinnedConnector] = []
     for connector in connectors:
-        reaches, deferred = attached_to(connector, kind, project_id)
+        reaches, deferred = attached_to(connector, kind, agent_project_id)
         if not reaches or not connector.tools or connector.place is not place:
             continue
         if child:

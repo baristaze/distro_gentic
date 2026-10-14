@@ -5,9 +5,9 @@ is there for the next.
 
 The tree comes in from outside: the delivered commit with the checks,
 fixtures, and runner taken from the protected source, read from the
-project's repository by the platform (`Tree`) and written in as files. A
+agent project's repository by the platform (`Tree`) and written in as files. A
 hidden suite's source is a repository of its own, which the request
-names by its project. No
+names by its agent project. No
 credential and no history enters the instance, and nothing leaves it: its
 egress is none. Every file of the tree the request protects, or keeps
 untouched, is read-only before a check runs, and a trial after which one
@@ -39,7 +39,7 @@ its pool gives it, and reached through the relay
 (`PlacedInstancesInterface`). A root that wires no such way refuses its
 checks, loudly.
 
-A session pinned to a base, such as its project's workspace base, has its
+A session pinned to a base, such as its agent project's workspace base, has its
 checks run on that base, so what its setup installed is there for them:
 the base's image and the snapshot its setup left, never the session's
 workspace or a snapshot of it. The instance's egress is none even so: the
@@ -116,8 +116,8 @@ Tree = Callable[
     [TenantContext, UUID, str, str, tuple[str, ...], UUID, str | None, tuple[str, ...]],
     Awaitable[bytes],
 ]
-"""The tree a validation of a project runs on, as a tar, by the project, the
-commit, the protected source, the protected patterns, the project whose
+"""The tree a validation of an agent project runs on, as a tar, by the agent project, the
+commit, the protected source, the protected patterns, the agent project whose
 repository holds the source, and the base and patterns of the paths no
 change may touch: the workspaces' (`AgentWorkspacesManagerInterface.checks_tree`)."""
 MISSING = 404
@@ -221,14 +221,16 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                 f"session {request.session_id} is pinned to a base with setup, and this "
                 "process reads no base, so its checks never run on the bare image"
             )
-        named = (request.project, request.source_project or request.project)
+        named = (request.agent_project, request.source_agent_project or request.agent_project)
         try:
-            project_id, source_id = (UUID(project) for project in named)
+            agent_project_id, source_id = (UUID(agent_project) for agent_project in named)
         except ValueError:
-            raise Unavailable(f"no project's id to validate in {sorted(set(named))}") from None
+            raise Unavailable(
+                f"no agent project's id to validate in {sorted(set(named))}"
+            ) from None
         tree = await self._tree(
             ctx,
-            project_id,
+            agent_project_id,
             request.version,
             request.source,
             request.protected,
@@ -409,7 +411,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                     stream,
                     executor="executor",
                     session_id=request.session_id,
-                    project=request.project,
+                    agent_project=request.agent_project,
                     purpose=request.purpose,
                     validation_id=new_id(),
                     now=self._clock(),
@@ -432,7 +434,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
             stream,
             executor="executor",
             session_id=request.session_id,
-            project=request.project,
+            agent_project=request.agent_project,
             purpose=request.purpose,
             validation_id=new_id(),
             now=self._clock(),

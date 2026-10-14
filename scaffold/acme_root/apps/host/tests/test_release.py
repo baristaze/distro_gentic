@@ -23,7 +23,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_workspaces import ProjectsTwin
+from contracts.agent_workspaces import AgentProjectsTwin
 from host_support import Pace, Stack, started_host
 from runner_support import TOOLS, assistant
 
@@ -89,7 +89,7 @@ def git(where: Path, *args: str) -> str:
 
 @pytest.fixture
 def remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The project's repository on disk, its default branch seeded, and the
+    """The agent project's repository on disk, its default branch seeded, and the
     reader the runner's root builds allowed to read a path, as a deployed
     one is not."""
     monkeypatch.setattr(
@@ -100,7 +100,7 @@ def remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     remote, seed = tmp_path / "remote.git", tmp_path / "seed"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
-    (seed / "README.md").write_text("the project\n")
+    (seed / "README.md").write_text("the agent project\n")
     git(seed, "add", "README.md")
     git(seed, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "1")
     git(seed, "push", "-q", str(remote), "main")
@@ -153,7 +153,7 @@ class Placed:
     owner: TenantContext
     host: HostAgent
     provider: WorkspaceHostImpl
-    projects: ProjectsTwin
+    agent_projects: AgentProjectsTwin
     remote: Path
     clock: Clock
     sweep: HeldWorkspacesSweep
@@ -211,7 +211,7 @@ async def placed(
     holding work, and the sweep over it. `grace` is the kind's warm grace;
     None takes the default."""
     assert GIT is not None
-    projects = ProjectsTwin(repository=str(remote))
+    agent_projects = AgentProjectsTwin(repository=str(remote))
     forge = IntegrationTwinImpl("forge", writes=True)
     runner = RunnerContainer.over(
         SETTINGS,
@@ -223,7 +223,7 @@ async def placed(
             {"forge": forge},
         ),
         ports=PlatformPorts(
-            workspace_projects=projects,
+            workspace_agent_projects=agent_projects,
             kinds=ProductKinds(
                 agents=(KIND,),
                 tools=lambda _managers: TOOLS,
@@ -260,7 +260,7 @@ async def placed(
         pool.id,
         api.settings(tmp_path / "host" / "home", None),
         Ceilings(
-            projects=None,
+            agent_projects=None,
             min_isolation=IsolationMode.directory,
             egress=None,
             readable=(str(root),),
@@ -304,7 +304,7 @@ async def placed(
         owner=owner,
         host=host,
         provider=provider,
-        projects=projects,
+        agent_projects=agent_projects,
         remote=remote,
         clock=clock,
         sweep=sweep,
@@ -344,11 +344,11 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
     await managers.work.fail_for_good(owner, run.item, "its runner died")
     assert await run.passes() == 0, "the grace begins"
     assert await run.passes(GRACE - timedelta(seconds=1)) == 0
-    run.projects.repository = str(tmp_path / "gone.git")
+    run.agent_projects.repository = str(tmp_path / "gone.git")
     assert await run.passes(timedelta(seconds=1)) == 0, "a push that does not land lets nothing go"
     assert killed in await run.held()
     assert await run.release() is None
-    run.projects.repository = str(remote)
+    run.agent_projects.repository = str(remote)
     assert await run.passes() == 1
     await run.answers()  # the release, on this host's lane
 

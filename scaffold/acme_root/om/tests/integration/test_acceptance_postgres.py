@@ -41,7 +41,7 @@ async def test_a_whole_chain_passes_and_an_edit_of_the_system_under_test_does_no
     runs = await world.managers.evidence.get_runs(world.owner, run.session, None, 200)
     assert COMPLETE.name not in {found.check for found in runs.items}
 
-    # The project's policy leaves the service open, so its gate lets the
+    # The agent project's policy leaves the service open, so its gate lets the
     # edit through; the scenario forbids the system under test on its own.
     edited = ScriptedRun(world.parts, world.owner)
     verdict = await edited.judge(await whole(edited, "src/export.py", "service/app.py"))

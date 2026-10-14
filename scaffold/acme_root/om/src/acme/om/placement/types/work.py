@@ -57,7 +57,7 @@ class ExecPayload(Platform):
     egress: tuple[str, ...] | None  # None is open egress
     reads: tuple[str, ...]  # the paths on the host its result reads
     by_person: bool = False
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
 
 
 class WorkspaceOperation(StrEnum):
@@ -87,7 +87,7 @@ class WorkspacePayload(Platform):
     owner's ceilings before anything is made, as an `exec` item's does; a
     field left None asks the most. A prepare of an instance a run makes for
     a session under an id of its own targets the instance, and names the
-    session in `instance_of`: the pool and the project are that session's."""
+    session in `instance_of`: the pool and the agent project are that session's."""
 
     operation: WorkspaceOperation
     pool_id: UUID | None = None
@@ -98,7 +98,7 @@ class WorkspacePayload(Platform):
     egress: tuple[str, ...] | None = None  # None is open egress
     reads: tuple[str, ...] = ()
     by_person: bool = False
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     instance_of: UUID | None = None
     snapshot: HostSnapshot | None = None
     kept_for: UUID | None = None

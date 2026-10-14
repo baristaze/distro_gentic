@@ -7,7 +7,7 @@ is made of](../../../../README.md).
 
 - **Agent automation**: a trigger (an event with filters, or a
   schedule), an action (start a session in one of the tenant's
-  [projects](../projects/README.md), message a standing one, or a
+  [agent projects](../agent_projects/README.md), message a standing one, or a
   product's own kind of action), and limits of its own: a cost cap over
   a period and the share one run may take, a rate, a concurrency,
   whether to queue when limited and how deep, and a hop limit. It runs
@@ -21,9 +21,9 @@ is made of](../../../../README.md).
 
 ## What can happen
 
-- **Create** an agent automation, by a person in person. A start names a
-  project of the tenant; outside a local stack, one that names none is
-  refused. A start may name a [agent
+- **Create** an agent automation, by a person in person. A start names
+  an agent project of the tenant; outside a local stack, one that names
+  none is refused. A start may name a [agent
   playbook](../agent_playbooks/README.md) of the tenant's to invoke into
   the session it starts; one with no version is refused. A product's
   action names a kind the product declares, and its params hold to that
@@ -81,12 +81,12 @@ is made of](../../../../README.md).
   it, makes its remaining calls at the grant.
 - **A slot fires once.** Its run's id is derived from the agent
   automation and the slot, so several workers at once make one run.
-- **A started session is in its project from its first moment,** so the
-  project's budget and policies hold it. Another tenant's project is
-  refused when the agent automation is saved. Outside a local stack, a
-  start that names no project is refused when it is saved, and one
-  stored with none starts nothing when it fires: its run is refused, and
-  says why.
+- **A started session is in its agent project from its first moment,**
+  so the agent project's budget and policies hold it. Another tenant's
+  agent project is refused when the agent automation is saved. Outside a
+  local stack, a start that names no agent project is refused when it is
+  saved, and one stored with none starts nothing when it fires: its run
+  is refused, and says why.
 - **A product adds its own kind of action, and never takes the
   platform's.** Its kind acts in the firing, as the agent automation
   runs, and its check says when the work it started ended: the run is at
@@ -113,12 +113,12 @@ The limits are asked inside the write that records a run
 (`AgentAutomationStorageInterface.admit`, which holds the agent
 automation's row in Postgres), from `rules.admitted`. A started
 session's tree gets a `LIFE` budget of `run_cap_micros` before its brief
-wakes it, and starts through the projects' `start_session`. A
+wakes it, and starts through the agent projects' `start_session`. A
 `message_session` action is refused while enabled, when it is written
 and at each firing (`impl/manager.py` `UNHELD`): no budget on a session
 ends with a run, so nothing would hold its run to its cap (ADR 2036).
-`build_agent_automations` takes `project_required`, which a root sets
-outside `local`, and `actions`, the product's kinds
+`build_agent_automations` takes `agent_project_required`, which a root
+sets outside `local`, and `actions`, the product's kinds
 (`ProductKinds.actions`, `actions.py`), which every process that writes
 or fires an agent automation hands it. The principal's live context is
 `root.agent_automation_principals`, the transition a root hands

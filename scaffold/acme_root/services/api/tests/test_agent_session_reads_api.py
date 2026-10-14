@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.agent_session_storage import make_session
 from contracts.evidence_storage import make_record, make_validation
 from contracts.intake_storage import make_binding
@@ -82,7 +82,7 @@ async def start(client: httpx.AsyncClient, headers: dict[str, str], title: str) 
     answered = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
-        json={"kind": "assistant", "title": title, "project_id": PROJECT_ID},
+        json={"kind": "assistant", "title": title, "agent_project_id": AGENT_PROJECT_ID},
     )
     assert answered.status_code == 201, answered.text
     return answered.json()
@@ -572,7 +572,7 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         new_id(),
         new_id(),
         Principal(kind=PrincipalKind.PERSON, id=ctx.user_id),
-        project_id=None,
+        agent_project_id=None,
     )
     keys = {BudgetScopeKind.TENANT: str(ctx.org_id), BudgetScopeKind.PERSON: str(new_id())}
     budgets = [

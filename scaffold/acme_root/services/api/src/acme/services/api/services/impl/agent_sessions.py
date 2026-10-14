@@ -5,6 +5,7 @@ from pydantic import JsonValue
 
 from acme.infra.base import thaw_mapping
 from acme.integrations.model_providers.types import Usage
+from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import (
     AgentSession,
@@ -19,7 +20,6 @@ from acme.om.attribution import AttributionManagerInterface
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
-from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.rules import control_step, message_step
 from acme.om.steps.types.content import TextBlock
@@ -251,12 +251,12 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         attribution: AttributionManagerInterface,
         loop: LoopManagerInterface,
         windows: WindowsManagerInterface,
-        projects: ProjectsManagerInterface,
+        agent_projects: AgentProjectsManagerInterface,
         *,
-        project_required: bool,
+        agent_project_required: bool,
     ) -> None:
-        """`project_required` refuses a session started in no project: what
-        every stack but a local one sets, so no per-project policy is
+        """`agent_project_required` refuses a session started in no agent project: what
+        every stack but a local one sets, so no per-agent-project policy is
         skipped by a session that names none."""
         self._windows = windows
         self._sessions = sessions
@@ -265,17 +265,21 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self._tools = tools
         self._attribution = attribution
         self._loop = loop
-        self._projects = projects
-        self._project_required = project_required
+        self._agent_projects = agent_projects
+        self._project_required = agent_project_required
 
     async def start_session(
         self, ctx: TenantContext, body: StartSessionRequest, session_id: UUID
     ) -> AgentSessionView:
         start = Start(id=session_id, kind=body.kind, title=body.title)
-        if body.project_id is not None:
-            return session_view(await self._projects.start_session(ctx, body.project_id, start))
+        if body.agent_project_id is not None:
+            return session_view(
+                await self._agent_projects.start_session(ctx, body.agent_project_id, start)
+            )
         if self._project_required:
-            raise ValidationFailed("a session starts in a project: name its project_id")
+            raise ValidationFailed(
+                "a session starts in an agent project: name its agent_project_id"
+            )
         return session_view(await self._agents.start_session(ctx, start))
 
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:

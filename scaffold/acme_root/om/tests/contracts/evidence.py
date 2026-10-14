@@ -32,14 +32,14 @@ from acme.om.evidence.types.validation import (
 )
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
-from contracts.doubles import Members, SessionProjectsMemory
+from contracts.doubles import Members, SessionAgentProjectsMemory
 from contracts.evidence_storage import make_policy
 
 CHECKOUT = UUID("0192f3a0-0000-7000-8000-00000000a12a")
-"""The `checkout` project's id: every session of a suite's evidence belongs to
+"""The `checkout` agent project's id: every session of a suite's evidence belongs to
 it unless the suite names another."""
 CHECKOUT_KEY = policy_key(CHECKOUT)
-"""The key the `checkout` project's policy, and each of its validations, is kept
+"""The key the `checkout` agent project's policy, and each of its validations, is kept
 under."""
 
 Outcome = Callable[[str, int], str]
@@ -160,7 +160,7 @@ class Evidence:
     work: WorkProductMemoryImpl
     executor: ScriptedExecutor
     members: Members
-    projects: SessionProjectsMemory
+    agent_projects: SessionAgentProjectsMemory
 
 
 def evidence_over(
@@ -176,27 +176,29 @@ def evidence_over(
     relay = OutboxRelayImpl(outbox, EventStorageMemoryImpl(), TopicsMemoryImpl())
     work = WorkProductMemoryImpl()
     executor = executor or ScriptedExecutor()
-    projects = SessionProjectsMemory(default=CHECKOUT)
+    agent_projects = SessionAgentProjectsMemory(default=CHECKOUT)
     manager = EvidenceManagerImpl(
         storage,
         members,
         relay,
         Executors(executor, executors),
         work,
-        projects,
+        agent_projects,
         options or EvidenceOptions(),
     )
-    gate = ResultGateEvidenceImpl(storage, work, projects)
-    return Evidence(manager, gate, storage, work, executor, members, projects)
+    gate = ResultGateEvidenceImpl(storage, work, agent_projects)
+    return Evidence(manager, gate, storage, work, executor, members, agent_projects)
 
 
 def checkout_policy(
-    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",), project: UUID = CHECKOUT
+    *requirements: Requirement,
+    protected: tuple[str, ...] = ("tests/**",),
+    agent_project: UUID = CHECKOUT,
 ) -> ValidationPolicy:
-    """The `checkout` project's policy, kept under `project`: the `unit` check
+    """The `checkout` agent project's policy, kept under `agent_project`: the `unit` check
     and the `trials` check, which needs a browser, declared; `unit` required
     for a change under `src/` unless the case names its own requirements."""
-    policy = make_policy(policy_key(project))
+    policy = make_policy(policy_key(agent_project))
     checks = (
         *policy.checks,
         CheckDeclaration(
@@ -224,4 +226,4 @@ def delivered(
     dirty: bool = False,
     base: str = "base0",
 ) -> WorkProduct:
-    return WorkProduct(project="checkout", base=base, head=head, dirty=dirty, changed=changed)
+    return WorkProduct(agent_project="checkout", base=base, head=head, dirty=dirty, changed=changed)

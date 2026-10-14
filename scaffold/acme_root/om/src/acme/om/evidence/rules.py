@@ -1,4 +1,4 @@
-"""Pure rules of evidence: the key a project's policy is kept under, which
+"""Pure rules of evidence: the key an agent project's policy is kept under, which
 paths a policy protects, the target a tool's call reports for them, the checks a change asks for, what a
 validation is asked to run, the baseline that came first, the result
 gate's judgment, and a validation session's verdict. Values in, values
@@ -27,11 +27,11 @@ from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 # The policy's key.
 
 
-def policy_key(project_id: UUID) -> str:
-    """The key a project's validation policy is kept under: the project's
-    id, as the projects answer a session's project, never a name the work
+def policy_key(agent_project_id: UUID) -> str:
+    """The key an agent project's validation policy is kept under: the agent project's
+    id, as the agent projects answer a session's agent project, never a name the work
     product reports."""
-    return str(project_id)
+    return str(agent_project_id)
 
 
 # Protected paths.
@@ -89,9 +89,9 @@ def protected_paths(patterns: Iterable[str], paths: Iterable[str]) -> tuple[str,
 
 
 def protection_target(policy: ValidationPolicy | None, paths: Iterable[str]) -> Target:
-    """What a call that changes `paths` acts on, read from the project's
+    """What a call that changes `paths` acts on, read from the agent project's
     policy and never from what the call claims: whether any of them is
-    protected. A project with no policy protects nothing."""
+    protected. An agent project with no policy protects nothing."""
     touched = protected_paths(policy.protected if policy else (), paths)
     return Target(kind=PATHS, attributes={"protected": bool(touched)})
 
@@ -182,7 +182,7 @@ def execution_request(
     checks = tuple(policy.declared(name) for name in sorted(counts))
     return ExecutionRequest(
         session_id=session_id,
-        project=policy.project,
+        agent_project=policy.agent_project,
         purpose=purpose,
         version=version,
         source=work_product.base,
@@ -260,7 +260,7 @@ def baseline(
 class Reading:
     """What the gate read for one result: the runs its evidence names, the
     work product as its system reports it (or what could not be read),
-    the project's policy, every validation of the session at the
+    the agent project's policy, every validation of the session at the
     delivered head with every run each one lists, and the session's
     validations at the work product's base, where its baselines are."""
 
@@ -312,7 +312,7 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
         )
     policy = reading.policy
     if policy is None:
-        return refused("the session's project declares no validation policy")
+        return refused("the session's agent project declares no validation policy")
     touched = protected_paths(policy.protected, work_product.changed)
     if touched:
         return refused(

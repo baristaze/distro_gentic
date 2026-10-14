@@ -108,7 +108,7 @@ async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned
         updated_at=now,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
-        project_id=new_id(),
+        agent_project_id=new_id(),
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",

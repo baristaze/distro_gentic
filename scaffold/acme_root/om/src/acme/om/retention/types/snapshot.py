@@ -28,7 +28,7 @@ class SessionRetention(Identifiable, Created):
     Every write after the first is a compare-and-set on `version`."""
 
     session_id: UUID
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
     policy: RetentionPolicy
     policy_version: int = Field(default=0, ge=0)
     at_rest: bool

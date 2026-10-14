@@ -36,7 +36,7 @@ class AgentSessionRetentionRows(IdentifiableMixin, CreatedMixin, Base):
         ),
     )
     session_id: Mapped[UUID]
-    project_id: Mapped[UUID | None]
+    agent_project_id: Mapped[UUID | None]
     policy: Mapped[dict[str, Any]] = mapped_column(JSONB())
     policy_version: Mapped[int]
     at_rest: Mapped[bool]

@@ -243,7 +243,7 @@ class AgentWorkspaceBinding(Identifiable, Trackable):
     workspace lives where it was prepared, so every item of the session goes
     to that host. An instance a run made for a session under an id of its
     own is bound the same way, and `instance_of` names that session: its
-    placement routes the instance, and its project is what the host's
+    placement routes the instance, and its agent project is what the host's
     owner holds the instance's work to. None for a session's own
     workspace."""
 

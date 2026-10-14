@@ -31,7 +31,7 @@ class ExecutionView(View):
     purpose: RunPurpose
     step_id: UUID | None
     validation_id: UUID | None
-    project: str
+    agent_project: str
     version: str
     dirty: bool
     image: str
@@ -64,7 +64,7 @@ class ValidationView(View):
     id: UUID
     created_at: datetime
     purpose: RunPurpose
-    project: str
+    agent_project: str
     version: str
     source: str
     executor: str
@@ -93,12 +93,12 @@ class ReportView(View):
 
 
 class WorkProductView(View):
-    """What a session delivered: its project, its branch and whether the
+    """What a session delivered: its agent project, its branch and whether the
     remote has held it, the pull requests and branches bound to it, and its
     latest accepted result. A session that never had a workspace has no
     branch."""
 
-    project_id: UUID | None
+    agent_project_id: UUID | None
     branch: str | None
     branch_seen: bool
     work: list[WorkHandleView]

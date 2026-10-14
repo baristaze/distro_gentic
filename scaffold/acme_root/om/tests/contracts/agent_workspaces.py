@@ -1,4 +1,4 @@
-"""Twins of what the workspaces read from outside: a session's project and
+"""Twins of what the workspaces read from outside: a session's agent project and
 the repository it binds, what source control says of a gone branch, and the
 checkout in a workspace, kept in memory."""
 
@@ -7,8 +7,11 @@ from uuid import UUID
 
 from acme.infra.workspaces import Workspace, WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces.agent_projects import (
+    PullRequestsInterface,
+    WorkspaceAgentProjectsInterface,
+)
 from acme.om.agent_workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
-from acme.om.agent_workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
 from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.agent_workspaces.types.source import (
     BranchState,
@@ -28,29 +31,33 @@ BASE = "b" * 40
 """The commit the twin's branches start from."""
 
 
-class ProjectsTwin(WorkspaceProjectsInterface):
-    """Every session belongs to one project, which binds `repository`, or
+class AgentProjectsTwin(WorkspaceAgentProjectsInterface):
+    """Every session belongs to one agent project, which binds `repository`, or
     none when `repository` is None, and names `workspace_base` for its
     sessions' workspaces, or none."""
 
     def __init__(self, repository: str | None = REPOSITORY) -> None:
-        self.project_id = new_id()
+        self.agent_project_id = new_id()
         self.repository = repository
         self.workspace_base: WorkspaceBase | None = None
 
-    async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
-        return self.project_id
+    async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+        return self.agent_project_id
 
-    async def binding_of(self, ctx: TenantContext, project_id: UUID) -> RepositoryBinding | None:
-        if self.repository is None or project_id != self.project_id:
+    async def binding_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> RepositoryBinding | None:
+        if self.repository is None or agent_project_id != self.agent_project_id:
             return None
-        return RepositoryBinding(project_id=project_id, repository=self.repository)
+        return RepositoryBinding(agent_project_id=agent_project_id, repository=self.repository)
 
-    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+    async def keeps_snapshots(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         return True
 
-    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
-        return self.workspace_base if project_id == self.project_id else None
+    async def workspace_base_of(
+        self, ctx: TenantContext, agent_project_id: UUID
+    ) -> WorkspaceBase | None:
+        return self.workspace_base if agent_project_id == self.agent_project_id else None
 
 
 class PullRequestsTwin(PullRequestsInterface):

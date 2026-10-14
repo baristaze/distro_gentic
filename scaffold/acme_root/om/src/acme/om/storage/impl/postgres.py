@@ -21,6 +21,8 @@ from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_knowledge.storage.impl.postgres import AgentKnowledgeStoragePostgresImpl
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
+from acme.om.agent_projects.storage import AgentProjectStorageInterface
+from acme.om.agent_projects.storage.impl.postgres import AgentProjectStoragePostgresImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
@@ -75,8 +77,6 @@ from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
-from acme.om.projects.storage import ProjectStorageInterface
-from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -232,7 +232,7 @@ class StoragePostgresImpl(StorageInterface):
         self._agents = AgentStoragePostgresImpl(sessions)
         self._attribution = AttributionStoragePostgresImpl(sessions)
         self._privacy = PrivacyStoragePostgresImpl(sessions)
-        self._projects = ProjectStoragePostgresImpl(sessions)
+        self._agent_projects = AgentProjectStoragePostgresImpl(sessions)
         self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
@@ -298,8 +298,8 @@ class StoragePostgresImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
-    def get_project_storage(self) -> ProjectStorageInterface:
-        return self._projects
+    def get_agent_project_storage(self) -> AgentProjectStorageInterface:
+        return self._agent_projects
 
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention

@@ -24,8 +24,8 @@ Five registries, each refusing a name registered twice:
 - A **claimant kind**: its name, and the lanes and kinds its identity
   claims (`placement/kinds.py`). The host is the platform's.
 - A **secret owner kind**: whether an owner is the tenant's, and which
-  owner a session is placed on (`trust/owners.py`). The project is the
-  platform's, and resolves first.
+  owner a session is placed on (`trust/owners.py`). The agent project is
+  the platform's, and resolves first.
 - A **stream kind**: what each of its streams may hold
   (`watch/kinds.py`). The step is the platform's.
 - An **executor**, by the name a check's `executor` gives it

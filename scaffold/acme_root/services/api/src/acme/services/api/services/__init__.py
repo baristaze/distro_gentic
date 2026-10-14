@@ -10,6 +10,7 @@ from acme.services.api.services.agent_billing import AgentBillingServiceInterfac
 from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
 from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
+from acme.services.api.services.agent_projects import AgentProjectsServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
@@ -24,7 +25,6 @@ from acme.services.api.services.leases import LeasesServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
-from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
@@ -42,6 +42,7 @@ __all__ = [
     "AgentFleetServiceInterface",
     "AgentKnowledgeServiceInterface",
     "AgentPlaybooksServiceInterface",
+    "AgentProjectsServiceInterface",
     "AgentSessionsServiceInterface",
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
@@ -56,7 +57,6 @@ __all__ = [
     "MatrixServiceInterface",
     "MediaServiceInterface",
     "ParkAlertsServiceInterface",
-    "ProjectsServiceInterface",
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
     "RetentionServiceInterface",
@@ -141,7 +141,7 @@ class ServicesInterface(ABC):
     def get_evidence_service(self) -> EvidenceServiceInterface: ...
 
     @abstractmethod
-    def get_projects_service(self) -> ProjectsServiceInterface: ...
+    def get_agent_projects_service(self) -> AgentProjectsServiceInterface: ...
 
     @abstractmethod
     def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface: ...

@@ -1,4 +1,4 @@
-"""Wire types of a tenant's retention: its policy with each project's
+"""Wire types of a tenant's retention: its policy with each agent project's
 narrowing, written whole on the version the caller read, and one session's
 snapshot, which an erasure of its content answers with."""
 
@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.privacy.types.session_privacy import StorageMode
-from acme.om.retention.types.policy import MAX_LIFETIME, MAX_PROJECTS, REGION
+from acme.om.retention.types.policy import MAX_AGENT_PROJECTS, MAX_LIFETIME, REGION
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -35,15 +35,15 @@ class RetentionPolicyView(View):
     region: str | None
 
 
-class ProjectRetentionBody(RequestBody):
-    """What one project of the tenant narrows; it never widens the tenant's."""
+class AgentProjectRetentionBody(RequestBody):
+    """What one agent project of the tenant narrows; it never widens the tenant's."""
 
-    project_id: UUID
+    agent_project_id: UUID
     policy: RetentionPolicyBody
 
 
-class ProjectRetentionView(View):
-    project_id: UUID
+class AgentProjectRetentionView(View):
+    agent_project_id: UUID
     policy: RetentionPolicyView
 
 
@@ -52,8 +52,8 @@ class RetentionRequest(RequestBody):
     or, with no `If-Match`, as the tenant's first."""
 
     policy: RetentionPolicyBody = Field(default_factory=RetentionPolicyBody)
-    projects: list[ProjectRetentionBody] = Field(
-        default_factory=list[ProjectRetentionBody], max_length=MAX_PROJECTS
+    agent_projects: list[AgentProjectRetentionBody] = Field(
+        default_factory=list[AgentProjectRetentionBody], max_length=MAX_AGENT_PROJECTS
     )
 
 
@@ -61,7 +61,7 @@ class RetentionView(View):
     """The tenant's policy; version 0, the loosest, until its first write."""
 
     policy: RetentionPolicyView
-    projects: list[ProjectRetentionView]
+    agent_projects: list[AgentProjectRetentionView]
     version: int
     updated_at: datetime
     updated_by: UUID
@@ -85,7 +85,7 @@ class SessionRetentionView(View):
     key alone and the platform's revocation is the destruction."""
 
     session_id: UUID
-    project_id: UUID | None
+    agent_project_id: UUID | None
     policy: RetentionPolicyView
     content_expires_at: datetime | None
     shape_expires_at: datetime | None

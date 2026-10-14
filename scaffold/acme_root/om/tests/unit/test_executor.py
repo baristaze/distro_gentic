@@ -4,7 +4,7 @@ there with their templates filled, and the instance is destroyed after,
 whatever ended the run, so nothing of one run is there for the next. A
 session inside its tenant's wall runs on an instance a host of its pool
 makes, never on the cloud's, and a process that reaches no pool refuses it
-before anything is made. A session pinned to its project's workspace base has
+before anything is made. A session pinned to its agent project's workspace base has
 its checks run on a new instance of that base, with no egress."""
 
 import io
@@ -68,14 +68,14 @@ WORKSPACE_BASE = WorkspaceBase(
     setup=("pip install --target /opt/deps numpy",),
     egress=EgressPolicy(mode=EgressMode.OPEN),
 )
-"""A project's workspace base, as its session's pin names it: an image, and a
+"""An agent project's workspace base, as its session's pin names it: an image, and a
 setup that reaches a package registry."""
 ON_WORKSPACE_BASE = IsolationSpec(
     mode=IsolationMode.CONTAINER,
     egress=EgressPolicy(mode=EgressMode.NONE),
     base=WORKSPACE_BASE,
 )
-"""A session pinned to its project's workspace base, in a container with no
+"""A session pinned to its agent project's workspace base, in a container with no
 egress, as the software engineer's is."""
 WORKSPACE_BASE_SNAPSHOT = b"the workspace base, once its setup ran"
 """The base's snapshot, as the tenant keeps it: what the setup installed."""
@@ -195,16 +195,18 @@ class Executor:
     async def _tree(
         self,
         ctx: TenantContext,
-        project_id: UUID,
+        agent_project_id: UUID,
         version: str,
         source: str,
         protected: tuple[str, ...],
-        source_project: UUID,
+        source_agent_project: UUID,
         base: str | None,
         untouched: tuple[str, ...],
     ) -> bytes:
-        assert source_project == project_id, "a validation's source is its project's own"
-        self.trees.append((project_id, version, source, protected))
+        assert source_agent_project == agent_project_id, (
+            "a validation's source is its agent project's own"
+        )
+        self.trees.append((agent_project_id, version, source, protected))
         return TAR
 
     async def _pinned(self, ctx: TenantContext, session_id: UUID) -> Pin | None:
@@ -239,7 +241,7 @@ class Executor:
 def a_request(trials: int = 1) -> ExecutionRequest:
     return ExecutionRequest(
         session_id=new_id(),
-        project=str(new_id()),
+        agent_project=str(new_id()),
         purpose=RunPurpose.VALIDATION,
         version=HEAD,
         source=BASE,
@@ -276,7 +278,7 @@ async def test_each_run_gets_an_instance_nobody_used_and_destroys_it(tmp_path: P
         first.results,
         executor=first.executor,
         session_id=request.session_id,
-        project=request.project,
+        agent_project=request.agent_project,
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
         now=utcnow(),
@@ -284,9 +286,9 @@ async def test_each_run_gets_an_instance_nobody_used_and_destroys_it(tmp_path: P
     assert len(records) == 2 and {r.version for r in records} == {HEAD}
     # The tree came from outside, at the head, with the checks from the base,
     # and each trial ran the template filled, in the tree.
-    (project_id, version, source, protected) = harness.trees[0]
-    assert (str(project_id), version, source, protected) == (
-        request.project,
+    (agent_project_id, version, source, protected) = harness.trees[0]
+    assert (str(agent_project_id), version, source, protected) == (
+        request.agent_project,
         HEAD,
         BASE,
         ("checks/**",),
@@ -438,7 +440,7 @@ def collected(report: ExecutorReport, request: ExecutionRequest) -> tuple[Execut
         report.results,
         executor=report.executor,
         session_id=request.session_id,
-        project=request.project,
+        agent_project=request.agent_project,
         purpose=request.purpose,
         validation_id=new_id(),
         now=utcnow(),
@@ -506,7 +508,7 @@ def needs_its_workspace_base(harness: Executor) -> TwinHandler:
     return handler
 
 
-# Check 1: a session pinned to its project's workspace base has its checks run
+# Check 1: a session pinned to its agent project's workspace base has its checks run
 # on a new instance of that base, with no egress, and the record names the
 # base's image.
 
@@ -584,7 +586,7 @@ async def test_a_session_with_no_workspace_base_runs_on_the_executors_own_image(
         assert (record.host, record.run_image.image) == ("cloud", "python:3.14"), name
 
 
-# Check 3: a session inside the wall pinned to its project's workspace base has
+# Check 3: a session inside the wall pinned to its agent project's workspace base has
 # its checks run on an instance a host of its pool makes on that base, with no
 # egress, whatever egress the session holds.
 

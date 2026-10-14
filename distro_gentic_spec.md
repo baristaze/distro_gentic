@@ -124,8 +124,8 @@ A platform claims a closed loop only if it keeps seven promises:
 2. **A baseline comes first,** recorded before a change, so "fixed" has
    something to be compared with.
 3. **Work completes through one gate,** which refuses a success unless
-   the project's validation passed at the exact version delivered, with
-   the runs behind each claim cited.
+   the agent project's validation passed at the exact version delivered,
+   with the runs behind each claim cited.
 4. **Failed and inconclusive are first-class.** A failure with an
    evidence-backed explanation is a result; a success without validation
    is not.
@@ -307,10 +307,10 @@ in.
 - **Pinned claims.** A host is handed only the work pinned to its pool,
   filtered by its identity, never by what it asks for.
 - **Owner's ceilings.** A host enforces limits its owner sets and the
-  platform cannot raise: the projects it serves, its minimum isolation,
-  its egress, the paths it lets a result read, whether it accepts
-  people's commands, and the MCP servers it starts, each named whole
-  ([Connectors](#connectors)). A compromised control plane still
+  platform cannot raise: the agent projects it serves, its minimum
+  isolation, its egress, the paths it lets a result read, whether it
+  accepts people's commands, and the MCP servers it starts, each named
+  whole ([Connectors](#connectors)). A compromised control plane still
   cannot widen what a host does.
 - **What it holds.** No database credential, no model key, no history:
   its own credential, its local secret store (keyed by tenant first, as
@@ -423,7 +423,7 @@ artifacts ([`agentic_core` Workspace Snapshots][e-snapshots]). The
 workspace itself stays a cache.
 
 - **Who chooses.** An agent kind says `cache`, the default, or
-  `snapshot`. A project narrows it: one that keeps its sessions'
+  `snapshot`. An agent project narrows it: one that keeps its sessions'
   workspaces as caches makes each of them a cache. A session that keeps
   no content at rest keeps no snapshot, so a kind kept by snapshots is
   refused for it when it is created.
@@ -460,35 +460,36 @@ workspace itself stays a cache.
   from the object store and from each host's store that keeps one, and
   their records go with them.
 
-### A Project's Workspace Base
+### An Agent Project's Workspace Base
 
 `optional`
 
 A software engineer works with no network, so it cannot install what its
 work needs, and open egress would make every command after its first
-tool result wait for a person. A project names its **workspace base**
-instead: an image, the commands that set it up, and the package
+tool result wait for a person. An agent project names its **workspace
+base** instead: an image, the commands that set it up, and the package
 registries the setup reaches. The platform builds it once and keeps it
-as a snapshot, and each session of the project starts from it, sealed.
-It is the engine's base ([`agentic_core` Workspace
-Snapshots][e-snapshots]), as a project names it.
+as a snapshot, and each session of the agent project starts from it,
+sealed. It is the engine's base ([`agentic_core` Workspace
+Snapshots][e-snapshots]), as an agent project names it.
 
-- **Who chooses.** The project, set by whoever writes the tenant's
-  configuration. An agent kind takes its project's workspace base only
-  from a version that says so, as the platform's software engineer does.
-  A kind that takes none, and a project that names none, work as before.
+- **Who chooses.** The agent project, set by whoever writes the tenant's
+  configuration. An agent kind takes its agent project's workspace base
+  only from a version that says so, as the platform's software engineer
+  does. A kind that takes none, and an agent project that names none,
+  work as before.
 - **Pinned with the session.** A session pins the workspace base its
-  project names when it is created, and keeps it. A changed workspace
-  base is another one, built again for the sessions created after it. A
-  session already running keeps the one it started on.
+  agent project names when it is created, and keeps it. A changed
+  workspace base is another one, built again for the sessions created
+  after it. A session already running keeps the one it started on.
 - **Built where its workspaces run.** In the cloud, the runner's
   provider builds it and keeps it in the platform's object store, under
   the tenant. On a customer's host, that host builds it and keeps it in
   its own store, inside the wall, as it keeps a snapshot. One build
-  serves the project on each side, and the hosts of a pool share one
-  when they share a store.
+  serves the agent project on each side, and the hosts of a pool share
+  one when they share a store.
 - **The setup reaches registries, the workspace nothing.** A setup that
-  names a registry runs with open egress, the project's recorded
+  names a registry runs with open egress, the agent project's recorded
   choice, and one that names none reaches nothing. A workspace on it
   keeps its kind's egress; the software engineer's is none. A host
   whose owner closed egress refuses a setup that reaches out.
@@ -496,8 +497,8 @@ Snapshots][e-snapshots]), as a project names it.
   new instance of the workspace base the session pinned, never on its
   workspace, and with no egress: the checks find what the setup
   installed, and reach nothing.
-- **No agent, no secret.** The setup runs the project's commands alone:
-  no model, no secret, no platform credential, and nothing of the
+- **No agent, no secret.** The setup runs the agent project's commands
+  alone: no model, no secret, no platform credential, and nothing of the
   tenant's records. A workspace base whose snapshot holds a secret's
   value is not kept.
 - **A failed setup keeps nothing.** In the cloud, the loop ends with the
@@ -537,12 +538,12 @@ runs one session at a time, unless its owner says otherwise.
 
 ### Egress
 
-A workspace's egress opens outward only, to a per-project allowlist that
-names destinations and methods: source control, through a credential
-scoped to the session's branch; package registries, read-only,
-through a vetting mirror; the platform's endpoints. Open egress is an
-explicit policy choice, recorded. A workspace never reaches the
-platform's internal network or a cloud metadata endpoint. No surface
+A workspace's egress opens outward only, to a per-agent-project
+allowlist that names destinations and methods: source control, through a
+credential scoped to the session's branch; package registries,
+read-only, through a vetting mirror; the platform's endpoints. Open
+egress is an explicit policy choice, recorded. A workspace never reaches
+the platform's internal network or a cloud metadata endpoint. No surface
 renders a URL from agent output as a fetch, such as an image in a
 comment or a mirror.
 
@@ -690,7 +691,7 @@ principal's message, and its gates compile into the session's policy,
 where they can only narrow it.
 
 A person who manages the tenant may also pin an agent playbook to an
-[agent kind][e-kinds], for the tenant or for one project, as the kind's
+[agent kind][e-kinds], for the tenant or for one agent project, as the kind's
 **kind manual**: the standing instructions of every session of that
 kind. It is one noun, invoked as a procedure or pinned as a kind manual.
 Each session of the kind made after the pin, a sub-agent and a hand-over
@@ -729,7 +730,7 @@ A **connector** is a tenant's own MCP server, which its agents take as
 a toolset ([`agentic_core` Agent Kinds][e-kinds]): a tracker, a wiki, a
 cloud's read API. A person who manages the tenant connects one, reviews
 the tools of it a session may call, and attaches it to a kind, for one
-project or for every session. A session of that kind holds it as a
+agent project or for every session. A session of that kind holds it as a
 toolset, deferred until its agent loads it unless it is attached
 otherwise.
 
@@ -786,12 +787,12 @@ to the runs that support or refute it.
 
 ### Validation Policy and Protected Checks
 
-Each project declares a **validation policy**: which checks must pass, at
-what grade, for which kinds of change, for a success to count. The
-checks, their fixtures, the policy itself, and every path that changes
-how tests are found or how the runtime starts are **protected**, by
-pattern: the agent cannot edit them, and a change that touches one voids
-validation.
+Each agent project declares a **validation policy**: which checks must
+pass, at what grade, for which kinds of change, for a success to count.
+The checks, their fixtures, the policy itself, and every path that
+changes how tests are found or how the runtime starts are **protected**,
+by pattern: the agent cannot edit them, and a change that touches one
+voids validation.
 
 Validation never runs in the agent's workspace. It runs on a fresh
 executor, from the delivered commit, with the checks, fixtures, and
@@ -914,7 +915,7 @@ addressing the agent in chat or on its work.
 
 `core`
 
-An environment secret is declared by name on a project, with the
+An environment secret is declared by name on an agent project, with the
 variable a command sees and a scope. The platform stores names
 only. Where it can, the executor brokers the secret outside the
 workspace; otherwise the machine that executes the call resolves it from
@@ -970,11 +971,11 @@ supplies everything behind the gate.
 **Metering** collects the engine's usage records, one per model call or
 spending job, and one aggregation serves every view of them: a
 dashboard, a list, a cap. **Limits** are budgets over a scope (person,
-project, team, tenant) and a window (hour, day, week, month, or custom).
-Days and weeks follow the tenant's time zone, months follow the billing
-period, and a change of time zone never manufactures budget. A limit
-counts settled spend plus open holds, and a one-time raise applies to the
-current window only.
+agent project, team, tenant) and a window (hour, day, week, month, or
+custom). Days and weeks follow the tenant's time zone, months follow the
+billing period, and a change of time zone never manufactures budget. A
+limit counts settled spend plus open holds, and a one-time raise applies
+to the current window only.
 
 ### Spend Units, Charges, and Agent Billing
 
@@ -1073,8 +1074,8 @@ tenant adds toolsets of its own to a kind: its connectors
 
 - The **software engineer** takes an objective to a validated,
   reviewable change. Its workspace has no network and starts from its
-  project's workspace base ([A Project's Workspace
-  Base](#a-projects-workspace-base)).
+  agent project's workspace base ([An Agent Project's Workspace
+  Base](#an-agent-projects-workspace-base)).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
@@ -1132,11 +1133,11 @@ What is stored where is a decision, never an accident.
   History][e-history]). Step content is sealed under a
   key per session, and the keys live in a key service the tenant can
   revoke; a tenant may bring its own key service.
-- **Retention policy** is declared per tenant and narrowed per project:
-  the content's lifetime, the shape's lifetime, the storage mode, zero
-  retention, and region. A session takes a snapshot of the policy when it
-  is created. Tightening reaches existing sessions at the next sweep;
-  loosening never reaches back.
+- **Retention policy** is declared per tenant and narrowed per agent
+  project: the content's lifetime, the shape's lifetime, the storage
+  mode, zero retention, and region. A session takes a snapshot of the
+  policy when it is created. Tightening reaches existing sessions at the
+  next sweep; loosening never reaches back.
 - **Enforcement and proof.** The sweep revokes the keys of sessions whose
   content has expired, and purges shape past its own lifetime. The audit
   holds each key destruction as the key service reported it, and a

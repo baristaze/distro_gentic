@@ -20,7 +20,7 @@ from uuid import UUID
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface
 from acme.integrations.exceptions import ProviderRefused
-from acme.om.agent_workspaces.projects import SourceControlInterface
+from acme.om.agent_workspaces.agent_projects import SourceControlInterface
 from acme.om.agent_workspaces.types.source import OpenedPullRequest, RepositoryBinding
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotAuthorized, PlatformException, Unavailable, ValidationFailed

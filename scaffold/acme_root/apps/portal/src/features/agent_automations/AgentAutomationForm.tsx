@@ -14,7 +14,7 @@ export function AgentAutomationForm({
   label,
   draft,
   setDraft,
-  projectOptions,
+  agentProjectOptions,
   problem,
   busy,
   submitLabel,
@@ -23,7 +23,7 @@ export function AgentAutomationForm({
   label: string;
   draft: AgentAutomationDraft;
   setDraft: (draft: AgentAutomationDraft) => void;
-  projectOptions: { value: string; label: string }[];
+  agentProjectOptions: { value: string; label: string }[];
   problem: string | null;
   busy: boolean;
   submitLabel: string;
@@ -89,7 +89,7 @@ export function AgentAutomationForm({
             info={agent?.about ?? "The agent its sessions run"}
           />
           <TextField label="Session title" placeholder="e.g. Update dependencies" value={draft.title} onChange={set("title")} />
-          {projectOptions.length > 0 ? <Select label="Project" value={draft.projectId} options={projectOptions} onChange={set("projectId")} /> : null}
+          {agentProjectOptions.length > 0 ? <Select label="Agent project" value={draft.agentProjectId} options={agentProjectOptions} onChange={set("agentProjectId")} /> : null}
           <TextField
             label="Agent playbook"
             placeholder="e.g. release-check"

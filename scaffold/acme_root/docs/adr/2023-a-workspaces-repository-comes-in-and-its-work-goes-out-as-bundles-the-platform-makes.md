@@ -5,22 +5,22 @@
 ## Context
 
 ADR 2022 keeps every repository credential out of a workspace: the
-platform reads a private repository with the project's fetch credential,
-and the forge writes with its own. Two paths would still run through the
-workspace itself. A checkout that fetches the bound repository from
-inside has no credential, so a private repository never checks out. A
-forge handed a commit id that exists only in the workspace has nothing
-that carries the commits to the repository, and a snapshot pushed from
-inside has the same fault. The software engineer's workspace also has no
-egress, so whatever reaches the repository is done by the platform,
-outside it.
+platform reads a private repository with the agent project's fetch
+credential, and the forge writes with its own. Two paths would still run
+through the workspace itself. A checkout that fetches the bound
+repository from inside has no credential, so a private repository never
+checks out. A forge handed a commit id that exists only in the workspace
+has nothing that carries the commits to the repository, and a snapshot
+pushed from inside has the same fault. The software engineer's workspace
+also has no egress, so whatever reaches the repository is done by the
+platform, outside it.
 
 ## Decision
 
 **In: a bundle the platform reads.** Before a loop, the platform fetches
 the default branch, the session's branch where the repository holds it,
 and its last snapshot where the repository never held the branch, with
-the tags in their history, on its own host, with the project's
+the tags in their history, on its own host, with the agent project's
 fetch credential, as the read of a work product does. It reads only
 where a workspace may reach: it resolves the repository's host first,
 refuses it when any address is in the networks no workspace reaches,

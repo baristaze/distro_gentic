@@ -27,11 +27,11 @@ What is set up once lives in Settings (`/settings`, ⌘,), out of the bar a
 person scans every day. There, Settings' own bar takes the left bar's
 place: back to the app, a search (`/`), and the sections by group.
 Personal holds the profile; Organization its general facts, members,
-usage, and audit; Agents the projects, models and keys, and agent
+usage, and audit; Agents the agent projects, models and keys, and agent
 playbooks; Security the API keys and single sign-on; and a product adds
-its own. An old address (`/projects`, `/models`, `/agent-playbooks`,
-`/audit`, `/usage`) lands on its section, and `/approvals` on the
-sessions that need you.
+its own. An old address (`/agent-projects`, `/models`,
+`/agent-playbooks`, `/audit`, `/usage`) lands on its section, and
+`/approvals` on the sessions that need you.
 
 Every text field shows a realistic example of what goes in, and an ⓘ says
 what a field means where its name does not. `watermarks.test.ts` holds
@@ -80,19 +80,19 @@ conversation only when it is their own
   search, and their keys.
 - `src/features/<name>/`: one folder per screen, a pure model, a
   view-model hook, and a page. `home/` is the composer that starts a
-  session on an agent and a project. `sessions/` is Sessions, with its two
-  views and its filters; `session/` is
+  session on an agent and an agent project. `sessions/` is Sessions,
+  with its two views and its filters; `session/` is
   one session's page: its thread, timeline, tools, evidence, changes, and
   children, live while it runs, and an agent playbook invoked into it by
   name from its header. The org's records and settings each have
-  their own: `projects/`, `models/` (the org's own provider keys and its
-  model for each role), `agent_automations/`, `agent_playbooks/`,
-  `agent_knowledge/`, `audit/`, `usage/`, and `settings/` (the overview,
-  the profile, the org's general facts, members, API keys, and single
-  sign-on). `providers/` is the banner a page shows while the org's
-  sessions wait on a model provider. A secret field is write-only: the
-  form sends it once, and the page shows only who set it and when. A new
-  API key's secret shows once, until Done.
+  their own: `agent_projects/`, `models/` (the org's own provider keys
+  and its model for each role), `agent_automations/`,
+  `agent_playbooks/`, `agent_knowledge/`, `audit/`, `usage/`, and
+  `settings/` (the overview, the profile, the org's general facts,
+  members, API keys, and single sign-on). `providers/` is the banner a
+  page shows while the org's sessions wait on a model provider. A secret
+  field is write-only: the form sends it once, and the page shows only
+  who set it and when. A new API key's secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
   `flags.ts` reads the session's flags as one snapshot from the API, and a
   view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
@@ -142,12 +142,12 @@ takes control, and finds End this run beside Give it back. The seeded
 member sees who holds it and End this run, never Run or Give it back.
 The owner ends the run there, which ends the loop cancelled. The records check needs
 only the API, on the scripted providers, and this dev server: in Settings
-the owner makes a project with a read credential, saves a provider key,
-and creates an API key, and then makes an agent automation; each is read
-back from the API. The credential's password and the provider key come
-back in no reply and on no screen, and the API key shows once, then on
-no screen. Their screenshots land in `e2e/screenshots/`, which git
-ignores.
+the owner makes an agent project with a read credential, saves a
+provider key, and creates an API key, and then makes an agent
+automation; each is read back from the API. The credential's password
+and the provider key come back in no reply and on no screen, and the API
+key shows once, then on no screen. Their screenshots land in
+`e2e/screenshots/`, which git ignores.
 
 The timeline check plays the software engineer's scene: it thinks, takes
 its baseline, plans, starts two analysis sub-agents and waits for their
@@ -169,11 +169,11 @@ uv run --package acme-session-runner python services/api/tests/portal_stack.py r
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/timeline.spec.ts
 ```
 
-The check writes the scene's repository and its project's policy itself
-(`portal_check.py scene`). It sees the first thought and words stream
-before their step lands, pauses and resumes the session from its header,
-approves each command it holds, answers its question, and opens a work
-block and a diff. Each moment is shot light and dark.
+The check writes the scene's repository and its agent project's policy
+itself (`portal_check.py scene`). It sees the first thought and words
+stream before their step lands, pauses and resumes the session from its
+header, approves each command it holds, answers its question, and opens
+a work block and a diff. Each moment is shot light and dark.
 
 The pane check plays the same scene on the same stack, with
 `PORTAL_API_URL` naming the API:

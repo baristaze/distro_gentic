@@ -67,15 +67,15 @@ class AgentPlaybooksManagerInterface(ABC):
 
     @abstractmethod
     async def pin(
-        self, ctx: TenantContext, kind: str, name: str, project_id: UUID | None = None
+        self, ctx: TenantContext, kind: str, name: str, agent_project_id: UUID | None = None
     ) -> AgentPlaybookPin:
         """Pins the name's latest version to a kind as its kind manual, for the
-        tenant's sessions of the kind, or those of one project, by a person
+        tenant's sessions of the kind, or those of one agent project, by a person
         in person who manages its members: an agent's call is
         `NotAuthorized`. Each session of the kind made from now on pins the
         version; one made before keeps its own. Pinned again, the slot
         names the version then latest. A kind the tenant's sessions cannot
-        start on is `UnknownAgentKind`, a project the tenant does not hold
+        start on is `UnknownAgentKind`, an agent project the tenant does not hold
         or a name with no version `NotFound`, and a brief past what a
         session's standing text holds `ValidationFailed`, with nothing
         pinned."""
@@ -83,16 +83,16 @@ class AgentPlaybooksManagerInterface(ABC):
 
     @abstractmethod
     async def unpin(
-        self, ctx: TenantContext, kind: str, project_id: UUID | None = None
+        self, ctx: TenantContext, kind: str, agent_project_id: UUID | None = None
     ) -> AgentPlaybookPin:
-        """Takes the kind's pin for the tenant, or for one project, away, by
+        """Takes the kind's pin for the tenant, or for one agent project, away, by
         a person in person who manages its members, and answers it. A
         session made with it keeps it. None is `NotFound`."""
         ...
 
     @abstractmethod
     async def pins(self, ctx: TenantContext) -> tuple[AgentPlaybookPin, ...]:
-        """The tenant's pins, by kind, the tenant's before a project's."""
+        """The tenant's pins, by kind, the tenant's before an agent project's."""
         ...
 
     @abstractmethod

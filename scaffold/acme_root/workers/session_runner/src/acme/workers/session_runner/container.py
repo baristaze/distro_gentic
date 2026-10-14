@@ -256,8 +256,8 @@ class RunnerContainer:
             executor=ports.executor,
             executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
-            session_projects=ports.session_projects,
-            workspace_projects=ports.workspace_projects,
+            agent_session_projects=ports.agent_session_projects,
+            workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
             models_layer=matrix.layer,
             tools_layer=layers,
@@ -281,7 +281,7 @@ class RunnerContainer:
             build_agent_automations(
                 storage,
                 managers,
-                project_required=settings.environment != LOCAL,
+                agent_project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
                 agent_playbooks=lambda: agent_playbooks.build(managers),
             )

@@ -52,8 +52,8 @@ test("the software engineer's session reads as a live chat: thoughts, work block
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: /^SoftwareEngineer/ }).click();
   await owner.keyboard.press("Escape");
-  await owner.getByRole("button", { name: /^Project:/ }).click();
-  await owner.getByRole("menuitemradio", { name: "First project" }).click();
+  await owner.getByRole("button", { name: /^AgentProject:/ }).click();
+  await owner.getByRole("menuitemradio", { name: "First agent project" }).click();
   await owner.keyboard.press("Escape");
   await owner.getByRole("textbox", { name: "Prompt" }).fill(PROMPT);
   await owner.getByRole("button", { name: "Send", exact: true }).click();

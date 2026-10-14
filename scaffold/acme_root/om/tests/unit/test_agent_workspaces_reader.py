@@ -78,7 +78,7 @@ def served(tmp_path: Path) -> Iterator[Served]:
     seed = tmp_path / "seed"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
-    (seed / "README.md").write_text("the project\n")
+    (seed / "README.md").write_text("the agent project\n")
     git(seed, "add", "README.md")
     git(seed, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "1")
     git(seed, "checkout", "-q", "-b", BRANCH)
@@ -103,7 +103,7 @@ def resolving(table: dict[str, Sequence[str]]) -> Callable[[str, int], Awaitable
 
 
 def bound(url: str) -> RepositoryBinding:
-    return RepositoryBinding(project_id=new_id(), repository=url)
+    return RepositoryBinding(agent_project_id=new_id(), repository=url)
 
 
 @pytest.mark.parametrize(

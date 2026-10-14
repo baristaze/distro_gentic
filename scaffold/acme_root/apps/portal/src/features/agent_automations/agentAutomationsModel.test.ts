@@ -18,7 +18,7 @@ const saved: AgentAutomationView = {
   id: "a1",
   name: "Triage",
   trigger: { kind: "event", integrations: ["forge"], arrivals: ["comment"], effects: [], every: null },
-  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION, params: {}, agent_playbook: null },
+  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, session_id: SESSION, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
   runs_as: "agent_automation_principal",
   own_events: true,
@@ -48,11 +48,11 @@ describe("durations", () => {
 
 describe("agentAutomationRequest", () => {
   it("makes a schedule that starts a session", () => {
-    expect(agentAutomationRequest(draft({ projectId: "p1" }))).toEqual({
+    expect(agentAutomationRequest(draft({ agentProjectId: "p1" }))).toEqual({
       request: {
         name: "Nightly tidy",
         trigger: { kind: "schedule", every: "PT86400S", integrations: [], arrivals: [], effects: [] },
-        action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy the docs", project_id: "p1", session_id: null },
+        action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy the docs", agent_project_id: "p1", session_id: null },
         limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
         runs_as: "creator",
         enabled: true,
@@ -65,8 +65,8 @@ describe("agentAutomationRequest", () => {
     expect("request" in made && made.request.trigger).toEqual({ kind: "event", every: null, integrations: ["forge", "chat"], arrivals: ["comment"], effects: [] });
   });
   it("refuses what the API refuses, saying why", () => {
-    const problem = (fields: Partial<AgentAutomationDraft>, projectRequired = false) => {
-      const made = agentAutomationRequest(draft(fields), { projectRequired });
+    const problem = (fields: Partial<AgentAutomationDraft>, agentProjectRequired = false) => {
+      const made = agentAutomationRequest(draft(fields), { agentProjectRequired });
       return "problem" in made ? made.problem : null;
     };
     expect(problem({ name: " " })).toBe("Give the agent automation a name.");
@@ -75,7 +75,7 @@ describe("agentAutomationRequest", () => {
     expect(problem({ brief: "" })).toBe("Write the brief the session is given.");
     expect(problem({ agentKind: "" })).toBe("Choose the agent it starts.");
     expect(problem({ title: "" })).toBe("Give the sessions it starts a title.");
-    expect(problem({}, true)).toBe("Choose the project its sessions work in.");
+    expect(problem({}, true)).toBe("Choose the agent project its sessions work in.");
     expect(problem({ actionKind: "message_session", sessionId: "not-an-id" })).toBe("Name the standing session by its id.");
     expect(problem({ costCap: "0" })).toBe("Set the most its runs spend in a period, as an amount above zero.");
     expect(problem({ runCap: "abc" })).toBe("Set the most one run spends, as an amount above zero.");
@@ -89,7 +89,7 @@ describe("agentAutomationRequest", () => {
       request: {
         name: "Triage",
         trigger: { kind: "event", every: null, integrations: ["forge"], arrivals: ["comment"], effects: [] },
-        action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION },
+        action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, session_id: SESSION },
         limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
         runs_as: "agent_automation_principal",
         enabled: false,
@@ -100,7 +100,7 @@ describe("agentAutomationRequest", () => {
   it("keeps the agent playbook a saved start invokes through an edit, and refuses a name no publish could have", () => {
     const start: AgentAutomationView = {
       ...saved,
-      action: { kind: "start_session", brief: "Look.", agent_kind: "assistant", title: "Triage", project_id: null, session_id: null, params: {}, agent_playbook: "triage-a-comment" },
+      action: { kind: "start_session", brief: "Look.", agent_kind: "assistant", title: "Triage", agent_project_id: null, session_id: null, params: {}, agent_playbook: "triage-a-comment" },
     };
     const made = agentAutomationRequest(draftOf(start) ?? EMPTY_DRAFT, { kept: start });
     expect("request" in made && made.request.action).toEqual({
@@ -108,7 +108,7 @@ describe("agentAutomationRequest", () => {
       brief: "Look.",
       agent_kind: "assistant",
       title: "Triage",
-      project_id: null,
+      agent_project_id: null,
       session_id: null,
       agent_playbook: "triage-a-comment",
     });
@@ -130,7 +130,7 @@ it("shows a row in words", () => {
 });
 
 it("shows a product's own action by its kind, and offers no form to edit it", () => {
-  const product: AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, project_id: null, session_id: null, params: { steps: 2 }, agent_playbook: null } };
+  const product: AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, agent_project_id: null, session_id: null, params: { steps: 2 }, agent_playbook: null } };
   expect(actionLine(product.action, [])).toBe("run the product's action run_job");
   expect(draftOf(product)).toBeNull();
 });

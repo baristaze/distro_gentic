@@ -335,12 +335,12 @@ class ArtifactPageView(View):
 
 class StartSessionRequest(RequestBody):
     """A session to start on the latest version of a kind the product runs,
-    in a project of the caller's tenant. Outside a local stack a session
-    starts in a project or not at all."""
+    in an agent project of the caller's tenant. Outside a local stack a session
+    starts in an agent project or not at all."""
 
     kind: str = Field(min_length=1, max_length=MAX_KIND)
     title: str = Field(min_length=1, max_length=MAX_TITLE)
-    project_id: UUID | None = None
+    agent_project_id: UUID | None = None
 
 
 class MessageRequest(RequestBody):

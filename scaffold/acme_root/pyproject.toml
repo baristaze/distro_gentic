@@ -124,7 +124,7 @@ reason = "a host starts an MCP server its owner names through the engine's MCP c
 [[tool.distro-check.exception]]
 rule = "PLC-10"
 path = "apps/host/src/acme/apps/host/bases.py"
-adr = "docs/adr/2051-a-projects-workspace-base-is-built-once-where-its-workspaces-run.md"
+adr = "docs/adr/2051-an-agent-projects-workspace-base-is-built-once-where-its-workspaces-run.md"
 reason = "a host builds a workspace's base through the engine's provider and transport on its own disk, keeps it in its own store, and reaches the platform through the client alone"
 
 # The guideline's static checker (`make arch-check`). The layout is the

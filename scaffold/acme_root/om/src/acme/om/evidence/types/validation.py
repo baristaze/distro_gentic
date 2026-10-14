@@ -13,18 +13,18 @@ from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import PATTERN
 from acme.om.evidence.types.provenance import SHA256
 from acme.om.evidence.types.rate import RateRule
-from acme.om.evidence.types.record import PROJECT, VERSION, RunPurpose
+from acme.om.evidence.types.record import AGENT_PROJECT, VERSION, RunPurpose
 
 
 class WorkProduct(Platform):
     """What a session's work product holds now, as the system that keeps it
-    reports it, never as the agent describes it: the name its project goes
+    reports it, never as the agent describes it: the name its agent project goes
     by there, the version the work started from, the committed head,
     whether the tree holds uncommitted changes, and every path changed from
     the base, committed or not. No policy is read by that name: a session
-    is judged by its own project's."""
+    is judged by its own agent project's."""
 
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     base: str = Field(pattern=VERSION)
     head: str = Field(pattern=VERSION)
     dirty: bool = False
@@ -41,11 +41,11 @@ class ExecutionRequest(Platform):
     source, and under an environment the executor sets. `protected` holds
     the patterns of those paths: every path one matches comes from
     `source`, whatever the tree at `version` holds there. `source` is a
-    commit of the repository `project` binds, or of the one
-    `source_project` binds when the request names it: a hidden suite's
+    commit of the repository `agent_project` binds, or of the one
+    `source_agent_project` binds when the request names it: a hidden suite's
     source of its own. `untouched` holds the patterns of the paths no
     change may touch: every path one matches, and no `protected` one does,
-    comes from the commit `base` of the repository `project` binds. Every
+    comes from the commit `base` of the repository `agent_project` binds. Every
     file of the tree either matches is read-only to the checks while they
     run, and a trial that changes one has no verdict, so no file that
     scores a run scores it as the head rewrote it, in the tree or while it
@@ -55,7 +55,7 @@ class ExecutionRequest(Platform):
     rule stops, at the confidence given here, and nowhere else."""
 
     session_id: UUID
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
     version: str = Field(pattern=VERSION)
     source: str = Field(pattern=VERSION)
@@ -63,7 +63,7 @@ class ExecutionRequest(Platform):
     trials: tuple[int, ...] = Field(min_length=1)
     rates: tuple[RateRule | None, ...] = ()
     protected: tuple[PATTERN, ...] = ()
-    source_project: str | None = Field(default=None, pattern=PROJECT)
+    source_agent_project: str | None = Field(default=None, pattern=AGENT_PROJECT)
     base: str | None = Field(default=None, pattern=VERSION)
     untouched: tuple[PATTERN, ...] = ()
 
@@ -109,7 +109,7 @@ class Validation(Identifiable, Created):
     this executor and the hash still holds."""
 
     session_id: UUID
-    project: str = Field(pattern=PROJECT)
+    agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
     version: str = Field(pattern=VERSION)
     source: str = Field(pattern=VERSION)

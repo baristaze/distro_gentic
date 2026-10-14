@@ -17,6 +17,7 @@ from acme.services.api.routers import (
     agent_fleet,
     agent_knowledge,
     agent_playbooks,
+    agent_projects,
     agent_sessions,
     approvals,
     benchmarks,
@@ -34,7 +35,6 @@ from acme.services.api.routers import (
     matrix_operator,
     media,
     park_alerts,
-    projects,
     provider_keys,
     retention,
     spend_ledgers,
@@ -59,7 +59,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "agent_sessions": (agent_sessions.router, approvals.router),
     # What a session ran to show its work, and what it delivered.
     "evidence": (evidence.router,),
-    # A check of a project's policy run with no agent, as CI asks for one.
+    # A check of an agent project's policy run with no agent, as CI asks for one.
     "platform_agents": (validations.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim; and a product's claimant's, through the same path.
@@ -74,9 +74,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "budgets": (budgets.router, usage.router),
     # The tenant's agent automations, and its agent automation principal and its grant.
     "agent_automations": (agent_automations.router,),
-    # A tenant's projects, each bound to its repository, and the fetch
+    # A tenant's agent projects, each bound to its repository, and the fetch
     # credential the platform reads that repository with.
-    "projects": (projects.router,),
+    "agent_projects": (agent_projects.router,),
     # What sessions recall, and the procedures they follow, each invoked
     # into a session or pinned to a kind as its kind manual.
     "agent_knowledge": (agent_knowledge.router,),

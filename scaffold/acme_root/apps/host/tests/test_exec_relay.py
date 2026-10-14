@@ -22,8 +22,8 @@ from uuid import UUID
 
 import httpx
 import pytest
+from contracts.agent_project_storage import make_agent_project, make_binding
 from contracts.agent_session_storage import make_session
-from contracts.project_storage import make_binding, make_project
 from host_support import (
     DETAIL,
     Pace,
@@ -97,7 +97,7 @@ async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
 async def relay_to(
     api: Stack,
     tmp_path: Path,
-    project_id: UUID | None = None,
+    agent_project_id: UUID | None = None,
     serves: UUID | None = None,
     wire: httpx.AsyncBaseTransport | None = None,
     now: Callable[[], datetime] | None = None,
@@ -107,7 +107,7 @@ async def relay_to(
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's exec relay to it. With `serves`, the host's ceilings serve that
-    project alone, and the session belongs to `project_id`. With `wire`, the
+    agent project alone, and the session belongs to `agent_project_id`. With `wire`, the
     host reaches the platform through it, and with `now` it reads its time.
     It sends what a command prints at once, or `flush_seconds` apart, and
     starts the MCP servers `servers` names."""
@@ -129,7 +129,7 @@ async def relay_to(
     host = HostAgent(
         api.settings(tmp_path / "home", await api.token(pool.id)),
         Ceilings(
-            projects=None if serves is None else frozenset({serves}),
+            agent_projects=None if serves is None else frozenset({serves}),
             min_isolation=HostMode.directory,
             egress=frozenset(),
             readable=(str(where),),
@@ -149,9 +149,9 @@ async def relay_to(
     await host.start()
     managers = api.container.managers
     session = await managers.agent_sessions.create_session(api.owner, make_session())
-    if project_id is not None:
-        await api.container.storage.get_project_storage().bind_session(
-            api.owner.org_id, make_binding(session.id, project_id)
+    if agent_project_id is not None:
+        await api.container.storage.get_agent_project_storage().bind_session(
+            api.owner.org_id, make_binding(session.id, agent_project_id)
         )
     await managers.hosts.place_session(api.owner, session.id, pool.id)
     host_id = UUID(host.credential.claimant_id)
@@ -421,12 +421,14 @@ async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call
 
 
 @pytest.mark.parametrize("served", [True, False])
-async def test_a_relayed_call_names_its_sessions_project_to_the_hosts_ceilings(
+async def test_a_relayed_call_names_its_sessions_agent_project_to_the_hosts_ceilings(
     api: Stack, tmp_path: Path, served: bool
 ) -> None:
-    project = await api.container.managers.projects.create_project(api.owner, make_project())
-    serves = project.id if served else new_id()
-    relayed = await relay_to(api, tmp_path, project.id, serves)
+    agent_project = await api.container.managers.agent_projects.create_agent_project(
+        api.owner, make_agent_project()
+    )
+    serves = agent_project.id if served else new_id()
+    relayed = await relay_to(api, tmp_path, agent_project.id, serves)
     waiting = asyncio.ensure_future(
         relayed.runner.run(relayed.workspace, command(relayed.epoch, "echo", "ours"), seal=NO_SEAL)
     )
@@ -436,7 +438,7 @@ async def test_a_relayed_call_names_its_sessions_project_to_the_hosts_ceilings(
         ran = await waiting
         assert (ran.exit_code, ran.stdout) == (0, "ours\n")
     else:
-        with pytest.raises(Exception, match="a project this host does not serve"):
+        with pytest.raises(Exception, match="an agent project this host does not serve"):
             await waiting
 
 

@@ -6,10 +6,11 @@
 
 The spec's Data, Retention, and the Wall seals step content under a key
 per session, kept in a key service the tenant can revoke, or bring its
-own. A retention policy is declared per tenant and narrowed per project.
-A session takes a snapshot of it when it is created: tightening reaches
-existing sessions at the next sweep, and loosening never reaches back.
-The audit holds each key destruction as the key service reported it.
+own. A retention policy is declared per tenant and narrowed per agent
+project. A session takes a snapshot of it when it is created: tightening
+reaches existing sessions at the next sweep, and loosening never reaches
+back. The audit holds each key destruction as the key service reported
+it.
 
 The engine seals each session's content under its own key, wrapped by
 the tenant's key service, which keeps no copy: the engine's revocation
@@ -22,12 +23,12 @@ marked deleted
 ## Decision
 
 **A policy only tightens what it reaches.** One operation, the tighter
-of two policies field by field, folds a project's narrowing into its
-tenant's policy, and the tenant's policy into a session's snapshot. So a
-project never widens its tenant's policy, and a loosening leaves every
-snapshot as it was. A region is the one field where neither side is
-tighter: a project that names another region than its tenant's is
-refused. Lifetimes count from the session's creation.
+of two policies field by field, folds an agent project's narrowing into
+its tenant's policy, and the tenant's policy into a session's snapshot.
+So an agent project never widens its tenant's policy, and a loosening
+leaves every snapshot as it was. A region is the one field where neither
+side is tighter: an agent project that names another region than its
+tenant's is refused. Lifetimes count from the session's creation.
 
 **The snapshot is taken before the session is written.** A decorator over
 the engine's sessions manager takes it first, then lets the engine write
