@@ -14,6 +14,7 @@ from acme.infra.impl.settings import InfraSettings
 from acme.infra.root import InfraInterface
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om import product_namespaces
 from acme.om.agent_automations.impl.manager import AgentAutomationsOptions
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
@@ -41,7 +42,6 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_root import PlatformManagers, PlatformPorts, PlatformRootOptions, ProductKinds
-from acme.om.product_namespaces import PRODUCT_NAMESPACES
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
@@ -239,7 +239,7 @@ class WorkerPlatform:
             options=ParkAlertsOptions(purge_batch=batch),
         )
         # The product's namespaces, each built once here for its purges.
-        self.products = PRODUCT_NAMESPACES.swept(storage, managers)
+        self.products = product_namespaces.PRODUCT_NAMESPACES.swept(storage, managers)
 
     @property
     def ticks(self) -> dict[str, TickStep]:

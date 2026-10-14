@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 from fastapi import APIRouter
 
-from acme.services.api.product_api import PRODUCT_API
+from acme.services.api import product_api
 from acme.services.api.realtime import control
 from acme.services.api.routers import (
     agent_automations,
@@ -101,7 +101,7 @@ def with_platform(hosted: Mapping[str, tuple[APIRouter, ...]]) -> dict[str, tupl
     then the platform's namespaces, then the product's. A name hosted twice
     is refused at boot."""
     served = {name: (*routers, *BESIDE.get(name, ())) for name, routers in hosted.items()}
-    for extra in (PLATFORM_HOSTED, PRODUCT_API.hosted()):
+    for extra in (PLATFORM_HOSTED, product_api.PRODUCT_API.hosted()):
         for name, routers in extra.items():
             if name in served:
                 raise ValueError(f"namespace {name} is hosted twice")

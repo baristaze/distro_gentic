@@ -12,6 +12,7 @@ from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om import product_namespaces
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import build_agent_knowledge
@@ -34,7 +35,6 @@ from acme.om.platform_root import (
     PlatformRootOptions,
     build_platform_managers,
 )
-from acme.om.product_namespaces import PRODUCT_NAMESPACES
 from acme.om.root import LOCAL, TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.root import StorageInterface
 from acme.om.trust import KeyProbeInterface
@@ -45,7 +45,7 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
-from acme.services.api.product_api import PRODUCT_API
+from acme.services.api import product_api
 from acme.services.api.services.impl.platform_root import build_platform_services
 from acme.services.api.services.impl.root import build_services
 from acme.services.api.services.platform import PlatformServicesInterface
@@ -209,6 +209,8 @@ def build_platform_api(
             options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
         ),
         # Each namespace the product serves, over the managers it builds.
-        products=PRODUCT_API.services(storage, managers, PRODUCT_NAMESPACES),
+        products=product_api.PRODUCT_API.services(
+            storage, managers, product_namespaces.PRODUCT_NAMESPACES
+        ),
     )
     return PlatformApi(managers, services, stream)
