@@ -1,7 +1,6 @@
 """The all-local infra root: every capability in-process or on disk under
 one folder, for tests and the fast gate."""
 
-from datetime import timedelta
 from pathlib import Path
 
 from acme.infra.buckets import BucketsInterface
@@ -12,18 +11,16 @@ from acme.infra.flags import FlagsInterface
 from acme.infra.flags.memory import FlagsMemoryImpl
 from acme.infra.keys import KeyServiceInterface
 from acme.infra.keys.memory import KeyServiceMemoryImpl
-from acme.infra.machines import MachinesInterface, SeedsInterface
-from acme.infra.machines.seeded import PLAIN_WRITE, SeedsChannelImpl
+from acme.infra.machines import MachinesInterface
 from acme.infra.machines.twin import MachinesTwinImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.null import OutageSignalNullImpl
+from acme.infra.platform_root import PlatformInfra, PlatformInfraRoot
 from acme.infra.queues import QueuesInterface
 from acme.infra.queues.memory import QueueMemoryImpl
 from acme.infra.root import InfraInterface
 from acme.infra.secrets import SecretsInterface
 from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.streams import StreamsInterface
-from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.topics import TopicsInterface
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
@@ -33,7 +30,7 @@ from acme.infra.workspaces import WorkspaceProviderInterface
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 
 
-class InfraLocalImpl(InfraInterface):
+class InfraLocalImpl(PlatformInfraRoot, InfraInterface):
     def __init__(self, root: Path) -> None:
         self._root = root
         self._caches: dict[CacheScope, CacheInterface] = {
@@ -46,9 +43,8 @@ class InfraLocalImpl(InfraInterface):
         self._queues = QueueMemoryImpl()
         self._secrets = SecretsLocalImpl(root / "secrets.env")
         self._keys = KeyServiceMemoryImpl()
-        self._streams = StreamsMemoryImpl()
         self._machines = MachinesTwinImpl(root / "machines")
-        self._seeds = SeedsChannelImpl(self._machines, timedelta(seconds=30), PLAIN_WRITE)
+        self._platform_infra = PlatformInfra.local(self._machines)
         self._workspaces = WorkspaceTwinImpl()
         self._broker = BrokerTwinImpl()
         self._transport = TransportTwinImpl(self._secrets, self._broker)
@@ -72,17 +68,11 @@ class InfraLocalImpl(InfraInterface):
     def get_keys(self) -> KeyServiceInterface:
         return self._keys
 
-    def get_streams(self) -> StreamsInterface:
-        return self._streams
-
     def get_workspaces(self) -> WorkspaceProviderInterface:
         return self._workspaces
 
     def get_machines(self) -> MachinesInterface:
         return self._machines
-
-    def get_seeds(self) -> SeedsInterface:
-        return self._seeds
 
     def get_transport(self) -> TransportInterface:
         return self._transport
@@ -105,7 +95,7 @@ class InfraLocalImpl(InfraInterface):
             self._queues.describe(),
             self._secrets.describe(),
             self._keys.describe(),
-            self._streams.describe(),
+            *self._platform_infra.describe(),
             self._machines.describe(),
             self._workspaces.describe(),
             self._transport.describe(),
@@ -124,14 +114,14 @@ class InfraLocalImpl(InfraInterface):
             self._flags,
         ):
             await capability.start()
-        await self._streams.start()
+        await self._platform_infra.start()
         for runtime in (self._broker, self._machines, self._workspaces, self._transport):
             await runtime.start()
 
     async def close(self) -> None:
         for runtime in (self._transport, self._workspaces, self._machines, self._broker):
             await runtime.close()
-        await self._streams.close()
+        await self._platform_infra.close()
         for cache in self._caches.values():
             await cache.close()
         for capability in (

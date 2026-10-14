@@ -10,6 +10,7 @@ from dotenv import dotenv_values
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from acme.infra.platform_settings import PlatformInfraSettings
 from acme.infra.workspaces.container import DEFAULT_IMAGE
 
 ENVIRONMENTS = frozenset({"local", "test", "dev", "staging", "production"})
@@ -43,7 +44,7 @@ def secret_overrides_from_environment() -> dict[str, str]:
     }
 
 
-class InfraSettings(BaseSettings):
+class InfraSettings(PlatformInfraSettings, BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ACME_", env_file=ENV_FILE, extra="ignore")
 
     environment: str = "local"
@@ -102,17 +103,15 @@ class InfraSettings(BaseSettings):
     # `machines_backend` (ADR 1029). A deployed environment refuses `host`
     # and `account`.
     # The root also holds each transport's records of how commands ended,
-    # beside the workspaces. Each container carries the deployment's name,
-    # and a runner holds only those that carry its own. `account` refuses a
-    # host that lets an account link a file it does not own; where this
-    # process cannot read the host's fs.protected_hardlinks, as under a unit
-    # with ProcSubset=pid, `workspace_protected_hardlinks` declares it on.
+    # beside the workspaces. `account` refuses a host that lets an account
+    # link a file it does not own; where this process cannot read the
+    # host's fs.protected_hardlinks, as under a unit with ProcSubset=pid,
+    # `workspace_protected_hardlinks` declares it on.
     workspace_backend: Literal["none", "host", "account", "container", "vm"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
     workspace_account: str = "acme-agent"
     workspace_protected_hardlinks: bool = False
     workspace_image: str = DEFAULT_IMAGE
-    workspace_deployment: str = Field(default="acme-local", min_length=1)
     # The machines a `vm` workspace runs on: `lima` on this host's hypervisor
     # through Lima, or `none`, which runs no machine and refuses every VM
     # workspace. A new machine boots `machine_image`, in the backend's terms
@@ -122,32 +121,12 @@ class InfraSettings(BaseSettings):
     # probe refuses a Lima home too deep for the longest name. A machine's
     # snapshot is its disk, kept in the backend's store;
     # `machine_store_encrypted` declares that store encrypted at rest, and
-    # without it a VM workspace keeps no snapshot.
-    # `ec2` runs each machine as an instance in the platform's cloud
-    # account, from the cloud pool's launch template
-    # (`machine_launch_template`), in one of `machine_subnets` (comma
-    # separated), and in the security group of its egress:
-    # `machine_closed_group` reaches the gateway alone, and
-    # `machine_open_group` adds open egress. Its image is an AMI, and its
-    # snapshots are the cloud's own, under the template's key. A process on
-    # `ec2` never calls into a machine, so no VM workspace runs on it.
+    # without it a VM workspace keeps no snapshot. `ec2` is the platform's
+    # cloud account (`PlatformInfraSettings`).
     machines_backend: Literal["none", "lima", "ec2"] = "none"
     machine_image: str = "template:_images/ubuntu-lts"
     machine_prefix: str = Field(default="acme-vm-", pattern=r"^[a-z][a-z0-9-]*-$", max_length=21)
     machine_store_encrypted: bool = False
-    machine_launch_template: str = ""
-    machine_subnets: str = ""
-    machine_closed_group: str = ""
-    machine_open_group: str = ""
-    # The cloud pool: a machine per session of the cloud whose workspace is a
-    # VM, each running the host program, which reaches the platform at
-    # `cloud_pool_api_url`. Every machine starts from `cloud_pool_image`, a
-    # snapshot of the machines that holds the host program: a stopped
-    # machine's name on Lima, the AMI id on ec2; empty runs no pool.
-    # `cloud_pool_warm` machines stand started ahead of demand.
-    cloud_pool_image: str = ""
-    cloud_pool_api_url: str = ""
-    cloud_pool_warm: int = Field(default=0, ge=0)
 
     # Where the flags' rules come from: the memory impl over a rules file
     # (local only, refused at boot anywhere else), LaunchDarkly through
@@ -172,10 +151,6 @@ class InfraSettings(BaseSettings):
     # A Docker command that prepares, releases, or reaches into a container
     # workspace; the first prepare may pull the image.
     docker_timeout_seconds: float = 120.0
-    # `docker pull` of the workspace image, which a prepare runs when the
-    # image is absent: the image is large, and a pull cut short leaves
-    # nothing, so it has a limit of its own.
-    docker_pull_timeout_seconds: float = 900.0
     # A command a machine runs for a VM workspace, and a machine's start,
     # which may download its image and install Docker in it.
     machine_timeout_seconds: float = Field(default=120.0, gt=0)

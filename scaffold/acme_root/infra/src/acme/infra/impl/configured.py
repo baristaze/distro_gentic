@@ -24,14 +24,18 @@ from acme.infra.impl.valkey import ValkeyConnection
 from acme.infra.keys import KeyServiceInterface
 from acme.infra.keys.kms import KeyServiceKmsImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl, root_key
-from acme.infra.machines import MachinesInterface, SeedsInterface
-from acme.infra.machines.ec2 import MachinesEc2Impl
+from acme.infra.machines import MachinesInterface
 from acme.infra.machines.lima import MachinesLimaImpl
-from acme.infra.machines.seeded import SeedsChannelImpl, SeedsNullImpl
 from acme.infra.machines.twin import MachinesNullImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.cache import OutageSignalCacheImpl
 from acme.infra.outages.null import OutageSignalNullImpl
+from acme.infra.platform_root import (
+    PlatformInfra,
+    PlatformInfraRoot,
+    cloud_machines,
+    unsafe_on_platform,
+)
 from acme.infra.queues import QueuesInterface
 from acme.infra.queues.memory import QueueMemoryImpl
 from acme.infra.queues.sqs import QueueSqsImpl
@@ -39,10 +43,6 @@ from acme.infra.root import InfraInterface
 from acme.infra.secrets import SecretsInterface
 from acme.infra.secrets.aws import SecretsAwsImpl
 from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.streams import StreamsInterface
-from acme.infra.streams.breaker import StreamsBreakerImpl
-from acme.infra.streams.memory import StreamsMemoryImpl
-from acme.infra.streams.valkey import StreamsValkeyImpl
 from acme.infra.topics import TopicsInterface
 from acme.infra.topics.breaker import TopicsBreakerImpl
 from acme.infra.topics.memory import TopicsMemoryImpl
@@ -102,11 +102,8 @@ def refuse_unsafe(settings: InfraSettings) -> None:
         raise UnsafeConfiguration(
             "ACME_FLAGS_BACKEND=launchdarkly is refused without ACME_LAUNCHDARKLY_SDK_KEY"
         )
-    if settings.workspace_backend == "vm" and settings.machines_backend == "ec2":
-        raise UnsafeConfiguration(
-            "ACME_WORKSPACE_BACKEND=vm is refused with ACME_MACHINES_BACKEND=ec2: "
-            "a machine of the cloud takes no command from outside, and its host pulls"
-        )
+    if (refusal := unsafe_on_platform(settings)) is not None:
+        raise UnsafeConfiguration(refusal)
     if not settings.is_cloud_environment:
         return
     for field, unsafe_value, env_name in UNSAFE_IN_CLOUD:
@@ -116,7 +113,7 @@ def refuse_unsafe(settings: InfraSettings) -> None:
             )
 
 
-class InfraConfiguredImpl(InfraInterface):
+class InfraConfiguredImpl(PlatformInfraRoot, InfraInterface):
     def __init__(self, settings: InfraSettings) -> None:
         refuse_unsafe(settings)
         self._settings = settings
@@ -158,15 +155,6 @@ class InfraConfiguredImpl(InfraInterface):
             )
         else:
             self._outages = OutageSignalNullImpl()
-        # The live streams follow the cache too, behind the same breaker.
-        if settings.cache_backend == "valkey":
-            assert self._valkey is not None
-            assert self._valkey_breaker is not None
-            self._streams: StreamsInterface = StreamsBreakerImpl(
-                StreamsValkeyImpl(self._valkey), self._valkey_breaker
-            )
-        else:
-            self._streams = StreamsMemoryImpl()
 
         if settings.buckets_backend == "s3":
             self._buckets: BucketsInterface = BucketsS3Impl(
@@ -229,7 +217,9 @@ class InfraConfiguredImpl(InfraInterface):
         # rather than injected.
         self._broker: CredentialBrokerInterface = BrokerNullImpl()
         self._machines = self._build_machines(settings)
-        self._seeds = self._build_seeds(settings)
+        self._platform_infra = PlatformInfra.configured(
+            settings, self._valkey, self._valkey_breaker, self._machines
+        )
         self._workspaces, self._transport = self._build_runtime(settings)
         self._flags = self._build_flags()
 
@@ -284,37 +274,15 @@ class InfraConfiguredImpl(InfraInterface):
     def _build_machines(self, settings: InfraSettings) -> MachinesInterface:
         """The machines a VM workspace, or the cloud pool, runs on; none runs
         no machine, and its probe refuses every VM workspace."""
+        if (cloud := cloud_machines(settings, self._aws)) is not None:
+            return cloud
         if settings.machines_backend == "lima":
             return MachinesLimaImpl(
                 timedelta(seconds=settings.machine_timeout_seconds),
                 timedelta(seconds=settings.machine_boot_timeout_seconds),
                 encrypted=settings.machine_store_encrypted,
             )
-        if settings.machines_backend == "ec2":
-            return MachinesEc2Impl(
-                self._aws,
-                region=settings.aws_region,
-                timeout=timedelta(seconds=settings.aws_timeout_seconds),
-                boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
-                template=settings.machine_launch_template,
-                subnets=tuple(s for s in settings.machine_subnets.split(",") if s),
-                closed=settings.machine_closed_group,
-                open_=settings.machine_open_group,
-                encrypted=settings.machine_store_encrypted,
-            )
         return MachinesNullImpl()
-
-    def _build_seeds(self, settings: InfraSettings) -> SeedsInterface:
-        """How a machine of the cloud pool is handed its seed: at its start,
-        on the cloud's machines; through the hypervisor's channel, on
-        Lima's."""
-        if isinstance(self._machines, MachinesEc2Impl):
-            return self._machines
-        if settings.machines_backend == "lima":
-            return SeedsChannelImpl(
-                self._machines, timedelta(seconds=settings.machine_timeout_seconds)
-            )
-        return SeedsNullImpl()
 
     def _build_flags(self) -> FlagsInterface:
         """Built now and connected at start: the vendor's client blocks while
@@ -358,17 +326,11 @@ class InfraConfiguredImpl(InfraInterface):
     def get_keys(self) -> KeyServiceInterface:
         return self._keys
 
-    def get_streams(self) -> StreamsInterface:
-        return self._streams
-
     def get_workspaces(self) -> WorkspaceProviderInterface:
         return self._workspaces
 
     def get_machines(self) -> MachinesInterface:
         return self._machines
-
-    def get_seeds(self) -> SeedsInterface:
-        return self._seeds
 
     def get_transport(self) -> TransportInterface:
         return self._transport
@@ -391,7 +353,7 @@ class InfraConfiguredImpl(InfraInterface):
             self._queues.describe(),
             self._secrets.describe(),
             self._keys.describe(),
-            self._streams.describe(),
+            *self._platform_infra.describe(),
             self._machines.describe(),
             self._workspaces.describe(),
             self._transport.describe(),
@@ -412,7 +374,7 @@ class InfraConfiguredImpl(InfraInterface):
             self._flags,
         ):
             await capability.start()
-        await self._streams.start()
+        await self._platform_infra.start()
         for runtime in (self._broker, self._machines, self._workspaces, self._transport):
             await runtime.start()
 
@@ -421,7 +383,7 @@ class InfraConfiguredImpl(InfraInterface):
         last, once nothing holds it."""
         for runtime in (self._transport, self._workspaces, self._machines, self._broker):
             await runtime.close()
-        await self._streams.close()
+        await self._platform_infra.close()
         for cache in self._caches.values():
             await cache.close()
         for capability in (
