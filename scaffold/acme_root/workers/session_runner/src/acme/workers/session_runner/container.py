@@ -20,7 +20,7 @@ from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
-from acme.workers.session_runner.platform import RunnerPlatform, build_runner_platform
+from acme.workers.session_runner.platform.container import RunnerPlatform, build_runner_platform
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 log = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ class RunnerContainer:
         placement_options: PlacementOptions | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose: the platform's,
-        as `platform.build_runner_platform` builds them with `ports`,
+        as `platform.container.build_runner_platform` builds them with `ports`,
         `platform_agents`, and `placement_options`."""
         managers, platform = build_runner_platform(
             settings,

@@ -10,23 +10,23 @@ from httpx import ASGITransport
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.services.api import platform_api
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 from acme.services.api.main import main
+from acme.services.api.platform import container as platform_container
 
 
 async def test_managers_are_built_once_for_any_number_of_requests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[int] = []
-    real_build = platform_api.build_platform_managers
+    real_build = platform_container.build_platform_managers
 
     def counting_build(*args: object, **kwargs: object) -> object:
         calls.append(1)
         return real_build(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(platform_api, "build_platform_managers", counting_build)
+    monkeypatch.setattr(platform_container, "build_platform_managers", counting_build)
     container = AppContainer.for_tests(StorageMemoryImpl(), InfraLocalImpl(tmp_path))
     assert len(calls) == 1
 

@@ -4,6 +4,7 @@ platform router resolves its service through
 `acme.services.api.gateway.platform_resolve`."""
 
 from abc import abstractmethod
+from collections.abc import Mapping
 
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
@@ -94,8 +95,7 @@ class PlatformServicesInterface(ServicesInterface):
     def get_validations_service(self) -> ValidationsServiceInterface: ...
 
     @abstractmethod
-    def get_product_service(self, namespace: str) -> object:
-        """The service of the product's namespace of that name
-        (`acme.services.api.product_api`); a name the product declares no
-        namespace for is refused (`LookupError`)."""
+    def get_product_services(self) -> Mapping[str, object]:
+        """The service of each namespace the product serves, by the
+        namespace's name (`acme.services.api.product_api`)."""
         ...

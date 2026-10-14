@@ -194,6 +194,26 @@ reason = "a session's pool of one is named by its session, so concurrent prepare
 
 # The storage methods that take no tenant, the same list
 # om/tests/unit/test_storage_exceptions.py holds.
+# The root's hooks wire: the engine's root hands each hook what it built so
+# far, and an impl of them builds the impls a layer above adds, as a root
+# does.
+[tool.arch-check.options.CON-06]
+roots = ["StorageInterface", "InfraInterface", "ServicesInterface", "RootHooksInterface"]
+
+[tool.arch-check.options.CON-08]
+roots = ["StorageInterface", "InfraInterface", "ServicesInterface", "RootHooksInterface"]
+
+# The platform's services root, beside the engine's, holds a getter per
+# service as the engine's does.
+[tool.arch-check.options.CON-20]
+roots = ["StorageInterface", "InfraInterface", "ServicesInterface", "PlatformServicesInterface"]
+
+[[tool.arch-check.exception]]
+rule = "CON-06"
+path = "om/src/acme/om/root_hooks.py"
+adr = "docs/adr/2064-the-platform-wires-in-files-of-its-own-and-a-product-declares-its-namespaces.md"
+reason = "each hook takes the managers the engine's root built so far, at boot; it is wiring, and no request reaches it"
+
 [tool.arch-check.options.CTX-12]
 tenantless = [
     "AgentSessionStorageInterface.read_purgeable",

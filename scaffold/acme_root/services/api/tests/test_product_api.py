@@ -68,7 +68,7 @@ async def test_a_declared_namespaces_routes_are_served_and_its_service_resolves(
 ) -> None:
     assert PARCELS in routers.HOSTED and router in routers.HOSTED[PARCELS]
     container = build_container(tmp_path)
-    service = container.services.get_product_service(PARCELS)
+    service = container.services.get_product_services()[PARCELS]
     assert isinstance(service, ParcelsService) and service.managers is container.managers
     assert service.parcels is product_namespace.built[-1], "built once, over the platform's"
 

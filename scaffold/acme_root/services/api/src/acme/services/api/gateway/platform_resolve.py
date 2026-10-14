@@ -42,12 +42,13 @@ def platform_services_of(connection: HTTPConnection) -> PlatformServicesInterfac
 def product_service[S](namespace: str, interface: type[S]) -> Callable[[HTTPConnection], S]:
     """The resolver of a product's namespace's service, as its router names
     it: `Annotated[interface, Depends(product_service(namespace, interface))]`.
-    A service that is not an `interface` is refused."""
+    A namespace the product serves no service of, or a service that is not
+    an `interface`, is refused."""
 
     def resolve(connection: HTTPConnection) -> S:
-        service = platform_services_of(connection).get_product_service(namespace)
+        service = platform_services_of(connection).get_product_services().get(namespace)
         if not isinstance(service, interface):
-            raise TypeError(f"the {namespace} service is no {interface.__name__}")
+            raise TypeError(f"the product serves no {namespace} service of {interface.__name__}")
         return service
 
     return resolve

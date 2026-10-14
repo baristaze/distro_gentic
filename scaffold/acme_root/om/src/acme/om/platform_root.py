@@ -691,7 +691,7 @@ class EngineOptions(TypedDict, total=False):
     environment: str
 
 
-class PlatformRoot(RootHooksInterface):
+class RootHooksPlatformImpl(RootHooksInterface):
     """The platform's hooks into the engine's root for one build, and the
     managers it builds once the engine's are: hand it to `build_managers`
     as its hooks, with `engine_options()` as its keywords, then `build` the
@@ -1275,7 +1275,7 @@ def build_platform_managers(
     platform's managers are built over it. The engine's keywords are as
     `build_managers` takes them; `platform_root_options` is what the process
     sets on the platform's managers, None the defaults."""
-    root = PlatformRoot(
+    root = RootHooksPlatformImpl(
         storage, infra, integrations, platform_root_options or PlatformRootOptions(), engine
     )
     return root.build(

@@ -41,7 +41,7 @@ from acme.workers.maintenance.orchestrations import (
     OrchestrationHandlerImpl,
     WakeParkedHandlerImpl,
 )
-from acme.workers.maintenance.platform import PlatformWorkerLoop
+from acme.workers.maintenance.platform.container import PlatformWorkerLoop
 from acme.workers.maintenance.providers import ProviderCalls
 from acme.workers.maintenance.sessions import (
     LeaseNoticeHandlerImpl,

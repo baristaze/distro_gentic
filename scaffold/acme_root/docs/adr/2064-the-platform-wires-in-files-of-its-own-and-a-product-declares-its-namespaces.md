@@ -30,7 +30,7 @@ engine's `Managers` with the platform's beside them, and
 `build_platform_managers` is the one call every process makes.
 
 **Each process wires the platform in a half of its own.** The API's
-container builds through `platform_api`. Its services root
+container builds through `platform.container`. Its services root
 (`services/impl/platform_root`) holds the platform's services beside the
 engine's, and its routers ride beside the engine's registry
 (`routers/platform.with_platform`), resolving their services through

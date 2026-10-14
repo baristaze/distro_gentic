@@ -50,7 +50,7 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
-from acme.workers.maintenance.platform import cloud_pool_options
+from acme.workers.maintenance.platform.container import cloud_pool_options
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 

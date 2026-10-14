@@ -44,7 +44,7 @@ from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.work.impl.manager import WorkOptions
-from acme.workers.maintenance.platform import WorkerPlatform, worker_platform_options
+from acme.workers.maintenance.platform.container import WorkerPlatform, worker_platform_options
 from acme.workers.maintenance.settings import MaintenanceSettings
 
 log = logging.getLogger(__name__)

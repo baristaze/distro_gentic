@@ -57,7 +57,7 @@ which builds a `Firing` and calls `fire`.
 | `om/src/<name>/om/agent_automations/types/agent_automation.py` | `TriggerKind.<TRIGGER>`; each filter on `Trigger`; in `_a_schedule_has_a_period` or a validator beside it, a trigger of the kind sets its own filters alone and no `every`; on `Firing`, the fields its filters read, defaulted so the existing callers change nothing |
 | `om/src/<name>/om/agent_automations/rules.py` | `matches` answers for the kind by its filters, and a firing of one kind never matches a trigger of another |
 | the namespace of `--occurrence`, its manager impl | the work item asked for in the occurrence's own write |
-| `om/src/<name>/om/work/` and `workers/maintenance/src/<name>/workers/maintenance/platform.py` | the work kind and its payload, as the worker's README says under Adding a work kind, and its handler in `WorkerPlatform.handlers`, which the worker's loop runs beside the engine's |
+| `om/src/<name>/om/work/` and `workers/maintenance/src/<name>/workers/maintenance/platform/container.py` | the work kind and its payload, as the worker's README says under Adding a work kind, and its handler in `WorkerPlatform.handlers`, which the worker's loop runs beside the engine's |
 | `om/tests/unit/test_agent_automations.py` | the cases of step 5 for the rule and the manager |
 | `om/src/<name>/om/agent_automations/README.md` | the kind in What it holds and What can happen |
 

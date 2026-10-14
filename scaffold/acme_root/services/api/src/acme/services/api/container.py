@@ -28,7 +28,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
-from acme.services.api.platform_api import build_platform_api
+from acme.services.api.platform.container import build_platform_api
 from acme.services.api.services.platform import PlatformServicesInterface
 from acme.services.api.settings import ApiSettings
 
@@ -201,7 +201,7 @@ class AppContainer:
         payments: PaymentProviderInterface | None = None,
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose: the
-        platform's, as `platform_api.build_platform_api` builds them with
+        platform's, as `platform.container.build_platform_api` builds them with
         `ports`, `platform_agents`, and `payments`."""
         platform = build_platform_api(
             settings,

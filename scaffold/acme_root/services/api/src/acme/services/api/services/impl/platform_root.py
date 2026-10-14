@@ -100,7 +100,16 @@ class PlatformServicesImpl(PlatformServicesInterface):
         validations: ValidationsServiceInterface,
         products: Mapping[str, object],
     ) -> None:
-        self._engine = engine
+        # The engine's services, as its root built them.
+        self._tenancy = engine.get_tenancy_service()
+        self._admin = engine.get_admin_service()
+        self._events = engine.get_events_service()
+        self._media = engine.get_media_service()
+        self._flags = engine.get_flags_service()
+        self._realtime = engine.get_realtime_service()
+        self._webhooks = engine.get_webhooks_service()
+        self._leases = engine.get_lease_service()
+        self._agent_sessions = engine.get_agent_sessions_service()
         self._hosts = hosts
         self._agent_fleet = agent_fleet
         self._exec_relay = exec_relay
@@ -125,31 +134,31 @@ class PlatformServicesImpl(PlatformServicesInterface):
         self._products = dict(products)
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
-        return self._engine.get_tenancy_service()
+        return self._tenancy
 
     def get_admin_service(self) -> AdminServiceInterface:
-        return self._engine.get_admin_service()
+        return self._admin
 
     def get_events_service(self) -> EventsServiceInterface:
-        return self._engine.get_events_service()
+        return self._events
 
     def get_media_service(self) -> MediaServiceInterface:
-        return self._engine.get_media_service()
+        return self._media
 
     def get_flags_service(self) -> FlagsServiceInterface:
-        return self._engine.get_flags_service()
+        return self._flags
 
     def get_realtime_service(self) -> RealtimeServiceInterface:
-        return self._engine.get_realtime_service()
+        return self._realtime
 
     def get_webhooks_service(self) -> WebhooksServiceInterface:
-        return self._engine.get_webhooks_service()
+        return self._webhooks
 
     def get_lease_service(self) -> LeasesServiceInterface:
-        return self._engine.get_lease_service()
+        return self._leases
 
     def get_agent_sessions_service(self) -> AgentSessionsServiceInterface:
-        return self._engine.get_agent_sessions_service()
+        return self._agent_sessions
 
     def get_hosts_service(self) -> HostsServiceInterface:
         return self._hosts
@@ -214,11 +223,8 @@ class PlatformServicesImpl(PlatformServicesInterface):
     def get_validations_service(self) -> ValidationsServiceInterface:
         return self._validations
 
-    def get_product_service(self, namespace: str) -> object:
-        try:
-            return self._products[namespace]
-        except KeyError:
-            raise LookupError(f"the product declares no namespace {namespace}") from None
+    def get_product_services(self) -> Mapping[str, object]:
+        return self._products
 
 
 def build_platform_services(

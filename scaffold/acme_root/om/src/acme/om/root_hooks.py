@@ -8,7 +8,7 @@ beyond its kind, and what goes with a purged session.
 The root calls each hook once, in the order it builds, so an impl may keep
 what an earlier hook handed it for a later one. `RootHooksNullImpl` reaches
 nothing: the root builds the engine's graph as it is. The platform's impl is
-`acme.om.platform_root.PlatformRoot`."""
+`acme.om.platform_root.RootHooksPlatformImpl`."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
