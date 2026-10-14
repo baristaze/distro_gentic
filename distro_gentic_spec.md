@@ -489,6 +489,10 @@ calls it a base ([`agentic_core` Workspace Snapshots][e-snapshots]).
   choice, and one that names none reaches nothing. A workspace on the
   environment keeps its kind's egress; the engineer's is none. A host
   whose owner closed egress refuses a setup that reaches out.
+- **Its checks run on it.** A validation of a session's work runs on a
+  new instance of the environment the session pinned, never on its
+  workspace, and with no egress: the checks find what the setup
+  installed, and reach nothing.
 - **No agent, no secret.** The setup runs the project's commands alone:
   no model, no secret, no platform credential, and nothing of the
   tenant's records. An environment whose snapshot holds a secret's

@@ -106,17 +106,21 @@ rebuilt from.
   when its lifetime passes, when the loop's workspace is prepared again
   or released, or when a newer one is minted.
 - **Run a delivery's checks.** The platform's executor
-  (`impl/executor.py`) makes a container with no egress for the run. It
-  writes in the tree the platform read from the project's repository:
-  the delivered commit, with every protected path from the base, and no
-  credential and no history. It runs each check's template there, reads
-  back and hashes the results within their bound, and destroys the
-  instance whatever ended the run. A trial that reaches no verdict (it
-  ran past its time, or wrote no run of its check) is an `errored` run
-  the executor writes, so every trial counts. For a session inside its tenant's
-  wall, a host of its pool makes the instance instead, to the isolation
-  the session is pinned to, and every step crosses the wall as `exec`
-  work; no host of another pool or tenant takes it.
+  (`impl/executor.py`) makes a container with no egress for the run, on
+  the workspace base the session pinned when it names one, such as its
+  project's environment, so the checks find what its setup installed
+  ([ADR 2062](../../../../../docs/adr/2062-a-validations-checks-run-on-the-base-its-session-pinned-with-no-egress.md)).
+  It writes in the tree the platform read from the project's
+  repository: the delivered commit, with every protected path from the
+  base, and no credential and no history. It runs each check's template
+  there, reads back and hashes the results within their bound, and
+  destroys the instance whatever ended the run. A trial that reaches no
+  verdict (it ran past its time, or wrote no run of its check) is an
+  `errored` run the executor writes, so every trial counts. For a
+  session inside its tenant's wall, a host of its pool makes the
+  instance instead, to the isolation the session is pinned to, with no
+  egress when it is on a workspace base, and every step crosses the wall
+  as `exec` work; no host of another pool or tenant takes it.
 - **Keep a snapshot.** A workspace kept by snapshots is snapshotted at
   the end of each run that holds it: by the engine, into the platform's
   bucket, when this process holds it; by the host that holds it, into
