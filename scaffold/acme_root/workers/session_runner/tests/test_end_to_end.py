@@ -54,7 +54,8 @@ import pytest
 from api_support import seed_request, sign_in_as
 from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import E2E_KINDS, KINDS, answers, runs, submits, validates
+from platform_runner_support import E2E_KINDS, submits, validates
+from runner_support import KINDS, answers, runs
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 

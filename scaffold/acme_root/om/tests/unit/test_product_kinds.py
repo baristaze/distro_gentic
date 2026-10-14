@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import SessionAgentProjectsMemory, context
+from contracts.doubles import context
 from contracts.evidence import (
     CHECKOUT,
     CHECKOUT_KEY,
@@ -24,6 +24,7 @@ from contracts.evidence import (
 )
 from contracts.evidence_storage import make_record, make_validation
 from contracts.factories import make_org
+from contracts.platform_doubles import SessionAgentProjectsMemory
 from contracts.tools import INJECTED_TOKEN
 from contracts.trust import trusted
 from pydantic import Field, ValidationError
