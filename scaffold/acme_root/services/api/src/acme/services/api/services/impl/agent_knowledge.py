@@ -14,21 +14,23 @@ from acme.services.api.types.agent_knowledge import (
 
 class AgentKnowledgeServiceImpl(AgentKnowledgeServiceInterface):
     def __init__(self, agent_knowledge: AgentKnowledgeManagerInterface) -> None:
-        self._knowledge = agent_knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def list_entries(
         self, ctx: TenantContext, status: AgentKnowledgeStatus, after: UUID | None, limit: int
     ) -> list[AgentKnowledgeView]:
-        found = await self._knowledge.list_entries(ctx, status, after, limit)
+        found = await self._agent_knowledge.list_entries(ctx, status, after, limit)
         return [AgentKnowledgeView.model_validate(entry) for entry in found]
 
     async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> AgentKnowledgeView:
-        return AgentKnowledgeView.model_validate(await self._knowledge.get_entry(ctx, entry_id))
+        return AgentKnowledgeView.model_validate(
+            await self._agent_knowledge.get_entry(ctx, entry_id)
+        )
 
     async def write_entry(
         self, ctx: TenantContext, body: AgentKnowledgeRequest, entry_id: UUID
     ) -> AgentKnowledgeView:
-        written = await self._knowledge.write(
+        written = await self._agent_knowledge.write(
             ctx, body.title, tuple(body.trigger), body.text, entry_id=entry_id
         )
         return AgentKnowledgeView.model_validate(written)
@@ -38,7 +40,7 @@ class AgentKnowledgeServiceImpl(AgentKnowledgeServiceInterface):
     ) -> AgentKnowledgeView:
         if version is None:
             raise ValidationFailed("an edit names the version it read, in If-Match")
-        edited = await self._knowledge.edit(
+        edited = await self._agent_knowledge.edit(
             ctx, entry_id, body.title, tuple(body.trigger), body.text, version
         )
         return AgentKnowledgeView.model_validate(edited)
@@ -46,5 +48,5 @@ class AgentKnowledgeServiceImpl(AgentKnowledgeServiceInterface):
     async def review_entry(
         self, ctx: TenantContext, entry_id: UUID, body: ReviewRequest
     ) -> AgentKnowledgeView:
-        reviewed = await self._knowledge.review(ctx, entry_id, keep=body.keep)
+        reviewed = await self._agent_knowledge.review(ctx, entry_id, keep=body.keep)
         return AgentKnowledgeView.model_validate(reviewed)

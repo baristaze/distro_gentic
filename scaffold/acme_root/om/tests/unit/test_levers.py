@@ -1,5 +1,5 @@
 """Levers, as the platform reads them: each check finds its defect in a
-agent_playbook and none in a plain one, nor in quoted words, an agent playbook's
+agent playbook and none in a plain one, nor in quoted words, an agent playbook's
 gates, or a thing not to stop; a publish with a finding lands and keeps
 it with the version; and a reading of recorded sessions names the lever
 that came before the stalls, by its kind, id, and version alone, with the

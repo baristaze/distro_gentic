@@ -116,9 +116,9 @@ class StorageMemoryImpl(StorageInterface):
         self._hosts = HostsStorageMemoryImpl(self._outbox)
         self._cloud_pool = CloudPoolStorageMemoryImpl()
         self._intake = IntakeStorageMemoryImpl()
-        self._automation = AgentAutomationStorageMemoryImpl(self._outbox)
-        self._playbook = AgentPlaybookStorageMemoryImpl(self._outbox)
-        self._knowledge = AgentKnowledgeStorageMemoryImpl(self._outbox)
+        self._agent_automation = AgentAutomationStorageMemoryImpl(self._outbox)
+        self._agent_playbook = AgentPlaybookStorageMemoryImpl(self._outbox)
+        self._agent_knowledge = AgentKnowledgeStorageMemoryImpl(self._outbox)
         self._connector = ConnectorStorageMemoryImpl(self._outbox)
         self._notification = NotificationStorageMemoryImpl()
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
@@ -213,13 +213,13 @@ class StorageMemoryImpl(StorageInterface):
         return self._intake
 
     def get_agent_automation_storage(self) -> AgentAutomationStorageInterface:
-        return self._automation
+        return self._agent_automation
 
     def get_agent_playbook_storage(self) -> AgentPlaybookStorageInterface:
-        return self._playbook
+        return self._agent_playbook
 
     def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface:
-        return self._knowledge
+        return self._agent_knowledge
 
     def get_connector_storage(self) -> ConnectorStorageInterface:
         return self._connector

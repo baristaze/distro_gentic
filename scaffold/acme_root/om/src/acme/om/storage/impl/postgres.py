@@ -247,9 +247,9 @@ class StoragePostgresImpl(StorageInterface):
         self._hosts = HostsStoragePostgresImpl(sessions)
         self._cloud_pool = CloudPoolStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
-        self._automation = AgentAutomationStoragePostgresImpl(sessions)
-        self._playbook = AgentPlaybookStoragePostgresImpl(sessions)
-        self._knowledge = AgentKnowledgeStoragePostgresImpl(sessions)
+        self._agent_automation = AgentAutomationStoragePostgresImpl(sessions)
+        self._agent_playbook = AgentPlaybookStoragePostgresImpl(sessions)
+        self._agent_knowledge = AgentKnowledgeStoragePostgresImpl(sessions)
         self._connector = ConnectorStoragePostgresImpl(sessions)
         self._notification = NotificationStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
@@ -344,13 +344,13 @@ class StoragePostgresImpl(StorageInterface):
         return self._intake
 
     def get_agent_automation_storage(self) -> AgentAutomationStorageInterface:
-        return self._automation
+        return self._agent_automation
 
     def get_agent_playbook_storage(self) -> AgentPlaybookStorageInterface:
-        return self._playbook
+        return self._agent_playbook
 
     def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface:
-        return self._knowledge
+        return self._agent_knowledge
 
     def get_connector_storage(self) -> ConnectorStorageInterface:
         return self._connector

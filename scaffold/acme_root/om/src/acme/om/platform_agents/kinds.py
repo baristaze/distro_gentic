@@ -542,7 +542,7 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     isolation=NO_WORKSPACE,
 )
 """The platform assistant before it read the tenant's sessions, projects,
-and agent_automations, and its agent knowledge: kept while a session may still run
+and agent automations, and its agent knowledge: kept while a session may still run
 it."""
 
 PLATFORM_ASSISTANT_KIND = AgentKind(

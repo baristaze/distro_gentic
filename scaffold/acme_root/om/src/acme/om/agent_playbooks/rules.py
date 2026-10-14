@@ -1,4 +1,4 @@
-"""Pure rules of agent_playbooks: a version as an Agent Skills brief, and where
+"""Pure rules of agent playbooks: a version as an Agent Skills brief, and where
 its gates leave a call. Values in, values out.
 
 A call stands at the strictest of what policy decided for it and what the

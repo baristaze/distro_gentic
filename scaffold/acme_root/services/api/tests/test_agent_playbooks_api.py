@@ -2,7 +2,7 @@
 version with its gates, and the latest version is read, each with what the
 lever checks found in it, which never refuses the publish, and null on a
 version the checks never read. A viewer publishes none; another tenant's
-agent_playbook is not found; a malformed draft, a gate that would allow among
+agent playbook is not found; a malformed draft, a gate that would allow among
 them, is refused whole."""
 
 import httpx

@@ -1,5 +1,5 @@
 """The agent automations service: a person makes, reads, and edits the tenant's
-agent_automations, and grants the tenant's agent automation principal a role."""
+agent automations, and grants the tenant's agent automation principal a role."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID

@@ -1,5 +1,5 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, agent_automations, agent_playbooks, agent_knowledge, and notifications
+with the intake, agent automations, agent playbooks, agent knowledge, and notifications
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
 the agent playbooks layer, and the agent knowledge layer, and each manager built over

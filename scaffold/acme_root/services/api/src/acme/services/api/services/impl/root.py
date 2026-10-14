@@ -131,7 +131,7 @@ class ServicesImpl(ServicesInterface):
         self._intake = intake
         self._budgets = budgets
         self._agent_billing = agent_billing
-        self._automations = agent_automations
+        self._agent_automations = agent_automations
         self._notifications = notifications
         self._watch = watch
         self._matrix = matrix
@@ -140,8 +140,8 @@ class ServicesImpl(ServicesInterface):
         self._spend_ledgers = spend_ledgers
         self._evidence = evidence
         self._projects = projects
-        self._knowledge = agent_knowledge
-        self._playbooks = agent_playbooks
+        self._agent_knowledge = agent_knowledge
+        self._agent_playbooks = agent_playbooks
         self._connectors = connectors
         self._tools = tools
         self._retention = retention
@@ -193,7 +193,7 @@ class ServicesImpl(ServicesInterface):
         return self._agent_billing
 
     def get_agent_automations_service(self) -> AgentAutomationsServiceInterface:
-        return self._automations
+        return self._agent_automations
 
     def get_notifications_service(self) -> NotificationsServiceInterface:
         return self._notifications
@@ -220,13 +220,13 @@ class ServicesImpl(ServicesInterface):
         return self._projects
 
     def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface:
-        return self._knowledge
+        return self._agent_knowledge
 
     def get_connectors_service(self) -> ConnectorsServiceInterface:
         return self._connectors
 
     def get_agent_playbooks_service(self) -> AgentPlaybooksServiceInterface:
-        return self._playbooks
+        return self._agent_playbooks
 
     def get_tools_service(self) -> ToolsServiceInterface:
         return self._tools

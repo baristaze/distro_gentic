@@ -687,13 +687,13 @@ class SearchAgentKnowledgeImpl(NativeToolImpl):
         self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
     ) -> None:
         self._corpus = corpus
-        self._knowledge = agent_knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, AgentKnowledgeQuery)
-        entries = await self._knowledge().search(
+        entries = await self._agent_knowledge().search(
             ctx, runtime.session_id, call_input.query, call_input.limit
         )
         passages = rules.search(self._corpus, call_input.query, call_input.limit)
@@ -754,7 +754,7 @@ class ReadAgentKnowledgeImpl(NativeToolImpl):
         self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
     ) -> None:
         self._corpus = corpus
-        self._knowledge = agent_knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -766,7 +766,7 @@ class ReadAgentKnowledgeImpl(NativeToolImpl):
                 return AgentKnowledgeRead(
                     scope=PLATFORM, slug=slug, title=document.title, text=document.text
                 )
-        entry = await self._knowledge().read(ctx, runtime.session_id, slug)
+        entry = await self._agent_knowledge().read(ctx, runtime.session_id, slug)
         return AgentKnowledgeRead(
             scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text
         )
@@ -807,13 +807,13 @@ class SuggestAgentKnowledgeImpl(NativeToolImpl):
     )
 
     def __init__(self, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]) -> None:
-        self._knowledge = agent_knowledge
+        self._agent_knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, SuggestionInput)
-        entry = await self._knowledge().suggest(
+        entry = await self._agent_knowledge().suggest(
             ctx, runtime.session_id, call_input.title, call_input.trigger, call_input.text
         )
         return Suggested(slug=entry.slug, note="It waits for a person's review.")
@@ -1475,14 +1475,16 @@ class ListAgentAutomationsImpl(NativeToolImpl):
     )
 
     def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
-        self._automations = agent_automations
+        self._agent_automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
-        rows = await self._automations().list_agent_automations(ctx, call_input.after, limit + 1)
+        rows = await self._agent_automations().list_agent_automations(
+            ctx, call_input.after, limit + 1
+        )
         shown = rows[:limit]
         return AgentAutomationList(
             agent_automations=tuple(agent_automation_line(a) for a in shown),
@@ -1512,16 +1514,16 @@ class ReadAgentAutomationImpl(NativeToolImpl):
     )
 
     def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
-        self._automations = agent_automations
+        self._agent_automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, AgentAutomationInput)
-        agent_automation = await self._automations().get_agent_automation(
+        agent_automation = await self._agent_automations().get_agent_automation(
             ctx, call_input.agent_automation_id
         )
-        runs = await self._automations().get_runs(ctx, agent_automation.id, call_input.runs)
+        runs = await self._agent_automations().get_runs(ctx, agent_automation.id, call_input.runs)
         trigger, action = agent_automation.trigger, agent_automation.action
         return AgentAutomationRead(
             agent_automation_id=agent_automation.id,

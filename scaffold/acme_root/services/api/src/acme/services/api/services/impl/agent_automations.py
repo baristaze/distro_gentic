@@ -22,24 +22,24 @@ class AgentAutomationsServiceImpl(AgentAutomationsServiceInterface):
         agent_automations: AgentAutomationsManagerInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self._automations = agent_automations
+        self._agent_automations = agent_automations
         self._clock = clock
 
     async def get_principal(self, ctx: TenantContext) -> AgentAutomationPrincipalView:
         return AgentAutomationPrincipalView.model_validate(
-            await self._automations.get_principal(ctx)
+            await self._agent_automations.get_principal(ctx)
         )
 
     async def grant_principal(
         self, ctx: TenantContext, body: GrantRequest
     ) -> AgentAutomationPrincipalView:
-        granted = await self._automations.grant_principal(ctx, body.role)
+        granted = await self._agent_automations.grant_principal(ctx, body.role)
         return AgentAutomationPrincipalView.model_validate(granted)
 
     async def create_agent_automation(
         self, ctx: TenantContext, body: AgentAutomationRequest, agent_automation_id: UUID
     ) -> AgentAutomationView:
-        made = await self._automations.create_agent_automation(
+        made = await self._agent_automations.create_agent_automation(
             ctx, self._built(ctx, body, agent_automation_id)
         )
         return AgentAutomationView.model_validate(made)
@@ -47,19 +47,19 @@ class AgentAutomationsServiceImpl(AgentAutomationsServiceInterface):
     async def list_agent_automations(
         self, ctx: TenantContext, after: UUID | None, limit: int
     ) -> list[AgentAutomationView]:
-        found = await self._automations.list_agent_automations(ctx, after, limit)
+        found = await self._agent_automations.list_agent_automations(ctx, after, limit)
         return [AgentAutomationView.model_validate(agent_automation) for agent_automation in found]
 
     async def get_agent_automation(
         self, ctx: TenantContext, agent_automation_id: UUID
     ) -> AgentAutomationView:
-        found = await self._automations.get_agent_automation(ctx, agent_automation_id)
+        found = await self._agent_automations.get_agent_automation(ctx, agent_automation_id)
         return AgentAutomationView.model_validate(found)
 
     async def update_agent_automation(
         self, ctx: TenantContext, agent_automation_id: UUID, body: AgentAutomationRequest
     ) -> AgentAutomationView:
-        edited = await self._automations.update_agent_automation(
+        edited = await self._agent_automations.update_agent_automation(
             ctx, agent_automation_id, self._built(ctx, body, agent_automation_id)
         )
         return AgentAutomationView.model_validate(edited)

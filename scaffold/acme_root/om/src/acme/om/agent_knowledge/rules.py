@@ -1,4 +1,4 @@
-"""Pure rules of agent_knowledge: which entries a session reaches, which of them
+"""Pure rules of agent knowledge: which entries a session reaches, which of them
 its subject triggers or a search finds, an entry's slug, and an entry as
 the input that brings it into a session. Values in, values out.
 

@@ -43,7 +43,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         steps: Callable[[], StepsManagerInterface],
     ) -> None:
         self._inner = inner
-        self._knowledge = agent_knowledge
+        self._agent_knowledge = agent_knowledge
         self._sessions = sessions
         self._steps = steps
 
@@ -60,7 +60,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             # No model request yet: this loop starts the session.
             page = await self._steps().get_steps(ctx, session_id, 0, FIRST_STEPS)
             said = [step.as_text() for step in page.items if principal_authored(step)]
-            await self._knowledge().recall(ctx, session_id, "\n".join([session.title, *said]))
+            await self._agent_knowledge().recall(ctx, session_id, "\n".join([session.title, *said]))
         return workspace
 
     # The rest, as beneath.

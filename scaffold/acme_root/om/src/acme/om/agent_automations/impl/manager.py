@@ -109,7 +109,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         self._options = options
         self._clock = clock
         self._actions = actions or AgentAutomationActions(())
-        self._playbooks = agent_playbooks
+        self._agent_playbooks = agent_playbooks
 
     async def create_agent_automation(
         self, ctx: TenantContext, agent_automation: AgentAutomation
@@ -373,7 +373,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         agent_playbook = (
             None
             if action.agent_playbook is None
-            else await self._playbook(creator, action.agent_playbook)
+            else await self._agent_playbook(creator, action.agent_playbook)
         )
         start = Start(
             id=derived_id(run.id, run.created_at, "session"),
@@ -400,10 +400,10 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         )
         await self._budgets.create_budget(ctx, budget)
         session_id, budget_id = session.id, budget.id
-        if agent_playbook is not None and self._playbooks is not None:
+        if agent_playbook is not None and self._agent_playbooks is not None:
             # Its gates hold before anything else arrives, and its brief is
             # the creator's message, as an invocation in person is.
-            await self._playbooks().invoke_version(creator, session_id, agent_playbook.id)
+            await self._agent_playbooks().invoke_version(creator, session_id, agent_playbook.id)
         inputs: list[Step] = []
         if run.event_text:
             inputs.append(self._event_step(ctx, run, session_id))
@@ -590,7 +590,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
     async def _check_kind(self, ctx: TenantContext, agent_automation: AgentAutomation) -> None:
         """A product's action names a kind a product declares, and its params
         hold to that kind's shape: otherwise it is `ValidationFailed`, so no
-        agent_automation is written that could never act. An enabled one is then
+        agent automation is written that could never act. An enabled one is then
         its kind's to check against its writer and whom it runs as, whose
         refusal answers as is, so a writer its firings would refuse is told
         now. A disabled one is
@@ -627,16 +627,16 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         if name is None:
             return
         try:
-            await self._playbook(ctx, name)
+            await self._agent_playbook(ctx, name)
         except NotFound as missing:
             raise ValidationFailed(f"no agent playbook {name} is published to invoke") from missing
 
-    async def _playbook(self, ctx: TenantContext, name: str) -> AgentPlaybook:
+    async def _agent_playbook(self, ctx: TenantContext, name: str) -> AgentPlaybook:
         """The name's latest version; none, or no agent playbooks in this
         process, is `NotFound`."""
-        if self._playbooks is None:
+        if self._agent_playbooks is None:
             raise NotFound(f"no agent playbook {name} is kept in this process")
-        return await self._playbooks().get_agent_playbook(ctx, name)
+        return await self._agent_playbooks().get_agent_playbook(ctx, name)
 
     async def _check_project(self, ctx: TenantContext, agent_automation: AgentAutomation) -> None:
         """A start's project is one of the caller's tenant: another tenant's

@@ -274,7 +274,7 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # agent_playbooks, agent_knowledge, and notifications, for their purges.
+        # agent playbooks, agent knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
         # Outside a local stack, an agent automation's session starts in a project:

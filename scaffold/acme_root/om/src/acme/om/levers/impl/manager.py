@@ -47,8 +47,8 @@ class LeversManagerImpl(LeversManagerInterface):
     ) -> None:
         self._sessions = sessions
         self._shapes = shapes
-        self._playbooks = agent_playbooks
-        self._knowledge = agent_knowledge
+        self._agent_playbooks = agent_playbooks
+        self._agent_knowledge = agent_knowledge
         self._options = options
 
     async def read_levers(
@@ -113,13 +113,13 @@ class LeversManagerImpl(LeversManagerInterface):
                 id=invocation.agent_playbook_id,
                 version=invocation.version,
             )
-            for invocation in await self._playbooks.read_invocations(
+            for invocation in await self._agent_playbooks.read_invocations(
                 org_id, session.id, self._options.levers
             )
         ]
         levers += [
             LeverRef(kind=LeverKind.AGENT_KNOWLEDGE, id=recall.entry_id, version=recall.version)
-            for recall in await self._knowledge.read_recalls(
+            for recall in await self._agent_knowledge.read_recalls(
                 org_id, session.id, self._options.levers
             )
         ]

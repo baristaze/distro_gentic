@@ -42,7 +42,7 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
-        self._playbooks = agent_playbooks
+        self._agent_playbooks = agent_playbooks
         self._steps = steps
         self._clock = clock
 
@@ -248,7 +248,7 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         if not isinstance(header, ToolRequestHeader):
             return decided
         try:
-            gates = await self._playbooks().gates_of(ctx, request.session_id)
+            gates = await self._agent_playbooks().gates_of(ctx, request.session_id)
         except NotFound:
             # A session of its chain cannot be read, nor the gates it
             # invoked: the call waits for a person rather than run past them.

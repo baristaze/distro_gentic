@@ -117,7 +117,7 @@ class FeedbackDeliveriesImpl(DeliveryProviderInterface[FeedbackDelivery]):
         self, intake: IntakeManagerInterface, agent_automations: AgentAutomationsManagerInterface
     ) -> None:
         self._intake = intake
-        self._automations = agent_automations
+        self._agent_automations = agent_automations
 
     def read(self, delivery: object) -> FeedbackDelivery:
         return FeedbackDelivery.model_validate(delivery)
@@ -138,7 +138,7 @@ class FeedbackDeliveriesImpl(DeliveryProviderInterface[FeedbackDelivery]):
             platform=routed.platform,
             text=described(event),
         )
-        await self._automations.fire(ctx, firing)
+        await self._agent_automations.fire(ctx, firing)
         return True
 
 

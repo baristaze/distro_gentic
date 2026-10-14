@@ -305,7 +305,7 @@ class ProductKinds:
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
     claimant kinds of its own that write and read it, if any; its executors, each by
-    the name a check's `executor` gives; and its kinds of agent_automation
+    the name a check's `executor` gives; and its kinds of agent automation
     action, each acting in a firing, saying when the run it started
     ended, and checking the person who writes one (`agent_automations.actions`);
     and its resource kinds, each with the shape of its ask, the hooks a

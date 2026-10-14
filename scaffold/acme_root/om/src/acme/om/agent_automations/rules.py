@@ -1,4 +1,4 @@
-"""Pure rules of agent_automations: whether a firing matches a trigger, where it
+"""Pure rules of agent automations: whether a firing matches a trigger, where it
 stands in a chain, and whether its limits let it run. Values in, values
 out; both storage impls ask `admitted` inside the write that records a
 run, so two firings at once cannot both take the last of a limit.

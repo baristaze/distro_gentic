@@ -18,7 +18,7 @@ from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 class AgentAutomationStorageMemoryImpl(MemoryStorageBase, AgentAutomationStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
-        self._automations: MemoryTable[AgentAutomation] = {}
+        self._agent_automations: MemoryTable[AgentAutomation] = {}
         self._runs: MemoryTable[AgentAutomationRun] = {}
         self._principals: MemoryTable[AgentAutomationPrincipal] = {}
 
@@ -26,26 +26,26 @@ class AgentAutomationStorageMemoryImpl(MemoryStorageBase, AgentAutomationStorage
         self, org_id: UUID, agent_automation: AgentAutomation, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         async with self._lock:
-            return self._insert(self._automations, org_id, agent_automation, outbox_rows)
+            return self._insert(self._agent_automations, org_id, agent_automation, outbox_rows)
 
     async def read_agent_automation(
         self, org_id: UUID, agent_automation_id: UUID
     ) -> AgentAutomation | None:
-        return self._get(self._automations, org_id, agent_automation_id)
+        return self._get(self._agent_automations, org_id, agent_automation_id)
 
     async def write_agent_automation(
         self, org_id: UUID, agent_automation: AgentAutomation, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         async with self._lock:
-            if self._get(self._automations, org_id, agent_automation.id) is None:
+            if self._get(self._agent_automations, org_id, agent_automation.id) is None:
                 return False
-            self._put(self._automations, org_id, agent_automation, outbox_rows)
+            self._put(self._agent_automations, org_id, agent_automation, outbox_rows)
             return True
 
     async def read_agent_automations(
         self, org_id: UUID, after: UUID | None, limit: int
     ) -> list[AgentAutomation]:
-        rows = sorted(self._rows(self._automations, org_id), key=lambda a: a.id)
+        rows = sorted(self._rows(self._agent_automations, org_id), key=lambda a: a.id)
         return [a for a in rows if after is None or a.id > after][:limit]
 
     async def admit(
@@ -139,7 +139,7 @@ class AgentAutomationStorageMemoryImpl(MemoryStorageBase, AgentAutomationStorage
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             return (
-                _drop(self._automations, org_id, limit)
+                _drop(self._agent_automations, org_id, limit)
                 + _drop(self._runs, org_id, limit)
                 + _drop(self._principals, org_id, limit)
             )

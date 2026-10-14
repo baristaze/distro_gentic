@@ -15,7 +15,7 @@ from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
-        self._playbooks: MemoryTable[AgentPlaybook] = {}
+        self._agent_playbooks: MemoryTable[AgentPlaybook] = {}
         self._invocations: MemoryTable[AgentPlaybookInvocation] = {}
         self._pins: MemoryTable[AgentPlaybookPin] = {}
 
@@ -23,23 +23,23 @@ class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInte
         self, org_id: UUID, agent_playbook: AgentPlaybook, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         async with self._lock:
-            if agent_playbook.id in self._playbooks:
+            if agent_playbook.id in self._agent_playbooks:
                 return False
             # One version of a name in a tenant: the unique index the table holds.
             if any(
                 (p.name, p.version) == (agent_playbook.name, agent_playbook.version)
-                for p in self._rows(self._playbooks, org_id)
+                for p in self._rows(self._agent_playbooks, org_id)
             ):
                 raise UniqueKeyTaken(f"agent playbooks {agent_playbook.id}: the version is taken")
-            return self._insert(self._playbooks, org_id, agent_playbook, outbox_rows)
+            return self._insert(self._agent_playbooks, org_id, agent_playbook, outbox_rows)
 
     async def read_agent_playbook(
         self, org_id: UUID, agent_playbook_id: UUID
     ) -> AgentPlaybook | None:
-        return self._get(self._playbooks, org_id, agent_playbook_id)
+        return self._get(self._agent_playbooks, org_id, agent_playbook_id)
 
     async def read_latest(self, org_id: UUID, name: str) -> AgentPlaybook | None:
-        versions = [p for p in self._rows(self._playbooks, org_id) if p.name == name]
+        versions = [p for p in self._rows(self._agent_playbooks, org_id) if p.name == name]
         return max(versions, key=lambda p: p.version, default=None)
 
     async def create_invocation(
@@ -101,7 +101,7 @@ class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInte
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             return (
-                _drop(self._playbooks, org_id, limit)
+                _drop(self._agent_playbooks, org_id, limit)
                 + _drop(self._invocations, org_id, limit)
                 + _drop(self._pins, org_id, limit)
             )

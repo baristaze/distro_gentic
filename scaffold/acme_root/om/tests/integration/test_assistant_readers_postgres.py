@@ -1,6 +1,6 @@
 """The platform assistant's readers over Postgres: each reads through the
 asking person's own context, so another tenant's session, project,
-agent_automation, and runs, and a session marked deleted, all read as not
+agent automation, and runs, and a session marked deleted, all read as not
 found, and no list shows another tenant's row; and asked why a session is
 parked on a held call, the assistant reads it and answers with the call
 and who may decide it, from what it read."""
