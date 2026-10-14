@@ -281,15 +281,24 @@ async def on_core(url: str, sql: str) -> list[tuple[object, ...]]:
         await engine.dispose()
 
 
-async def notices_of(url: str, org: UUID, session_id: UUID, column: str = "notices") -> object:
+WORKSPACES = "agent_session_workspaces"
+"""A session's workspace row, by this release's name."""
+WORKSPACES_BEFORE = "session_workspaces"
+"""The same table, by the name the releases before this one gave it."""
+
+
+async def notices_of(
+    url: str, org: UUID, session_id: UUID, column: str = "notices", table: str = WORKSPACES
+) -> object:
     """A workspace's notices, or another of its columns, as the migration
-    login reads them, inside its tenant's fence."""
+    login reads them, inside its tenant's fence, from `table`: the name the
+    revision the read runs at gives the workspace rows."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             read = await connection.exec_driver_sql(
-                f"SELECT {column} FROM core.agent_session_workspaces WHERE id = '{session_id}'"
+                f"SELECT {column} FROM core.{table} WHERE id = '{session_id}'"
             )
             return read.scalar_one()
     finally:
@@ -321,12 +330,13 @@ V0_2_0_HEAD = "202610121749"
 """The core head of the release before the one notice left the table."""
 
 
-async def notice_shape(url: str) -> list[tuple[object, ...]]:
-    """The notice columns of a workspace row and the default of each."""
+async def notice_shape(url: str, table: str = WORKSPACES) -> list[tuple[object, ...]]:
+    """The notice columns of a workspace row and the default of each, in
+    `table`, the name the revision the read runs at gives the rows."""
     return await on_core(
         url,
         "SELECT column_name, column_default FROM information_schema.columns"
-        " WHERE table_schema = 'core' AND table_name = 'agent_session_workspaces'"
+        f" WHERE table_schema = 'core' AND table_name = '{table}'"
         " AND column_name IN ('notice', 'notices') ORDER BY column_name",
     )
 
@@ -339,7 +349,7 @@ async def told_before(url: str, org: UUID, session_id: UUID) -> None:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                f"UPDATE core.agent_session_workspaces SET notice = 'told' WHERE id = '{session_id}'"
+                f"UPDATE core.{WORKSPACES_BEFORE} SET notice = 'told' WHERE id = '{session_id}'"
             )
     finally:
         await engine.dispose()
@@ -376,10 +386,10 @@ async def seed_notices_before(
                 await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
                 await connection.execute(
                     text(
-                        "INSERT INTO core.agent_session_workspaces (id, org_id, created_at,"
-                        " updated_at, created_by, updated_by, agent_project_id, level, limits,"
+                        f"INSERT INTO core.{WORKSPACES_BEFORE} (id, org_id, created_at,"
+                        " updated_at, created_by, updated_by, project_id, level, limits,"
                         " egress, rules, egress_source, branch, branch_seen, notices, version)"
-                        " VALUES (:id, :org, :at, :at, :by, :by, :agent_project, :level,"
+                        " VALUES (:id, :org, :at, :at, :by, :by, :project, :level,"
                         " CAST(:limits AS jsonb), :egress, CAST(:rules AS jsonb), :source,"
                         " :branch, false, CAST(:notices AS jsonb), 1)"
                     ),
@@ -388,7 +398,7 @@ async def seed_notices_before(
                         "org": org,
                         "at": workspace.created_at,
                         "by": workspace.created_by,
-                        "agent_project": workspace.agent_project_id,
+                        "project": workspace.agent_project_id,
                         "level": workspace.level.value,
                         "limits": workspace.limits.model_dump_json(),
                         "egress": workspace.egress.value,
@@ -417,7 +427,10 @@ async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_lis
     held = await seed_notices_before(core, ("older", "newer"), ("only",), ())
     for org, (session_id, _) in held.items():
         await told_before(core, org, session_id)
-    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+    assert await notice_shape(core, WORKSPACES_BEFORE) == [
+        ("notice", None),
+        ("notices", "'[]'::jsonb"),
+    ]
 
     await upgrade(DatabaseRole.CORE, core)
 
@@ -438,11 +451,14 @@ async def test_the_one_notice_comes_back_as_the_lists_last_entry(
 
     await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
 
-    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+    assert await notice_shape(core, WORKSPACES_BEFORE) == [
+        ("notice", None),
+        ("notices", "'[]'::jsonb"),
+    ]
     for org, (session_id, listed) in held.items():
         last = listed[-1] if listed else None
-        assert await notices_of(core, org, session_id, "notice") == last
-        assert await notices_of(core, org, session_id) == list(listed)
+        assert await notices_of(core, org, session_id, "notice", WORKSPACES_BEFORE) == last
+        assert await notices_of(core, org, session_id, table=WORKSPACES_BEFORE) == list(listed)
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
@@ -469,7 +485,8 @@ async def session_shape(url: str) -> list[tuple[object, ...]]:
         "SELECT column_name, is_nullable FROM information_schema.columns"
         " WHERE table_schema = 'core' AND table_name = 'validation_sessions'"
         " AND column_name IN"
-        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'agent_project_id')"
+        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'project_id',"
+        " 'agent_project_id')"
         " ORDER BY column_name",
     )
 
@@ -480,12 +497,12 @@ V0_2_0_SESSION_SHAPE = [
     ("head", "YES"),
     ("lab_id", "YES"),
     ("parameters", "YES"),
-    ("agent_project_id", "YES"),
+    ("project_id", "YES"),
 ]
 """The columns at the release before the station's columns left: all
 nullable, so both releases' rows fit."""
 
-SESSION_SHAPE = [("base", "NO"), ("head", "NO"), ("agent_project_id", "NO")]
+SESSION_SHAPE = [("agent_project_id", "NO"), ("base", "NO"), ("head", "NO")]
 
 
 async def written_on_a_station(url: str, org: UUID) -> UUID:
@@ -562,7 +579,7 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
         assert await in_tenant(
             core,
             org,
-            "SELECT agent_project_id, head, base, lab_id, check_version, parameters"
+            "SELECT project_id, head, base, lab_id, check_version, parameters"
             f" FROM core.validation_sessions WHERE id = '{session.id}'",
         ) == [(session.agent_project_id, session.head, session.base, None, None, None)]
 
@@ -610,19 +627,22 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
         assert (back.status, back.refusal) == (ValidationStatus.QUEUED, None)
 
 
-PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "agent_project_id", "session_id"}
+PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}
 """The fields of an action the release before product action kinds holds,
 which forbids any other."""
 
 
-async def actions_of(url: str, org: UUID) -> dict[UUID, dict[str, object]]:
-    """A tenant's stored actions by agent automation, as the migration login reads
-    them inside the tenant's fence."""
+async def actions_of(
+    url: str, org: UUID, table: str = "agent_automations"
+) -> dict[UUID, dict[str, object]]:
+    """A tenant's stored actions by agent automation, as the migration login
+    reads them inside the tenant's fence, from `table`: the name the revision
+    the read runs at gives the agent automations."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
-            read = await connection.exec_driver_sql("SELECT id, action FROM core.agent_automations")
+            read = await connection.exec_driver_sql(f"SELECT id, action FROM core.{table}")
             return {row[0]: row[1] for row in read}
     finally:
         await engine.dispose()
@@ -656,7 +676,7 @@ async def test_a_platform_agent_automation_reads_as_the_previous_releases_after_
         await engine.dispose()
 
     await downgrade(DatabaseRole.CORE, core, "202610121751")
-    previous = await actions_of(core, org)
+    previous = await actions_of(core, org, "automations")
     await upgrade(DatabaseRole.CORE, core)
 
     assert set(previous) == {written.id, carried.id}
@@ -683,7 +703,7 @@ async def test_a_version_the_release_before_wrote_reads_as_never_checked(
     await in_tenant(
         core,
         org,
-        "INSERT INTO core.agent_playbooks (id, org_id, created_at, name, version, description,"
+        "INSERT INTO core.playbooks (id, org_id, created_at, name, version, description,"
         " body, gates, published_by) VALUES"
         f" ('{agent_playbook.id}', '{org}', now(), '{agent_playbook.name}', 1, 'Cut a build.',"
         f" 'Build.', '{gates}'::jsonb, '{agent_playbook.published_by}')",
@@ -717,8 +737,8 @@ async def test_an_invocation_the_release_before_wrote_reads_as_no_kind_manual(
     await in_tenant(
         core,
         org,
-        "INSERT INTO core.agent_playbook_invocations (id, org_id, created_at, session_id,"
-        " agent_playbook_id, name, version, invoked_by) VALUES"
+        "INSERT INTO core.playbook_invocations (id, org_id, created_at, session_id,"
+        " playbook_id, name, version, invoked_by) VALUES"
         f" ('{new_id()}', '{org}', now(), '{session}', '{agent_playbook.id}', '{agent_playbook.name}', 1,"
         f" '{new_id()}')",
     )
