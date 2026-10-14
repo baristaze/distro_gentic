@@ -161,7 +161,7 @@ session's history.
 ## Evidence
 
 A **run** is one execution of one check, written once: the version it
-ran against, the environment, who ran it, its outcome, and what served
+ran against, the run image, who ran it, its outcome, and what served
 each thing it relied on: the real thing, a **twin**, a test **double**, or
 nothing. A **hypothesis** and a **finding** link the runs that show them.
 

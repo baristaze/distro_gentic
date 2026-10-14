@@ -67,13 +67,13 @@ macOS.
   bytes match their digest; bytes gone or altered are answered lost. An
   erase lets a session's snapshots go. It refuses a workspace kept by
   snapshots at a mode whose snapshots it did not probe.
-- **Builds a project's environment in its own store.** A workspace on a
+- **Builds a project's workspace base in its own store.** A workspace on a
   base with setup starts from the base this host keeps, built here once
   in a workspace of its own: its setup runs the project's commands with
   no secret and no variable of the host's, its snapshot is refused when
   it holds a value of the host's secrets, and it is kept in the store
   beside the snapshots, never sent anywhere. A workspace on it runs the
-  environment's image in place of the host's own. A prepare that finds the
+  workspace base's image in place of the host's own. A prepare that finds the
   build running waits a while, then is refused until it is done. A
   setup command that fails keeps nothing, and the prepare is answered
   `unbuilt` with the command, its text cut to fit the answer, and its

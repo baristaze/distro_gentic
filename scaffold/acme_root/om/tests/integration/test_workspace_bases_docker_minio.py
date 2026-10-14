@@ -1,5 +1,5 @@
 """Workspace bases on real Docker, kept on the stack's MinIO (ADR 1028), as
-the platform serves them: each case's base is the environment its session's
+the platform serves them: each case's base is the workspace base its session's
 project names, which a kind that takes it pins when the session is created
 (ADR 2051). The registry a setup reaches is a small HTTP server on this
 host, which counts each request: the setup reaches it through the shared
@@ -146,7 +146,7 @@ pytestmark = [
 SEALED = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 TAKES = ASSISTANT.model_copy(update={"name": ENGINEER, "version": 8, "isolation": SEALED})
 """A kind the platform names among those that take their project's
-environment: the engineer at version 8, here with the assistant's loop, in
+workspace base: the engineer at version 8, here with the assistant's loop, in
 a container with no egress."""
 
 
@@ -229,7 +229,7 @@ async def minio() -> AsyncIterator[BucketsS3Impl]:
 
 
 class OnDocker:
-    """A tenant whose sessions belong to one project, whose environment each
+    """A tenant whose sessions belong to one project, whose workspace base each
     case names."""
 
     def __init__(self, tmp_path: Path, buckets: BucketsS3Impl) -> None:
@@ -242,8 +242,8 @@ class OnDocker:
 
     async def start(self, spec: IsolationSpec) -> UUID:
         """A session of the project once it names `spec`'s base as its
-        environment: the session pins it."""
-        self.projects.environment = spec.base
+        workspace base: the session pins it."""
+        self.projects.workspace_base = spec.base
         session_id = await self.loop.start(TAKES.name)
         self.sessions.append(session_id)
         return session_id

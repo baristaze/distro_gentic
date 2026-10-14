@@ -9,7 +9,7 @@ a head that plants a runner of its own still runs the base's, a head's
 `.gitattributes` leaves nothing out of the tree the checks run on, a
 head whose code changes the base's fixture while it runs has no verdict,
 and a check may write a new file beside that fixture. A session pinned to
-its project's environment has its checks run on that base, with no
+its project's workspace base has its checks run on that base, with no
 network, so what its setup installed is there for them."""
 
 import subprocess
@@ -98,17 +98,17 @@ TOTAL = 4
 """
 """A cart whose code removes the base's fixture from its folder, which
 stays writable, while the check runs, and writes its own total there."""
-ENVIRONMENT = WorkspaceBase(
+WORKSPACE_BASE = WorkspaceBase(
     image=DEFAULT_IMAGE,
     setup=(
         "python3 -c 'import site; "
         'open(site.getsitepackages()[0] + "/cartenv.py", "w").write("TOTAL = 3")\'',
     ),
 )
-"""A project's environment whose setup installs a module, reaching
+"""A project's workspace base whose setup installs a module, reaching
 nothing."""
-NEEDS_ENVIRONMENT = "from cartenv import TOTAL\n"
-"""A cart that totals right with what its environment installed, and
+NEEDS_WORKSPACE_BASE = "from cartenv import TOTAL\n"
+"""A cart that totals right with what its workspace base installed, and
 fails to import anywhere else."""
 
 
@@ -396,12 +396,12 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
 
 
 async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
-    """The session's workspace pinned to `ENVIRONMENT`, in a container with
-    no egress, as its kind would pin it to its project's environment."""
+    """The session's workspace pinned to `WORKSPACE_BASE`, in a container with
+    no egress, as its kind would pin it to its project's workspace base."""
     rows = storage.get_workspace_storage()
     kept = await rows.read_workspace(ctx.org_id, session_id)
     if kept is not None:
-        moved = kept.model_copy(update={"base": ENVIRONMENT, "version": kept.version + 1})
+        moved = kept.model_copy(update={"base": WORKSPACE_BASE, "version": kept.version + 1})
         await rows.write_workspace(ctx.org_id, moved, kept.version)
         return
     now = utcnow()
@@ -414,24 +414,24 @@ async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",
-        base=ENVIRONMENT,
+        base=WORKSPACE_BASE,
         branch=f"sessions/{session_id}",
     )
     assert await rows.create_workspace(ctx.org_id, pinned)
 
 
-# A session pinned to its project's environment: its checks run in a fresh
+# A session pinned to its project's workspace base: its checks run in a fresh
 # container on that base, where what the setup installed is, and the gate
-# confirms them. The same head with no environment cannot import it.
+# confirms them. The same head with no workspace base cannot import it.
 
 
-async def test_a_sessions_checks_run_on_the_environment_it_pinned(
+async def test_a_sessions_checks_run_on_the_workspace_base_it_pinned(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     for name in ("bare", "pinned"):
         (tmp_path / name).mkdir()
     unpinned = Delivered(storage, tmp_path / "bare")
-    bare, bare_session, _ = await unpinned.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    bare, bare_session, _ = await unpinned.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
     await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.BASELINE)
     await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.VALIDATION)
     (record,) = await validated(unpinned.managers.evidence, bare, bare_session)
@@ -439,7 +439,7 @@ async def test_a_sessions_checks_run_on_the_environment_it_pinned(
 
     delivered = Delivered(storage, tmp_path / "pinned")
     evidence = delivered.managers.evidence
-    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
     await pin(storage, owner, session_id)
     await evidence.validate(owner, session_id, RunPurpose.BASELINE)
     (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
@@ -449,8 +449,8 @@ async def test_a_sessions_checks_run_on_the_environment_it_pinned(
         head,
         RunOutcome.PASSED,
         "container",
-    ), "the check imports what the environment's setup installed"
-    assert record.environment.image == ENVIRONMENT.image
+    ), "the check imports what the workspace base's setup installed"
+    assert record.run_image.image == WORKSPACE_BASE.image
     instance = UUID(validation.executor.removeprefix("executor:"))
     assert gone(instance), "the instance goes after its run"
     verdict = await delivered.managers.agents.judge_result(

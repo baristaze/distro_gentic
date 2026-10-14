@@ -122,8 +122,8 @@ with its machine.
   is the platform's cloud account: the environment then calls the
   module, gives the runner and the sweep `ACME_MACHINES_BACKEND=ec2` and
   its outputs, and their task roles its policy.
-- A session of the pool whose project names an environment is refused
-  for good. The trigger is a cloud project with an environment: the pool
+- A session of the pool whose project names a workspace base is refused
+  for good. The trigger is a cloud project with a workspace base: the pool
   then builds the base on a machine and keeps its disk under the tenant.
 - A machine's host holds no tenant's secret, so a cloud session's
   environment secret is missing there. The trigger is a cloud project

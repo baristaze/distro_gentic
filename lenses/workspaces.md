@@ -304,12 +304,12 @@ replaces; an instance no snapshot holds let go.
 
 **Check.** review
 
-## WSP-14 A project's environment is built once, where it runs, and sealed
+## WSP-14 A project's workspace base is built once, where it runs, and sealed
 
-**Principle.** A project names its environment: an image, the commands
-that set it up, and the package registries the setup reaches. A kind
-that takes it pins it with its session, which keeps it: a changed
-environment is built anew for later sessions. It is built once where
+**Principle.** A project names its workspace base: an image, the
+commands that set it up, and the registries the setup reaches.
+A kind that takes it pins it with its session, which keeps it: a
+changed one is built anew for later sessions. It is built once where
 its workspaces run: by the runner's provider into the platform's store,
 or by the host into its own, inside the wall. Its setup runs the
 project's commands alone, with no model, no secret, no platform
@@ -317,21 +317,21 @@ credential, and nothing of the tenant's records. A workspace on it
 keeps its kind's egress; a validation runs on a new instance of it with
 none. A failed setup keeps nothing and names its command and exit code.
 
-**Source.** Workspaces and Isolation, A Project's Environment.
+**Source.** Workspaces and Isolation, A Project's Workspace Base.
 
-**Look for.** Where a session's pin reads its project's environment and
-which kinds take it; the setup's environment, its egress, and the
-owner's ceilings it is held to on a host; where a built environment is
-kept and read back; the base and the egress of the instance a
+**Look for.** Where a session's pin reads its project's workspace base
+and which kinds take it; the setup's environment, its egress, and the
+owner's ceilings it is held to on a host; where a built workspace base
+is kept and read back; the base and the egress of the instance a
 validation's checks run on; what a failed setup leaves and what the run
 that waits on it says.
 
-**Violation.** A session whose environment changes under it; a setup
-given a secret, a platform credential, a tenant's record, or a model's
-words; a workspace on an environment with its setup's egress; an
-environment built on one side of the wall and served on the other; a
-half-built environment served; the checks of a session on an
-environment run on another image, in its workspace, or with egress; a
+**Violation.** A session whose workspace base changes under it; a
+setup given a secret, a platform credential, a tenant's record, or a
+model's words; a workspace on a workspace base with its setup's egress;
+a workspace base built on one side of the wall and served on the other;
+a half-built workspace base served; the checks of a session on a
+workspace base run on another image, in its workspace, or with egress; a
 failed setup that waits or ends with no command named.
 
 **Severity.** high

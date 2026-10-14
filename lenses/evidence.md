@@ -37,7 +37,7 @@ that refuses its breach.
 
 **Principle.** Every execution is recorded, durably, tied to the version
 and the environment it ran in. Its record holds the version it ran
-against, whether the tree had uncommitted changes, the environment (an
+against, whether the tree had uncommitted changes, the run image (an
 image digest, the toolchain), the host and isolation it ran under, the
 check and its version, its parameters, metrics, timing, outcome, and its
 artifacts, each with a hash and a provenance.
@@ -48,7 +48,7 @@ artifacts, each with a hash and a provenance.
 check or a command, and whether it writes one.
 
 **Violation.** An execution with no record, or a record without its
-version, whether the tree was clean, its environment, its host and
+version, whether the tree was clean, its run image, its host and
 isolation, or its check's version; an artifact with no hash or no
 provenance.
 

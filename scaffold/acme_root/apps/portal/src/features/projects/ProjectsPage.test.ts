@@ -22,7 +22,7 @@ const project = (org: "a" | "b", name: string): ProjectView => ({
   name,
   repository: { host: "forge.example.com", path: `${org}/docs` },
   workspace_snapshots: true,
-  environment: null,
+  workspace_base: null,
   created_at: "2026-10-03T10:00:00Z",
   created_by: PEOPLE[org].id,
   updated_at: "2026-10-03T10:00:00Z",

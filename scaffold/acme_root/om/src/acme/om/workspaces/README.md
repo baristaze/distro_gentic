@@ -15,7 +15,7 @@ rebuilt from.
   level, the limits, and the egress its project allowed then, with where
   that egress came from, and its **durability** and base: its kind's,
   a cache where its project keeps its sessions' workspaces as caches,
-  and, for a kind that takes it, the base its project's environment
+  and, for a kind that takes it, the base its project's workspace base
   names. It
   also holds what the cache knows between
   loops: the session's branch, whether the remote has held it, the last
@@ -49,11 +49,11 @@ rebuilt from.
   and its project's allowlist as it stands. A kind that takes no egress
   keeps none, whatever its project allows. A session of no project keeps
   its kind's own egress. A later write of the allowlist reaches only the
-  sessions created after it. A kind that takes its project's environment
-  pins the base the environment names then, and keeps it: a changed
-  environment reaches only the sessions created after it, and the first
+  sessions created after it. A kind that takes its project's workspace base
+  pins the base the workspace base names then, and keeps it: a changed
+  workspace base reaches only the sessions created after it, and the first
   of them builds it where its workspace runs
-  ([ADR 2051](../../../../../docs/adr/2051-a-projects-environment-is-built-once-where-its-workspaces-run.md)).
+  ([ADR 2051](../../../../../docs/adr/2051-a-projects-workspace-base-is-built-once-where-its-workspaces-run.md)).
 - **Prepare.** Before a loop's first model call, the workspace is
   prepared to the pin, whatever the loop asks. The host refuses what it
   cannot give before its provider is reached, and the provider refuses
@@ -108,7 +108,7 @@ rebuilt from.
 - **Run a delivery's checks.** The platform's executor
   (`impl/executor.py`) makes a container with no egress for the run, on
   the workspace base the session pinned when it names one, such as its
-  project's environment, so the checks find what its setup installed
+  project's workspace base, so the checks find what its setup installed
   ([ADR 2062](../../../../../docs/adr/2062-a-validations-checks-run-on-the-base-its-session-pinned-with-no-egress.md)).
   It writes in the tree the platform read from the project's
   repository: the delivered commit, with every protected path from the
@@ -180,9 +180,9 @@ rebuilt from.
 ## How another namespace composes it
 
 - The root names the kinds whose pin takes their project's
-  environment, each by name and version: the platform's
-  (`ENVIRONMENT_KINDS`), and those a product's slot names
-  (`ProductKinds.environments`).
+  workspace base, each by name and version: the platform's
+  (`WORKSPACE_BASE_KINDS`), and those a product's slot names
+  (`ProductKinds.workspace_bases`).
 - The root decorates the engine's sessions manager, so every session is
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.

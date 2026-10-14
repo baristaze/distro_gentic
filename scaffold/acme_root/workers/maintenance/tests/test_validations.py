@@ -43,14 +43,12 @@ class Unmade(ScriptedExecutor):
 
 
 async def started(
-    container: WorkerContainer, ctx: TenantContext, check: str, environment: str | None = None
+    container: WorkerContainer, ctx: TenantContext, check: str, executor: str | None = None
 ) -> UUID:
     project_id = new_id()
     policy = make_policy(policy_key(project_id))
-    if environment is not None:
-        moved = tuple(
-            each.model_copy(update={"environment": environment}) for each in policy.checks
-        )
+    if executor is not None:
+        moved = tuple(each.model_copy(update={"executor": executor}) for each in policy.checks)
         policy = policy.model_copy(update={"checks": moved})
     await container.managers.evidence.write_policy(ctx, policy)
     session = await container.managers.platform_agents.start_validation(
@@ -121,7 +119,7 @@ async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Pa
     assert executor.requests == []
 
 
-async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: Path) -> None:
+async def test_a_check_naming_a_products_executor_runs_on_it(tmp_path: Path) -> None:
     platform, batch = (
         ScriptedExecutor(capabilities=frozenset()),
         ScriptedExecutor(name="batch-1", capabilities=frozenset()),
@@ -131,7 +129,7 @@ async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: 
         StorageMemoryImpl(), InfraLocalImpl(tmp_path), ports=ports
     )
     owner = await sign_in(container)
-    session_id = await started(container, owner, "unit", environment="batch")
+    session_id = await started(container, owner, "unit", executor="batch")
     handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)

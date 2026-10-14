@@ -484,7 +484,7 @@ class ValidateInput(ToolInput):
 
 
 class Validated(Platform):
-    """The validations it kept, one per environment the checks name, and
+    """The validations it kept, one per executor the checks name, and
     every run they wrote."""
 
     validations: tuple[UUID, ...]

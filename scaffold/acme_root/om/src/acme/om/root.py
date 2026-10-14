@@ -117,12 +117,12 @@ from acme.om.platform_agents.catalog import (
 from acme.om.platform_agents.impl.gate import ResultGateReviewImpl
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
 from acme.om.platform_agents.kinds import (
-    ENVIRONMENT_KINDS,
     GRACES,
     PROMPT_CACHE_LIFE,
     SHIPPED,
     TOOLSETS,
     WARM_GRACE,
+    WORKSPACE_BASE_KINDS,
 )
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
@@ -304,8 +304,8 @@ class ProductKinds:
     its permission, its lane, and the claimant kind that takes it through
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
-    claimant kinds of its own that write and read it, if any; its executors, by
-    the validation environment each runs; and its kinds of automation
+    claimant kinds of its own that write and read it, if any; its executors, each by
+    the name a check's `executor` gives; and its kinds of automation
     action, each acting in a firing, saying when the run it started
     ended, and checking the person who writes one (`automations.actions`);
     and its resource kinds, each with the shape of its ask, the hooks a
@@ -316,9 +316,9 @@ class ProductKinds:
     its warm grace, how long its workspace stays held after a loop, at
     most the prompt cache's life; one it names none for takes the
     default (`warm_grace`). It names, by name and version, the agent kinds
-    of its own whose workspace starts from the environment its session's
-    project names (`environments`), as the platform names its engineer
-    (`platform_agents.kinds.ENVIRONMENT_KINDS`); a pair that is no agent
+    of its own whose workspace starts from the workspace base its session's
+    project names (`workspace_bases`), as the platform names its engineer
+    (`platform_agents.kinds.WORKSPACE_BASE_KINDS`); a pair that is no agent
     kind of its own is refused.
     Its agent kinds join the platform's catalog, which refuses a version
     declared twice, and its tools the
@@ -345,7 +345,7 @@ class ProductKinds:
     resources: ProductResources = no_resources
     toolsets: tuple[Toolset, ...] = ()
     graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
-    environments: frozenset[tuple[str, int]] = frozenset()
+    workspace_bases: frozenset[tuple[str, int]] = frozenset()
 
     def __post_init__(self) -> None:
         platform = {toolset.name for toolset in TOOLSETS}
@@ -377,10 +377,10 @@ class ProductKinds:
                     f"of {PROMPT_CACHE_LIFE}"
                 )
         versions = {(kind.name, kind.version) for kind in self.agents}
-        for name, version in sorted(self.environments):
+        for name, version in sorted(self.workspace_bases):
             if (name, version) not in versions:
                 raise ValueError(
-                    f"the kinds that take their project's environment name {name} v{version}, "
+                    f"the kinds that take their project's workspace base name {name} v{version}, "
                     "which is no agent kind of the product's"
                 )
         for spec in self.work:
@@ -746,10 +746,10 @@ def build_managers(
     and the tools' ceilings, each tool
     reading the managers built here at call time; its work kinds and
     claimant kinds, which the work queue and placement read beside the
-    platform's; its executors, which run a check that names their
-    environment; its kinds whose workspace starts from their project's
-    environment, which the workspaces read beside the platform's
-    (`ENVIRONMENT_KINDS`); and its resource kinds, which the leases manager
+    platform's; its executors, which run a check that names
+    them; its kinds whose workspace starts from their project's
+    workspace base, which the workspaces read beside the platform's
+    (`WORKSPACE_BASE_KINDS`); and its resource kinds, which the leases manager
     reads beside `noop`. A name the platform holds is refused at boot. None
     adds nothing.
 
@@ -1003,7 +1003,7 @@ def build_managers(
         infra.get_secrets(),
         writes,
         held,
-        environments=ENVIRONMENT_KINDS | product.environments,
+        workspace_bases=WORKSPACE_BASE_KINDS | product.workspace_bases,
     )
     notification_storage = storage.get_notification_storage()
     engine_sessions = AgentSessionsManagerImpl(

@@ -39,7 +39,7 @@ its pool gives it, and reached through the relay
 (`PlacedInstancesInterface`). A root that wires no such way refuses its
 checks, loudly.
 
-A session pinned to a base, such as its project's environment, has its
+A session pinned to a base, such as its project's workspace base, has its
 checks run on that base, so what its setup installed is there for them:
 the base's image and the snapshot its setup left, never the session's
 workspace or a snapshot of it. The instance's egress is none even so: the

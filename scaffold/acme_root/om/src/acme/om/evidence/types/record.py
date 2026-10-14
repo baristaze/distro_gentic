@@ -1,5 +1,5 @@
 """An execution record: one run of one check, tied to the version and the
-environment it ran in. It is written once and never changed."""
+image it ran on. It is written once and never changed."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -36,7 +36,7 @@ class RunOutcome(StrEnum):
     ABORTED = "aborted"  # an abort ended it; a declared rule classifies it
 
 
-class Environment(Platform):
+class RunImage(Platform):
     """What a run ran under: the image's digest and the toolchain's
     versions, by name."""
 
@@ -54,7 +54,7 @@ class CaseTally(Platform):
 
 class ExecutionRecord(Identifiable, Created):
     """One run: the version it ran against and whether the tree held
-    uncommitted changes, the environment, the host and its isolation, who
+    uncommitted changes, the run image, the host and its isolation, who
     ran it and wrote its results (`executor`), the check and its version,
     its parameters, metrics, timing, and outcome, its artifacts, and every
     dependency it relied on with its provenance. `step_id` is the tool call
@@ -68,7 +68,7 @@ class ExecutionRecord(Identifiable, Created):
     validation_id: UUID | None = None
     version: str = Field(pattern=VERSION)
     dirty: bool
-    environment: Environment
+    run_image: RunImage
     host: str = Field(min_length=1, max_length=200)
     isolation: str = Field(min_length=1, max_length=100)
     executor: str = Field(min_length=1, max_length=200)

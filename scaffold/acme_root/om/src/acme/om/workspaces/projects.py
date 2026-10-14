@@ -1,7 +1,7 @@
 """What the workspaces read of a session's project: which project it belongs
 to, which keys the allowlist it pins, the one repository that project
 binds, where its branch and pull request are its work product, and the
-environment its workspace starts from. And the
+workspace base its workspace starts from. And the
 source control that holds that repository: what it says of a gone branch,
 and the writes that carry a session's commits to its branch or a snapshot
 and open its pull request.
@@ -42,9 +42,9 @@ class WorkspaceProjectsInterface(ABC):
         ...
 
     @abstractmethod
-    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
         """The base the tenant's project names for its sessions' workspaces:
-        its environment's image, setup, and the setup's egress. None when it
+        its workspace base's image, setup, and the setup's egress. None when it
         names none, or the tenant does not hold it."""
         ...
 

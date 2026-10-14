@@ -62,7 +62,7 @@ ON_BASE = IsolationSpec(
 )
 SECRET = "tok-0123456789abcdef"
 LONGEST = get_args(SetupCommand)[1].max_length
-"""The longest setup command a project's environment allows."""
+"""The longest setup command a project's workspace base allows."""
 
 
 async def _unsealed(data: bytes) -> None:

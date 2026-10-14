@@ -20,7 +20,7 @@ from acme.om.evidence.types.contract import (
     ResultsLine,
     StartLine,
 )
-from acme.om.evidence.types.record import CaseTally, Environment, ExecutionRecord, RunPurpose
+from acme.om.evidence.types.record import CaseTally, ExecutionRecord, RunImage, RunPurpose
 from acme.om.evidence.types.validation import Prepared
 from acme.om.exceptions import ValidationFailed
 
@@ -105,12 +105,10 @@ class Collector:
         start = self._start
         if start is None:
             raise self._refused("a run ends that never started")
-        environment, host, isolation = start.environment, start.host, start.isolation
+        run_image, host, isolation = start.environment, start.host, start.isolation
         if self._prepared is not None:
             # What the executor made, never what the delivered code printed.
-            environment = Environment(
-                image=self._prepared.image, toolchain=start.environment.toolchain
-            )
+            run_image = RunImage(image=self._prepared.image, toolchain=start.environment.toolchain)
             host, isolation = self._prepared.host, self._prepared.isolation
         try:
             record = ExecutionRecord(
@@ -118,7 +116,7 @@ class Collector:
                 **self._base,
                 version=start.version,
                 dirty=start.dirty,
-                environment=environment,
+                run_image=run_image,
                 host=host,
                 isolation=isolation,
                 check=start.check,

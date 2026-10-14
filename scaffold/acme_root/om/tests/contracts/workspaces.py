@@ -30,13 +30,13 @@ BASE = "b" * 40
 
 class ProjectsTwin(WorkspaceProjectsInterface):
     """Every session belongs to one project, which binds `repository`, or
-    none when `repository` is None, and names `environment` for its
+    none when `repository` is None, and names `workspace_base` for its
     sessions' workspaces, or none."""
 
     def __init__(self, repository: str | None = REPOSITORY) -> None:
         self.project_id = new_id()
         self.repository = repository
-        self.environment: WorkspaceBase | None = None
+        self.workspace_base: WorkspaceBase | None = None
 
     async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return self.project_id
@@ -49,8 +49,8 @@ class ProjectsTwin(WorkspaceProjectsInterface):
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
 
-    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
-        return self.environment if project_id == self.project_id else None
+    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        return self.workspace_base if project_id == self.project_id else None
 
 
 class PullRequestsTwin(PullRequestsInterface):

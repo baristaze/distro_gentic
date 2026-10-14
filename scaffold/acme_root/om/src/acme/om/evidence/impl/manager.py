@@ -11,7 +11,7 @@ from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface, Executors
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import (
-    by_environment,
+    by_executor,
     compatibility_refusal,
     execution_request,
     policy_key,
@@ -253,16 +253,16 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
     async def _planned(
         self, ctx: TenantContext, request: ExecutionRequest
     ) -> list[tuple[ExecutorInterface, ExecutionRequest]]:
-        """Each environment the request's checks name, with its executor and
-        its part of the request, once every executor offers what its checks
-        need. An environment no executor of this process runs, or a check
+        """Each executor the request's checks name, with its part of the
+        request, once every executor offers what its checks need. An
+        executor this process does not hold, or a check
         its executor cannot run, refuses the whole request before anything
         runs."""
         planned: list[tuple[ExecutorInterface, ExecutionRequest]] = []
-        for environment, part in by_environment(request).items():
-            executor = self._executors.get(environment)
+        for name, part in by_executor(request).items():
+            executor = self._executors.get(name)
             if executor is None:
-                raise PreconditionFailed(f"no executor here runs the {environment} environment")
+                raise PreconditionFailed(f"no executor here is named {name}")
             offer = await executor.offer(ctx)
             for check in part.checks:
                 refusal = compatibility_refusal(check, offer)

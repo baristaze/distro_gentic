@@ -37,7 +37,7 @@ def execution_view(record: ExecutionRecord) -> ExecutionView:
         project=record.project,
         version=record.version,
         dirty=record.dirty,
-        image=record.environment.image,
+        image=record.run_image.image,
         host=record.host,
         isolation=record.isolation,
         executor=record.executor,

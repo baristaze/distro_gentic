@@ -15,7 +15,7 @@ from acme.om.projects.exceptions import ProjectFixed, ProjectInUse
 from acme.om.projects.impl.sessions import bind
 from acme.om.projects.manager import ProjectsManagerInterface
 from acme.om.projects.storage import ProjectStorageInterface
-from acme.om.projects.types.project import Project, ProjectEnvironment, Repository
+from acme.om.projects.types.project import Project, ProjectWorkspaceBase, Repository
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "projects.project.created"
@@ -82,11 +82,11 @@ class ProjectsManagerImpl(ProjectsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         return await self._update(ctx, project_id, {"name": name})
 
-    async def set_environment(
-        self, ctx: TenantContext, project_id: UUID, environment: ProjectEnvironment | None
+    async def set_workspace_base(
+        self, ctx: TenantContext, project_id: UUID, workspace_base: ProjectWorkspaceBase | None
     ) -> Project:
         ctx.require(Permission.MANAGE_MEMBERS)
-        return await self._update(ctx, project_id, {"environment": environment})
+        return await self._update(ctx, project_id, {"workspace_base": workspace_base})
 
     async def remove_project(self, ctx: TenantContext, project_id: UUID) -> Project:
         ctx.require(Permission.MANAGE_MEMBERS)

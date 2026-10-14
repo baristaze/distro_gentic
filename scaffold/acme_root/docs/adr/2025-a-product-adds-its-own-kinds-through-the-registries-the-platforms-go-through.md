@@ -26,16 +26,16 @@ Five registries, each refusing a name registered twice:
   platform's, and resolves first.
 - A **stream kind**: what each of its streams may hold
   (`watch/kinds.py`). The step is the platform's.
-- An **executor**, by the validation environment it runs
-  (`evidence/executor.py`). The fresh executor runs `platform`.
+- An **executor**, by the name a check's `executor` gives it
+  (`evidence/executor.py`). The fresh executor is `platform`.
 
 A product hands its kinds to every root in one place, `PRODUCT_KINDS`
 in `product_kinds.py`, with its agent kinds, its tools, and the classes
 they declare. Every process's entry point passes it as
 `PlatformPorts.kinds`, so each process builds the same registry. A
 work, claimant, secret owner, or stream kind whose name the platform
-holds is refused at boot, and so is an executor for the platform's own
-environment. An agent kind is refused only at a version the catalog
+holds is refused at boot, and so is an executor under the platform's own
+name. An agent kind is refused only at a version the catalog
 already holds, so a later version of a shipped kind is accepted.
 
 **The gateway's rule holds for every claimant.** Placement claims for a
@@ -50,14 +50,13 @@ before anything reads it.
 **A secret reaches only the sessions placed on its owner,** whatever
 the owner's kind. **A product's stream** is held to its kind's bounds,
 in a group of its own, and never loosens the step's. **A check names
-its environment,** and its validation runs on that environment's
-executor. Every executor's report is held to the same bounds and hash
+its executor,** and its validation runs on that executor. Every executor's report is held to the same bounds and hash
 before it is kept, and the result gate reads the record alike.
 
 ## Consequences
 
 - No migration. A kind is stored by name in a text column with no
-  check, and a check's environment rides in the policy's checks.
+  check, and a check's executor rides in the policy's checks.
 - The work namespace's own kinds keep their payloads in `WORK_PAYLOADS`,
   the guideline's table per kind, which their specs read.
 - A product's stream kind sets its entries, its bytes, and its open
@@ -78,8 +77,8 @@ before it is kept, and the result gate reads the record alike.
 - A row asking for a kind its process does not know is refused at the
   relay and ends a dead letter, which an audit event names. Every root
   reads the kinds from the one hand-off so none omits them.
-- A change whose checks name two environments takes one validation in
-  each, on that environment's executor. Every executor's offer is read
+- A change whose checks name two executors takes one validation on
+  each. Every executor's offer is read
   before any runs, and a check none can run refuses all of them. The
   gate reads every validation at the head, each with its own runs.
 - `distro-scaffold-work-kind` adds a kind to a copy.

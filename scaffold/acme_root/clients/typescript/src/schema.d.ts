@@ -3410,7 +3410,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/projects/{project_id}/environment": {
+    "/v1/projects/{project_id}/workspace-base": {
         parameters: {
             query?: never;
             header?: never;
@@ -3419,19 +3419,19 @@ export interface paths {
         };
         get?: never;
         /**
-         * Set Environment
-         * @description The environment the project's sessions' workspaces start from; a later
+         * Set Workspace Base
+         * @description The workspace base the project's sessions' workspaces start from; a later
          *     one replaces it. Each session keeps the one it started on, and a changed
          *     one is built again for the sessions created after it.
          */
-        put: operations["set_environment_v1_projects__project_id__environment_put"];
+        put: operations["set_workspace_base_v1_projects__project_id__workspace_base_put"];
         post?: never;
         /**
-         * Remove Environment
-         * @description The project with no environment: its sessions created after it start
+         * Remove Workspace Base
+         * @description The project with no workspace base: its sessions created after it start
          *     from their kind's own workspace.
          */
-        delete: operations["remove_environment_v1_projects__project_id__environment_delete"];
+        delete: operations["remove_workspace_base_v1_projects__project_id__workspace_base_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4955,14 +4955,14 @@ export interface components {
          * CreateProjectRequest
          * @description A project and the one repository it binds, which never moves; whether
          *     a kind that keeps its workspace by snapshots keeps it so here, False
-         *     keeping each of its sessions' workspaces a cache; and the environment
+         *     keeping each of its sessions' workspaces a cache; and the workspace base
          *     its sessions' workspaces start from, if it names one.
          */
         CreateProjectRequest: {
-            environment?: components["schemas"]["EnvironmentBody"] | null;
             /** Name */
             name: string;
             repository: components["schemas"]["RepositoryBody"];
+            workspace_base?: components["schemas"]["WorkspaceBaseBody"] | null;
             /**
              * Workspace Snapshots
              * @default true
@@ -5278,31 +5278,6 @@ export interface components {
             data: string;
             /** N */
             n: number;
-        };
-        /**
-         * EnvironmentBody
-         * @description The environment a project's sessions' workspaces start from: the
-         *     image, the commands that set it up, run once in order, and the package
-         *     registries the setup reaches. A setup that names a registry runs with
-         *     open egress; one that names none reaches nothing. Registries serve a
-         *     setup, so they come with one.
-         */
-        EnvironmentBody: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries?: string[];
-            /** Setup */
-            setup?: string[];
-        };
-        /** EnvironmentView */
-        EnvironmentView: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries: string[];
-            /** Setup */
-            setup: string[];
         };
         /** ErrorBody */
         ErrorBody: {
@@ -7713,7 +7688,6 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
-            environment: components["schemas"]["EnvironmentView"] | null;
             /**
              * Id
              * Format: uuid
@@ -7732,6 +7706,7 @@ export interface components {
              * Format: uuid
              */
             updated_by: string;
+            workspace_base: components["schemas"]["WorkspaceBaseView"] | null;
             /** Workspace Snapshots */
             workspace_snapshots: boolean;
         };
@@ -9341,6 +9316,31 @@ export interface components {
          * @enum {string}
          */
         WorkStatus: "queued" | "claimed" | "done" | "failed";
+        /**
+         * WorkspaceBaseBody
+         * @description The workspace base a project's sessions' workspaces start from: the
+         *     image, the commands that set it up, run once in order, and the package
+         *     registries the setup reaches. A setup that names a registry runs with
+         *     open egress; one that names none reaches nothing. Registries serve a
+         *     setup, so they come with one.
+         */
+        WorkspaceBaseBody: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries?: string[];
+            /** Setup */
+            setup?: string[];
+        };
+        /** WorkspaceBaseView */
+        WorkspaceBaseView: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries: string[];
+            /** Setup */
+            setup: string[];
+        };
     };
     responses: never;
     parameters: never;
@@ -16693,7 +16693,7 @@ export interface operations {
             };
         };
     };
-    set_environment_v1_projects__project_id__environment_put: {
+    set_workspace_base_v1_projects__project_id__workspace_base_put: {
         parameters: {
             query?: never;
             header?: {
@@ -16708,7 +16708,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EnvironmentBody"];
+                "application/json": components["schemas"]["WorkspaceBaseBody"];
             };
         };
         responses: {
@@ -16732,7 +16732,7 @@ export interface operations {
             };
         };
     };
-    remove_environment_v1_projects__project_id__environment_delete: {
+    remove_workspace_base_v1_projects__project_id__workspace_base_delete: {
         parameters: {
             query?: never;
             header?: {

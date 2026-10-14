@@ -1,6 +1,6 @@
 """Wire types of a tenant's projects: one as stored, with the repository it
-binds and the environment its sessions' workspaces start from; a new one, a
-new name, and a new environment; and the fetch credential its repository is
+binds and the workspace base its sessions' workspaces start from; a new one, a
+new name, and a new workspace base; and the fetch credential its repository is
 read with, which is written and never read back."""
 
 from datetime import datetime
@@ -39,8 +39,8 @@ class RepositoryView(View):
     path: str
 
 
-class EnvironmentBody(RequestBody):
-    """The environment a project's sessions' workspaces start from: the
+class WorkspaceBaseBody(RequestBody):
+    """The workspace base a project's sessions' workspaces start from: the
     image, the commands that set it up, run once in order, and the package
     registries the setup reaches. A setup that names a registry runs with
     open egress; one that names none reaches nothing. Registries serve a
@@ -51,7 +51,7 @@ class EnvironmentBody(RequestBody):
     registries: list[Destination] = Field(default_factory=lambda: [], max_length=MAX_REGISTRIES)
 
 
-class EnvironmentView(View):
+class WorkspaceBaseView(View):
     image: str
     setup: list[str]
     registries: list[str]
@@ -60,13 +60,13 @@ class EnvironmentView(View):
 class CreateProjectRequest(RequestBody):
     """A project and the one repository it binds, which never moves; whether
     a kind that keeps its workspace by snapshots keeps it so here, False
-    keeping each of its sessions' workspaces a cache; and the environment
+    keeping each of its sessions' workspaces a cache; and the workspace base
     its sessions' workspaces start from, if it names one."""
 
     name: str = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: RepositoryBody
     workspace_snapshots: bool = True
-    environment: EnvironmentBody | None = None
+    workspace_base: WorkspaceBaseBody | None = None
 
 
 class RenameProjectRequest(RequestBody):
@@ -78,7 +78,7 @@ class ProjectView(View):
     name: str
     repository: RepositoryView
     workspace_snapshots: bool
-    environment: EnvironmentView | None
+    workspace_base: WorkspaceBaseView | None
     created_at: datetime
     created_by: UUID
     updated_at: datetime

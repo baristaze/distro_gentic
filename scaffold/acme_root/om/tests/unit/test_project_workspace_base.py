@@ -1,7 +1,7 @@
-"""A project's environment as the platform serves it, over the memory roots,
+"""A project's workspace base as the platform serves it, over the memory roots,
 the twin provider, the twin transport, and the local buckets. A kind that
-takes its project's environment, the platform's or one a product's slot
-names, pins the base the environment names when its session is created; a
+takes its project's workspace base, the platform's or one a product's slot
+names, pins the base the workspace base names when its session is created; a
 kind that does not, and a project that names none, pin what they pinned
 before. The first session builds the base and
 the next one starts from it. A changed setup command builds a new base for
@@ -34,8 +34,8 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
-from acme.om.platform_agents.kinds import ENGINEER, ENVIRONMENT_KINDS
-from acme.om.projects.types.project import ProjectEnvironment
+from acme.om.platform_agents.kinds import ENGINEER, WORKSPACE_BASE_KINDS
+from acme.om.projects.types.project import ProjectWorkspaceBase
 from acme.om.root import ProductKinds
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
@@ -44,30 +44,30 @@ NONE = EgressPolicy(mode=EgressMode.NONE)
 SEALED = IsolationSpec(mode=IsolationMode.TWIN, egress=NONE)
 TAKES = ASSISTANT.model_copy(update={"name": ENGINEER, "version": 8, "isolation": SEALED})
 """A kind the platform names among those that take their project's
-environment: the engineer at version 8, here with the assistant's loop on
+workspace_base: the engineer at version 8, here with the assistant's loop on
 the twin."""
 OWN = ASSISTANT.model_copy(update={"isolation": SEALED})
 """A kind that keeps its own base: none."""
 BUILDER = ASSISTANT.model_copy(update={"name": "builder", "version": 2, "isolation": SEALED})
 """A product's kind its slot names among those that take their project's
-environment."""
+workspace_base."""
 READER = ASSISTANT.model_copy(update={"name": "reader", "isolation": SEALED})
 """A product's kind its slot does not name."""
-PRODUCT = ProductKinds(agents=(BUILDER, READER), environments=frozenset({("builder", 2)}))
+PRODUCT = ProductKinds(agents=(BUILDER, READER), workspace_bases=frozenset({("builder", 2)}))
 
-ENVIRONMENT = ProjectEnvironment(
+WORKSPACE_BASE = ProjectWorkspaceBase(
     image="python:3.14-slim",
     setup=("pip install acme-tools", "echo built >> /opt/count"),
     registries=("pypi.org", "files.pythonhosted.org"),
 )
-CHANGED = ENVIRONMENT.model_copy(
+CHANGED = WORKSPACE_BASE.model_copy(
     update={"setup": ("pip install acme-tools", "echo changed >> /opt/count")}
 )
 TOKEN = "tok-0123456789abcdef"
 
 
 class Setup:
-    """The twin transport's handler: each command it runs, the environment
+    """The twin transport's handler: each command it runs, the workspace base
     it gets, and the exit code a case asks of a command."""
 
     def __init__(self) -> None:
@@ -127,7 +127,7 @@ class InfraBuilt(InfraLocalImpl):
         return self.built
 
 
-class Environments:
+class WorkspaceBases:
     """A tenant whose sessions belong to one project, over the built twin."""
 
     def __init__(self, tmp_path: Path, product: ProductKinds | None = None) -> None:
@@ -166,66 +166,68 @@ def key(base: WorkspaceBase) -> str:
 
 
 @pytest.fixture
-def environments(tmp_path: Path) -> Environments:
-    return Environments(tmp_path)
+def workspace_bases(tmp_path: Path) -> WorkspaceBases:
+    return WorkspaceBases(tmp_path)
 
 
-def test_the_engineer_from_version_8_takes_its_projects_environment() -> None:
-    assert (ENGINEER, 8) in ENVIRONMENT_KINDS
-    assert all(name != ENGINEER or version >= 8 for name, version in ENVIRONMENT_KINDS)
+def test_the_engineer_from_version_8_takes_its_projects_workspace_base() -> None:
+    assert (ENGINEER, 8) in WORKSPACE_BASE_KINDS
+    assert all(name != ENGINEER or version >= 8 for name, version in WORKSPACE_BASE_KINDS)
 
 
-def test_an_environment_names_a_setup_whose_egress_follows_its_registries() -> None:
+def test_a_workspace_base_names_a_setup_whose_egress_follows_its_registries() -> None:
     """A setup that names a registry runs with open egress, the project's
     recorded choice; one that names none reaches nothing. Registries serve
     a setup, and an image never reads as an option."""
-    assert ENVIRONMENT.base() == WorkspaceBase(
-        image=ENVIRONMENT.image, setup=ENVIRONMENT.setup, egress=EgressPolicy(mode=EgressMode.OPEN)
+    assert WORKSPACE_BASE.base() == WorkspaceBase(
+        image=WORKSPACE_BASE.image,
+        setup=WORKSPACE_BASE.setup,
+        egress=EgressPolicy(mode=EgressMode.OPEN),
     )
-    sealed = ENVIRONMENT.model_copy(update={"registries": ()})
+    sealed = WORKSPACE_BASE.model_copy(update={"registries": ()})
     assert sealed.base().egress.mode is EgressMode.NONE
     with pytest.raises(ValueError, match="registries only for a setup"):
-        ProjectEnvironment(image="python:3.14-slim", registries=("pypi.org",))
+        ProjectWorkspaceBase(image="python:3.14-slim", registries=("pypi.org",))
     with pytest.raises(ValueError, match="each registry once"):
-        ProjectEnvironment(image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io"))
+        ProjectWorkspaceBase(image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io"))
     for image in ("--privileged", "-v/:/host", "python 3", ""):
         with pytest.raises(ValueError):
-            ProjectEnvironment(image=image)
+            ProjectWorkspaceBase(image=image)
 
 
-async def test_a_kind_that_takes_its_projects_environment_pins_its_base(
-    environments: Environments,
+async def test_a_kind_that_takes_its_projects_workspace_base_pins_its_base(
+    workspace_bases: WorkspaceBases,
 ) -> None:
-    """The kind that takes it pins the environment's base; a kind that does
+    """The kind that takes it pins the base it names; a kind that does
     not keeps its own, and a project that names none changes nothing."""
-    loop = environments.loop
+    loop = workspace_bases.loop
     bare = await loop.start(TAKES.name)
-    environments.projects.environment = ENVIRONMENT.base()
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
     takes = await loop.start(TAKES.name)
     own = await loop.start(OWN.name)
 
-    assert await environments.pinned(takes) == ENVIRONMENT.base()
-    assert await environments.pinned(own) is None, "its kind keeps its own"
-    assert await environments.pinned(bare) is None, "its project named none when it was created"
+    assert await workspace_bases.pinned(takes) == WORKSPACE_BASE.base()
+    assert await workspace_bases.pinned(own) is None, "its kind keeps its own"
+    assert await workspace_bases.pinned(bare) is None, "its project named none when it was created"
     pinned = await loop.managers.workspaces.get_workspace(loop.owner, takes)
     assert pinned.egress is EgressMode.NONE, "its workspace keeps its kind's egress"
 
 
-async def test_a_products_kind_its_slot_names_pins_its_projects_environment(
+async def test_a_products_kind_its_slot_names_pins_its_projects_workspace_base(
     tmp_path: Path,
 ) -> None:
     """The root reads the product's kinds beside the platform's: the one its
-    slot names pins the environment's base, as the engineer does, and the
+    slot names pins the base it names, as the engineer does, and the
     one it does not keeps its own."""
-    environments = Environments(tmp_path, PRODUCT)
-    environments.projects.environment = ENVIRONMENT.base()
-    builder = await environments.loop.start(BUILDER.name)
-    reader = await environments.loop.start(READER.name)
-    engineer = await environments.loop.start(TAKES.name)
+    workspace_bases = WorkspaceBases(tmp_path, PRODUCT)
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
+    builder = await workspace_bases.loop.start(BUILDER.name)
+    reader = await workspace_bases.loop.start(READER.name)
+    engineer = await workspace_bases.loop.start(TAKES.name)
 
-    assert await environments.pinned(builder) == ENVIRONMENT.base()
-    assert await environments.pinned(reader) is None, "its slot does not name it"
-    assert await environments.pinned(engineer) == ENVIRONMENT.base(), "the platform's too"
+    assert await workspace_bases.pinned(builder) == WORKSPACE_BASE.base()
+    assert await workspace_bases.pinned(reader) is None, "its slot does not name it"
+    assert await workspace_bases.pinned(engineer) == WORKSPACE_BASE.base(), "the platform's too"
 
 
 def test_a_slot_names_only_the_products_own_kinds_at_a_version_it_declares() -> None:
@@ -233,78 +235,78 @@ def test_a_slot_names_only_the_products_own_kinds_at_a_version_it_declares() -> 
     version of its own it does not declare."""
     for named in ((ENGINEER, 7), ("builder", 1), ("absent", 1)):
         with pytest.raises(ValueError, match="no agent kind of the product's"):
-            ProductKinds(agents=(BUILDER,), environments=frozenset({named}))
+            ProductKinds(agents=(BUILDER,), workspace_bases=frozenset({named}))
 
 
 async def test_one_build_serves_the_project_and_the_next_session_runs_no_setup(
-    environments: Environments,
+    workspace_bases: WorkspaceBases,
 ) -> None:
-    environments.projects.environment = ENVIRONMENT.base()
-    first = await environments.loop.start(TAKES.name)
-    second = await environments.loop.start(TAKES.name)
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
+    first = await workspace_bases.loop.start(TAKES.name)
+    second = await workspace_bases.loop.start(TAKES.name)
 
-    assert await environments.run(first) is LoopOutcome.SUCCEEDED
-    assert environments.setup.ran == list(ENVIRONMENT.setup), "the first session built it"
-    assert await environments.run(second) is LoopOutcome.SUCCEEDED
+    assert await workspace_bases.run(first) is LoopOutcome.SUCCEEDED
+    assert workspace_bases.setup.ran == list(WORKSPACE_BASE.setup), "the first session built it"
+    assert await workspace_bases.run(second) is LoopOutcome.SUCCEEDED
 
-    assert environments.setup.ran == list(ENVIRONMENT.setup), "the second ran no setup"
-    started = environments.infra.built.started_from
-    assert started[first] == started[second] == [await environments.held(ENVIRONMENT.base())]
-    assert await environments.kept() == [key(ENVIRONMENT.base())]
+    assert workspace_bases.setup.ran == list(WORKSPACE_BASE.setup), "the second ran no setup"
+    started = workspace_bases.infra.built.started_from
+    assert started[first] == started[second] == [await workspace_bases.held(WORKSPACE_BASE.base())]
+    assert await workspace_bases.kept() == [key(WORKSPACE_BASE.base())]
 
 
 async def test_a_changed_setup_command_builds_a_new_base_and_a_running_session_keeps_its_own(
-    environments: Environments,
+    workspace_bases: WorkspaceBases,
 ) -> None:
-    environments.projects.environment = ENVIRONMENT.base()
-    running = await environments.loop.start(TAKES.name)
-    assert await environments.run(running) is LoopOutcome.SUCCEEDED
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
+    running = await workspace_bases.loop.start(TAKES.name)
+    assert await workspace_bases.run(running) is LoopOutcome.SUCCEEDED
 
-    environments.projects.environment = CHANGED.base()
-    later = await environments.loop.start(TAKES.name)
-    assert await environments.run(later) is LoopOutcome.SUCCEEDED
-    assert await environments.run(running) is LoopOutcome.SUCCEEDED
+    workspace_bases.projects.workspace_base = CHANGED.base()
+    later = await workspace_bases.loop.start(TAKES.name)
+    assert await workspace_bases.run(later) is LoopOutcome.SUCCEEDED
+    assert await workspace_bases.run(running) is LoopOutcome.SUCCEEDED
 
-    assert environments.setup.ran == [*ENVIRONMENT.setup, *CHANGED.setup], "built once each"
-    assert await environments.pinned(running) == ENVIRONMENT.base()
-    assert await environments.pinned(later) == CHANGED.base()
-    started = environments.infra.built.started_from
-    first = await environments.held(ENVIRONMENT.base())
+    assert workspace_bases.setup.ran == [*WORKSPACE_BASE.setup, *CHANGED.setup], "built once each"
+    assert await workspace_bases.pinned(running) == WORKSPACE_BASE.base()
+    assert await workspace_bases.pinned(later) == CHANGED.base()
+    started = workspace_bases.infra.built.started_from
+    first = await workspace_bases.held(WORKSPACE_BASE.base())
     assert started[running] == [first, first], "each of its loops starts from the base it pinned"
-    assert started[later] == [await environments.held(CHANGED.base())] != [first]
-    assert await environments.kept() == sorted([key(ENVIRONMENT.base()), key(CHANGED.base())])
+    assert started[later] == [await workspace_bases.held(CHANGED.base())] != [first]
+    assert await workspace_bases.kept() == sorted([key(WORKSPACE_BASE.base()), key(CHANGED.base())])
 
 
 async def test_a_failed_setup_ends_the_loop_with_the_command_and_its_exit_code_and_keeps_no_base(
-    environments: Environments, caplog: pytest.LogCaptureFixture
+    workspace_bases: WorkspaceBases, caplog: pytest.LogCaptureFixture
 ) -> None:
-    environments.projects.environment = ENVIRONMENT.base()
-    environments.setup.exits["pip install acme-tools"] = 1
-    session_id = await environments.loop.start(TAKES.name)
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
+    workspace_bases.setup.exits["pip install acme-tools"] = 1
+    session_id = await workspace_bases.loop.start(TAKES.name)
 
     with caplog.at_level(logging.WARNING):
-        assert await environments.run(session_id) is LoopOutcome.ERRORED
+        assert await workspace_bases.run(session_id) is LoopOutcome.ERRORED
 
     told = " ".join(record.getMessage() for record in caplog.records)
     assert "the base's setup command 1, 'pip install acme-tools', exited 1" in told
-    assert await environments.kept() == [], "no half-built base"
-    assert environments.infra.built.started_from == {}, "no workspace started from one"
+    assert await workspace_bases.kept() == [], "no half-built base"
+    assert workspace_bases.infra.built.started_from == {}, "no workspace started from one"
 
 
 async def test_the_setup_is_given_no_secret_and_nothing_of_the_tenants_records(
-    environments: Environments,
+    workspace_bases: WorkspaceBases,
 ) -> None:
-    """The setup's commands carry the environment's text alone, and run with
+    """The setup's commands carry the workspace base's text alone, and run with
     no variable of their own: not the tenant's secret, nor the session's
     words, nor the project."""
-    loop = environments.loop
-    await environments.infra.get_secrets().put(loop.owner.org_id, "SERVICE_TOKEN", TOKEN)
-    environments.projects.environment = ENVIRONMENT.base()
+    loop = workspace_bases.loop
+    await workspace_bases.infra.get_secrets().put(loop.owner.org_id, "SERVICE_TOKEN", TOKEN)
+    workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
     session_id = await loop.start(TAKES.name)
 
-    assert await environments.run(session_id) is LoopOutcome.SUCCEEDED
+    assert await workspace_bases.run(session_id) is LoopOutcome.SUCCEEDED
 
-    assert environments.setup.ran == list(ENVIRONMENT.setup)
-    assert environments.setup.envs == [{}, {}], "no variable of its own"
-    for held in (TOKEN, "Check the report.", str(environments.projects.project_id)):
-        assert not any(held in command for command in environments.setup.ran)
+    assert workspace_bases.setup.ran == list(WORKSPACE_BASE.setup)
+    assert workspace_bases.setup.envs == [{}, {}], "no variable of its own"
+    for held in (TOKEN, "Check the report.", str(workspace_bases.projects.project_id)):
+        assert not any(held in command for command in workspace_bases.setup.ran)

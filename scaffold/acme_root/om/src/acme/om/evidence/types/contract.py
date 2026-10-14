@@ -11,15 +11,15 @@ from pydantic import Field, field_validator
 
 from acme.om.base import FrozenMapping, Platform
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency
-from acme.om.evidence.types.record import NAME, VERSION, Environment, RunOutcome
+from acme.om.evidence.types.record import NAME, VERSION, RunImage, RunOutcome
 
 SCHEMA = 1
 """The results schema this platform writes and reads."""
 SCHEMAS = frozenset({SCHEMA})
 """Every results schema the one collector reads."""
-PLATFORM_ENVIRONMENT = "platform"
-"""The environment of the platform's fresh executor, where a check that
-names no other runs."""
+PLATFORM_EXECUTOR = "platform"
+"""The platform's fresh executor, by name: where a check that names no
+other runs."""
 FIELDS = frozenset({"version", "out"})
 """The fields a check's command template names: the version under test,
 and where the results stream goes."""
@@ -29,7 +29,7 @@ class CheckDeclaration(Platform):
     """A check as a project declares it: its name and version, the command
     template a runner is started with, its kind, the capabilities a place
     must offer to run it, the version of the results schema it writes, and
-    the environment whose executor runs it: the platform's fresh executor,
+    the executor that runs it, by name: the platform's fresh executor,
     or one a product registered at its root.
     `{version}` and `{out}` in the template are the version under test and
     where the results stream goes. The template is checked when it is
@@ -44,7 +44,7 @@ class CheckDeclaration(Platform):
     kind: str = Field(pattern=NAME)
     capabilities: tuple[Annotated[str, Field(pattern=NAME)], ...] = ()
     schema_version: int = Field(ge=1)
-    environment: str = Field(default=PLATFORM_ENVIRONMENT, pattern=NAME)
+    executor: str = Field(default=PLATFORM_EXECUTOR, pattern=NAME)
 
     @field_validator("command")
     @classmethod
@@ -78,7 +78,7 @@ class StartLine(Platform):
     check_version: str = Field(pattern=VERSION)
     version: str = Field(pattern=VERSION)
     dirty: bool
-    environment: Environment
+    environment: RunImage
     host: str = Field(min_length=1, max_length=200)
     isolation: str = Field(min_length=1, max_length=100)
     parameters: FrozenMapping = Field(default_factory=dict, validate_default=True)

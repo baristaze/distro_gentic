@@ -5,18 +5,18 @@ from uuid import UUID
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.projects import ProjectsManagerInterface
-from acme.om.projects.types.project import Project, ProjectEnvironment
+from acme.om.projects.types.project import Project, ProjectWorkspaceBase
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces.types.credential import FetchCredential
 from acme.services.api.services.impl.built import built
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.types.projects import (
     CreateProjectRequest,
-    EnvironmentBody,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
     RenameProjectRequest,
+    WorkspaceBaseBody,
 )
 
 
@@ -46,7 +46,9 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
                 "name": body.name,
                 "repository": body.repository.model_dump(),
                 "workspace_snapshots": body.workspace_snapshots,
-                "environment": None if body.environment is None else body.environment.model_dump(),
+                "workspace_base": None
+                if body.workspace_base is None
+                else body.workspace_base.model_dump(),
             },
         )
         return ProjectView.model_validate(await self._projects.create_project(ctx, project))
@@ -66,11 +68,11 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
         renamed = await self._projects.rename_project(ctx, project_id, body.name)
         return ProjectView.model_validate(renamed)
 
-    async def set_environment(
-        self, ctx: TenantContext, project_id: UUID, body: EnvironmentBody | None
+    async def set_workspace_base(
+        self, ctx: TenantContext, project_id: UUID, body: WorkspaceBaseBody | None
     ) -> ProjectView:
-        environment = None if body is None else built(ProjectEnvironment, body.model_dump())
-        updated = await self._projects.set_environment(ctx, project_id, environment)
+        workspace_base = None if body is None else built(ProjectWorkspaceBase, body.model_dump())
+        updated = await self._projects.set_workspace_base(ctx, project_id, workspace_base)
         return ProjectView.model_validate(updated)
 
     async def remove_project(self, ctx: TenantContext, project_id: UUID) -> ProjectView:

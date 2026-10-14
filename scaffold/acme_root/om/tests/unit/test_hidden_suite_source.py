@@ -211,7 +211,7 @@ class Bound(WorkspaceProjectsInterface):
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
 
-    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
         return None
 
 

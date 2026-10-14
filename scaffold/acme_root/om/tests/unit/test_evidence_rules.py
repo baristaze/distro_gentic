@@ -233,7 +233,7 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
     first, second = collected(data)
     assert first.provenance is Provenance.TWIN and first.outcome is RunOutcome.PASSED
     assert second.outcome is RunOutcome.FAILED and second.cases.failed == 1
-    assert first.executor == "executor-1" and first.environment.toolchain == {"python": "3.14"}
+    assert first.executor == "executor-1" and first.run_image.toolchain == {"python": "3.14"}
     collector = Collector(
         executor="executor-1",
         session_id=new_id(),

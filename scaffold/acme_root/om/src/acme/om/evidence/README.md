@@ -8,7 +8,7 @@ of](../../../../README.md).
 ## What it holds
 
 - **Run**: one execution of one check. It records the version it ran
-  against and whether the tree held uncommitted changes, the environment
+  against and whether the tree held uncommitted changes, the run image
   (an image and a toolchain), the host and its isolation, who ran it and
   wrote its results, the check and its version, its parameters, metrics,
   timing, and outcome, and its artifacts, each with a hash. A run is
@@ -28,8 +28,8 @@ of](../../../../README.md).
   runtime starts.
 - **Validation**: one pass of the policy's checks on a fresh executor,
   from the delivered commit, with the checks, fixtures, and runner taken
-  from the version the work started from. Checks of two environments
-  take one validation each, on each one's executor. A **baseline** is
+  from the version the work started from. Checks of two executors
+  take one validation each, one on each. A **baseline** is
   the same pass at that starting version, before any change.
 - **Rate claim**: what repeated trials show of a failure rate: never the
   rate, only a bound under it at a declared confidence. The trials are a

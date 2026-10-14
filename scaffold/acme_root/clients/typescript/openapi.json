@@ -2653,18 +2653,8 @@
       },
       "CreateProjectRequest": {
         "additionalProperties": false,
-        "description": "A project and the one repository it binds, which never moves; whether\na kind that keeps its workspace by snapshots keeps it so here, False\nkeeping each of its sessions' workspaces a cache; and the environment\nits sessions' workspaces start from, if it names one.",
+        "description": "A project and the one repository it binds, which never moves; whether\na kind that keeps its workspace by snapshots keeps it so here, False\nkeeping each of its sessions' workspaces a cache; and the workspace base\nits sessions' workspaces start from, if it names one.",
         "properties": {
-          "environment": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnvironmentBody"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -2673,6 +2663,16 @@
           },
           "repository": {
             "$ref": "#/components/schemas/RepositoryBody"
+          },
+          "workspace_base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceBaseBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "workspace_snapshots": {
             "default": true,
@@ -3306,73 +3306,6 @@
           "data"
         ],
         "title": "EntryView",
-        "type": "object"
-      },
-      "EnvironmentBody": {
-        "additionalProperties": false,
-        "description": "The environment a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
-        "properties": {
-          "image": {
-            "maxLength": 255,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
-            "title": "Image",
-            "type": "string"
-          },
-          "registries": {
-            "items": {
-              "maxLength": 253,
-              "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Registries",
-            "type": "array"
-          },
-          "setup": {
-            "items": {
-              "maxLength": 4000,
-              "minLength": 1,
-              "type": "string"
-            },
-            "maxItems": 50,
-            "title": "Setup",
-            "type": "array"
-          }
-        },
-        "required": [
-          "image"
-        ],
-        "title": "EnvironmentBody",
-        "type": "object"
-      },
-      "EnvironmentView": {
-        "properties": {
-          "image": {
-            "title": "Image",
-            "type": "string"
-          },
-          "registries": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Registries",
-            "type": "array"
-          },
-          "setup": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Setup",
-            "type": "array"
-          }
-        },
-        "required": [
-          "image",
-          "setup",
-          "registries"
-        ],
-        "title": "EnvironmentView",
         "type": "object"
       },
       "ErrorBody": {
@@ -8426,16 +8359,6 @@
             "title": "Created By",
             "type": "string"
           },
-          "environment": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EnvironmentView"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -8458,6 +8381,16 @@
             "title": "Updated By",
             "type": "string"
           },
+          "workspace_base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceBaseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workspace_snapshots": {
             "title": "Workspace Snapshots",
             "type": "boolean"
@@ -8468,7 +8401,7 @@
           "name",
           "repository",
           "workspace_snapshots",
-          "environment",
+          "workspace_base",
           "created_at",
           "created_by",
           "updated_at",
@@ -11990,6 +11923,73 @@
         ],
         "title": "WorkStatus",
         "type": "string"
+      },
+      "WorkspaceBaseBody": {
+        "additionalProperties": false,
+        "description": "The workspace base a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
+        "properties": {
+          "image": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "maxLength": 253,
+              "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "WorkspaceBaseBody",
+        "type": "object"
+      },
+      "WorkspaceBaseView": {
+        "properties": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image",
+          "setup",
+          "registries"
+        ],
+        "title": "WorkspaceBaseView",
+        "type": "object"
       }
     }
   },
@@ -31956,10 +31956,10 @@
         ]
       }
     },
-    "/v1/projects/{project_id}/environment": {
+    "/v1/projects/{project_id}/workspace-base": {
       "delete": {
-        "description": "The project with no environment: its sessions created after it start\nfrom their kind's own workspace.",
-        "operationId": "remove_environment_v1_projects__project_id__environment_delete",
+        "description": "The project with no workspace base: its sessions created after it start\nfrom their kind's own workspace.",
+        "operationId": "remove_workspace_base_v1_projects__project_id__workspace_base_delete",
         "parameters": [
           {
             "in": "path",
@@ -32042,14 +32042,14 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Remove Environment",
+        "summary": "Remove Workspace Base",
         "tags": [
           "projects"
         ]
       },
       "put": {
-        "description": "The environment the project's sessions' workspaces start from; a later\none replaces it. Each session keeps the one it started on, and a changed\none is built again for the sessions created after it.",
-        "operationId": "set_environment_v1_projects__project_id__environment_put",
+        "description": "The workspace base the project's sessions' workspaces start from; a later\none replaces it. Each session keeps the one it started on, and a changed\none is built again for the sessions created after it.",
+        "operationId": "set_workspace_base_v1_projects__project_id__workspace_base_put",
         "parameters": [
           {
             "in": "path",
@@ -32114,7 +32114,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EnvironmentBody"
+                "$ref": "#/components/schemas/WorkspaceBaseBody"
               }
             }
           },
@@ -32142,7 +32142,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Set Environment",
+        "summary": "Set Workspace Base",
         "tags": [
           "projects"
         ]

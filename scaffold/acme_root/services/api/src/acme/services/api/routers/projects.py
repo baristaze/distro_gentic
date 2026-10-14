@@ -1,5 +1,5 @@
 """A tenant's projects: create one bound to its repository, list and read
-them, rename one, set or take away the environment its sessions'
+them, rename one, set or take away the workspace base its sessions'
 workspaces start from, and remove one no session belongs to. And the fetch
 credential the platform reads the repository with, written and never read
 back. An owner's or an admin's to write; any member's to read."""
@@ -14,11 +14,11 @@ from acme.services.api.gateway.resolve import ProjectsService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.projects import (
     CreateProjectRequest,
-    EnvironmentBody,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
     RenameProjectRequest,
+    WorkspaceBaseBody,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -54,21 +54,23 @@ async def rename_project(
     return await projects.rename_project(ctx, project_id, body)
 
 
-@router.put("/{project_id}/environment", response_model=ProjectView)
-async def set_environment(
-    ctx: Ctx, projects: ProjectsService, project_id: UUID, body: EnvironmentBody
+@router.put("/{project_id}/workspace-base", response_model=ProjectView)
+async def set_workspace_base(
+    ctx: Ctx, projects: ProjectsService, project_id: UUID, body: WorkspaceBaseBody
 ) -> ProjectView:
-    """The environment the project's sessions' workspaces start from; a later
+    """The workspace base the project's sessions' workspaces start from; a later
     one replaces it. Each session keeps the one it started on, and a changed
     one is built again for the sessions created after it."""
-    return await projects.set_environment(ctx, project_id, body)
+    return await projects.set_workspace_base(ctx, project_id, body)
 
 
-@router.delete("/{project_id}/environment", response_model=ProjectView)
-async def remove_environment(ctx: Ctx, projects: ProjectsService, project_id: UUID) -> ProjectView:
-    """The project with no environment: its sessions created after it start
+@router.delete("/{project_id}/workspace-base", response_model=ProjectView)
+async def remove_workspace_base(
+    ctx: Ctx, projects: ProjectsService, project_id: UUID
+) -> ProjectView:
+    """The project with no workspace base: its sessions created after it start
     from their kind's own workspace."""
-    return await projects.set_environment(ctx, project_id, None)
+    return await projects.set_workspace_base(ctx, project_id, None)
 
 
 @router.delete("/{project_id}", response_model=ProjectView)

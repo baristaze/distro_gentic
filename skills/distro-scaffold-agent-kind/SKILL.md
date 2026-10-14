@@ -94,8 +94,8 @@ The shape of a kind is the four profiles in
    `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
    every process's entry point hands its root as `PlatformPorts.kinds`.
    A version of its kind whose workspace starts from its project's
-   environment, as the platform's engineer does from version 8, is named
-   by its name and version in `environments`.
+   workspace base, as the platform's engineer does from version 8, is
+   named by its name and version in `workspace_bases`.
    A class of the product's that must always wait for a person takes its
    ceiling in `ceilings`, never a row in `DEFAULT_CEILINGS` in the
    platform's `tools/rules.py`, whatever the engine's

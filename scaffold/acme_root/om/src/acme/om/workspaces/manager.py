@@ -38,7 +38,7 @@ class WorkspacesManagerInterface(ABC):
         project allows now (`rules.pinned_egress`), and its kind's
         durability, narrowed to a cache when its project keeps its
         sessions' workspaces as caches. A kind that takes its project's
-        environment starts from the base that environment names now, when
+        workspace base starts from the base that workspace base names now, when
         it names one, in place of its own. Pinned once: a session pinned
         already is answered as stored. None, with nothing pinned, for a kind
         this process does not declare: no loop of it runs here, and one that

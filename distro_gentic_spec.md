@@ -458,25 +458,26 @@ workspace itself stays a cache.
   from the object store and from each host's store that keeps one, and
   their records go with them.
 
-### A Project's Environment
+### A Project's Workspace Base
 
 `optional`
 
 An engineer works with no network, so it cannot install what its work
 needs, and open egress would make every command after its first tool
-result wait for a person. A project names its **environment** instead:
-an image, the commands that set it up, and the package registries the
-setup reaches. The platform builds it once and keeps it as a snapshot,
-and each session of the project starts from it, sealed. The engine
-calls it a base ([`agentic_core` Workspace Snapshots][e-snapshots]).
+result wait for a person. A project names its **workspace base**
+instead: an image, the commands that set it up, and the package
+registries the setup reaches. The platform builds it once and keeps it
+as a snapshot, and each session of the project starts from it, sealed.
+It is the engine's base ([`agentic_core` Workspace
+Snapshots][e-snapshots]), as a project names it.
 
 - **Who chooses.** The project, set by whoever writes the tenant's
-  configuration. An agent kind takes its project's environment only
+  configuration. An agent kind takes its project's workspace base only
   from a version that says so, as the platform's engineer does. A kind
   that takes none, and a project that names none, work as before.
-- **Pinned with the session.** A session pins the environment its
-  project names when it is created, and keeps it. A changed environment
-  is another one, built again for the sessions created after it. A
+- **Pinned with the session.** A session pins the workspace base its
+  project names when it is created, and keeps it. A changed workspace
+  base is another one, built again for the sessions created after it. A
   session already running keeps the one it started on.
 - **Built where its workspaces run.** In the cloud, the runner's
   provider builds it and keeps it in the platform's object store, under
@@ -486,16 +487,16 @@ calls it a base ([`agentic_core` Workspace Snapshots][e-snapshots]).
   when they share a store.
 - **The setup reaches registries, the workspace nothing.** A setup that
   names a registry runs with open egress, the project's recorded
-  choice, and one that names none reaches nothing. A workspace on the
-  environment keeps its kind's egress; the engineer's is none. A host
+  choice, and one that names none reaches nothing. A workspace on it
+  keeps its kind's egress; the engineer's is none. A host
   whose owner closed egress refuses a setup that reaches out.
 - **Its checks run on it.** A validation of a session's work runs on a
-  new instance of the environment the session pinned, never on its
+  new instance of the workspace base the session pinned, never on its
   workspace, and with no egress: the checks find what the setup
   installed, and reach nothing.
 - **No agent, no secret.** The setup runs the project's commands alone:
   no model, no secret, no platform credential, and nothing of the
-  tenant's records. An environment whose snapshot holds a secret's
+  tenant's records. A workspace base whose snapshot holds a secret's
   value is not kept.
 - **A failed setup keeps nothing.** In the cloud, the loop ends with the
   failing command and its exit code. On a host, it waits on the
@@ -771,7 +772,7 @@ product does what was asked, at the version delivered.
 `core`
 
 Every execution is a record: the version it ran against, whether the
-tree had uncommitted changes, the environment (an image digest, the
+tree had uncommitted changes, the run image (an image digest, the
 toolchain), the host and isolation it ran under, the check and its
 version, its parameters, metrics, timing, outcome, and its artifacts,
 each with a hash and a provenance. Every dependency an execution relied
@@ -1068,7 +1069,7 @@ tenant adds toolsets of its own to a kind: its connectors
 
 - The **engineer** takes an objective to a validated, reviewable change.
   Its workspace has no network and starts from its project's
-  environment ([A Project's Environment](#a-projects-environment)).
+  workspace base ([A Project's Workspace Base](#a-projects-workspace-base)).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an

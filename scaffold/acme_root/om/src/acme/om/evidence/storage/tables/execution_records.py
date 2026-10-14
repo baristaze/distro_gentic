@@ -30,7 +30,7 @@ class ExecutionRecords(IdentifiableMixin, CreatedMixin, Base):
     validation_id: Mapped[UUID | None]
     version: Mapped[str]
     dirty: Mapped[bool]
-    environment: Mapped[dict[str, Any]]
+    run_image: Mapped[dict[str, Any]]
     host: Mapped[str]
     isolation: Mapped[str]
     executor: Mapped[str]

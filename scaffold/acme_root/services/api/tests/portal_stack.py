@@ -135,10 +135,10 @@ def runner() -> int:
         async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
             return await self._inner.keeps_snapshots(ctx, project_id)
 
-        async def environment_of(
+        async def workspace_base_of(
             self, ctx: TenantContext, project_id: UUID
         ) -> WorkspaceBase | None:
-            return await self._inner.environment_of(ctx, project_id)
+            return await self._inner.workspace_base_of(ctx, project_id)
 
     # One loop at a time: the script is one queue for every session.
     os.environ["ACME_RUNNER_CAPACITY"] = "1"

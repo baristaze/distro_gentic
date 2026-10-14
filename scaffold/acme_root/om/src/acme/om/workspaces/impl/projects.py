@@ -34,11 +34,11 @@ class WorkspaceProjectsBoundImpl(WorkspaceProjectsInterface):
         project = await self._storage.read_project(ctx.org_id, project_id)
         return project is None or project.workspace_snapshots
 
-    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
         project = await self._storage.read_project(ctx.org_id, project_id)
-        if project is None or project.environment is None:
+        if project is None or project.workspace_base is None:
             return None
-        return project.environment.base()
+        return project.workspace_base.base()
 
 
 class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
@@ -55,7 +55,7 @@ class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
 
-    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+    async def workspace_base_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
         return None
 
 

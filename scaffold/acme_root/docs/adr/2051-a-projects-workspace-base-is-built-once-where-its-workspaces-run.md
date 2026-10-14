@@ -1,4 +1,4 @@
-# ADR 2051: A project's environment is built once where its workspaces run
+# ADR 2051: A project's workspace base is built once where its workspaces run
 
 **Status**: accepted (2026-10-11)
 
@@ -18,33 +18,33 @@ named one was refused for good.
 
 ## Decision
 
-**A project names its environment.** A project's environment is an
+**A project names its workspace base.** A project's workspace base is an
 image, its setup commands, and the package registries the setup
 reaches. Whoever writes the tenant's configuration sets it or takes it
-away (`PUT` and `DELETE /projects/{id}/environment`), as it creates the
+away (`PUT` and `DELETE /projects/{id}/workspace-base`), as it creates the
 project. Its image starts with a letter or a digit, so a runtime never
 reads it as an option.
 
 **A kind takes it from a version that says so.** The platform names the
-kinds that take their project's environment by name and version
-(`ENVIRONMENT_KINDS`): the engineer from version 8, which also tells its
+kinds that take their project's workspace base by name and version
+(`WORKSPACE_BASE_KINDS`): the engineer from version 8, which also tells its
 model that its workspace has no network and a missing package is named
 in its result. When such a session is created, its pin takes the base
-the environment names in place of its kind's own. A kind that takes
+the workspace base names in place of its kind's own. A kind that takes
 none, a project that names none, and a session of no project pin what
 they pinned before. A product names its own kinds that take it the
 same way, by name and version, in its slot
-(`ProductKinds.environments`), and never one of the platform's.
+(`ProductKinds.workspace_bases`), and never one of the platform's.
 
 **A session keeps the base it pinned.** The pin is read once. A changed
-environment is another base, keyed by its own hash, so the next session
+workspace base is another base, keyed by its own hash, so the next session
 builds it, and a session already running keeps starting from the base
 it started on.
 
 **The setup's egress is the project's recorded choice.** A setup that
 names a registry runs with open egress, since a setup's egress is open
 or none; one that names none reaches nothing. The registries are the
-record of why. A workspace on the environment keeps its kind's egress:
+record of why. A workspace on the workspace base keeps its kind's egress:
 the engineer's is none. Holding a setup to its registries alone waits
 on the egress proxy, as the engine's base does.
 
@@ -57,7 +57,7 @@ build runs beside the prepares, since it outlasts a work item's claim: a
 prepare that finds it running waits a while, then is refused with a
 refusal that clears, and is asked again. One build serves the project on
 a host, and the hosts of a pool that share a store share it. A workspace
-on it runs the environment's image in place of the host's own, as a
+on it runs the workspace base's image in place of the host's own, as a
 cloud workspace on a base runs the base's image in place of its
 provider's. Each command in it prepares it again on the base the host
 keeps, so an instance that stopped starts anew from that base. A command
@@ -91,12 +91,12 @@ minutes, then builds again.
 
 ## Consequences
 
-- One migration: the project's `environment`.
-- A host whose owner closed egress serves no environment whose setup
+- One migration: the project's `workspace_base`.
+- A host whose owner closed egress serves no workspace base whose setup
   reaches a registry, even one its store already holds.
 - A rebuild on a schedule is a later step, not an automation action
   here: a base is keyed by what it names, so rebuilding the same one
-  means dropping it first. The trigger is an environment whose image or
+  means dropping it first. The trigger is a workspace base whose image or
   registry moves under a fixed name often enough that a project asks.
 - Each host of a pool that does not share a store builds its own copy
   the first time a session lands on it.

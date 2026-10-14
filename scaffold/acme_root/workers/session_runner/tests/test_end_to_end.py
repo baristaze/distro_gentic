@@ -10,7 +10,7 @@ runner takes the loop under a new epoch once the lease runs out, the lost
 run can append nothing more, and the call it left open is settled by its
 effect.
 
-A project's environment runs on real Docker and the stack's object store:
+A project's workspace base runs on real Docker and the stack's object store:
 the first engineer session builds its base, whose setup installs a package
 from a registry on this host, and the next starts from the same base with
 no setup run, and imports the package with no egress.
@@ -918,11 +918,11 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     ]
 
 
-# A project's environment: built once, served to every session, sealed.
+# A project's workspace base: built once, served to every session, sealed.
 
 PACKAGE = "envpkg"
 WHEEL = f"{PACKAGE}-1.0-py3-none-any.whl"
-VALUE = "set up once, by the environment"
+VALUE = "set up once, by the workspace base"
 
 INSTALL = r"""
 import socket, subprocess, sys, urllib.request
@@ -959,7 +959,7 @@ except Exception:
     print("no egress")
 """
 """What the engineer runs: the package's import, then a reach for the
-registry its environment's setup used."""
+registry its workspace base's setup used."""
 
 
 def wheel() -> bytes:
@@ -1119,29 +1119,29 @@ def removed(deployment: str) -> None:
 
 
 @pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
-async def test_a_projects_environment_is_built_once_and_its_engineer_imports_its_package_sealed(
+async def test_a_projects_workspace_base_is_built_once_and_its_engineer_imports_its_package_sealed(
     shipped: Stack, registry: Registry
 ) -> None:
     person = await owner_of(shipped)
     install = base64.b64encode(INSTALL.encode()).decode()
     keep = f"import base64; open('/opt/install.py', 'wb').write(base64.b64decode('{install}'))"
-    environment = {
+    workspace_base = {
         "image": "python:3.14-slim",
         "setup": [f'python -c "{keep}"', f"python /opt/install.py {registry.port} {PACKAGE}"],
         "registries": ["host.docker.internal"],
     }
     named = await shipped.client.put(
-        f"/v1/projects/{person.project_id}/environment",
+        f"/v1/projects/{person.project_id}/workspace-base",
         headers=person.headers,
-        json=environment,
+        json=workspace_base,
     )
     assert named.status_code == 200, named.text
-    assert named.json()["environment"] == environment
+    assert named.json()["workspace_base"] == workspace_base
     imports = IMPORTS.replace("{port}", str(registry.port))
     sealed = [runs("python", "-c", imports), *[answers("The package imports.")] * 3]
     deployment = f"e2e-{new_id().hex[:8]}"
     shipped.runner(
-        "runner-environment",
+        "runner-workspace-base",
         [*sealed, *sealed],
         ACME_WORKSPACE_BACKEND="container",
         ACME_WORKSPACE_DEPLOYMENT=deployment,
@@ -1166,7 +1166,7 @@ async def test_a_projects_environment_is_built_once_and_its_engineer_imports_its
     assert built >= 2, "the first session's setup reached the registry"
     assert registry.hits == built, "the second session ran no setup, and reached nothing"
     assert pins[0].base == pins[1].base and pins[0].base is not None
-    assert pins[0].base.setup == tuple(environment["setup"])
+    assert pins[0].base.setup == tuple(workspace_base["setup"])
     assert [pin.egress.value for pin in pins] == ["none", "none"]
     assert kept == [base_key(pins[0].spec())], "one base, kept once, for both"
     for steps in (first_steps, second_steps):

@@ -87,8 +87,8 @@ class EvidenceManagerInterface(ABC):
         """Runs the session's checks on a fresh executor and keeps what it
         wrote: a `validation` at the committed head, of the checks the
         change asks for, or a `baseline` at the base, of every check the
-        policy requires. Each environment the checks name runs its own
-        validation on its own executor, in name order, and each is answered.
+        policy requires. Each executor the checks name runs its own
+        validation, in name order, and each is answered.
         The checks, fixtures, and runner come from the base. The policy is
         the session's project's, as the projects answer it, never one the
         work product names. Refused before anything runs

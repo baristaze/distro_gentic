@@ -17,8 +17,8 @@ from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance
 from acme.om.evidence.types.record import (
     CaseTally,
-    Environment,
     ExecutionRecord,
+    RunImage,
     RunOutcome,
     RunPurpose,
 )
@@ -96,7 +96,7 @@ def make_record(
         validation_id=validation_id,
         version=version,
         dirty=False,
-        environment=Environment(image="sha256:" + "1" * 64, toolchain={"python": "3.14"}),
+        run_image=RunImage(image="sha256:" + "1" * 64, toolchain={"python": "3.14"}),
         host="host-1",
         isolation="vm",
         executor=executor,

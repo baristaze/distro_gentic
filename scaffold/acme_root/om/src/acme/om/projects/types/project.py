@@ -1,7 +1,7 @@
 """A project: a tenant's unit of work, bound to one repository. The
 policies the platform keys by project (what validates a change, where a
 workspace may reach, which secrets a command sees, retention's narrowing,
-the environment its sessions' workspaces start from) are read through the
+the workspace base its sessions' workspaces start from) are read through the
 project a session belongs to, and the session's own branch and pull
 request are work product on this repository alone.
 
@@ -49,12 +49,12 @@ reads it as an option."""
 SetupCommand = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
 
 MAX_SETUP = 50
-"""The most setup commands one environment runs."""
+"""The most setup commands one workspace base runs."""
 
 MAX_REGISTRIES = 20
 
 
-class ProjectEnvironment(Platform):
+class ProjectWorkspaceBase(Platform):
     """What a project's sessions work in: the image their workspace starts
     on, and the commands that set it up, run once, in order, then kept as
     the base every workspace of a kind that takes it starts from.
@@ -70,9 +70,9 @@ class ProjectEnvironment(Platform):
     @model_validator(mode="after")
     def _registries_serve_a_setup(self) -> Self:
         if self.registries and not self.setup:
-            raise ValueError("an environment names registries only for a setup to reach")
+            raise ValueError("a workspace base names registries only for a setup to reach")
         if len(set(self.registries)) != len(self.registries):
-            raise ValueError("an environment names each registry once")
+            raise ValueError("a workspace base names each registry once")
         return self
 
     def base(self) -> WorkspaceBase:
@@ -84,11 +84,11 @@ class ProjectEnvironment(Platform):
 class Project(Identifiable, Trackable):
     """A tenant's project: its name, the one repository it binds, whether a
     kind that keeps its workspace by snapshots keeps it so here, and the
-    environment its sessions' workspaces start from. False narrows each of
+    workspace base its sessions' workspaces start from. False narrows each of
     its sessions' workspaces to a cache, on purpose. Both reach the
     sessions created after they are set; a session keeps what it pinned."""
 
     name: Stored = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: Repository
     workspace_snapshots: bool = True
-    environment: ProjectEnvironment | None = None
+    workspace_base: ProjectWorkspaceBase | None = None
