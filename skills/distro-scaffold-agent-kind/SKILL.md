@@ -74,8 +74,8 @@ The shape of a kind is the four profiles in
 ## Procedure
 
 1. Every process builds its catalog from `SHIPPED`:
-   `build_managers` in `om/src/<name>/om/root.py` puts it before the
-   product's own kinds, and the model matrix's root,
+   `build_platform_managers` in `om/src/<name>/om/platform_root.py`
+   puts it before the product's own kinds, and the model matrix's root,
    `om/src/<name>/om/matrix/root.py`, requires every role a shipped kind
    names. A kind in `SHIPPED` is in every process, so no container
    changes. A product's own kind, one no other product built on the
@@ -91,8 +91,9 @@ The shape of a kind is the four profiles in
    reads that call. Its kinds, every version it still runs, its tools,
    and the classes they declare go in `PRODUCT_KINDS`, in
    `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
-   `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
-   every process's entry point hands its root as `PlatformPorts.kinds`.
+   `ceilings` of `ProductKinds` in
+   `om/src/<name>/om/platform_root.py`), which every process's entry
+   point hands its root as `PlatformPorts.kinds`.
    A version of its kind whose workspace starts from its agent project's
    workspace base, as the platform's software engineer does from version
    8, is named by its name and version in `workspace_bases`.
