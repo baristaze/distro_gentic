@@ -352,7 +352,7 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
     await a_host(platform, pool.id, "host-2", now)
     pinned = await platform.start(kinds.SOFTWARE_ENGINEER)
     await hosts.place_session(platform.owner, pinned, pool.id)
-    await platform.managers.relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
+    await platform.managers.exec_relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Why has my session not started?")
     platform.anthropic.add(

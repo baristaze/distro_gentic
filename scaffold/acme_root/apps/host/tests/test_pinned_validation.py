@@ -3,7 +3,7 @@ validates any: the runner's root, as it boots, and hosts of the tenant's
 pools, each the host's own agent against the API in process. The checks
 run on a host of the session's pool, in an instance made for the run alone
 under an id of its own, never in the session's workspace and never on the
-platform's machines. Its results stream is read back through the relay and
+platform's machines. Its results stream is read back through the exec relay and
 hashed, the gate confirms the success it shows, and the instance goes with
 its files and its records once the run ends, whatever ended it. A host of
 another pool of the tenant, or of another tenant, is handed nothing.
@@ -49,8 +49,8 @@ from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery
+from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
-from acme.om.relay.rules import READ_BYTES
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
@@ -188,7 +188,7 @@ class Runner:
 def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
     """The runner's root over `storage`, as it boots outside `local`: its
     executor is the platform's fresh one, which reaches a pinned session's
-    pool through the relay."""
+    pool through the exec relay."""
     where.mkdir()
     repository, work = Repository(where), WorkProductMemoryImpl()
     container = RunnerContainer.over(
@@ -363,7 +363,7 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     assert gone(location), "the instance's files went with it"
     assert await host.provider.held_instances() == []
     assert gone(host.transport.records / instance.hex), "and its records"
-    assert await managers.relay.binding_of(owner, instance) is None
+    assert await managers.exec_relay.binding_of(owner, instance) is None
     purge = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
     assert purge is not None and purge.status is WorkStatus.DONE
     assert WorkspacePayload.model_validate(purge.payload).operation is WorkspaceOperation.PURGE

@@ -23,12 +23,12 @@ from acme.services.api.services import (
     AgentSessionsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
+    ExecRelayServiceInterface,
     FlagsServiceInterface,
     HostsServiceInterface,
     LeasesServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
-    RelayServiceInterface,
     ServicesInterface,
     TenancyServiceInterface,
     WatchServiceInterface,
@@ -53,6 +53,7 @@ from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.evidence import EvidenceServiceImpl
+from acme.services.api.services.impl.exec_relay import ExecRelayServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
@@ -63,7 +64,6 @@ from acme.services.api.services.impl.park_alerts import ParkAlertsServiceImpl
 from acme.services.api.services.impl.projects import ProjectsServiceImpl
 from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
-from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.retention import RetentionServiceImpl
 from acme.services.api.services.impl.spend_ledgers import SpendLedgersServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
@@ -96,7 +96,7 @@ class ServicesImpl(ServicesInterface):
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
         agent_fleet: AgentFleetServiceInterface,
-        relay: RelayServiceInterface,
+        exec_relay: ExecRelayServiceInterface,
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
         agent_billing: AgentBillingServiceInterface,
@@ -127,7 +127,7 @@ class ServicesImpl(ServicesInterface):
         self._agent_sessions = agent_sessions
         self._hosts = hosts
         self._agent_fleet = agent_fleet
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._intake = intake
         self._budgets = budgets
         self._agent_billing = agent_billing
@@ -180,8 +180,8 @@ class ServicesImpl(ServicesInterface):
     def get_agent_fleet_service(self) -> AgentFleetServiceInterface:
         return self._agent_fleet
 
-    def get_relay_service(self) -> RelayServiceInterface:
-        return self._relay
+    def get_exec_relay_service(self) -> ExecRelayServiceInterface:
+        return self._exec_relay
 
     def get_intake_service(self) -> IntakeServiceInterface:
         return self._intake
@@ -291,7 +291,7 @@ def build_services(
         ),
         hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
         agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
-        relay=RelayServiceImpl(managers.relay, infra.get_topics()),
+        exec_relay=ExecRelayServiceImpl(managers.exec_relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets, agent_billing),
         agent_billing=AgentBillingServiceImpl(agent_billing),

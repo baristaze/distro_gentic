@@ -1,4 +1,4 @@
-"""Storage of the relay: each `exec` item with how it ended, the parts of
+"""Storage of the exec relay: each `exec` item with how it ended, the parts of
 its output, the control messages for the host that holds it, and the host
 that holds each session's workspace. Every operation takes org_id first,
 except the sweep's read of expired leases, which reaches across tenants. A
@@ -8,11 +8,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.exec_relay.types.exec import ExecControl, ExecItem, ExecPart, WorkspaceBinding
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.relay.types.exec import ExecControl, ExecItem, ExecPart, WorkspaceBinding
 
 
-class RelayStorageInterface(ABC):
+class ExecRelayStorageInterface(ABC):
     @abstractmethod
     async def create_item(self, org_id: UUID, item: ExecItem) -> bool:
         """The create; False, with nothing landed, when the id is written."""

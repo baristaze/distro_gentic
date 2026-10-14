@@ -16,6 +16,7 @@ from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
+from acme.services.api.services.exec_relay import ExecRelayServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
@@ -26,7 +27,6 @@ from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
-from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
@@ -48,6 +48,7 @@ __all__ = [
     "ConnectorsServiceInterface",
     "EventsServiceInterface",
     "EvidenceServiceInterface",
+    "ExecRelayServiceInterface",
     "FlagsServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
@@ -58,7 +59,6 @@ __all__ = [
     "ProjectsServiceInterface",
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
-    "RelayServiceInterface",
     "RetentionServiceInterface",
     "ServicesInterface",
     "SpendLedgersServiceInterface",
@@ -105,7 +105,7 @@ class ServicesInterface(ABC):
     def get_agent_fleet_service(self) -> AgentFleetServiceInterface: ...
 
     @abstractmethod
-    def get_relay_service(self) -> RelayServiceInterface: ...
+    def get_exec_relay_service(self) -> ExecRelayServiceInterface: ...
 
     @abstractmethod
     def get_agent_automations_service(self) -> AgentAutomationsServiceInterface: ...

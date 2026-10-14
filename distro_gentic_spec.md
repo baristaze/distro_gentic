@@ -250,9 +250,10 @@ later, rarely share a machine.
   Default][e-durable]).
 
 A runner chooses the transport by the session's placement: a **direct
-transport** to a cloud workspace, or a **relay transport** to a host
-inside a customer's wall ([The Relay Transport](#the-relay-transport)).
-The engine sees one transport interface either way.
+transport** to a cloud workspace, or an **exec relay transport** to a
+host inside a customer's wall ([The Exec Relay
+Transport](#the-exec-relay-transport)). The engine sees one transport
+interface either way.
 
 > **Principle:** The brain runs in the platform, and a lost claim stops
 > a runner's writes, whatever its clock says.
@@ -330,8 +331,9 @@ A session of the platform's cloud whose workspace is a VM runs on a
 machine of its own, from the **cloud pool**: one virtual machine per
 session, which boots the pool's image, named by the id its cloud gives
 it, and runs the same host program a customer installs, with a
-container engine inside. The runner reaches it through the relay, as it
-reaches any host: the machine pulls, and the platform never calls in.
+container engine inside. The runner reaches it through the exec relay,
+as it reaches any host: the machine pulls, and the platform never calls
+in.
 
 - **Its own credential, for one session.** The pool hands each machine,
   as it starts, a one-use key, and its host trades the key once for a
@@ -361,7 +363,7 @@ reaches any host: the machine pulls, and the platform never calls in.
   revocation, since a machine left running is money. A revocation the
   API takes reaches no machine, so the sweep destroys its disks.
 
-### The Relay Transport
+### The Exec Relay Transport
 
 A tool call into a customer's wall travels as `exec` work:
 
@@ -1161,9 +1163,9 @@ to the sweep:
 
 - a loop whose lease expired is requeued, and its next run takes a new
   writer epoch;
-- an `exec` item whose lease expired follows [The Relay
-  Transport](#the-relay-transport): requeued by effect, or completed
-  `interrupted`;
+- an `exec` item whose lease expired follows [The Exec Relay
+  Transport](#the-exec-relay-transport): requeued by effect, or
+  completed `interrupted`;
 - a workspace instance nobody claims is purged;
 - a hold nobody settled settles at usage retrieved from the provider,
   else at its full amount, and is released only when the provider
@@ -1257,11 +1259,11 @@ merges it ([Upgrade a copy of the scaffold][g-adopting]).
 
 ## What This Spec Does Not Cover
 
-The wire protocols of the relay, the control stream, and the live read;
-the technology of the stream service; default values (grace periods,
-lease lengths, fairness weights, hop limits, anomaly thresholds), which
-belong to each system; the console's screens; the price table; and the
-threat model each deployment writes.
+The wire protocols of the exec relay, the control stream, and the live
+read; the technology of the stream service; default values (grace
+periods, lease lengths, fairness weights, hop limits, anomaly
+thresholds), which belong to each system; the console's screens; the
+price table; and the threat model each deployment writes.
 
 ## Next: Rodeo
 

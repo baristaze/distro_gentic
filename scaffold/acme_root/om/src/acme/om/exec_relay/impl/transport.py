@@ -1,6 +1,6 @@
 """The runner's transports. The engine sees one transport interface; behind
 it the runner picks, per session, by its placement: the direct transport to
-a cloud workspace, or the relay into a customer's wall, where each
+a cloud workspace, or the exec relay into a customer's wall, where each
 operation of a call travels as keyed `exec` work to the host that holds the
 workspace and the runner waits for its result."""
 
@@ -31,11 +31,10 @@ from acme.integrations.mcp import McpAnswer
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
-from acme.om.placement.types.work import ExecEffect
-from acme.om.relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
-from acme.om.relay.manager import RelayManagerInterface
-from acme.om.relay.rules import READ_BYTES
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.rules import READ_BYTES
+from acme.om.exec_relay.types.exec import (
     REQUESTS,
     ExecCall,
     ExecItem,
@@ -51,6 +50,7 @@ from acme.om.relay.types.exec import (
     StopKind,
     WriteRequest,
 )
+from acme.om.placement.types.work import ExecEffect
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.types.tool import Effect
 from acme.om.trust.placement import PlacementInterface
@@ -81,7 +81,7 @@ class TransportRelayImpl(TransportInterface):
     the item over its host's control stream; one whose deadline passes by
     this clock cuts it there.
 
-    It runs below any context, so `relay` is the manager it reaches, bound
+    It runs below any context, so `exec_relay` is the manager it reaches, bound
     at call time as the root builds it, and `stage` mints the request stage
     each operation runs under, at the edge of the process that wires it. A
     file operation carries no deadline of its own, so it takes
@@ -89,7 +89,7 @@ class TransportRelayImpl(TransportInterface):
 
     def __init__(
         self,
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
         stage: Callable[[], RequestContext],
         *,
         file_time: timedelta = timedelta(minutes=5),
@@ -100,7 +100,7 @@ class TransportRelayImpl(TransportInterface):
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._stage = stage
         self._file_time = file_time
         self._grace = grace
@@ -155,7 +155,9 @@ class TransportRelayImpl(TransportInterface):
     ) -> CommandResult | None:
         rctx = self._stage()
         try:
-            item = await self._relay().outcome_of(rctx, workspace.org_id, workspace.id, key, epoch)
+            item = await self._exec_relay().outcome_of(
+                rctx, workspace.org_id, workspace.id, key, epoch
+            )
         except StaleExec as error:
             raise StaleCommand(error.message) from error
         if item is None:
@@ -171,7 +173,7 @@ class TransportRelayImpl(TransportInterface):
         return _command_result(key, outcome, progress.output or ExecOutput())
 
     async def purge_records(self, workspace_id: UUID) -> None:
-        """The relay's records of a session go with it in the sweep's purge;
+        """The exec relay's records of a session go with it in the sweep's purge;
         a host's own go with the workspace it holds."""
         return None
 
@@ -291,7 +293,7 @@ class TransportRelayImpl(TransportInterface):
         rctx = self._stage()
         org_id = workspace.org_id
         try:
-            item = await self._relay().send(rctx, org_id, call, occurrence)
+            item = await self._exec_relay().send(rctx, org_id, call, occurrence)
         except StaleExec as error:
             raise StaleCommand(error.message) from error
         except (NoWorkspaceHost, ContentNotKept) as error:
@@ -329,7 +331,7 @@ class TransportRelayImpl(TransportInterface):
         cut = False
         while True:
             try:
-                progress = await self._relay().watch(rctx, org_id, item.id, after)
+                progress = await self._exec_relay().watch(rctx, org_id, item.id, after)
             except Exception as error:
                 if _final(error) or self._clock() >= item.deadline + self._grace:
                     log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
@@ -364,10 +366,10 @@ class TransportRelayImpl(TransportInterface):
     async def _stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
     ) -> None:
-        """Stops the item; a stop the relay refuses, such as one from a run
+        """Stops the item; a stop the exec relay refuses, such as one from a run
         that lost the session, leaves the item to the run that holds it."""
         try:
-            await self._relay().stop(rctx, org_id, item_id, kind, epoch)
+            await self._exec_relay().stop(rctx, org_id, item_id, kind, epoch)
         except Exception:
             log.warning("exec item %s: the %s was not sent", item_id, kind.value, exc_info=True)
 
@@ -382,7 +384,7 @@ class TransportRelayImpl(TransportInterface):
 
 
 class TransportPlacedImpl(TransportInterface):
-    """The runner's one transport: per session, the relay when its placement
+    """The runner's one transport: per session, the exec relay when its placement
     is inside its tenant's wall, or when its workspace runs on a machine of
     the cloud pool (`pooled`), and the direct transport otherwise. The
     engine and its tools see this alone, and never what is behind it."""

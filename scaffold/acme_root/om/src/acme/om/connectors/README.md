@@ -64,9 +64,9 @@ keyed by the session's id (`storage.create_pin`), and a sub-agent pins
 only what its parent pinned (`rules.pinned`). Each tool is the engine's
 `McpToolImpl` over an `McpBinding` whose input schema is the server's
 (`impl.toolsets.input_model_of`). A cloud call goes through the engine's
-`McpServers`; a host call goes through the relay transport's `call_mcp`,
-an `exec` item whose request is `relay.types.exec.McpRequest`, which the
-host answers from the servers its owner configures (`ceilings.toml`,
-`[mcp_servers.<name>]`). Every call first checks the connector's current
-review (`rules.still_reviewed`).
--->
+`McpServers`; a host call goes through the exec relay transport's
+`call_mcp`, an `exec` item whose request is
+`exec_relay.types.exec.McpRequest`, which the host answers from the
+servers its owner configures (`ceilings.toml`, `[mcp_servers.<name>]`).
+Every call first checks the connector's current review
+(`rules.still_reviewed`). -->

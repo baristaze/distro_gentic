@@ -3,7 +3,7 @@ instance stays on the host that prepared it, its work uncommitted in it,
 and no run lets it go. The runner's sweep and a host of the pool share one
 memory storage root, as the platform's processes share one database. Once
 no loop item accounts for the instance past the grace, the sweep pushes
-its work to a snapshot ref through the relay, which the host runs, and
+its work to a snapshot ref through the exec relay, which the host runs, and
 only then asks the host to let it go, which it does through its own
 provider. A live loop's instance is kept, a push that does not land lets
 nothing go, and an instance whose tenant or session the platform holds no
@@ -278,7 +278,7 @@ async def placed(
         managers.tenancy,
         runner.kinds.warm_grace,
         clock=clock,
-        relay=managers.relay,
+        exec_relay=managers.exec_relay,
     )
     # A run takes the session, its host makes the workspace, and the run's
     # tool call leaves work in it uncommitted.
@@ -331,7 +331,7 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
     )
     await api.container.managers.hosts.place_session(owner, unrun.id, run.pool_id)
     there = await provider.prepare(owner.org_id, unrun.id, KIND.isolation)
-    await managers.relay.bind_workspace(
+    await managers.exec_relay.bind_workspace(
         owner, unrun.id, UUID(host.credential.claimant_id), there.location
     )
 

@@ -29,6 +29,8 @@ from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.storage.impl.memory import ExecRelayStorageMemoryImpl
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.memory import HostsStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
@@ -60,8 +62,6 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.memory import ProjectStorageMemoryImpl
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.storage.impl.memory import RelayStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -123,7 +123,7 @@ class StorageMemoryImpl(StorageInterface):
         self._park_alert = ParkAlertStorageMemoryImpl()
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._benchmarks = BenchmarkStorageMemoryImpl()
-        self._relay = RelayStorageMemoryImpl(self._outbox)
+        self._exec_relay = ExecRelayStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
         self._matrix_tenants = MatrixTenantStorageMemoryImpl()
@@ -233,8 +233,8 @@ class StorageMemoryImpl(StorageInterface):
     def get_benchmark_storage(self) -> BenchmarkStorageInterface:
         return self._benchmarks
 
-    def get_relay_storage(self) -> RelayStorageInterface:
-        return self._relay
+    def get_exec_relay_storage(self) -> ExecRelayStorageInterface:
+        return self._exec_relay
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

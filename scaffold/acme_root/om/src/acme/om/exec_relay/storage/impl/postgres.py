@@ -5,29 +5,29 @@ from sqlalchemy import select, update
 
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
-from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
-from acme.om.outbox.types.row import OutboxRow
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.storage.tables.exec_controls import ExecControls
-from acme.om.relay.storage.tables.exec_items import ExecItems
-from acme.om.relay.storage.tables.exec_parts import ExecParts
-from acme.om.relay.storage.tables.workspace_bindings import WorkspaceBindings
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.storage.tables.exec_controls import ExecControls
+from acme.om.exec_relay.storage.tables.exec_items import ExecItems
+from acme.om.exec_relay.storage.tables.exec_parts import ExecParts
+from acme.om.exec_relay.storage.tables.workspace_bindings import WorkspaceBindings
+from acme.om.exec_relay.types.exec import (
     ExecControl,
     ExecItem,
     ExecPart,
     ExecState,
     WorkspaceBinding,
 )
+from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
+from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 PURGED_IN_ORDER = (ExecParts, ExecControls, ExecItems, WorkspaceBindings)
-"""The relay's tables, each purged a batch at a time: the parts and the
+"""The exec relay's tables, each purged a batch at a time: the parts and the
 controls before the items they name."""
 
 
-class RelayStoragePostgresImpl(PgStorageBase, RelayStorageInterface):
+class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
     async def create_item(self, org_id: UUID, item: ExecItem) -> bool:
         return await self._insert(ExecItems, org_id, item)
 

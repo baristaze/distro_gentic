@@ -52,12 +52,12 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import ValidationFailed
+from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
+from acme.om.exec_relay.impl.transport import TransportPlacedImpl
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
-from acme.om.relay.impl.placement import PlacementRelayedImpl
-from acme.om.relay.impl.transport import TransportPlacedImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
@@ -724,7 +724,7 @@ class Outside(TransportNullImpl):
 
 
 class OnItsHost(TransportLocalImpl):
-    """The relay to the host that holds a pinned session's workspace: the
+    """The exec relay to the host that holds a pinned session's workspace: the
     host runs each command in the directory it made, on this machine here,
     and each one is counted."""
 
@@ -771,7 +771,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
         PlacementHostsImpl(
             storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
         ),
-        storage.get_relay_storage(),
+        storage.get_exec_relay_storage(),
     )
     # The session runner's layer: a pinned session's calls go to its host.
     checkout = Checkout(
@@ -808,7 +808,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     # The host prepared its workspace, an empty directory, and holds it.
     here = tmp_path / "host" / session.id.hex
     here.mkdir(parents=True)
-    await managers.relay.bind_workspace(owner, session.id, holder.host_id, str(here))
+    await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, str(here))
 
     workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     assert workspace.location == str(here)

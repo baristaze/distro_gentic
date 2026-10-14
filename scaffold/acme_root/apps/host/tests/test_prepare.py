@@ -42,7 +42,7 @@ async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
 async def test_the_first_host_to_answer_holds_the_workspace_and_a_second_lets_its_own_go(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    relay = api.container.managers.exec_relay
     pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     assert await relay.ask_prepare(api.owner, session_id, DIRECTORY)
@@ -70,7 +70,7 @@ async def test_the_first_host_to_answer_holds_the_workspace_and_a_second_lets_it
 async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    relay = api.container.managers.exec_relay
     pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     await relay.ask_prepare(api.owner, session_id, DIRECTORY)
@@ -89,7 +89,7 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
 async def test_a_session_moved_to_another_pool_is_prepared_by_a_host_of_that_pool(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    relay = api.container.managers.exec_relay
     left, joined = await api.pool("left"), await api.pool("joined")
     session_id = await a_pinned_session(api, left.id)
     assert await relay.ask_prepare(api.owner, session_id, DIRECTORY)  # no host of it is online
@@ -112,7 +112,7 @@ async def test_a_session_moved_to_another_pool_is_prepared_by_a_host_of_that_poo
 async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_made(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    relay = api.container.managers.exec_relay
     pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     await relay.ask_prepare(api.owner, session_id, SEALED)

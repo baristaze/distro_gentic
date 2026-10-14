@@ -1,4 +1,4 @@
-"""The relay service: what a host's calls do with the `exec` items it
+"""The exec relay service: what a host's calls do with the `exec` items it
 holds, and its control stream, in views."""
 
 from abc import ABC, abstractmethod
@@ -7,7 +7,7 @@ from uuid import UUID
 
 from acme.om.context import RequestContext
 from acme.om.hosts.types.host import HostIdentity
-from acme.services.api.types.relay import (
+from acme.services.api.types.exec_relay import (
     ControlView,
     ExecDetailView,
     ExecLeaseView,
@@ -19,7 +19,7 @@ from acme.services.api.types.relay import (
 )
 
 
-class RelayServiceInterface(ABC):
+class ExecRelayServiceInterface(ABC):
     @abstractmethod
     async def detail(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID

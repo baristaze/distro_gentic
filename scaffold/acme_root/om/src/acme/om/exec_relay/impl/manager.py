@@ -17,23 +17,9 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
-from acme.om.hosts import HostsManagerInterface
-from acme.om.hosts.types.host import HostIdentity
-from acme.om.outbox import OutboxRelayInterface
-from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.placement.kinds import HOST
-from acme.om.placement.rules import host_lane
-from acme.om.placement.types.claimant import Claimant
-from acme.om.placement.types.work import (
-    ExecOperation,
-    ExecPayload,
-    WorkspaceOperation,
-    WorkspacePayload,
-)
-from acme.om.projects import ProjectsManagerInterface
-from acme.om.relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspaceHost, StaleExec
-from acme.om.relay.manager import RelayManagerInterface
-from acme.om.relay.rules import (
+from acme.om.exec_relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.rules import (
     CONTROL_KIND,
     asks,
     claimed_row,
@@ -47,8 +33,8 @@ from acme.om.relay.rules import (
     setup_reaches,
     stale,
 )
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.types.exec import (
     REQUESTS,
     ExecCall,
     ExecControl,
@@ -66,6 +52,20 @@ from acme.om.relay.types.exec import (
     StopKind,
     WorkspaceBinding,
 )
+from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.types.host import HostIdentity
+from acme.om.outbox import OutboxRelayInterface
+from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
+from acme.om.placement.kinds import HOST
+from acme.om.placement.rules import host_lane
+from acme.om.placement.types.claimant import Claimant
+from acme.om.placement.types.work import (
+    ExecOperation,
+    ExecPayload,
+    WorkspaceOperation,
+    WorkspacePayload,
+)
+from acme.om.projects import ProjectsManagerInterface
 from acme.om.retention.crossing import Crossing, CrossingKind, CrossingRefused, verified
 from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
@@ -76,12 +76,12 @@ from acme.om.workspaces.types.snapshot import HostSnapshot
 
 log = logging.getLogger(__name__)
 
-BINDING_KIND = "relay.workspace_binding.updated"
+BINDING_KIND = "exec_relay.workspace_binding.updated"
 
 STREAMS = frozenset({"stdout", "stderr"})
 
 
-class RelayOptions(Platform):
+class ExecRelayOptions(Platform):
     # How long a renewal holds an item: a host renews at a third of it, so
     # one missed renewal costs nothing and a lost host is known within it.
     lease: timedelta = timedelta(seconds=60)
@@ -132,13 +132,13 @@ REFUSED = (WorkStatus.QUEUED, WorkStatus.CLAIMED, WorkStatus.FAILED)
 by one, or failed once its attempts were spent. Its reason stays with it."""
 
 
-class RelayManagerImpl(RelayManagerInterface):
+class ExecRelayManagerImpl(ExecRelayManagerInterface):
     """`kept` records each snapshot a host keeps; with none, every one a host
     answers is refused, since nothing could record where it lives."""
 
     def __init__(
         self,
-        storage: RelayStorageInterface,
+        storage: ExecRelayStorageInterface,
         work: WorkManagerInterface,
         steps: StepsManagerInterface,
         tenancy: TenancyManagerInterface,
@@ -146,7 +146,7 @@ class RelayManagerImpl(RelayManagerInterface):
         projects: ProjectsManagerInterface,
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
-        options: RelayOptions,
+        options: ExecRelayOptions,
         clock: Callable[[], datetime] = utcnow,
         *,
         kept: KeptOnHost | None = None,
@@ -971,7 +971,7 @@ class RelayManagerImpl(RelayManagerInterface):
         return row
 
     async def _service(self, rctx: RequestContext, org_id: UUID) -> TenantContext:
-        """The tenant's service context: the relay runs below any principal,
+        """The tenant's service context: the exec relay runs below any principal,
         for the runner's transport and for a host, which is no person."""
         return await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
 

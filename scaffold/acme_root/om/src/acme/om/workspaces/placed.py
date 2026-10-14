@@ -1,11 +1,11 @@
 """Where a session's workspace is made when the session runs inside its
 tenant's wall: on a host of its pool, which prepares it and holds it from
-then on. The relay answers it (`acme.om.relay.impl.workspaces`); a root
+then on. The exec relay answers it (`acme.om.exec_relay.impl.workspaces`); a root
 that wires none makes every workspace on the machine it runs on.
 
 A run that validates such a session's delivery makes an instance of its
 own on a host of the same pool, and destroys it when the run ends. The
-relay answers that too (`acme.om.relay.impl.instances`); a root that wires
+exec relay answers that too (`acme.om.exec_relay.impl.instances`); a root that wires
 none refuses the run."""
 
 from abc import ABC, abstractmethod

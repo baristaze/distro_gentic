@@ -16,14 +16,14 @@ from acme.infra.topics import (
 from acme.om.base import utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import ValidationFailed
+from acme.om.exec_relay import ExecRelayManagerInterface
+from acme.om.exec_relay.rules import CONTROL_KIND
+from acme.om.exec_relay.types.exec import REQUESTS, PrepareAnswer, SnapshotAnswer
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
-from acme.om.relay import RelayManagerInterface
-from acme.om.relay.rules import CONTROL_KIND
-from acme.om.relay.types.exec import REQUESTS, PrepareAnswer, SnapshotAnswer
 from acme.om.retention.crossing import Crossing
-from acme.services.api.services.relay import RelayServiceInterface
-from acme.services.api.types.relay import (
+from acme.services.api.services.exec_relay import ExecRelayServiceInterface
+from acme.services.api.types.exec_relay import (
     ControlKind,
     ControlView,
     CrossingBody,
@@ -55,13 +55,13 @@ def crossing_of(body: CrossingBody) -> Crossing:
     return Crossing(kind=body.kind, sha256=body.sha256, size=body.size)
 
 
-class RelayServiceImpl(RelayServiceInterface):
+class ExecRelayServiceImpl(ExecRelayServiceInterface):
     """`poll` is how long the control stream waits for a wake before it
     reads the host's control messages again and pings."""
 
     def __init__(
         self,
-        relay: RelayManagerInterface,
+        relay: ExecRelayManagerInterface,
         topics: TopicsInterface,
         *,
         poll: timedelta = timedelta(seconds=5),

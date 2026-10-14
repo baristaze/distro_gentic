@@ -2914,7 +2914,7 @@ class ClaimantWorkView(BaseModel):
 class CommandProgressView(BaseModel):
     """
     How a command stands: its state, its output after the last part read,
-    and how it ended once it has. `refused` names why its host or the relay
+    and how it ended once it has. `refused` names why its host or the exec relay
     refused it, such as a command a later run fenced.
     """
     exit_code: Annotated[int | None, Field(title='Exit Code')] = None

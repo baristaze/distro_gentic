@@ -42,6 +42,8 @@ from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.storage.impl.postgres import ExecRelayStoragePostgresImpl
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.postgres import HostsStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
@@ -73,8 +75,6 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.storage.impl.postgres import RelayStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -254,7 +254,7 @@ class StoragePostgresImpl(StorageInterface):
         self._park_alert = ParkAlertStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._benchmarks = BenchmarkStoragePostgresImpl(sessions)
-        self._relay = RelayStoragePostgresImpl(sessions)
+        self._exec_relay = ExecRelayStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
@@ -364,8 +364,8 @@ class StoragePostgresImpl(StorageInterface):
     def get_benchmark_storage(self) -> BenchmarkStorageInterface:
         return self._benchmarks
 
-    def get_relay_storage(self) -> RelayStorageInterface:
-        return self._relay
+    def get_exec_relay_storage(self) -> ExecRelayStorageInterface:
+        return self._exec_relay
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

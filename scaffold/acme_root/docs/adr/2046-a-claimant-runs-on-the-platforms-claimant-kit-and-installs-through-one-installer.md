@@ -33,7 +33,8 @@ already lets a host import the client.
 - **The calls are the kind's.** A kind gives how it enrolls and rotates
   (`RoutesInterface`). A product's claimant uses `/claimants/...`
   (`Claimant`): claim, renew, and report. The host keeps its own calls
-  and what is the host's alone: its probes, its ceilings, the relay.
+  and what is the host's alone: its probes, its ceilings, the exec
+  relay.
 - **A report is kept before it is sent.** The journal deletes it once
   the platform records it, sends it again while the platform does not
   answer, and claims nothing in the meantime. One whose claim lapsed

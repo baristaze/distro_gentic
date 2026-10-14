@@ -2,20 +2,20 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.exceptions import PreconditionFailed
-from acme.om.outbox.storage import OutboxLandingInterface
-from acme.om.outbox.types.row import OutboxRow
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.types.exec import (
     ExecControl,
     ExecItem,
     ExecPart,
     ExecState,
     WorkspaceBinding,
 )
+from acme.om.outbox.storage import OutboxLandingInterface
+from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
-class RelayStorageMemoryImpl(MemoryStorageBase, RelayStorageInterface):
+class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
         self._items: MemoryTable[ExecItem] = {}

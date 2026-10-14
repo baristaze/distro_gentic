@@ -67,6 +67,12 @@ from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import NotFound, Unavailable, UnsafeConfiguration
+from acme.om.exec_relay import ExecRelayManagerInterface
+from acme.om.exec_relay.impl.instances import PlacedInstancesRelayedImpl
+from acme.om.exec_relay.impl.manager import ExecRelayManagerImpl, ExecRelayOptions
+from acme.om.exec_relay.impl.placement import PlacementClaimsRelayedImpl
+from acme.om.exec_relay.impl.transport import TransportRelayImpl
+from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.hosts.impl.placement import inside_wall
@@ -140,12 +146,6 @@ from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
 from acme.om.projects.policies import SessionProjectsInterface
-from acme.om.relay import RelayManagerInterface
-from acme.om.relay.impl.instances import PlacedInstancesRelayedImpl
-from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
-from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
-from acme.om.relay.impl.transport import TransportRelayImpl
-from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
     KeyServiceByTenantImpl,
@@ -253,7 +253,7 @@ class Managers:
     placement_operator: PlacementOperatorManagerInterface
     workspaces: WorkspacesManagerInterface
     hosts: HostsManagerInterface
-    relay: RelayManagerInterface
+    exec_relay: ExecRelayManagerInterface
     cloud_pool: CloudPoolManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
@@ -388,7 +388,7 @@ class ProductKinds:
                 raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
         # A stream a claimant writes or reads is bound to an item it holds,
         # and only a product's claimant holds one: the host's items are the
-        # relay's.
+        # exec relay's.
         own = {claimant.name for claimant in self.claimants}
         for stream in self.streams:
             for role, kind in (("written", stream.claimant), ("read", stream.reader)):
@@ -501,7 +501,7 @@ async def purge_held(
     session_id: UUID,
     tree_id: UUID | None,
 ) -> None:
-    """What the windows, the tools, the relay, attribution, the evidence, the
+    """What the windows, the tools, the exec relay, attribution, the evidence, the
     projects, the park alerts, and the agents hold of a session the sweep
     purges: its artifacts, its workspace with its transport's records, and
     its relayed exec items with their output, which go with its history,
@@ -511,7 +511,7 @@ async def purge_held(
     reached through their storage."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
-    await managers.relay.purge_session(org_id, session_id)
+    await managers.exec_relay.purge_session(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
     await managers.projects.purge_session(org_id, session_id)
@@ -640,7 +640,7 @@ def build_managers(
     workspace_git: WorkspaceGitInterface | None = None,
     workspace_reader: RepositoryReaderInterface | None = None,
     hosts_options: HostsOptions | None = None,
-    relay_options: RelayOptions | None = None,
+    relay_options: ExecRelayOptions | None = None,
     cloud_pool_options: CloudPoolOptions | None = None,
     cloud_pool_stage: Callable[[], RequestContext] | None = None,
     transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
@@ -765,7 +765,7 @@ def build_managers(
     `relay_options` is the lease a host renews on an `exec` item and the
     bounds of its output; None keeps the defaults. `transport_layer` wraps
     the transport infra chose before the tools and the checkout take it:
-    the session runner puts the relay behind it for a session inside its
+    the session runner puts the exec relay behind it for a session inside its
     tenant's wall, whose workspace is then the one a host of its pool
     prepared and holds. None takes infra's transport as it is, and makes
     every workspace on this machine.
@@ -839,7 +839,7 @@ def build_managers(
             projects=lambda: managers.projects,
             work=lambda: managers.work,
             hosts=lambda: managers.hosts,
-            relay=lambda: managers.relay,
+            exec_relay=lambda: managers.exec_relay,
             agent_automations=agent_automations or agent_automations_absent,
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
@@ -855,7 +855,7 @@ def build_managers(
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
-    # manager, which needs this relay, so that one edge is bound at call time
+    # manager, which needs this exec relay, so that one edge is bound at call time
     # and the graph the root hands back is still whole.
     outbox = OutboxRelayImpl(
         storage.get_outbox_storage(),
@@ -966,7 +966,7 @@ def build_managers(
     narrowed = session_projects or SessionProjectBoundImpl(storage.get_project_storage())
     refuse_quiet_nulls(environment, bound, narrowed)
     # The transport infra chose, and the one the tools and the checkout
-    # take: for a session inside its tenant's wall, the relay to its host.
+    # take: for a session inside its tenant's wall, the exec relay to its host.
     transport = infra.get_transport()
     placed = transport if transport_layer is None else transport_layer(transport)
     # Each session's workspace, pinned as the session is created: a
@@ -1226,11 +1226,13 @@ def build_managers(
         ),
     )
     # A session inside its tenant's wall finds its workspace on its host,
-    # where only the relayed transport reaches. The relay and the hosts are
+    # where only the relayed transport reaches. The exec relay and the hosts are
     # built below, so the edges are bound at call time.
-    placed_workspaces = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    placed_workspaces = PlacedWorkspacesRelayedImpl(
+        lambda: managers.exec_relay, lambda: managers.hosts
+    )
     # The cloud pool: a machine per session of the cloud whose workspace is
-    # a VM, its host reached through the relay as any host is. Every process
+    # a VM, its host reached through the exec relay as any host is. Every process
     # builds it: the gateway trades a machine's key, the sweep lets its
     # machines go, and the runner starts them, on the machines infra chose.
     sessions_rows = storage.get_agent_session_storage()
@@ -1251,7 +1253,7 @@ def build_managers(
         infra.get_seeds(),
         lambda: managers.hosts,
         lambda: placed_workspaces,
-        lambda: managers.relay,
+        lambda: managers.exec_relay,
         cloud_pool_options or CloudPoolOptions(),
         session_gone=session_gone,
         expired=tenancy.tenant_expired,
@@ -1272,11 +1274,11 @@ def build_managers(
         # A snapshot a host keeps is named by the digest it declared, keyed
         # by the session; its revoked key asks the host to let it go.
         keyed_hash=privacy.keyed_hash,
-        erase_on_host=lambda ctx, session_id, host_id: managers.relay.ask_erase(
+        erase_on_host=lambda ctx, session_id, host_id: managers.exec_relay.ask_erase(
             ctx, session_id, host_id
         ),
         # So does the session's purge, which runs for no principal.
-        erase_purged=lambda org_id, session_id, host_id: managers.relay.erase_purged(
+        erase_purged=lambda org_id, session_id, host_id: managers.exec_relay.erase_purged(
             org_id, session_id, host_id
         ),
         cloud=cloud_pool,
@@ -1287,8 +1289,8 @@ def build_managers(
     # the platform's own: an instance made for each run. For a session of
     # the cloud, it is the cloud's, on the provider and the transport infra
     # chose. For a session inside its tenant's wall, a host of its pool
-    # makes it to the session's pinned isolation, and the relay reaches it;
-    # the relay is built below, so the edge is bound at call time. Either way,
+    # makes it to the session's pinned isolation, and the exec relay reaches it;
+    # the exec relay is built below, so the edge is bound at call time. Either way,
     # a session pinned to a base has its checks run on that base.
     if executor is None and environment != LOCAL:
         hosts_storage = storage.get_hosts_storage()
@@ -1309,8 +1311,8 @@ def build_managers(
             workspaces.checks_tree,
             pinned,
             PlacedInstancesRelayedImpl(
-                lambda: managers.relay,
-                lambda stage: TransportRelayImpl(lambda: managers.relay, stage),
+                lambda: managers.exec_relay,
+                lambda stage: TransportRelayImpl(lambda: managers.exec_relay, stage),
             ),
             executor_options,
             bases=bases.archive,
@@ -1364,18 +1366,18 @@ def build_managers(
         claimant_kinds,
     )
     # A host's credential, its claims through placement, and where each
-    # session runs. An exec item a claim takes is started by the relay before
+    # session runs. An exec item a claim takes is started by the exec relay before
     # it reaches a host, and the work that waits on a revoked host is ended
-    # by it; the relay is built below, so both edges are bound at call time.
+    # by it; the exec relay is built below, so both edges are bound at call time.
     hosts = HostsManagerImpl(
         storage.get_hosts_storage(),
-        PlacementClaimsRelayedImpl(placement, lambda: managers.relay),
+        PlacementClaimsRelayedImpl(placement, lambda: managers.exec_relay),
         agent_sessions,
         tenancy,
         outbox,
         hosts_options or HostsOptions(),
         claimant_kinds,
-        revoked=lambda rctx, org_id, host_id: managers.relay.end_host(rctx, org_id, host_id),
+        revoked=lambda rctx, org_id, host_id: managers.exec_relay.end_host(rctx, org_id, host_id),
     )
     # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(
@@ -1477,8 +1479,8 @@ def build_managers(
         # A tool call into a customer's wall as keyed exec work: its items,
         # their output sealed under the session's key as its commands' records
         # are, and the control messages that stop them.
-        relay=RelayManagerImpl(
-            storage.get_relay_storage(),
+        exec_relay=ExecRelayManagerImpl(
+            storage.get_exec_relay_storage(),
             work,
             steps,
             tenancy,
@@ -1486,7 +1488,7 @@ def build_managers(
             projects,
             outbox,
             records,
-            relay_options or RelayOptions(),
+            relay_options or ExecRelayOptions(),
             # A snapshot a host answers is recorded where it lives.
             kept=held_to_pins.keep_on_host,
         ),

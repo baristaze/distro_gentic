@@ -21,6 +21,7 @@ from acme.services.api.services import (
     ConnectorsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
+    ExecRelayServiceInterface,
     FlagsServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
@@ -31,7 +32,6 @@ from acme.services.api.services import (
     ProjectsServiceInterface,
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
-    RelayServiceInterface,
     RetentionServiceInterface,
     ServicesInterface,
     SpendLedgersServiceInterface,
@@ -102,8 +102,8 @@ def hosts_service(connection: HTTPConnection) -> HostsServiceInterface:
     return services_of(connection).get_hosts_service()
 
 
-def relay_service(connection: HTTPConnection) -> RelayServiceInterface:
-    return services_of(connection).get_relay_service()
+def exec_relay_service(connection: HTTPConnection) -> ExecRelayServiceInterface:
+    return services_of(connection).get_exec_relay_service()
 
 
 def watch_service(connection: HTTPConnection) -> WatchServiceInterface:
@@ -186,7 +186,7 @@ AgentSessionsService = Annotated[AgentSessionsServiceInterface, Depends(agent_se
 EvidenceService = Annotated[EvidenceServiceInterface, Depends(evidence_service)]
 HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
 AgentFleetService = Annotated[AgentFleetServiceInterface, Depends(agent_fleet_service)]
-RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
+ExecRelayService = Annotated[ExecRelayServiceInterface, Depends(exec_relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
 AgentAutomationsService = Annotated[
     AgentAutomationsServiceInterface, Depends(agent_automations_service)

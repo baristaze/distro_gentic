@@ -1,11 +1,11 @@
-"""The relay over memory: a tool call into a customer's wall travels as
+"""The exec relay over memory: a tool call into a customer's wall travels as
 keyed exec work. It runs once on the host that holds the workspace, its
 output streamed and its result stored under its key, and a resumed run
 attaches to it rather than starting another. An expired lease completes an
 unsafe item `interrupted` and requeues a repeatable one to its workspace's
 host alone. A stop reaches the host's control stream at once, and nothing a
 stale writer sends acts. A part or a result whose hash does not verify is
-refused at the relay. A file is read in one item, whose result crosses
+refused at the exec relay. A file is read in one item, whose result crosses
 whole: a file longer than one carries is refused at once."""
 
 import asyncio
@@ -39,26 +39,13 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ToolFailed, Unavailable
-from acme.om.hosts.exceptions import PinnedToHosts
-from acme.om.hosts.impl.manager import HostsOptions
-from acme.om.hosts.impl.placement import PlacementHostsImpl
-from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
-from acme.om.hosts.types.host import IsolationMode as Mode
-from acme.om.hosts.types.pool import HostPool
-from acme.om.placement.rules import host_lane
-from acme.om.placement.types.work import (
-    ExecEffect,
-    ExecPayload,
-    WorkspaceOperation,
-    WorkspacePayload,
-)
-from acme.om.relay import RelayManagerInterface
-from acme.om.relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
-from acme.om.relay.impl.manager import RelayOptions
-from acme.om.relay.impl.placement import PlacementRelayedImpl
-from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay import ExecRelayManagerInterface
+from acme.om.exec_relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.impl.manager import ExecRelayOptions
+from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
+from acme.om.exec_relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
+from acme.om.exec_relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
+from acme.om.exec_relay.types.exec import (
     REQUESTS,
     ExecCall,
     ExecItem,
@@ -71,6 +58,19 @@ from acme.om.relay.types.exec import (
     ReadRequest,
     RunRequest,
     StopKind,
+)
+from acme.om.hosts.exceptions import PinnedToHosts
+from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
+from acme.om.hosts.types.host import IsolationMode as Mode
+from acme.om.hosts.types.pool import HostPool
+from acme.om.placement.rules import host_lane
+from acme.om.placement.types.work import (
+    ExecEffect,
+    ExecPayload,
+    WorkspaceOperation,
+    WorkspacePayload,
 )
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
 from acme.om.root import Managers, build_managers
@@ -118,7 +118,7 @@ def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
         storage,
         InfraLocalImpl(tmp_path),
         hosts_options=HostsOptions(claim_lease=SHORT),
-        relay_options=RelayOptions(lease=SHORT),
+        relay_options=ExecRelayOptions(lease=SHORT),
     )
 
 
@@ -152,7 +152,7 @@ async def wall(managers: Managers, storage: StorageMemoryImpl) -> Wall:
     other = await enrolled(managers, owner, pool, "host-2")
     session = await managers.agent_sessions.create_session(owner, make_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
-    await managers.relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
+    await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
     epoch = await managers.steps.begin_run(owner, session.id)
     workspace = Workspace(id=session.id, org_id=owner.org_id, spec=CONTAINER, location="")
     return Wall(managers, storage, owner, pool, holder, other, workspace, epoch)
@@ -160,7 +160,7 @@ async def wall(managers: Managers, storage: StorageMemoryImpl) -> Wall:
 
 def transport(managers: Managers) -> TransportRelayImpl:
     return TransportRelayImpl(
-        lambda: managers.relay,
+        lambda: managers.exec_relay,
         lambda: RequestContext(request_id=new_id(), app=RUNNER),
         first_poll=timedelta(milliseconds=1),
         last_poll=timedelta(milliseconds=5),
@@ -172,7 +172,7 @@ async def _nothing(data: bytes) -> bytes | None:
 
 
 NO_SEAL = RecordSeal(seal=_nothing, open=_nothing)
-"""The relay keeps a command's output sealed itself, under the session's
+"""The exec relay keeps a command's output sealed itself, under the session's
 key; the seal the engine hands over is not read."""
 
 
@@ -189,7 +189,7 @@ def command(
 
 
 class Host:
-    """A host as the relay sees it: it claims through placement, reads what
+    """A host as the exec relay sees it: it claims through placement, reads what
     it holds, streams parts, and pushes how the command ended, each with the
     hash it declares. It counts what it was handed."""
 
@@ -217,7 +217,7 @@ class Host:
 
     async def part(self, row: WorkItem, seq: int, text: str) -> None:
         data = text.encode()
-        await self.managers.relay.push_part(
+        await self.managers.exec_relay.push_part(
             request(),
             self.identity,
             self.item_id(row),
@@ -241,7 +241,7 @@ class Host:
             output=ExecOutput(stdout=stdout, data=read, offset=offset),
         )
         data = result.model_dump_json().encode()
-        await self.managers.relay.push_result(
+        await self.managers.exec_relay.push_result(
             request(),
             self.identity,
             self.item_id(row),
@@ -252,7 +252,7 @@ class Host:
 
 async def item_of(wall: Wall, row: WorkItem):
     payload = ExecPayload.model_validate(row.payload)
-    item = await wall.managers.relay.watch(request(), wall.owner.org_id, payload.item_id, -1)
+    item = await wall.managers.exec_relay.watch(request(), wall.owner.org_id, payload.item_id, -1)
     return payload, item
 
 
@@ -274,7 +274,7 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
 
     async def on_the_host() -> None:
         row = await host.claim_soon()
-        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
         assert detail.request == RunRequest(argv=("make", "deploy"))
         assert (detail.key, detail.epoch, detail.location) == (spec.key, wall.epoch, WHERE)
         await host.part(row, 0, "building\n")
@@ -356,9 +356,9 @@ async def test_an_unsafe_items_lease_runs_out_and_it_completes_interrupted_never
     )
     row = await host.claim_soon()
     await asyncio.sleep(SHORT.total_seconds() * 2)
-    # The sweep: the queue's requeue of expired leases, and the relay's.
+    # The sweep: the queue's requeue of expired leases, and the exec relay's.
     await wall.managers.work.requeue_stale(request(), 100)
-    assert await wall.managers.relay.settle_expired(request()) == 1
+    assert await wall.managers.exec_relay.settle_expired(request()) == 1
     with pytest.raises(ToolFailed) as stopped:
         await waiting
     assert stopped.value.failure is ToolFailure.INTERRUPTED
@@ -367,7 +367,7 @@ async def test_an_unsafe_items_lease_runs_out_and_it_completes_interrupted_never
     assert progress.state is ExecState.INTERRUPTED
     # Never requeued: the row failed in the queue, and no claim finds it.
     assert await host.claim() is None and len(host.handed) == 1
-    controls = await wall.managers.relay.controls(request(), wall.holder, None)
+    controls = await wall.managers.exec_relay.controls(request(), wall.holder, None)
     assert [(c.item_id, c.kind) for c in controls] == [(payload.item_id, StopKind.REVOKE)]
     # A result its host pushes after that lands nothing.
     with pytest.raises(ItemNotHeld):
@@ -389,7 +389,7 @@ async def test_a_repeatable_items_lease_runs_out_and_it_goes_back_to_its_workspa
     first = await host.claim_soon()
     await asyncio.sleep(SHORT.total_seconds() * 2)
     await wall.managers.work.requeue_stale(request(), 100)
-    assert await wall.managers.relay.settle_expired(request()) == 1
+    assert await wall.managers.exec_relay.settle_expired(request()) == 1
     _, progress = await item_of(wall, first)
     assert progress.state is ExecState.QUEUED
     # Another host of the pool is handed nothing; the holder gets it again.
@@ -411,7 +411,7 @@ def before_the_result_lands(
 ) -> list[UUID]:
     """Runs `between` once, after the first result read its item and before
     it writes it; answers the items it ran for."""
-    relay = wall.storage.get_relay_storage()
+    relay = wall.storage.get_exec_relay_storage()
     write_item = relay.write_item
     ran: list[UUID] = []
 
@@ -435,7 +435,7 @@ async def test_a_renewal_that_lands_while_its_result_is_written_costs_the_result
     row = await host.claim_soon()
 
     async def renewed(item_id: UUID) -> None:
-        await wall.managers.relay.extend(request(), wall.holder, item_id)
+        await wall.managers.exec_relay.extend(request(), wall.holder, item_id)
 
     ran = before_the_result_lands(wall, monkeypatch, renewed)
     await host.finish(row, 0, "deployed\n")
@@ -462,7 +462,7 @@ async def test_a_result_of_a_claim_its_item_was_taken_from_lands_nothing(
         # Its lease ran out, the sweep requeued it, and its host claimed it
         # again: the same host, under a claim of its own.
         await wall.managers.work.requeue_stale(request(), 100)
-        assert await wall.managers.relay.settle_expired(request()) == 1
+        assert await wall.managers.exec_relay.settle_expired(request()) == 1
         await asyncio.sleep(0.05)  # past the requeue's stagger
         again.append(await host.claim_soon())
 
@@ -489,7 +489,7 @@ async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
             wall.owner.org_id, gone, make_credential(gone.id), ()
         )
     newest = await enrolled(wall.managers, wall.owner, wall.pool, "host-3")
-    relay, owner, session_id = wall.managers.relay, wall.owner, wall.workspace.id
+    relay, owner, session_id = wall.managers.exec_relay, wall.owner, wall.workspace.id
     bound = await relay.bind_workspace(owner, session_id, newest.host_id, WHERE)
     assert bound.host_id == newest.host_id
     assert await relay.holder(owner, session_id) == bound
@@ -500,7 +500,7 @@ async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
 async def test_revoking_a_host_ends_the_work_on_its_lane_and_settles_its_commands(
     wall: Wall,
 ) -> None:
-    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
     host = Host(wall.managers, wall.holder)
     running = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
     await host.claim_soon()
@@ -520,7 +520,7 @@ async def test_revoking_a_host_ends_the_work_on_its_lane_and_settles_its_command
 
 
 async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) -> None:
-    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
     queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
 
     await relay.purge_session(org, wall.workspace.id)
@@ -534,7 +534,7 @@ async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) 
 async def test_a_command_sent_after_its_host_was_revoked_is_refused_and_queues_no_row(
     wall: Wall,
 ) -> None:
-    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
     await wall.managers.hosts.revoke_host(wall.owner, wall.holder.host_id)
 
     with pytest.raises(NoWorkspaceHost):
@@ -545,7 +545,7 @@ async def test_a_command_sent_after_its_host_was_revoked_is_refused_and_queues_n
 
 
 async def test_stopping_a_command_no_host_took_ends_its_queue_row(wall: Wall) -> None:
-    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
     queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
 
     stopped = await relay.stop(request(), org, queued.id, StopKind.DEADLINE, wall.epoch)
@@ -562,7 +562,7 @@ async def test_stopping_a_command_no_host_took_ends_its_queue_row(wall: Wall) ->
 
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
-    relay = wall.managers.relay
+    relay = wall.managers.exec_relay
     for kind in (StopKind.CANCEL, StopKind.INTERRUPT):
         waiting = asyncio.ensure_future(
             transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
@@ -583,7 +583,7 @@ async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: W
 
 async def test_a_stop_no_host_took_yet_means_it_never_runs(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
-    relay = wall.managers.relay
+    relay = wall.managers.exec_relay
     sent = await relay.send(
         request(),
         wall.owner.org_id,
@@ -598,7 +598,7 @@ async def test_a_stop_no_host_took_yet_means_it_never_runs(wall: Wall) -> None:
 
 async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
-    relay = wall.managers.relay
+    relay = wall.managers.exec_relay
     stale = wall.epoch
     queued = await relay.send(request(), wall.owner.org_id, _call(wall, command(stale)), 0)
     running_task = asyncio.ensure_future(
@@ -641,10 +641,10 @@ async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
 
 
 class Flaky:
-    """The relay, each read of an item's progress failing with the next of
+    """The exec relay, each read of an item's progress failing with the next of
     `failures` while any is left; `read` is set by a read that went through."""
 
-    def __init__(self, relay: RelayManagerInterface) -> None:
+    def __init__(self, relay: ExecRelayManagerInterface) -> None:
         self._relay = relay
         self.failures: list[Exception] = []
         self.read = asyncio.Event()
@@ -660,8 +660,8 @@ class Flaky:
 
 
 def flaky(wall: Wall) -> tuple[TransportRelayImpl, Flaky]:
-    relay = Flaky(wall.managers.relay)
-    through = cast(RelayManagerInterface, relay)
+    relay = Flaky(wall.managers.exec_relay)
+    through = cast(ExecRelayManagerInterface, relay)
     transport = TransportRelayImpl(
         lambda: through,
         lambda: RequestContext(request_id=new_id(), app=RUNNER),
@@ -683,7 +683,7 @@ async def test_a_progress_read_that_fails_for_now_is_waited_out(wall: Wall) -> N
     assert relay.failures == []
     await host.finish(row, 0, "ok\n")
     assert (await waiting).stdout == "ok\n"
-    assert await wall.managers.relay.controls(request(), wall.holder, None) == []
+    assert await wall.managers.exec_relay.controls(request(), wall.holder, None) == []
 
 
 @pytest.mark.parametrize("lost", ["refused", "past its deadline"])
@@ -704,17 +704,17 @@ async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrup
     assert ended.value.failure is ToolFailure.INTERRUPTED
     assert "lost track of the command" in ended.value.message
     # Its host is told to stop it, after the deadline's own cut when one came.
-    controls = await wall.managers.relay.controls(request(), wall.holder, None)
+    controls = await wall.managers.exec_relay.controls(request(), wall.holder, None)
     assert controls[-1].item_id == host.item_id(row)
     assert controls[-1].kind is StopKind.INTERRUPT
 
 
-# Check 5: what crosses the wall is verified by its hash at the relay.
+# Check 5: what crosses the wall is verified by its hash at the exec relay.
 
 
 async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
-    relay = wall.managers.relay
+    relay = wall.managers.exec_relay
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
     )
@@ -761,7 +761,7 @@ async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once
 
     async def answers(data: bytes) -> None:
         row = await host.claim_soon()
-        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
         asked.append(cast(ReadRequest, detail.request))
         await host.finish(row, data=data)
 
@@ -798,7 +798,7 @@ async def test_a_relayed_read_asks_from_its_offset_and_a_negative_one_sends_noth
 
     async def answers(data: bytes) -> None:
         row = await host.claim_soon()
-        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
         asked.append(cast(ReadRequest, detail.request))
         await host.finish(row, data=data, offset=7)
 
@@ -822,7 +822,7 @@ async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_
     async def answers(data: bytes) -> None:
         # A host of an earlier release: it reads from the start, echoing nothing.
         row = await host.claim_soon()
-        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
         sent.append(json.loads(REQUESTS.dump_json(detail.request)))
         await host.finish(row, data=data)
 
@@ -858,7 +858,7 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
         PlacementHostsImpl(
             wall.storage.get_hosts_storage(), wall.storage.get_agent_session_storage(), runner
         ),
-        wall.storage.get_relay_storage(),
+        wall.storage.get_exec_relay_storage(),
     )
     executor = await placement.executor_of(wall.owner.org_id, wall.workspace.id)
     assert (executor.kind, executor.credential_id, executor.label) == (
@@ -879,7 +879,7 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
     with pytest.raises(Exception, match="no host holds its workspace"):
         await placed.run(unheld_workspace, command(0), seal=NO_SEAL)
     with pytest.raises(NoWorkspaceHost):
-        await wall.managers.relay.send(
+        await wall.managers.exec_relay.send(
             request(),
             wall.owner.org_id,
             _call(wall, command(0)).model_copy(update={"session_id": unheld.id}),
@@ -915,7 +915,7 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
     await loop.storage.get_hosts_storage().enroll(
         owner.org_id, silent, make_credential(silent.id), ()
     )
-    await loop.managers.relay.bind_workspace(owner, session_id, silent.id, WHERE)
+    await loop.managers.exec_relay.bind_workspace(owner, session_id, silent.id, WHERE)
     assert waiting.park is not None and waiting.park.retry_at is not None
     loop.clock.now = waiting.park.retry_at
     await loop.managers.agent_sessions.wake_session(owner, session_id, waiting.park)
@@ -935,24 +935,24 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     wall: Wall,
 ) -> None:
     managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
-    binding = await managers.relay.holder(owner, session_id)
+    binding = await managers.exec_relay.holder(owner, session_id)
     assert binding is not None and binding.host_id == wall.holder.host_id
-    assert await managers.relay.ask_release(owner, session_id, CONTAINER)
-    assert not await managers.relay.ask_release(owner, session_id, CONTAINER), "one at a time"
+    assert await managers.exec_relay.ask_release(owner, session_id, CONTAINER)
+    assert not await managers.exec_relay.ask_release(owner, session_id, CONTAINER), "one at a time"
     assert await Host(managers, wall.other).claim() is None, "no other host of the pool takes it"
     row = await Host(managers, wall.holder).claim_soon()
     payload = WorkspacePayload.model_validate(row.payload)
     assert (payload.operation, payload.session_id) == (WorkspaceOperation.RELEASE, session_id)
     with pytest.raises(ItemNotHeld):
-        await managers.relay.released(request(), wall.other, row.id)
-    await managers.relay.released(request(), wall.holder, row.id)
+        await managers.exec_relay.released(request(), wall.other, row.id)
+    await managers.exec_relay.released(request(), wall.holder, row.id)
     done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, session_id)
     assert done is not None and done.status is WorkStatus.DONE
     with pytest.raises(ItemNotHeld):
-        await managers.relay.released(request(), wall.holder, row.id)
+        await managers.exec_relay.released(request(), wall.holder, row.id)
     # A revoked host is reached by nothing, a release included.
     await managers.hosts.revoke_host(owner, wall.holder.host_id)
-    assert await managers.relay.holder(owner, session_id) is None
+    assert await managers.exec_relay.holder(owner, session_id) is None
 
 
 # An instance a run makes for a session: made by a host of the session's
@@ -988,7 +988,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     foreign = await enrolled(managers, stranger, await pool_of(managers, stranger, "build"), "h")
     instance = new_id()
 
-    await managers.relay.ask_instance(owner, session_id, instance, CONTAINER)
+    await managers.exec_relay.ask_instance(owner, session_id, instance, CONTAINER)
 
     for outside in (elsewhere, foreign):
         assert await Host(managers, outside).claim() is None, "no host outside the pool"
@@ -1000,7 +1000,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
         session_id,
     )
     assert payload.project_id == project_id, "held to the session's project"
-    binding = await managers.relay.prepared(
+    binding = await managers.exec_relay.prepared(
         request(), wall.other, row.id, PrepareAnswer(location="/srv/work/instance")
     )
     assert binding is not None
@@ -1009,7 +1009,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
         wall.other.host_id,
         session_id,
     )
-    own = await managers.relay.binding_of(owner, session_id)
+    own = await managers.exec_relay.binding_of(owner, session_id)
     assert own is not None and own.host_id == wall.holder.host_id, "the session's own stays"
 
     # Its command goes to the host that made it, held to the session's
@@ -1025,18 +1025,18 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     assert (await sent).stdout == "ok"
 
     # Its run ends: the host that holds it is asked to purge it, and only it
-    # answers; the relay's rows of it go at once.
-    assert await managers.relay.ask_purge(owner, instance, CONTAINER)
-    await managers.relay.purge_session(owner.org_id, instance)
-    assert await managers.relay.binding_of(owner, instance) is None
+    # answers; the exec relay's rows of it go at once.
+    assert await managers.exec_relay.ask_purge(owner, instance, CONTAINER)
+    await managers.exec_relay.purge_session(owner.org_id, instance)
+    assert await managers.exec_relay.binding_of(owner, instance) is None
     for outside in (wall.holder, elsewhere, foreign):
         assert await Host(managers, outside).claim() is None
     purge = await Host(managers, wall.other).claim_soon()
     purged = WorkspacePayload.model_validate(purge.payload)
     assert (purged.operation, purged.session_id) == (WorkspaceOperation.PURGE, instance)
     with pytest.raises(ItemNotHeld):
-        await managers.relay.released(request(), wall.holder, purge.id)
-    await managers.relay.released(request(), wall.other, purge.id)
+        await managers.exec_relay.released(request(), wall.holder, purge.id)
+    await managers.exec_relay.released(request(), wall.other, purge.id)
     done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
     assert done is not None and done.status is WorkStatus.DONE
 
@@ -1044,9 +1044,9 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
 async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall: Wall) -> None:
     managers, owner = wall.managers, wall.owner
     instance = new_id()
-    await managers.relay.ask_instance(owner, wall.workspace.id, instance, CONTAINER)
+    await managers.exec_relay.ask_instance(owner, wall.workspace.id, instance, CONTAINER)
 
-    assert not await managers.relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
+    assert not await managers.exec_relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
 
     assert await Host(managers, wall.other).claim() is None, "the prepare that waited is ended"
     ended = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)

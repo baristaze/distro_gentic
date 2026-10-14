@@ -19,6 +19,7 @@ from acme.om.base import Platform
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import COMMENT, CommentImpl
@@ -55,7 +56,6 @@ from acme.om.platform_agents.tools import (
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.projects import ProjectsManagerInterface
-from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
@@ -99,7 +99,7 @@ def with_shipped(
     projects: Callable[[], ProjectsManagerInterface],
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
-    relay: Callable[[], RelayManagerInterface],
+    exec_relay: Callable[[], ExecRelayManagerInterface],
     agent_automations: Callable[[], AgentAutomationsManagerInterface],
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
@@ -166,7 +166,7 @@ def with_shipped(
         SearchCorpusImpl(shipped.corpus),
         ReadSessionImpl(sessions, steps, policies, projects),
         ListSessionsImpl(sessions, projects),
-        ReadWaitImpl(sessions, work, hosts, relay),
+        ReadWaitImpl(sessions, work, hosts, exec_relay),
         ListProjectsImpl(projects),
         ReadProjectImpl(projects),
         ListAgentAutomationsImpl(agent_automations),

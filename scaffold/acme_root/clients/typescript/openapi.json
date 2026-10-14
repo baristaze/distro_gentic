@@ -2189,7 +2189,7 @@
         "type": "object"
       },
       "CommandProgressView": {
-        "description": "How a command stands: its state, its output after the last part read,\nand how it ended once it has. `refused` names why its host or the relay\nrefused it, such as a command a later run fenced.",
+        "description": "How a command stands: its state, its output after the last part read,\nand how it ended once it has. `refused` names why its host or the exec relay\nrefused it, such as a command a later run fenced.",
         "properties": {
           "exit_code": {
             "anyOf": [
@@ -26021,7 +26021,7 @@
         },
         "summary": "Control",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26195,7 +26195,7 @@
         },
         "summary": "Detail",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26287,7 +26287,7 @@
         },
         "summary": "Extend",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26382,7 +26382,7 @@
         },
         "summary": "Push Part",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26477,7 +26477,7 @@
         },
         "summary": "Push Result",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26670,7 +26670,7 @@
         },
         "summary": "Prepared",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26755,7 +26755,7 @@
         },
         "summary": "Released",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },
@@ -26850,7 +26850,7 @@
         },
         "summary": "Snapshotted",
         "tags": [
-          "relay"
+          "exec_relay"
         ]
       }
     },

@@ -1,17 +1,17 @@
 """Two decorators the root wires around placement. Trust's question of where
 a session's next call runs, answered with the host that holds the session's
 workspace once one does. And placement's claim for a host, which hands over
-an `exec` item only once the relay has started it."""
+an `exec` item only once the exec relay has started it."""
 
 from collections.abc import Callable
 from datetime import timedelta
 from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport
-from acme.om.relay.manager import RelayManagerInterface
-from acme.om.relay.storage import RelayStorageInterface
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkKind
@@ -22,7 +22,7 @@ class PlacementRelayedImpl(PlacementInterface):
     holds its workspace, its executor. Until one does, `inner` answers, and
     refuses the call: it never runs on one of the platform's machines."""
 
-    def __init__(self, inner: PlacementInterface, storage: RelayStorageInterface) -> None:
+    def __init__(self, inner: PlacementInterface, storage: ExecRelayStorageInterface) -> None:
         self._inner = inner
         self._storage = storage
 
@@ -43,16 +43,16 @@ class PlacementRelayedImpl(PlacementInterface):
 
 class PlacementClaimsRelayedImpl(PlacementManagerInterface):
     """Placement as the hosts claim through it: an `exec` item a claim took
-    is handed over only once the relay started it, so an unsafe item a claim
+    is handed over only once the exec relay started it, so an unsafe item a claim
     took before, a settled one, or a lost run's command is settled at the
-    claim and never reaches a host. `relay` answers at call time, as the
-    root builds the relay after the hosts."""
+    claim and never reaches a host. `exec_relay` answers at call time, as the
+    root builds the exec relay after the hosts."""
 
     def __init__(
-        self, inner: PlacementManagerInterface, relay: Callable[[], RelayManagerInterface]
+        self, inner: PlacementManagerInterface, exec_relay: Callable[[], ExecRelayManagerInterface]
     ) -> None:
         self._inner = inner
-        self._relay = relay
+        self._exec_relay = exec_relay
 
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
         return await self._inner.lane_for(org_id, item)
@@ -65,7 +65,7 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
             if claimed is None:
                 return None
             ctx, item = claimed
-            if item.kind != WorkKind.EXEC or await self._relay().start(ctx, item):
+            if item.kind != WorkKind.EXEC or await self._exec_relay().start(ctx, item):
                 return claimed
 
     async def held_for(

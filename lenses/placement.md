@@ -7,11 +7,11 @@ At a Glance states for every connection that crosses a customer's wall.
 This group judges where each part of a session runs and how its work
 reaches it: the kinds of work and their lanes, the session runner that
 hosts the brain, placement, the workspace host and what it holds, the
-relay transport that carries a tool call into a customer's wall, and the
-cloud pool's machine per session. It leaves a workspace's isolation and
-egress to `workspaces`, a person's commands on a workspace to `watch`,
-the four identities and how a secret is resolved to `wall`, and the
-sweep's duties to `agent-fleet`.
+exec relay transport that carries a tool call into a customer's wall,
+and the cloud pool's machine per session. It leaves a workspace's
+isolation and egress to `workspaces`, a person's commands on a workspace
+to `watch`, the four identities and how a secret is resolved to `wall`,
+and the sweep's duties to `agent-fleet`.
 
 ## PLC-01 A session becomes work of a kind, claimed where it can run
 
@@ -157,9 +157,9 @@ accepted.
 ## PLC-07 A runner picks the transport by placement, behind one interface
 
 **Principle.** A runner chooses the transport by the session's
-placement: a direct transport to a cloud workspace, or a relay transport
-to a host inside a customer's wall. The engine sees one transport
-interface either way.
+placement: a direct transport to a cloud workspace, or an exec relay
+transport to a host inside a customer's wall. The engine sees one
+transport interface either way.
 
 **Source.** Session Runners.
 
@@ -231,7 +231,7 @@ opens every connection outward; the platform never calls in. Every
 connection that crosses a customer's wall is opened from inside it.
 
 **Source.** At a Glance; Placement and Workspace Hosts, Workspace Hosts;
-The Relay Transport.
+The Exec Relay Transport.
 
 **Look for.** How a host connects to the platform; any listener or
 inbound port it opens; any platform code that dials an address inside a
@@ -416,7 +416,7 @@ claims it under a lease, runs it through its local transport, streams
 output parts back, and pushes the result, which the control plane stores
 under the key. The runner writes the `tool_response` from that result.
 
-**Source.** Placement and Workspace Hosts, The Relay Transport.
+**Source.** Placement and Workspace Hosts, The Exec Relay Transport.
 
 **Look for.** How an `exec` item's id is made and what the item carries;
 the host's claim, run, and push; where the result is stored, and what
@@ -439,7 +439,7 @@ cuts, and lease revocations, so a command starts at once and stops at
 once. The work row stays the record. A person's terminal is a recorded
 terminal session over the same stream, never a remote desktop.
 
-**Source.** Placement and Workspace Hosts, The Relay Transport.
+**Source.** Placement and Workspace Hosts, The Exec Relay Transport.
 
 **Look for.** The host's control stream and what it carries; whether the
 work row or the stream holds the record; how a person's terminal reaches
@@ -464,7 +464,7 @@ when its effect is `read_only` or `idempotent`, and only to the host
 that holds its workspace; an `unsafe` one completes `interrupted`,
 outcome unknown.
 
-**Source.** Placement and Workspace Hosts, The Relay Transport.
+**Source.** Placement and Workspace Hosts, The Exec Relay Transport.
 
 **Look for.** What a resumed run does with an `exec` item that already
 exists; what happens to an item whose lease expires, by its effect.
@@ -481,14 +481,14 @@ host other than the one that holds its workspace.
 
 **Principle.** A cloud session whose workspace is a VM runs on a machine
 of its own, which runs the host program and pulls its work through the
-relay. Its host trades a one-use key for a credential of the session's
-own pool, and is handed that session's work alone. It holds no database
-credential, no model key, no history, and no cloud role, and its key and
-its credential never reach its disk. Its egress is closed outside its
-guest, to the gateway and what its session's egress allows. Its whole
-disk is the session's snapshot, kept while the session lives; a machine
-with no host stops. Every path that starts a machine has the one that
-lets it go.
+exec relay. Its host trades a one-use key for a credential of the
+session's own pool, and is handed that session's work alone. It holds no
+database credential, no model key, no history, and no cloud role, and
+its key and its credential never reach its disk. Its egress is closed
+outside its guest, to the gateway and what its session's egress allows.
+Its whole disk is the session's snapshot, kept while the session lives;
+a machine with no host stops. Every path that starts a machine has the
+one that lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 

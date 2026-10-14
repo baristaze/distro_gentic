@@ -688,7 +688,7 @@ async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> No
             host = enrolled.json()
             await hosts.place_session(owner, session_id, pool.id)
             work = checkout(root, slug, root / "hands" / str(session_id))
-            await container.managers.relay.bind_workspace(
+            await container.managers.exec_relay.bind_workspace(
                 owner, session_id, UUID(host["host_id"]), str(work)
             )
             print("ready", flush=True)
@@ -722,7 +722,7 @@ async def run_one(client: Any, headers: dict[str, str], work: Path) -> None:
     import base64
     import hashlib
 
-    from acme.om.relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+    from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 
     for _ in range(240):
         claimed = await client.post(

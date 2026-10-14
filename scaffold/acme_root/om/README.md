@@ -366,7 +366,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
-- [Relay](src/acme/om/relay/README.md)
+- [Exec relay](src/acme/om/exec_relay/README.md)
 - [The cloud pool](src/acme/om/cloud_pool/README.md)
 - [Intake](src/acme/om/intake/README.md)
 - [Agent automations](src/acme/om/agent_automations/README.md)

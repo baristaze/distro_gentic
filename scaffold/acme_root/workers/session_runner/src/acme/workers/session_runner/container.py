@@ -26,6 +26,8 @@ from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import ConnectorsLayer
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
+from acme.om.exec_relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
@@ -38,8 +40,6 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.relay.impl.placement import PlacementRelayedImpl
-from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -169,7 +169,7 @@ class RunnerContainer:
             PlacementHostsImpl(
                 storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
             ),
-            storage.get_relay_storage(),
+            storage.get_exec_relay_storage(),
         )
         trust = TrustLayer(
             storage,
@@ -222,16 +222,16 @@ class RunnerContainer:
             infra,
             McpClientSdkImpl(),
             placement=placement,
-            host=TransportRelayImpl(lambda: built[0].relay, stage).call_mcp,
+            host=TransportRelayImpl(lambda: built[0].exec_relay, stage).call_mcp,
             options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
         )
 
         def placed(direct: TransportInterface) -> TransportInterface:
-            # The relay is the managers', built below on this transport, so
+            # The exec relay is the managers', built below on this transport, so
             # the edge is bound at call time.
-            relayed = TransportRelayImpl(lambda: built[0].relay, stage)
+            relayed = TransportRelayImpl(lambda: built[0].exec_relay, stage)
             # A session on a machine of the cloud pool runs its calls on that
-            # machine's host, through the relay too.
+            # machine's host, through the exec relay too.
             return TransportPlacedImpl(
                 direct, relayed, placement, lambda spec: built[0].cloud_pool.runs(spec)
             )

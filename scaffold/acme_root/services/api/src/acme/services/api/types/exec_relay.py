@@ -1,4 +1,4 @@
-"""The wire types of the relay: what a host reads of an `exec` item it
+"""The wire types of the exec relay: what a host reads of an `exec` item it
 holds, what it pushes as the item runs and ends, and the messages of its
 control stream. Each part and each result carries the bytes as they crossed
 the wall, in base64, and the hash its sender declared of them."""
@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.relay.rules import RESULT_CHARS
+from acme.om.exec_relay.rules import RESULT_CHARS
 from acme.om.retention.crossing import SHA256, CrossingKind
 from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.services.api.types.common import RequestBody, View

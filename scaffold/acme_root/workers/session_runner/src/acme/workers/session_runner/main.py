@@ -91,7 +91,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         managers.work,
         managers.tenancy,
         container.kinds.warm_grace,
-        relay=managers.relay,
+        exec_relay=managers.exec_relay,
         cloud=managers.cloud_pool,
     )
     return WorkerLoop(

@@ -22,13 +22,13 @@ from acme.om.exceptions import (
     Unavailable,
     ValidationFailed,
 )
+from acme.om.exec_relay import ExecRelayManagerInterface
+from acme.om.exec_relay.exceptions import NoWorkspaceHost
+from acme.om.exec_relay.rules import exec_id, key_time, stale
+from acme.om.exec_relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.intake.rules import in_person
-from acme.om.relay import RelayManagerInterface
-from acme.om.relay.exceptions import NoWorkspaceHost
-from acme.om.relay.rules import exec_id, key_time, stale
-from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.retention.crossing import CrossingKind, CrossingRefused
 from acme.om.retention.crossing import verified as crossed
 from acme.om.steps import StepsManagerInterface
@@ -80,7 +80,7 @@ class WatchManagerImpl(WatchManagerInterface):
         agents: AgentsManagerInterface,
         loop: LoopManagerInterface,
         steps: StepsManagerInterface,
-        relay: RelayManagerInterface,
+        exec_relay: ExecRelayManagerInterface,
         workspaces: WorkspacesManagerInterface,
         events: EventsManagerInterface,
         stream: StreamServiceInterface,
@@ -96,7 +96,7 @@ class WatchManagerImpl(WatchManagerInterface):
         self._agents = agents
         self._loop = loop
         self._steps = steps
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._workspaces = workspaces
         self._events = events
         self._stream = stream
@@ -214,7 +214,7 @@ class WatchManagerImpl(WatchManagerInterface):
         cursor = await self._steps.get_cursor(ctx, session_id)
         # What the agent's run still runs on the host stops now, so nothing of
         # its runs beside the person's commands; theirs run under this epoch.
-        await self._relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
+        await self._exec_relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
         await self._audit(ctx, new_id(), TAKEN, session_id, {"epoch": cursor.epoch})
         return session
 
@@ -277,7 +277,7 @@ class WatchManagerImpl(WatchManagerInterface):
             )
         if session.park.holder not in (None, ctx.user_id):
             raise NotAuthorized(f"session {session_id} is held by another person")
-        if await self._relay.binding_of(ctx, session_id) is None:
+        if await self._exec_relay.binding_of(ctx, session_id) is None:
             raise NoWorkspaceHost(f"no host holds session {session_id}'s workspace")
         workspace = await self._workspaces.get_workspace(ctx, session_id)
         request = RunRequest(argv=command.argv, cwd=command.cwd)
@@ -301,7 +301,7 @@ class WatchManagerImpl(WatchManagerInterface):
             spec=workspace.spec(),
             by_person=True,
         )
-        item = await self._relay.send(ctx, ctx.org_id, call, 0)
+        item = await self._exec_relay.send(ctx, ctx.org_id, call, 0)
         return HandRun(
             item_id=item.id,
             session_id=session_id,
@@ -317,10 +317,10 @@ class WatchManagerImpl(WatchManagerInterface):
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
         cursor = await self._steps.get_cursor(ctx, session_id)
-        item = await self._relay.outcome_of(ctx, ctx.org_id, session_id, key, cursor.epoch)
+        item = await self._exec_relay.outcome_of(ctx, ctx.org_id, session_id, key, cursor.epoch)
         if item is None:
             raise NotFound(f"session {session_id} sent no command under {key}")
-        return await self._relay.watch(ctx, ctx.org_id, item.id, after_seq)
+        return await self._exec_relay.watch(ctx, ctx.org_id, item.id, after_seq)
 
     async def give_back(
         self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
@@ -333,7 +333,7 @@ class WatchManagerImpl(WatchManagerInterface):
             cursor = await self._steps.get_cursor(ctx, session_id)
             running = [
                 item
-                for item in await self._relay.running(ctx, ctx.org_id, session_id)
+                for item in await self._exec_relay.running(ctx, ctx.org_id, session_id)
                 if not stale(item.epoch, cursor.epoch)
             ]
             if running and not stop:
@@ -342,7 +342,7 @@ class WatchManagerImpl(WatchManagerInterface):
                     "wait for it to end, or give back with stop"
                 )
             if running:
-                await self._relay.interrupt_running(ctx, ctx.org_id, session_id, None)
+                await self._exec_relay.interrupt_running(ctx, ctx.org_id, session_id, None)
         session = await self._loop.give_back(ctx, session_id, summary)
         cursor = await self._steps.get_cursor(ctx, session_id)
         await self._audit(ctx, new_id(), GIVEN_BACK, session_id, {"epoch": cursor.epoch})

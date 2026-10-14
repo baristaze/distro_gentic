@@ -25,6 +25,7 @@ from acme.services.api.routers import (
     connectors,
     events,
     evidence,
+    exec_relay,
     flags,
     hosts,
     intake,
@@ -35,7 +36,6 @@ from acme.services.api.routers import (
     park_alerts,
     projects,
     provider_keys,
-    relay,
     retention,
     spend_ledgers,
     tenancy,
@@ -66,7 +66,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "hosts": (hosts.router, claimants.router),
     # The exec work a host holds and its control stream: a host's own calls,
     # each opened from inside its wall.
-    "relay": (relay.router, control.router),
+    "exec_relay": (exec_relay.router, control.router),
     # A tenant's connections to the systems whose events reach its sessions.
     "intake": (intake.router,),
     # What a tenant may spend: a budget's amount, which a raise of wakes the

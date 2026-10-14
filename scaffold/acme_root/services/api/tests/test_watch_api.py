@@ -16,7 +16,7 @@ from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, created, 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id
 from acme.om.exceptions import Unavailable
-from acme.om.relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.retention.crossing import CrossingKind, declared
 from acme.om.steps.types.stream import TextPart
 from acme.services.api.container import AppContainer
@@ -99,7 +99,7 @@ async def test_a_person_takes_control_runs_a_command_as_theirs_and_gives_it_back
     managers = container.managers
     session = await managers.agent_sessions.create_session(ctx, make_session())
     await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
-    await managers.relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
+    await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
     await managers.workspaces.pinned(ctx, session.id, SPEC)
     control = f"/v1/agent-sessions/{session.id}/control"
     command = {"argv": ["make", "test"]}
@@ -123,7 +123,7 @@ async def test_a_person_takes_control_runs_a_command_as_theirs_and_gives_it_back
     identity = await managers.hosts.authenticate(seed_request(), host["token"])
     result = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="ok\n"))
     data = result.model_dump_json().encode()
-    await managers.relay.push_result(
+    await managers.exec_relay.push_result(
         seed_request(), identity, UUID(run["item_id"]), declared(CrossingKind.RESULT, data), data
     )
 

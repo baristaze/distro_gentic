@@ -1,8 +1,8 @@
-"""The relay's routes over the live app, in memory. Every connection that
+"""The exec relay's routes over the live app, in memory. Every connection that
 crosses a customer's wall is opened from inside it: each route a host calls
 takes the host's own credential and nothing else, and nothing the platform
 keeps or imports could call into a host. What crosses is verified by its
-hash at the relay, and refused when it does not verify."""
+hash at the exec relay, and refused when it does not verify."""
 
 import ast
 import base64
@@ -19,13 +19,13 @@ from api_support import build_container
 from contracts.agent_session_storage import make_session
 from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, tenant_of
 
+import acme.om.exec_relay
 import acme.om.hosts
-import acme.om.relay
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext
+from acme.om.exec_relay.types.exec import ExecCall, RunRequest
 from acme.om.hosts.types.host import Host
-from acme.om.relay.types.exec import ExecCall, RunRequest
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 from acme.services.api.types.hosts import HostView
@@ -76,7 +76,7 @@ async def a_held_item(
     managers = container.managers
     session = await managers.agent_sessions.create_session(ctx, make_session())
     await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
-    await managers.relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
+    await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
     epoch = await managers.steps.begin_run(ctx, session.id)
     spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     call = ExecCall(
@@ -88,7 +88,7 @@ async def a_held_item(
         epoch=epoch,
         spec=spec,
     )
-    item = await managers.relay.send(RUNNER, ctx.org_id, call, 0)
+    item = await managers.exec_relay.send(RUNNER, ctx.org_id, call, 0)
     claimed = await client.post(
         "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
     )
@@ -145,7 +145,7 @@ def test_nothing_the_platform_keeps_or_imports_could_call_into_a_host() -> None:
     # with a host is an answer to a request the host made.
     api = Path(create_app.__code__.co_filename).parent
     sources = [
-        *Path(acme.om.relay.__path__[0]).rglob("*.py"),
+        *Path(acme.om.exec_relay.__path__[0]).rglob("*.py"),
         *Path(acme.om.hosts.__path__[0]).rglob("*.py"),
         *(api / "routers").glob("*.py"),
         *(api / "services").rglob("*.py"),
@@ -191,7 +191,7 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
         refused = await client.post(f"{path}/result", headers=bearer(host["token"]), json=body)
         assert refused.status_code == 422 and refused.json()["error"]["code"] == "crossing_refused"
     ctx = await tenant_of(container, owner)
-    progress = await container.managers.relay.watch(RUNNER, ctx.org_id, item_id, -1)
+    progress = await container.managers.exec_relay.watch(RUNNER, ctx.org_id, item_id, -1)
     assert progress.parts == () and progress.outcome is None
     # The same bytes, declared as they are, land.
     part["data"] = base64.b64encode(real).decode()
@@ -200,6 +200,6 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
     body = {"data": base64.b64encode(result).decode(), "crossing": declared("result", result)}
     done = await client.post(f"{path}/result", headers=bearer(host["token"]), json=body)
     assert done.status_code == 204, done.text
-    progress = await container.managers.relay.watch(RUNNER, ctx.org_id, item_id, -1)
+    progress = await container.managers.exec_relay.watch(RUNNER, ctx.org_id, item_id, -1)
     assert [p.text for p in progress.parts] == ["deployed\n"]
     assert progress.output is not None and progress.output.stdout == "ok"

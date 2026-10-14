@@ -53,9 +53,9 @@ item, whose result crosses the wall whole: a stream longer than one
 carries is read no further, never waited on, and its trial is an errored
 run that names that bound. When the run ends, whatever ended it, the
 holding host is asked to purge the instance, or the prepare that waits
-is ended, and the relay's rows of the instance go at once. A root that
-reaches no pool refuses the run, loudly (`Unavailable`), never a run
-elsewhere.
+is ended, and the exec relay's rows of the instance go at once. A root
+that reaches no pool refuses the run, loudly (`Unavailable`), never a
+run elsewhere.
 
 **A validation session is platform work.** It names its project, a check
 its project's policy declares, the delivered commit it runs at, and the
@@ -86,7 +86,7 @@ again.
   bound, on a host of its pool making one; a pool that makes none in
   time fails the run as `Unavailable`.
 - An instance's commands and their output are sealed under a key of the
-  instance's own, as a session's are under its key, and go with the
+  instance's own, as a session's are under its key, and go with the exec
   relay's rows when the run ends.
 - A host still making the instance when its run gives up binds it after
   the run, and no run purges it: an empty instance, with no tree written

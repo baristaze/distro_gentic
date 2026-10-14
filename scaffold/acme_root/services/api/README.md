@@ -15,7 +15,7 @@ A request passes four layers, each in its own folder under
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
 - **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, agent sessions, hosts, the relay,
+  operator plane, events, media, agent sessions, hosts, the exec relay,
   and webhooks. Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a

@@ -31,8 +31,8 @@ from runner_support import HOST, TOOLS, answers, assistant, runs
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import DEFAULT_IMAGE
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.buckets import Buckets
@@ -239,7 +239,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert parked.end is RunEnd.PARKED and parked.park is not None
         assert await host.claim_once() is not None
         await host.idle()
-        assert await managers.relay.binding_of(owner, parent) is not None
+        assert await managers.exec_relay.binding_of(owner, parent) is not None
 
         # The parent writes a file and forks in the same run.
         await managers.agent_sessions.wake_session(owner, parent, parked.park)
@@ -279,7 +279,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert tried.outcome is LoopOutcome.SUCCEEDED, tried
         read, _ = outputs(await steps_of(runner, owner, child))
         assert "from-the-parent" in read
-        holder = await managers.relay.binding_of(owner, child)
+        holder = await managers.exec_relay.binding_of(owner, child)
         assert holder is not None and holder.host_id == UUID(host.credential.claimant_id)
 
         asked = message_step(new_id(), utcnow(), parent, owner, "What does the workspace hold?")

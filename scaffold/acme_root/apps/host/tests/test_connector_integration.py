@@ -219,7 +219,7 @@ async def test_a_server_inside_the_wall_is_called_by_its_host_and_never_by_the_p
     assert TOKEN not in repr(page.items)
     requests = [step for step in page.items if step.type is StepType.TOOL_REQUEST]
     called = requests[-1]
-    (item,) = await runner.storage.get_relay_storage().read_items_by_key(
+    (item,) = await runner.storage.get_exec_relay_storage().read_items_by_key(
         owner.org_id, session.id, called.id, 10
     )
     assert item.operation is ExecOperation.MCP_CALL, "the call crossed the wall as exec work"

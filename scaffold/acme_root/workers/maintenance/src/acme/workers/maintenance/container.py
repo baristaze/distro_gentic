@@ -38,6 +38,7 @@ from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.events.impl.manager import EventsOptions
+from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
@@ -58,7 +59,6 @@ from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.projects.impl.manager import ProjectsOptions
-from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import (
     LOCAL,
@@ -222,7 +222,7 @@ def worker_managers(
         hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
-        relay_options=RelayOptions(purge_batch=batch),
+        relay_options=ExecRelayOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
         cloud_pool_options=cloud_pool_options(settings),
         cloud_pool_stage=stage,

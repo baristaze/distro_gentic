@@ -71,7 +71,7 @@ expired meanwhile again, at its gate.
   write moves it or an operator requeues the dead letter, as any dead
   letter does. So does one whose loop a run held when a pass read it and
   whose work then failed for good: the pass reads on past it.
-- The relay's duties join the same list: its own, across tenants,
+- The exec relay's duties join the same list: its own, across tenants,
   bounded, and safe to run twice.
 - The sweep reads the ledger the gate writes. A root that wires another
   gate wires the read of its ledger with it.

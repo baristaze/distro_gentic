@@ -23,12 +23,12 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from host_support import Pace, Stack, probes
-from test_relay import claims, command, runner_of
+from test_exec_relay import claims, command, runner_of
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.bases import base_key
 from acme.apps.host.ceilings import Ceilings
-from acme.apps.host.relay import ExecutorRelayImpl
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.buckets import Buckets
@@ -47,8 +47,8 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.projects.types.project import SetupCommand
-from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.impl.git import INCOMING
@@ -211,21 +211,21 @@ def kept_base(host: Host, api: Stack) -> Path:
 async def test_a_host_builds_a_base_once_in_its_store_and_the_next_workspace_runs_no_setup(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    exec_relay = api.container.managers.exec_relay
     pool = await api.pool()
     first = await a_pinned_session(api, pool.id)
     second = await a_pinned_session(api, pool.id)
     host = await a_host(api, pool.id, tmp_path)
 
-    assert await relay.ask_prepare(api.owner, first, ON_BASE)
+    assert await exec_relay.ask_prepare(api.owner, first, ON_BASE)
     await host.claimed()
     assert host.setup.ran == list(SETUP), "the host built the base"
-    assert await relay.ask_prepare(api.owner, second, ON_BASE)
+    assert await exec_relay.ask_prepare(api.owner, second, ON_BASE)
     await host.claimed()
 
     assert host.setup.ran == list(SETUP), "the second workspace ran no setup"
     for session_id in (first, second):
-        assert await relay.binding_of(api.owner, session_id) is not None
+        assert await exec_relay.binding_of(api.owner, session_id) is not None
     kept = kept_base(host, api).read_bytes()
     started = host.twin.started_from
     assert started[first] == started[second] == hashlib.sha256(kept).hexdigest()
@@ -242,7 +242,7 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     session_id = await a_pinned_session(api, pool.id)
     host = await a_host(api, pool.id, tmp_path)
     host.setup.exits["pip install acme-tools"] = 1
-    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.exec_relay, lambda: managers.hosts)
 
     with pytest.raises(IsolationRefused) as asked:
         await placed.held_on_host(api.owner, session_id, ON_BASE)
@@ -252,7 +252,7 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     assert host.setup.ran == ["pip install acme-tools"], "the setup stopped at the failure"
     assert not kept_base(host, api).exists(), "no half-built base"
     assert host.twin.started_from == {}, "no workspace started from one"
-    assert await managers.relay.binding_of(api.owner, session_id) is None
+    assert await managers.exec_relay.binding_of(api.owner, session_id) is None
     row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
     assert row is not None and row.status is WorkStatus.QUEUED, "a host builds again later"
     failed = "the base's setup command 1, 'pip install acme-tools', exited 1"
@@ -272,7 +272,7 @@ async def test_a_setup_command_at_the_longest_a_project_allows_fails_and_the_wai
     longest = "pip install " + "x" * (LONGEST - len("pip install "))
     spec = ON_BASE.model_copy(update={"base": BASE.model_copy(update={"setup": (longest,)})})
     host.setup.exits[longest] = 2
-    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.exec_relay, lambda: managers.hosts)
 
     with pytest.raises(IsolationRefused):
         await placed.held_on_host(api.owner, session_id, spec)
@@ -294,9 +294,9 @@ async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keep
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
     host = await a_host(api, pool.id, tmp_path)
-    assert await managers.relay.ask_prepare(api.owner, session_id, ON_BASE)
+    assert await managers.exec_relay.ask_prepare(api.owner, session_id, ON_BASE)
     await host.claimed()
-    assert await managers.relay.binding_of(api.owner, session_id) is not None
+    assert await managers.exec_relay.binding_of(api.owner, session_id) is not None
     host.twin.started_from.clear()
 
     epoch = await managers.steps.begin_run(api.owner, session_id)
@@ -322,12 +322,12 @@ async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keep
 async def test_the_setup_on_a_host_is_given_no_secret_and_no_credential_of_the_hosts(
     api: Stack, tmp_path: Path
 ) -> None:
-    relay = api.container.managers.relay
+    exec_relay = api.container.managers.exec_relay
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
     host = await a_host(api, pool.id, tmp_path)
 
-    assert await relay.ask_prepare(api.owner, session_id, ON_BASE)
+    assert await exec_relay.ask_prepare(api.owner, session_id, ON_BASE)
     await host.claimed()
 
     assert host.setup.ran == list(SETUP)
@@ -347,14 +347,14 @@ async def test_a_base_that_holds_a_hosts_secret_is_not_kept_and_the_prepare_is_u
     host = await a_host(api, pool.id, tmp_path)
     host.twin.writes = f"export TOKEN={SECRET}\n".encode()
 
-    assert await managers.relay.ask_prepare(api.owner, session_id, ON_BASE)
+    assert await managers.exec_relay.ask_prepare(api.owner, session_id, ON_BASE)
     await host.claimed()
 
     assert not kept_base(host, api).exists()
     row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
     assert row is not None and "SERVICE_TOKEN" in (row.last_error or "")
     assert SECRET not in (row.last_error or "")
-    assert await managers.relay.binding_of(api.owner, session_id) is None
+    assert await managers.exec_relay.binding_of(api.owner, session_id) is None
 
 
 async def test_an_owner_who_closed_egress_refuses_a_base_whose_setup_reaches_out(
@@ -365,9 +365,9 @@ async def test_an_owner_who_closed_egress_refuses_a_base_whose_setup_reaches_out
     session_id = await a_pinned_session(api, pool.id)
     host = await a_host(api, pool.id, tmp_path, egress=frozenset())
 
-    assert await managers.relay.ask_prepare(api.owner, session_id, ON_BASE)
+    assert await managers.exec_relay.ask_prepare(api.owner, session_id, ON_BASE)
     await host.claimed()
 
     assert host.setup.ran == [], "nothing ran"
     assert not kept_base(host, api).exists()
-    assert await managers.relay.binding_of(api.owner, session_id) is None
+    assert await managers.exec_relay.binding_of(api.owner, session_id) is None

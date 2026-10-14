@@ -1,4 +1,4 @@
-# Relay
+# Exec relay
 
 How a tool call reaches a workspace inside a tenant's own wall. This is
 one of the kinds of thing [Acme is made of](../../../../README.md).
@@ -59,11 +59,11 @@ platform's cloud. Each call crosses the wall as `exec`
   whose host was revoked asks the pool again.
 - **Release.** The runner's sweep finds a workspace a host holds that no
   run accounts for past its grace, among the bindings. It pushes the
-  checkout's work through the relay first, then asks the holding host,
-  while that host is live and online, to let the instance go. One release
-  waits at a time. Only that host answers it, and its answer completes
-  the work. A release that waits when a prepare is asked is ended, since
-  no live host is left holding the workspace.
+  checkout's work through the exec relay first, then asks the holding
+  host, while that host is live and online, to let the instance go. One
+  release waits at a time. Only that host answers it, and its answer
+  completes the work. A release that waits when a prepare is asked is
+  ended, since no live host is left holding the workspace.
 - **Snapshot.** A run that ends with a workspace kept by snapshots asks
   the host that holds it for one, and waits for the answer a while. The
   host keeps the bytes and answers the reference, the digest, and the
@@ -86,8 +86,8 @@ platform's cloud. Each call crosses the wall as `exec`
   asks the session's pool for a new instance, as a prepare, and waits for
   a host's answer to bind it. Its checks run there as `exec` work. When
   the run ends, whatever ended it, the holding host is asked to purge the
-  instance, or the prepare that waits is ended, and the relay's rows of
-  the instance go at once. Only that host answers the purge.
+  instance, or the prepare that waits is ended, and the exec relay's
+  rows of the instance go at once. Only that host answers the purge.
 - **Send.** The runner's transport sends each operation of a call. A new
   one goes on the lane of the host that holds the workspace. One the
   call sent before is met as it stands, so a run that resumes after a
@@ -137,22 +137,23 @@ itself. ADR 2004 records the decisions.
 
 ## How another namespace composes it
 
-The session runner puts the relay behind the engine's transport for a
-session inside a wall, and the engine sees one transport either way. The
-gateway serves the host's calls and its control stream. The maintenance
-worker settles items whose lease ran out and purges a tenant's rows. The
-runner's tools find a pinned session's workspace on its host
-(`impl/workspaces.PlacedWorkspacesRelayedImpl`), and the host's answer to a
-prepare binds it with `bind_workspace` (`prepared`). The evidence's
-executor makes an instance through `impl/instances.PlacedInstancesRelayedImpl`,
-which asks for it with `ask_instance`, reaches it through the relay's
-transport, and ends it with `ask_purge` and `purge_session`; the host
-answers a purge as it answers a release (`released`). The runner's sweep
-reads the bindings (`bindings`), reaches a holding host through `holder`,
-and asks it to let an instance go with `ask_release`; the host answers
-with `released`. The platform's tools ask a host's snapshot with
-`ask_snapshot`, a restore with `ask_restore`, and an erase with
-`ask_erase`, or `erase_purged` for a session's purge, and read their work
-with `workspace_work`; the host answers
-a snapshot with `snapshotted`, which records it through the root's
-`kept`, a restore as a prepare, and an erase as a release.
+The session runner puts the exec relay behind the engine's transport for
+a session inside a wall, and the engine sees one transport either way.
+The gateway serves the host's calls and its control stream. The
+maintenance worker settles items whose lease ran out and purges a
+tenant's rows. The runner's tools find a pinned session's workspace on
+its host (`impl/workspaces.PlacedWorkspacesRelayedImpl`), and the host's
+answer to a prepare binds it with `bind_workspace` (`prepared`). The
+evidence's executor makes an instance through
+`impl/instances.PlacedInstancesRelayedImpl`, which asks for it with
+`ask_instance`, reaches it through the exec relay's transport, and ends
+it with `ask_purge` and `purge_session`; the host answers a purge as it
+answers a release (`released`). The runner's sweep reads the bindings
+(`bindings`), reaches a holding host through `holder`, and asks it to
+let an instance go with `ask_release`; the host answers with `released`.
+The platform's tools ask a host's snapshot with `ask_snapshot`, a
+restore with `ask_restore`, and an erase with `ask_erase`, or
+`erase_purged` for a session's purge, and read their work with
+`workspace_work`; the host answers a snapshot with `snapshotted`, which
+records it through the root's `kept`, a restore as a prepare, and an
+erase as a release.

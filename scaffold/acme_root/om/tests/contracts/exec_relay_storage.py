@@ -1,4 +1,4 @@
-"""The relay storage contract: exec items with how they ended, the parts of
+"""The exec relay storage contract: exec items with how they ended, the parts of
 their output, the control messages for the host that holds them, and the
 host that holds each session's workspace. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
@@ -13,9 +13,8 @@ import pytest
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
-from acme.om.placement.types.work import ExecOperation
-from acme.om.relay.storage import RelayStorageInterface
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.types.exec import (
     ExecControl,
     ExecItem,
     ExecOutcome,
@@ -24,6 +23,7 @@ from acme.om.relay.types.exec import (
     StopKind,
     WorkspaceBinding,
 )
+from acme.om.placement.types.work import ExecOperation
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -42,7 +42,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "purge_tenant",
     }
 )
-"""Every method of `RelayStorageInterface` that takes a tenant has a case in
+"""Every method of `ExecRelayStorageInterface` that takes a tenant has a case in
 this module that presents another tenant's."""
 
 SPEC = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -130,14 +130,14 @@ def make_binding(session_id: UUID) -> WorkspaceBinding:
     )
 
 
-class RelayStorageContract:
+class ExecRelayStorageContract:
     @pytest.fixture
-    def storage(self) -> RelayStorageInterface:
+    def storage(self) -> ExecRelayStorageInterface:
         raise NotImplementedError("the concrete test class provides the storage")
 
     # Items.
 
-    async def test_an_item_round_trips_once(self, storage: RelayStorageInterface) -> None:
+    async def test_an_item_round_trips_once(self, storage: ExecRelayStorageInterface) -> None:
         org = new_id()
         item = make_item()
         assert await storage.create_item(org, item)
@@ -145,7 +145,7 @@ class RelayStorageContract:
         assert await storage.read_item(org, item.id) == item
 
     async def test_a_calls_items_are_read_oldest_first(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, session, key = new_id(), new_id(), new_id()
         first, second = make_item(session, key), make_item(session, key)
@@ -159,7 +159,7 @@ class RelayStorageContract:
         assert len(await storage.read_items_by_key(org, session, key, 1)) == 1
 
     async def test_a_write_lands_only_at_the_version_it_read(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org = new_id()
         item = make_item()
@@ -177,7 +177,7 @@ class RelayStorageContract:
         assert await storage.read_item(org, item.id) == done
 
     async def test_the_sweep_reads_running_items_whose_lease_ended_with_their_tenant(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         ours, theirs = new_id(), new_id()
         ended, live, queued = make_item(), make_item(), make_item()
@@ -191,7 +191,7 @@ class RelayStorageContract:
         ] == [(ours, ended.id)]
 
     async def test_a_sessions_running_items_are_read_oldest_first_and_no_others(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other, session = new_id(), new_id(), new_id()
         first, second, queued, elsewhere = (
@@ -212,7 +212,7 @@ class RelayStorageContract:
         assert await storage.read_running(other, session, 10) == []
 
     async def test_items_of_another_tenant_are_not_read_or_written(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         item = make_item()
@@ -227,7 +227,7 @@ class RelayStorageContract:
     # Parts.
 
     async def test_parts_are_read_in_order_after_a_place_once_each(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org = new_id()
         item = make_item()
@@ -241,7 +241,7 @@ class RelayStorageContract:
         assert await storage.read_parts(org, new_id(), -1, 10) == []
 
     async def test_parts_of_another_tenant_are_not_read_or_taken(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         item = make_item()
@@ -253,7 +253,7 @@ class RelayStorageContract:
     # Controls.
 
     async def test_a_hosts_controls_are_read_after_the_last_it_saw(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org = new_id()
         item = make_item()
@@ -268,7 +268,7 @@ class RelayStorageContract:
         assert await storage.read_controls(org, item.host_id, None, later, 10) == []
 
     async def test_controls_of_another_tenant_are_not_read(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         item = make_item()
@@ -277,7 +277,7 @@ class RelayStorageContract:
         assert await storage.read_controls(other, item.host_id, None, since, 10) == []
 
     async def test_add_control_under_another_tenant_lands_there_alone(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         item = make_item()
@@ -287,7 +287,7 @@ class RelayStorageContract:
 
     # Bindings.
 
-    async def test_a_binding_is_a_compare_and_set(self, storage: RelayStorageInterface) -> None:
+    async def test_a_binding_is_a_compare_and_set(self, storage: ExecRelayStorageInterface) -> None:
         org, session = new_id(), new_id()
         binding = make_binding(session)
         await storage.write_binding(org, binding, 0, ())
@@ -300,7 +300,7 @@ class RelayStorageContract:
         assert await storage.read_binding(org, session) == moved
 
     async def test_a_binding_of_another_tenant_is_not_read_or_written(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other, session = new_id(), new_id(), new_id()
         binding = make_binding(session)
@@ -311,7 +311,7 @@ class RelayStorageContract:
         assert await storage.read_binding(org, session) == binding
 
     async def test_bindings_are_read_across_tenants_in_id_order_a_page_at_a_time(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         mine = {org: make_binding(new_id()), other: make_binding(new_id())}
@@ -333,7 +333,7 @@ class RelayStorageContract:
     # Purges.
 
     async def test_purge_session_takes_that_session_alone(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         gone, kept = make_item(), make_item()
@@ -351,7 +351,7 @@ class RelayStorageContract:
         assert await storage.read_binding(org, kept.session_id) is not None
 
     async def test_purge_tenant_takes_that_tenant_alone(
-        self, storage: RelayStorageInterface
+        self, storage: ExecRelayStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         item, theirs = make_item(), make_item()

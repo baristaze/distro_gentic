@@ -10,7 +10,7 @@ A path that starts with `../` is read from this skill's folder as
 `realpath` resolves it.
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Placement and Workspace Hosts
-(Workspace Hosts, The Relay Transport), Workspaces and Isolation
+(Workspace Hosts, The Exec Relay Transport), Workspaces and Isolation
 (Isolation Levels, Pinned, Probed, Refused, Egress), Trust (Four
 Identities, Secrets by Placement).
 Lenses: `../../lenses/placement.md`, `../../lenses/workspaces.md`.
@@ -28,9 +28,9 @@ as the host's dedicated workspace user, never as the host's own".
   `host_transports` does not run: `vm` or `directory`. The transport is
   keyed by the engine's mode for it, `IsolationMode` in
   `infra/src/<name>/infra/workspaces/__init__.py`, as `HOST_ISOLATION`
-  in `om/src/<name>/om/relay/rules.py` maps them. A mode in neither list
-  is a change to the platform's wire types, not this skill's: stop and
-  say so.
+  in `om/src/<name>/om/exec_relay/rules.py` maps them. A mode in neither
+  list is a change to the platform's wire types, not this skill's: stop
+  and say so.
 - `--transport` names a transport under
   `infra/src/<name>/infra/transports/` that already runs commands at
   that mode, such as one `distro-scaffold-workspace-provider` wrote.
@@ -64,10 +64,10 @@ from `infra/src/<name>/infra/transports/container.py`.
 ## Procedure
 
 1. A host runs a relayed `exec` item through the transport its spec's
-   mode names (`ExecutorRelayImpl._run` in `relay.py`), and answers an
-   item at a mode it has no transport for as refused, `capability_missing`.
-   After this skill, an item at `<mode>` runs, and every other refusal
-   stands.
+   mode names (`ExecutorRelayImpl._run` in `exec_relay.py`), and answers
+   an item at a mode it has no transport for as refused,
+   `capability_missing`. After this skill, an item at `<mode>` runs, and
+   every other refusal stands.
 2. The transport is built in `host_transports`, in `main.py`, the one
    host module the platform's checker lets build an engine transport:
    `[[tool.distro-check.exception]]` for `PLC-10` in `pyproject.toml`

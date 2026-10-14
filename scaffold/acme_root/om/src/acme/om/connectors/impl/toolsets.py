@@ -36,8 +36,8 @@ from acme.om.connectors.types.connector import (
 )
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
+from acme.om.exec_relay.types.exec import McpRequest
 from acme.om.projects.policies import SessionProjectsInterface
-from acme.om.relay.types.exec import McpRequest
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.mcp import McpCall, McpServers, secret_use
 from acme.om.tools.tool import ToolInterface, ToolRuntime
@@ -57,7 +57,7 @@ it."""
 
 class HostCall(Protocol):
     """Reaches a tool of a server the host that holds `workspace` runs, as
-    `exec` work keyed by the call: the runner's relay transport."""
+    `exec` work keyed by the call: the runner's exec relay transport."""
 
     def __call__(
         self,

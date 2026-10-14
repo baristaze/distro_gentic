@@ -153,15 +153,15 @@ credential_env = "TRACKER_TOKEN"
 ```
 
 <!-- agents-only
-What runs an item is the executor (`agent.ExecutorInterface`), the
-relay's in `relay.ExecutorRelayImpl`, over the engine's transports by
-isolation mode (`main.host_transports`). A `WORKSPACE` prepare is made by
-the provider of its spec's mode (`main.host_workspaces`) and answered
-through `ApiClient.answer_prepare`. A release lets go of the instance the
-provider of its spec's mode holds for the session and the host's tenant,
-and is answered through `ApiClient.answer_release`; a purge removes it,
-with its files and its transport's records, and is answered the same
-way. The fields a host reads
+What runs an item is the executor (`agent.ExecutorInterface`), the exec
+relay's in `exec_relay.ExecutorRelayImpl`, over the engine's transports
+by isolation mode (`main.host_transports`). A `WORKSPACE` prepare is
+made by the provider of its spec's mode (`main.host_workspaces`) and
+answered through `ApiClient.answer_prepare`. A release lets go of the
+instance the provider of its spec's mode holds for the session and the
+host's tenant, and is answered through `ApiClient.answer_release`; a
+purge removes it, with its files and its transport's records, and is
+answered the same way. The fields a host reads
 of an item are `project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
 refused. What the item runs it reads from the gateway while it holds it

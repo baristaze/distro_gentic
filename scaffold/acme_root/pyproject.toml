@@ -111,7 +111,7 @@ reason = "a host runs the items it holds through the engine's container transpor
 
 [[tool.distro-check.exception]]
 rule = "PLC-10"
-path = "apps/host/src/acme/apps/host/relay.py"
+path = "apps/host/src/acme/apps/host/exec_relay.py"
 adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
 reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
 
@@ -247,8 +247,8 @@ tenantless = [
     "OutboxStorageInterface.count_failed_since",
     "OutboxStorageInterface.oldest_pending_at",
     "OutboxStorageInterface.purge_done",
-    "RelayStorageInterface.read_bindings",
-    "RelayStorageInterface.read_expired",
+    "ExecRelayStorageInterface.read_bindings",
+    "ExecRelayStorageInterface.read_expired",
     "RetentionStorageInterface.read_behind",
     "RetentionStorageInterface.read_due",
     "TenancyStorageInterface.clear_failed_sign_ins",

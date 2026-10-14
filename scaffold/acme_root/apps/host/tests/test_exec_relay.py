@@ -38,8 +38,8 @@ from host_support import (
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.mcp import HostServers
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -58,14 +58,14 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.exceptions import ToolFailed
+from acme.om.exec_relay.impl.transport import TransportRelayImpl
+from acme.om.exec_relay.types.exec import ExecState, StopKind
 from acme.om.placement.types.work import ExecPayload
-from acme.om.relay.impl.transport import TransportRelayImpl
-from acme.om.relay.types.exec import ExecState, StopKind
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
-from acme.services.api.services.impl import relay as relay_service
+from acme.services.api.services.impl import exec_relay as exec_relay_service
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -106,7 +106,7 @@ async def relay_to(
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
-    the runner's relay to it. With `serves`, the host's ceilings serve that
+    the runner's exec relay to it. With `serves`, the host's ceilings serve that
     project alone, and the session belongs to `project_id`. With `wire`, the
     host reaches the platform through it, and with `now` it reads its time.
     It sends what a command prints at once, or `flush_seconds` apart, and
@@ -155,16 +155,16 @@ async def relay_to(
         )
     await managers.hosts.place_session(api.owner, session.id, pool.id)
     host_id = UUID(host.credential.claimant_id)
-    await managers.relay.bind_workspace(api.owner, session.id, host_id, str(where))
+    await managers.exec_relay.bind_workspace(api.owner, session.id, host_id, str(where))
     epoch = await managers.steps.begin_run(api.owner, session.id)
     workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
     return Relayed(api, host, executor, runner_of(api), workspace, epoch, host_id)
 
 
 def runner_of(api: Stack) -> TransportRelayImpl:
-    """The runner's relay to the tenant's hosts."""
+    """The runner's exec relay to the tenant's hosts."""
     return TransportRelayImpl(
-        lambda: api.container.managers.relay,
+        lambda: api.container.managers.exec_relay,
         lambda: RequestContext(request_id=new_id(), app=RUNNER),
         first_poll=timedelta(milliseconds=5),
         last_poll=timedelta(milliseconds=20),
@@ -177,10 +177,10 @@ async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UU
     managers = api.container.managers
     session = await managers.agent_sessions.create_session(api.owner, make_session())
     await managers.hosts.place_session(api.owner, session.id, host_pool(host))
-    await managers.relay.ask_prepare(api.owner, session.id, spec)
+    await managers.exec_relay.ask_prepare(api.owner, session.id, spec)
     assert await host.claim_once() is not None
     await host.idle()
-    held = await managers.relay.binding_of(api.owner, session.id)
+    held = await managers.exec_relay.binding_of(api.owner, session.id)
     assert held is not None
     return session.id, held.location
 
@@ -211,7 +211,7 @@ def command(epoch: int, *argv: str, seconds: float = 30) -> CommandSpec:
 
 async def claims(host: HostAgent, until: asyncio.Future[Any]) -> list[UUID]:
     """The host's loop while the runner waits: the exec items it was
-    handed, by the relay's id."""
+    handed, by the exec relay's id."""
     handed: list[UUID] = []
     pace = Pace()
     while not until.done():
@@ -317,7 +317,7 @@ async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_c
 async def test_a_stop_over_the_control_stream_ends_a_running_command_at_once(
     relayed: Relayed, kind: StopKind
 ) -> None:
-    relay = relayed.api.container.managers.relay
+    relay = relayed.api.container.managers.exec_relay
     listening = asyncio.ensure_future(relayed.host.listen())
     spec = command(relayed.epoch, "sh", "-c", "echo started; sleep 30")
     started = asyncio.Event()
@@ -329,7 +329,7 @@ async def test_a_stop_over_the_control_stream_ends_a_running_command_at_once(
     waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, sink, seal=NO_SEAL))
     running = asyncio.ensure_future(claims(relayed.host, waiting))
     await asyncio.wait_for(started.wait(), 10)
-    (item,) = await relayed.api.container.storage.get_relay_storage().read_items_by_key(
+    (item,) = await relayed.api.container.storage.get_exec_relay_storage().read_items_by_key(
         relayed.api.owner.org_id, relayed.workspace.id, spec.key, 10
     )
     item_id = item.id
@@ -569,7 +569,7 @@ class Clock:
 async def test_a_host_that_rotates_while_its_stream_is_open_keeps_its_stream_on_the_new_credential(
     api: Stack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(relay_service, "STREAM_SPAN", timedelta(milliseconds=200))
+    monkeypatch.setattr(exec_relay_service, "STREAM_SPAN", timedelta(milliseconds=200))
     bearers = Bearers(api.transport)
     clock = Clock()
     relayed = await relay_to(api, tmp_path, wire=bearers, now=clock)
@@ -604,7 +604,7 @@ async def test_a_host_that_rotates_while_its_stream_is_open_keeps_its_stream_on_
     running = asyncio.ensure_future(claims(host, waiting))
     await asyncio.wait_for(started.wait(), 10)
     (item,) = await _items(relayed, spec)
-    await api.container.managers.relay.stop(
+    await api.container.managers.exec_relay.stop(
         _request(), api.owner.org_id, item, StopKind.CANCEL, relayed.epoch
     )
     with pytest.raises(ToolFailed):
@@ -618,9 +618,9 @@ def host_pool(host: HostAgent) -> UUID:
 
 
 async def _items(relayed: Relayed, spec: CommandSpec) -> list[UUID]:
-    """The relay's items under the call's key, once its host runs one."""
-    relay = relayed.api.container.managers.relay
-    storage = relayed.api.container.storage.get_relay_storage()
+    """The exec relay's items under the call's key, once its host runs one."""
+    relay = relayed.api.container.managers.exec_relay
+    storage = relayed.api.container.storage.get_exec_relay_storage()
     for _ in range(500):
         items = await storage.read_items_by_key(
             relayed.api.owner.org_id, relayed.workspace.id, spec.key, 10

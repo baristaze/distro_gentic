@@ -26,8 +26,8 @@ from host_support import Stack, probes
 from acme.apps.host.agent import HostAgent, RoutesHostImpl
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import settings_from_env
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.seed import forget_key, read_seed
 from acme.client.claimant.credential import BadSetting
 from acme.client.client import ApiError
@@ -374,10 +374,10 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     assert identity.session_id == session.id
 
     kept = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
-    assert await managers.relay.ask_prepare(api.owner, session.id, kept)
+    assert await managers.exec_relay.ask_prepare(api.owner, session.id, kept)
     assert await host.claim_once() is not None
     await host.idle()
-    binding = await managers.relay.binding_of(api.owner, session.id)
+    binding = await managers.exec_relay.binding_of(api.owner, session.id)
     assert binding is not None and binding.host_id == identity.id
     assert made_under(binding.location, tmp_path / "workspace")
 

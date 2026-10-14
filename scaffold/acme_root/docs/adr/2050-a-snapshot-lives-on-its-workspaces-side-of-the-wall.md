@@ -17,7 +17,7 @@ The platform held every prepare to the session's pin, which kept the
 isolation alone. A kind that asked for snapshots or a base was refused,
 so no session of the platform's could resume on its whole machine. A
 workspace on a customer's host is made and run by that host, through the
-relay, and the host holds no key of the platform's, so the engine's
+exec relay, and the host holds no key of the platform's, so the engine's
 snapshot, taken by the process that runs the loop and sealed into the
 platform's bucket, cannot reach it.
 
@@ -35,10 +35,10 @@ live for good.
 **A snapshot lives where its workspace lives.** A workspace this
 process prepares is snapshotted by the engine, sealed into the
 platform's bucket. A workspace a host holds is snapshotted by that host,
-through the relay: a `snapshot` work item on its lane. The host takes
-back what its broker attached, takes the snapshot of the instance its
-provider holds by its labels, scans it for the value of every secret it
-keeps for the tenant, and keeps it in its own store, owner-only. It
+through the exec relay: a `snapshot` work item on its lane. The host
+takes back what its broker attached, takes the snapshot of the instance
+its provider holds by its labels, scans it for the value of every secret
+it keeps for the tenant, and keeps it in its own store, owner-only. It
 answers the reference, the SHA-256 of the bytes, and their size. The
 platform records where each snapshot lives (`workspace_snapshots`): the
 bucket, or the pool, the host, the reference, and the digest. The step

@@ -27,8 +27,9 @@ does; a chat message counts as a person's only as
   so a viewer watches a step from a process other than the one that runs
   it.
 
-It keeps no table. A person's command is the relay's `exec` item, and
-the record that it is theirs is an entry in the tenant's event stream.
+It keeps no table. A person's command is the exec relay's `exec` item,
+and the record that it is theirs is an entry in the tenant's event
+stream.
 
 ## What can happen
 
@@ -60,7 +61,7 @@ the record that it is theirs is an entry in the tenant's event stream.
   one else takes it from them or gives it back.
 - **Run a command.** While the agent stands down, the person's command
   runs as `exec` work on the host that holds the workspace, through the
-  [relay](../relay/README.md), in the workspace's own isolation. The
+  [exec relay](../exec_relay/README.md), in the workspace's own isolation. The
   host reads it as a person's, which its owner may refuse.
 - **Give back.** The person's summary becomes their message, and the
   next run continues the loop under an epoch that fences any command of
@@ -111,17 +112,17 @@ streams a session and overall, and closes a stream idle past `idle`. The
 handle is `rules.signed`/`rules.verified` (HMAC-SHA256 over a purpose
 prefix and the `Grant`), keyed by `WatchOptions.live_read_key`; none
 refuses every live read (`Unavailable`). A command's id is
-`relay.rules.exec_id(key, request, 0)`, audited as `watch.command.sent`
-under an id derived from it before `RelayManagerInterface.send`, with
-the session's cursor epoch read before its park, and sent with
-`ExecCall.by_person`, which lands in `ExecPayload.by_person` for the
-host's `people_commands` ceiling. Take control and give back are the
-engine's `take_over` and `give_back`, audited as `watch.control.taken`
-and `watch.control.given_back`. Take control then calls
-`relay.interrupt_running` below the new epoch; give back reads
-`relay.running` and raises `CommandRunning` for an item under the
-current epoch, unless `stop`. ADR 2007 records the scoped read. An
-item's handle is `rules.signed`/`rules.verified_item` over an
+`exec_relay.rules.exec_id(key, request, 0)`, audited as
+`watch.command.sent` under an id derived from it before
+`ExecRelayManagerInterface.send`, with the session's cursor epoch read
+before its park, and sent with `ExecCall.by_person`, which lands in
+`ExecPayload.by_person` for the host's `people_commands` ceiling. Take
+control and give back are the engine's `take_over` and `give_back`,
+audited as `watch.control.taken` and `watch.control.given_back`. Take
+control then calls `exec_relay.interrupt_running` below the new epoch;
+give back reads `exec_relay.running` and raises `CommandRunning` for an
+item under the current epoch, unless `stop`. ADR 2007 records the scoped
+read. An item's handle is `rules.signed`/`rules.verified_item` over an
 `ItemGrant`, under its own purpose prefix. `append_as` checks the kind's
 writer (`StreamKind.claimant`), the bounds `MAX_APPEND_ENTRIES` and
 `MAX_APPEND_BYTES`, each entry's `stream_part` crossing

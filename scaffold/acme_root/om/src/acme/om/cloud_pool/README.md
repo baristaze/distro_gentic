@@ -11,8 +11,8 @@ an instance of the platform's cloud account in a deployment. The machine
 runs the same host program a tenant installs
 ([hosts](../hosts/README.md)), with Docker inside, so the agent builds and
 runs containers of its own. The runner reaches the machine's host through
-the [relay](../relay/README.md), as it reaches any host: the host pulls,
-and the platform never calls in.
+the [exec relay](../exec_relay/README.md), as it reaches any host: the
+host pulls, and the platform never calls in.
 
 ## What it holds
 
@@ -40,7 +40,7 @@ and the platform never calls in.
   the pool's image; with the session's latest snapshot, one is started
   from that, held to its digest first. The loop waits on the resource
   while the machine starts and its host enrolls, then the host prepares
-  the workspace through the relay.
+  the workspace through the exec relay.
 - **Enroll.** The machine's host trades its key once. While the machine
   is warm it is told to ask again.
 - **Snapshot.** At a loop's end, for a session kept by snapshots, what

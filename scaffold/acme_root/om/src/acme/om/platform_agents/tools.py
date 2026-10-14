@@ -62,6 +62,7 @@ from acme.om.exceptions import (
     Unavailable,
     ValidationFailed,
 )
+from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostStatus
 from acme.om.intake import IntakeManagerInterface
@@ -73,7 +74,6 @@ from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.types.project import Project
-from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.content import MAX_NAME
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolRequestHeader
@@ -1231,12 +1231,12 @@ class ReadWaitImpl(NativeToolImpl):
         sessions: Callable[[], AgentSessionsManagerInterface],
         work: Callable[[], WorkManagerInterface],
         hosts: Callable[[], HostsManagerInterface],
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
     ) -> None:
         self._sessions = sessions
         self._work = work
         self._hosts = hosts
-        self._relay = relay
+        self._exec_relay = exec_relay
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -1266,7 +1266,7 @@ class ReadWaitImpl(NativeToolImpl):
                 _pool_host(status)
                 for status in (await self._hosts().get_hosts(ctx, pool.id))[:HOSTS_MAX]
             )
-            binding = await self._relay().binding_of(ctx, session.id)
+            binding = await self._exec_relay().binding_of(ctx, session.id)
             if binding is not None:
                 holder = await self._hosts().get_host(ctx, pool.id, binding.host_id)
                 # A revoked host took the workspace with it: another host of

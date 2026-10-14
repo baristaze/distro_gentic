@@ -1,4 +1,4 @@
-"""Pure rules of the relay: the ids an item and its queue rows take from the
+"""Pure rules of the exec relay: the ids an item and its queue rows take from the
 call's key, what a repeat of an item may do, what an item asks of its host,
 which writer epoch is stale, and how a settled item reads. Values in, values
 out; no clock, no storage, no settings."""
@@ -9,13 +9,13 @@ from uuid import UUID
 
 from acme.infra.workspaces import EgressMode, IsolationMode, IsolationSpec
 from acme.om.base import derived_id, thaw_mapping
+from acme.om.exec_relay.types.exec import ExecItem, ExecState
 from acme.om.placement.types.work import ExecEffect, HostIsolation
-from acme.om.relay.types.exec import ExecItem, ExecState
 from acme.om.work.types.work_item import WorkItem
 
 UNSAFE: ExecEffect = "unsafe"
 
-CONTROL_KIND = "relay.exec_control.created"
+CONTROL_KIND = "exec_relay.exec_control.created"
 """The kind of the outbox row a control message lands with: the push of it
 wakes the control stream of the host it is for, wherever that stream is
 held open."""
@@ -126,7 +126,7 @@ def held_by(item: ExecItem, worker_id: str) -> bool:
 
 
 def claimed_row(item: ExecItem) -> WorkItem:
-    """The queue row as its host's claim took it, which the relay settles
+    """The queue row as its host's claim took it, which the exec relay settles
     for the host."""
     assert item.claim is not None  # held_by's own rule
     return WorkItem.model_validate(thaw_mapping(item.claim))

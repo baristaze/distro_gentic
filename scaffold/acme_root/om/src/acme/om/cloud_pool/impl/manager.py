@@ -52,12 +52,12 @@ from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import MachineSnapshot, PoolMachine
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Enrollment
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool, Region
-from acme.om.relay.manager import RelayManagerInterface
 from acme.om.tenancy.rules import hash_token
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.types.snapshot import KeptSnapshot
@@ -100,7 +100,7 @@ class CloudPoolOptions(Platform):
 
 
 class CloudPoolManagerImpl(CloudPoolManagerInterface):
-    """`hosts`, `placed`, and `relay` answer at call time, as the root builds
+    """`hosts`, `placed`, and `exec_relay` answer at call time, as the root builds
     them after the tools."""
 
     def __init__(
@@ -110,7 +110,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         seeds: SeedsInterface,
         hosts: Callable[[], HostsManagerInterface],
         placed: Callable[[], PlacedWorkspacesInterface],
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
         options: CloudPoolOptions,
         *,
         session_gone: SessionGone,
@@ -124,7 +124,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self._seeds = seeds
         self._hosts = hosts
         self._placed = placed
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._options = options
         self._session_gone = session_gone
         self._expired = expired
@@ -438,7 +438,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, pool: HostPool
     ) -> Workspace:
         """The workspace once the machine's host holds it, waited on a while:
-        its host is asked to prepare it through the relay, as any host is."""
+        its host is asked to prepare it through the exec relay, as any host is."""
         by = self._clock() + self._options.ready_wait
         wait = self._options.first_poll
         while True:

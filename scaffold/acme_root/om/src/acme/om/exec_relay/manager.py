@@ -1,5 +1,5 @@
-"""The relay swimlane: a tool call into a customer's wall as keyed `exec`
-work. The runner's relay transport sends each operation of a call and waits
+"""The exec relay swimlane: a tool call into a customer's wall as keyed `exec`
+work. The runner's exec relay transport sends each operation of a call and waits
 for it; the host that holds the session's workspace claims it under a
 lease, reads it, streams its output, and pushes how it ended, which is
 stored under the call's key; a host's control stream stops it at once."""
@@ -10,8 +10,7 @@ from uuid import UUID
 
 from acme.infra.workspaces import IsolationSpec
 from acme.om.context import RequestContext, TenantContext
-from acme.om.hosts.types.host import HostIdentity
-from acme.om.relay.types.exec import (
+from acme.om.exec_relay.types.exec import (
     ExecCall,
     ExecControl,
     ExecDetail,
@@ -22,12 +21,13 @@ from acme.om.relay.types.exec import (
     StopKind,
     WorkspaceBinding,
 )
+from acme.om.hosts.types.host import HostIdentity
 from acme.om.retention.crossing import Crossing
 from acme.om.work.types.work_item import WorkItem
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
-class RelayManagerInterface(ABC):
+class ExecRelayManagerInterface(ABC):
     # Where a session's workspace is.
 
     @abstractmethod
@@ -193,7 +193,7 @@ class RelayManagerInterface(ABC):
         the host does not hold under a live claim."""
         ...
 
-    # The runner's side: its relay transport, which runs below any context,
+    # The runner's side: its exec relay transport, which runs below any context,
     # so each call mints the service context of the session's tenant.
 
     @abstractmethod
@@ -353,7 +353,7 @@ class RelayManagerInterface(ABC):
 
     @abstractmethod
     async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
-        """Platform-internal: what the relay keeps of a session the sweep
+        """Platform-internal: what the exec relay keeps of a session the sweep
         purges: its items with their queue rows, their output, its controls,
         and its binding."""
         ...

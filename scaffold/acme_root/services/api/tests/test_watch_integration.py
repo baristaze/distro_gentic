@@ -18,7 +18,7 @@ from test_rate_limits_integration import over_the_stack
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id
 from acme.om.exceptions import StaleWriter
-from acme.om.relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.stream import TextPart
 from acme.om.watch.impl.manager import SENT
@@ -43,7 +43,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         offers_none = make_session().model_copy(update={"tools": ()})
         session = await managers.agent_sessions.create_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
-        await managers.relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
+        await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
         await managers.workspaces.pinned(ctx, session.id, SPEC)
         agents_epoch = await managers.steps.begin_run(ctx, session.id)
 

@@ -22,10 +22,10 @@ from fastapi import FastAPI
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
+from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
-from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
 from acme.infra.secrets.local import SecretsLocalImpl

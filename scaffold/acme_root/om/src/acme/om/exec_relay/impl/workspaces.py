@@ -35,26 +35,26 @@ from acme.infra.workspaces import (
 )
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
+from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.rules import asks
+from acme.om.exec_relay.types.exec import WorkspaceBinding
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import SNAPSHOTS, snapshots_advertised
 from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
-from acme.om.relay.manager import RelayManagerInterface
-from acme.om.relay.rules import asks
-from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.work.types.work_item import WorkStatus
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
 class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
-    """`relay` answers at call time, as the root builds the relay after the
+    """`exec_relay` answers at call time, as the root builds the exec relay after the
     tools. A restore is waited on for `restore_wait`, its work read again at
     a wait that doubles from `first_poll` to `last_poll`."""
 
     def __init__(
         self,
-        relay: Callable[[], RelayManagerInterface],
+        exec_relay: Callable[[], ExecRelayManagerInterface],
         hosts: Callable[[], HostsManagerInterface],
         *,
         restore_wait: timedelta = timedelta(minutes=5),
@@ -63,7 +63,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self._relay = relay
+        self._exec_relay = exec_relay
         self._hosts = hosts
         self._restore_wait = restore_wait
         self._first_poll = first_poll
@@ -91,7 +91,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
             await self._snapshots_offered(ctx, placed, session_id, spec)
         if restore is not None:
             return await self._restored(ctx, placed, session_id, spec, restore)
-        binding = await self._relay().binding_of(ctx, session_id)
+        binding = await self._exec_relay().binding_of(ctx, session_id)
         if binding is not None:
             holder = await self._hosts().get_host(ctx, placed.pool.id, binding.host_id)
             if holder is not None and holder.host.revoked_at is None:
@@ -108,8 +108,8 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
             # another host of the pool prepares one.
         # Read before the ask: a prepare that failed is followed by a new
         # one, and the run still says why the last was refused.
-        refused = await self._relay().prepare_refusal(ctx, session_id)
-        await self._relay().ask_prepare(ctx, session_id, spec)
+        refused = await self._exec_relay().prepare_refusal(ctx, session_id)
+        await self._exec_relay().ask_prepare(ctx, session_id, spec)
         why = "" if refused is None else f"; a host refused it: {refused}"
         raise IsolationRefused(
             f"no host of pool {placed.pool.name} holds session {session_id}'s workspace yet "
@@ -126,7 +126,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         *,
         kept_for: UUID | None = None,
     ) -> UUID:
-        item_id = await self._relay().ask_snapshot(
+        item_id = await self._exec_relay().ask_snapshot(
             ctx, session_id, spec, snapshot_id, kept_for=kept_for
         )
         if item_id is None:
@@ -136,13 +136,13 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         return item_id
 
     async def refusal_of(self, ctx: TenantContext, item_id: UUID) -> str | None:
-        row = await self._relay().workspace_work(ctx, item_id)
+        row = await self._exec_relay().workspace_work(ctx, item_id)
         if row.status is not WorkStatus.FAILED:
             return None
         return row.last_error or "the host gave no reason"
 
     async def erase_on_host(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
-        await self._relay().ask_erase(ctx, session_id, host_id)
+        await self._exec_relay().ask_erase(ctx, session_id, host_id)
 
     async def _snapshots_offered(
         self, ctx: TenantContext, placed: PlacementState, session_id: UUID, spec: IsolationSpec
@@ -181,7 +181,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
     ) -> Workspace:
         """The workspace once a host restored it from `restore`."""
         assert placed.pool is not None
-        relay = self._relay()
+        relay = self._exec_relay()
         item_id = await relay.ask_restore(ctx, session_id, spec, restore)
         by = self._clock() + self._restore_wait
         wait = self._first_poll

@@ -53,17 +53,17 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   of, as after a restore, is left alone and logged. One whose session is
   kept by snapshots stays while no snapshot holds it as it stands, since
   a release would lose what its commands wrote outside its files. Then it
-  reads every workspace a tenant's host holds, by the relay's bindings,
-  and holds each to the same proofs. One whose loop is parked on a hand-over is
-  the person's, and stays. Past its grace, its work is pushed to a
-  snapshot ref through the relay, unless a snapshot after the session's
-  last step holds it already, as a loop's end leaves it; only then is its
-  host asked to let the instance go. One whose release was asked since
-  its session's last loop is not asked again, answered or failed (a
-  failed one is logged), one whose host is offline waits for a later
-  pass, and a deleted tenant's is left to the tenant's purge. The sweep
-  purges no rows: the purges, and the purge login, are the maintenance
-  worker's.
+  reads every workspace a tenant's host holds, by the exec relay's
+  bindings, and holds each to the same proofs. One whose loop is parked
+  on a hand-over is the person's, and stays. Past its grace, its work is
+  pushed to a snapshot ref through the exec relay, unless a snapshot
+  after the session's last step holds it already, as a loop's end leaves
+  it; only then is its host asked to let the instance go. One whose
+  release was asked since its session's last loop is not asked again,
+  answered or failed (a failed one is logged), one whose host is offline
+  waits for a later pass, and a deleted tenant's is left to the tenant's
+  purge. The sweep purges no rows: the purges, and the purge login, are
+  the maintenance worker's.
 
 The runner holds the model providers' keys and runs tools in the
 workspaces its settings name. It holds no purge login. Every call it

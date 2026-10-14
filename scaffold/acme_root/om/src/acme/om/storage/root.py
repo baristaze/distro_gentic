@@ -15,6 +15,7 @@ from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
+from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
@@ -29,7 +30,6 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.projects.storage import ProjectStorageInterface
-from acme.om.relay.storage import RelayStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
@@ -147,7 +147,7 @@ class StorageInterface(ABC):
     def get_benchmark_storage(self) -> BenchmarkStorageInterface: ...
 
     @abstractmethod
-    def get_relay_storage(self) -> RelayStorageInterface: ...
+    def get_exec_relay_storage(self) -> ExecRelayStorageInterface: ...
 
     @abstractmethod
     def get_workspace_storage(self) -> WorkspaceStorageInterface: ...

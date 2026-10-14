@@ -162,11 +162,11 @@ not; a recovery that a missed beat starts, rather than the sweep.
 ## FLT-08 The sweep carries the platform's duties
 
 **Principle.** The platform adds its duties to the sweep: an expired
-loop is requeued; an expired `exec` item follows the relay transport; a
-workspace instance nobody claims is purged; a hold nobody settled
-settles; an approval past its expiry is asked again; a session with a
-pending input and no queued loop is woken; and expired content's keys
-are revoked and expired shape purged.
+loop is requeued; an expired `exec` item follows the exec relay
+transport; a workspace instance nobody claims is purged; a hold nobody
+settled settles; an approval past its expiry is asked again; a session
+with a pending input and no queued loop is woken; and expired content's
+keys are revoked and expired shape purged.
 
 **Source.** Failure at Agent Fleet Scale.
 

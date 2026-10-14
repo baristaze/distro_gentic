@@ -46,7 +46,7 @@ from acme.om.connectors.types.connector import (
 )
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import Conflict, NotAuthorized, ValidationFailed
-from acme.om.relay.types.exec import McpRequest
+from acme.om.exec_relay.types.exec import McpRequest
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -146,7 +146,7 @@ class NoConnection(McpClientSdkImpl):
 
 @dataclass
 class HostCalls:
-    """The host that holds a session's workspace, as the relay reaches it:
+    """The host that holds a session's workspace, as the exec relay reaches it:
     each call it was sent, and the answer it gives."""
 
     answer: McpAnswer

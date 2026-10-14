@@ -33,6 +33,7 @@ from contracts import (
     connector_storage,
     event_storage,
     evidence_storage,
+    exec_relay_storage,
     fill_set_storage,
     hosts_storage,
     idempotency_storage,
@@ -48,7 +49,6 @@ from contracts import (
     platform_agents_storage,
     privacy_storage,
     project_storage,
-    relay_storage,
     retention_storage,
     spend_account_storage,
     spend_ledger_storage,
@@ -112,8 +112,8 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sweep's read of running exec items whose lease ended, each named
         # with its tenant, whose service context the sweep settles it under,
         # and of the workspaces hosts hold, the same way.
-        ("RelayStorageInterface", "read_bindings"),
-        ("RelayStorageInterface", "read_expired"),
+        ("ExecRelayStorageInterface", "read_bindings"),
+        ("ExecRelayStorageInterface", "read_expired"),
         # The sweep's requeue of expired leases: a named write in the system
         # scope, like the claim it undoes. A crashed worker's item waits one
         # pass for it, not the turn of its tenant in a ring of every tenant.
@@ -230,7 +230,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "PlatformAgentsStorageInterface": platform_agents_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
     "ProjectStorageInterface": project_storage.CROSS_TENANT_CASES,
-    "RelayStorageInterface": relay_storage.CROSS_TENANT_CASES,
+    "ExecRelayStorageInterface": exec_relay_storage.CROSS_TENANT_CASES,
     "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
@@ -270,7 +270,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And the release of the hold the API's edge keeps around a request,
         # by the request id the rows name, before any stage is established.
         ("OutboxRelayInterface", "release"),
-        # And the enqueue the relay makes: it runs on the relay's side of the
+        # And the enqueue the exec relay makes: it runs on the exec relay's side of the
         # handoff, under the tenant the row names, and stamps the actor from it.
         ("WorkManagerInterface", "enqueue_relayed"),
         # The queue's purge, like the outbox's: one sweep step across tenants.
@@ -302,10 +302,10 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And the hosts whose stores keep its snapshots, which that purge asks
         # to erase them before their records go.
         ("WorkspacesManagerInterface", "snapshot_hosts"),
-        ("RelayManagerInterface", "erase_purged"),
+        ("ExecRelayManagerInterface", "erase_purged"),
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),
-        ("RelayManagerInterface", "purge_session"),
+        ("ExecRelayManagerInterface", "purge_session"),
         # And what ends with them on the queue: the commands of a purged
         # session, and the work on a revoked host's lane, its one claimant.
         ("WorkManagerInterface", "end_open_for_target"),
@@ -315,7 +315,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("WorkManagerInterface", "failed_within"),
         # The runner sweep's read of the workspaces hosts hold, across
         # tenants, each named with its tenant.
-        ("RelayManagerInterface", "bindings"),
+        ("ExecRelayManagerInterface", "bindings"),
         # The platform's gauges, read across every tenant like the queue's.
         ("PlacementOperatorManagerInterface", "agent_fleet_counts"),
         # And the sweep's carry of each share the release before wrote into
@@ -405,35 +405,35 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # found: the ingress reads the tenant that connected it from the
         # request stage, and queues the event under that tenant.
         ("IntakeManagerInterface", "tenant_of"),
-        # The relay runs below any principal: the runner's transport sends,
+        # The exec relay runs below any principal: the runner's transport sends,
         # watches, stops, and recovers a session's exec items, the watch
         # reads and interrupts a session's running ones, and a host
         # reads, streams, settles, and renews the items it holds and reads its
         # control messages. Each mints its tenant's service context from this
         # stage, as the claim does.
-        ("RelayManagerInterface", "send"),
-        ("RelayManagerInterface", "watch"),
-        ("RelayManagerInterface", "stop"),
-        ("RelayManagerInterface", "outcome_of"),
-        ("RelayManagerInterface", "running"),
-        ("RelayManagerInterface", "interrupt_running"),
-        ("RelayManagerInterface", "detail"),
-        ("RelayManagerInterface", "push_part"),
-        ("RelayManagerInterface", "push_result"),
-        ("RelayManagerInterface", "extend"),
-        ("RelayManagerInterface", "controls"),
+        ("ExecRelayManagerInterface", "send"),
+        ("ExecRelayManagerInterface", "watch"),
+        ("ExecRelayManagerInterface", "stop"),
+        ("ExecRelayManagerInterface", "outcome_of"),
+        ("ExecRelayManagerInterface", "running"),
+        ("ExecRelayManagerInterface", "interrupt_running"),
+        ("ExecRelayManagerInterface", "detail"),
+        ("ExecRelayManagerInterface", "push_part"),
+        ("ExecRelayManagerInterface", "push_result"),
+        ("ExecRelayManagerInterface", "extend"),
+        ("ExecRelayManagerInterface", "controls"),
         # And its answers to a prepare it claimed, which binds the session,
         # and to a release.
-        ("RelayManagerInterface", "prepared"),
-        ("RelayManagerInterface", "released"),
-        ("RelayManagerInterface", "snapshotted"),
+        ("ExecRelayManagerInterface", "prepared"),
+        ("ExecRelayManagerInterface", "released"),
+        ("ExecRelayManagerInterface", "snapshotted"),
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
-        ("RelayManagerInterface", "settle_expired"),
+        ("ExecRelayManagerInterface", "settle_expired"),
         # And the settlement of the items a revoked host held or was to run,
         # under its tenant's service context, whoever revoked it: a person,
         # or a host whose credential was presented twice.
-        ("RelayManagerInterface", "end_host"),
+        ("ExecRelayManagerInterface", "end_host"),
         # A live read, by its handle alone: the handle is the authority, as a
         # presigned URL is, and the read mints no context.
         ("WatchManagerInterface", "read_live"),

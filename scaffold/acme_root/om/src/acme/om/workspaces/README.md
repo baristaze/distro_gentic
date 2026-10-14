@@ -189,12 +189,13 @@ rebuilt from.
 - The checkout runs in the workspace through the transport the tools
   take, each command under the epoch its run held when it began, so a run
   that lost its claim moves nothing: for a session
-  pinned to its tenant's hosts, the relay to the host that holds it.
-  Nothing it runs reaches the repository: a bundle comes in through the
-  transport's files, and one goes out the same way.
+  pinned to its tenant's hosts, the exec relay to the host that holds
+  it. Nothing it runs reaches the repository: a bundle comes in through
+  the transport's files, and one goes out the same way.
 - A pinned session's workspace is made by a host of its pool, not by this
-  process (`placed.PlacedWorkspacesInterface`, the relay's): it is held to
-  the same pin, and its loop waits on the resource until a host holds it.
+  process (`placed.PlacedWorkspacesInterface`, the exec relay's): it is
+  held to the same pin, and its loop waits on the resource until a host
+  holds it.
 - A session's project and the repository it binds are the projects'
   rows, read through `WorkspaceProjectsInterface`; a repository is read
   over HTTPS on the platform's host (`impl/reader.py`), with the tags in
@@ -208,9 +209,9 @@ rebuilt from.
   gone for any reason parks the loop for a person.
 - Outside `local`, the evidence's executor is this namespace's: the root
   builds it over infra's provider and transport for a session of the
-  cloud, and over the relay's instances (`PlacedInstancesInterface`, in
-  `placed.py`) for one inside its tenant's wall, and reads its tree
-  through `checks_tree`.
+  cloud, and over the exec relay's instances
+  (`PlacedInstancesInterface`, in `placed.py`) for one inside its
+  tenant's wall, and reads its tree through `checks_tree`.
 - What a host offers beyond its provider is a `HostOffer`, its owner's
   and its probe's. The default offers nothing more: a host of the
   platform's cloud.
