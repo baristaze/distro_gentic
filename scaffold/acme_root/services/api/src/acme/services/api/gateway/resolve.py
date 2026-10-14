@@ -10,9 +10,9 @@ from starlette.requests import HTTPConnection
 
 from acme.services.api.services import (
     AdminServiceInterface,
+    AgentAutomationsServiceInterface,
     AgentBillingServiceInterface,
     AgentSessionsServiceInterface,
-    AutomationsServiceInterface,
     BenchmarksServiceInterface,
     BudgetsServiceInterface,
     ConnectorsServiceInterface,
@@ -110,8 +110,8 @@ def watch_service(connection: HTTPConnection) -> WatchServiceInterface:
     return services_of(connection).get_watch_service()
 
 
-def automations_service(connection: HTTPConnection) -> AutomationsServiceInterface:
-    return services_of(connection).get_automations_service()
+def agent_automations_service(connection: HTTPConnection) -> AgentAutomationsServiceInterface:
+    return services_of(connection).get_agent_automations_service()
 
 
 def budgets_service(connection: HTTPConnection) -> BudgetsServiceInterface:
@@ -188,7 +188,9 @@ HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
 FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
 RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
-AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
+AgentAutomationsService = Annotated[
+    AgentAutomationsServiceInterface, Depends(agent_automations_service)
+]
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
 AgentBillingService = Annotated[AgentBillingServiceInterface, Depends(agent_billing_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]

@@ -15,6 +15,8 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl, Integr
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations.impl.manager import AgentAutomationsOptions
+from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
 from acme.om.agent_billing.root import (
     build_agent_billing_purge,
@@ -25,8 +27,6 @@ from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
-from acme.om.automations.impl.manager import AutomationsOptions
-from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
@@ -158,7 +158,7 @@ def worker_managers(
     money gate, is refused at boot.
 
     The catalog classes every tool a session can name, as the API's and the
-    session runner's do, since an intake event, an automation's start, and
+    session runner's do, since an intake event, an agent automation's start, and
     a message are checked against a session's tools here: `platform_agents`
     ships the platform's agents, which a deployed worker reads from its
     corpus root and refuses to boot with none, and the runner's `comment`
@@ -235,7 +235,7 @@ def worker_managers(
         workspace_projects=ports.workspace_projects,
         product_kinds=ports.kinds,
         models_layer=matrix.layer,
-        # An automation's start and an intake event make sessions here, each
+        # An agent automation's start and an intake event make sessions here, each
         # with its kind's manual.
         agents_layer=PlaybooksLayer(storage).agents,
     )
@@ -253,7 +253,7 @@ class WorkerContainer:
         integrations: IntegrationsInterface,
         kinds: ProductKinds | None = None,
     ) -> None:
-        """`kinds` are the product's, whose automation actions its firings
+        """`kinds` are the product's, whose agent automation actions its firings
         and its ticks run; None adds none."""
         kinds = kinds or ProductKinds()
         self.settings = settings
@@ -277,13 +277,13 @@ class WorkerContainer:
         # playbooks, knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
-        # Outside a local stack, an automation's session starts in a project:
+        # Outside a local stack, an agent automation's session starts in a project:
         # a start that names none fires nothing.
-        self.automations = build_automations(
+        self.agent_automations = build_agent_automations(
             storage,
             managers,
             project_required=settings.environment != LOCAL,
-            options=AutomationsOptions(purge_batch=batch),
+            options=AgentAutomationsOptions(purge_batch=batch),
             actions=kinds.actions,
             playbooks=lambda: self.playbooks,
         )

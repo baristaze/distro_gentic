@@ -38,7 +38,7 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
   to its project from its first moment. A project of another tenant is
   not found, and nothing is started. The API's start names the
   session's project, and outside `local` refuses a session that names
-  none. An automation's start names its project too, and outside
+  none. An agent automation's start names its project too, and outside
   `local` one that names none starts nothing.
 - **Spawn or hand over.** A session that another session spawns, or
   hands work to, belongs to the same project as that session.
@@ -83,5 +83,5 @@ session through the [agents](../agents/README.md). A namespace that keys
 a policy by project reads `project_of`, and
 [retention](../retention/README.md) takes a new session's project from
 here; one that judges an outward write reads `work_repository`.
-[Automations](../automations/README.md) start their sessions through the
-projects' start, in the project an automation's action names.
+[Agent automations](../agent_automations/README.md) start their sessions through the
+projects' start, in the project an agent automation's action names.

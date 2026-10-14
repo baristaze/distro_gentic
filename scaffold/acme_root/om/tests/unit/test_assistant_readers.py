@@ -176,8 +176,10 @@ async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path
         "huge": calls(kinds.LIST_PROJECTS, "huge", limit=10_000),
         "status": calls(kinds.LIST_SESSIONS, "status", status="stuck"),
         "reason": calls(kinds.LIST_SESSIONS, "reason", park_reason="person", status="idle"),
-        "cursor": calls(kinds.LIST_AUTOMATIONS, "cursor", after="page-2"),
-        "runs": calls(kinds.READ_AUTOMATION, "runs", automation_id=str(new_id()), runs=500),
+        "cursor": calls(kinds.LIST_AGENT_AUTOMATIONS, "cursor", after="page-2"),
+        "runs": calls(
+            kinds.READ_AGENT_AUTOMATION, "runs", agent_automation_id=str(new_id()), runs=500
+        ),
     }
     platform.anthropic.add(
         reply(said("Let me read."), *malformed.values()),

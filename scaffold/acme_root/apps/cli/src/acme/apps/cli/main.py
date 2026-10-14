@@ -39,8 +39,8 @@ from acme.apps.cli.product_commands import PRODUCT_COMMANDS
 from acme.client.client import ApiClient, ApiError
 from acme.client.realtime import ChannelRefused
 from acme.client.types import (
+    AgentAutomationRequest,
     AgentSessionView,
-    AutomationRequest,
     ConnectorReviewRequest,
     ConnectorView,
     IssuedLoginView,
@@ -656,32 +656,32 @@ def put_fetch_credential(
     run(go, api)
 
 
-automation_app = typer.Typer(
-    help="An automation: a trigger, an action, and its limits.", no_args_is_help=True
+agent_automation_app = typer.Typer(
+    help="An agent automation: a trigger, an action, and its limits.", no_args_is_help=True
 )
-app.add_typer(automation_app, name="automation")
+app.add_typer(agent_automation_app, name="agent-automation")
 
 
-@automation_app.command("create")
-def create_automation(
+@agent_automation_app.command("create")
+def create_agent_automation(
     path: Annotated[
         Path,
         typer.Argument(
-            help="The automation as JSON, as the API takes it.", exists=True, dir_okay=False
+            help="The agent automation as JSON, as the API takes it.", exists=True, dir_okay=False
         ),
     ],
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Create an automation from a file, in person. It runs as you unless it
+    """Create an agent automation from a file, in person. It runs as you unless it
     says otherwise."""
     try:
-        automation = AutomationRequest.model_validate_json(path.read_bytes())
+        agent_automation = AgentAutomationRequest.model_validate_json(path.read_bytes())
     except ValueError as error:
-        raise typer.BadParameter(f"{path} is no automation: {error}") from None
+        raise typer.BadParameter(f"{path} is no agent automation: {error}") from None
 
     async def go(client: ApiClient) -> None:
-        made = await client.create_automation(automation)
+        made = await client.create_agent_automation(agent_automation)
         if as_json:
             typer.echo(made.model_dump_json(indent=2))
         else:
@@ -690,12 +690,12 @@ def create_automation(
     run(go, api)
 
 
-@automation_app.command("list")
-def list_automations(as_json: Json = False, api: Api = None) -> None:
-    """The org's automations, one a line."""
+@agent_automation_app.command("list")
+def list_agent_automations(as_json: Json = False, api: Api = None) -> None:
+    """The org's agent automations, one a line."""
 
     async def go(client: ApiClient) -> None:
-        found = await client.automations()
+        found = await client.agent_automations()
         if as_json:
             typer.echo(json.dumps([a.model_dump(mode="json") for a in found], indent=2))
             return

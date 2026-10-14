@@ -13,7 +13,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type AutomationView, type KnowledgeView, type MeView, type ProjectView } from "@acme/client";
+import { ApiError, type AgentSessionView, type AgentAutomationView, type KnowledgeView, type MeView, type ProjectView } from "@acme/client";
 import { useSessionStore } from "../store/session";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
@@ -37,7 +37,7 @@ const PROJECT: ProjectView = {
   updated_at: at,
   updated_by: user.id,
 };
-const AUTOMATION: AutomationView = {
+const AGENT_AUTOMATION: AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
@@ -50,7 +50,7 @@ const AUTOMATION: AutomationView = {
   created_by: user.id,
   updated_at: at,
   updated_by: user.id,
-} as AutomationView;
+} as AgentAutomationView;
 const ENTRY: KnowledgeView = {
   id: "k1",
   title: "How we name migrations",
@@ -83,7 +83,7 @@ const SESSION = {
 } as AgentSessionView;
 
 /** A param of a screen's address, as a fixture's id. */
-const PARAMS: Record<string, string> = { sessionId: "s1", automationId: "a1", entryId: "k1", projectId: "p1" };
+const PARAMS: Record<string, string> = { sessionId: "s1", agentAutomationId: "a1", entryId: "k1", projectId: "p1" };
 
 function answer(path: string): unknown {
   const [bare = "", query = ""] = path.split("?");
@@ -99,8 +99,8 @@ function answer(path: string): unknown {
   if (bare === "/v1/knowledge/k1") return ENTRY;
   if (bare === "/v1/projects") return [PROJECT];
   if (bare === "/v1/projects/p1") return PROJECT;
-  if (bare === "/v1/automations") return [AUTOMATION];
-  if (bare === "/v1/automations/a1") return AUTOMATION;
+  if (bare === "/v1/agent-automations") return [AGENT_AUTOMATION];
+  if (bare === "/v1/agent-automations/a1") return AGENT_AUTOMATION;
   if (bare === "/v1/provider-keys" || bare === "/v1/matrix/options" || bare === "/v1/matrix/choices" || bare === "/v1/events/recent") return [];
   if (bare.startsWith("/v1/agent-sessions/s1")) {
     const part = bare.split("/")[4];
@@ -175,7 +175,7 @@ async function fieldsOf(address: string): Promise<{ title: string; fields: { nam
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   await act(async () => root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
   await settle();
-  for (const opens of ["Delete this organization", "Delete my account", "Edit the automation", "Edit the entry"]) {
+  for (const opens of ["Delete this organization", "Delete my account", "Edit the agent automation", "Edit the entry"]) {
     const button = [...container.querySelectorAll("button")].find((each) => each.textContent === opens);
     if (button) await act(async () => button.click());
   }
@@ -206,8 +206,8 @@ it("mounts every platform screen, and finds no text field on any without a water
   expect(seen.get("/settings/api-keys")).toContain("New key name");
   expect(seen.get("/settings/profile")).toEqual(expect.arrayContaining(["Name", `Type your email, ${user.email}, to confirm`]));
   expect(seen.get("/settings/general")).toContain(`Type the organization's name, ${org.name}, to confirm`);
-  expect(seen.get("/automations")).toEqual(expect.arrayContaining(["Name", "Session title", "Brief", "Cost cap a run"]));
-  expect(seen.get("/automations/a1")).toContain("Brief");
+  expect(seen.get("/agent-automations")).toEqual(expect.arrayContaining(["Name", "Session title", "Brief", "Cost cap a run"]));
+  expect(seen.get("/agent-automations/a1")).toContain("Brief");
   expect(seen.get("/knowledge")).toEqual(expect.arrayContaining(["Title", "Recalled by"]));
   expect(seen.get("/knowledge/k1")).toContain("Recalled by");
   expect(seen.get("/")).toContain("Prompt");

@@ -1,5 +1,5 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, automations, playbooks, knowledge, and notifications
+with the intake, agent_automations, playbooks, knowledge, and notifications
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
 the playbooks layer, and the knowledge layer, and each manager built over
@@ -22,6 +22,8 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_automations.manager import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -29,8 +31,6 @@ from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.automations.manager import AutomationsManagerInterface
-from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import (
     AppContext,
@@ -118,7 +118,7 @@ KINDS = (STEADY, ACTING, ASKING, DELEGATING)
 class Members:
     """The adopter's transition: each person a case names holds a member's
     place with the role it gives, read live, as an agent's call or an
-    automation's firing reads it; anyone else holds none."""
+    agent automation's firing reads it; anyone else holds none."""
 
     org_id: UUID
     roles: dict[UUID, Role] = field(default_factory=dict[UUID, Role])
@@ -148,12 +148,12 @@ class Wired:
     clock: Clock
     members: Members
     principals: PrincipalContext
-    """The root's transition: the tenant's automation principal by its
+    """The root's transition: the tenant's agent automation principal by its
     grant, and everyone else as `members` answers."""
     owner: TenantContext
     service: TenantContext
     intake: IntakeManagerInterface
-    automations: AutomationsManagerInterface
+    agent_automations: AgentAutomationsManagerInterface
     playbooks: PlaybooksManagerInterface
     knowledge: KnowledgeManagerInterface
     notifications: NotificationsManagerInterface
@@ -256,8 +256,8 @@ def wired(
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `project_required`
-    is the automations' as a stack outside `local` sets it, `actions` the
-    product's own kinds of automation action, and `credentials` the key
+    is the agent automations' as a stack outside `local` sets it, `actions` the
+    product's own kinds of agent automation action, and `credentials` the key
     each of the loop's calls goes out on, the platform's unless said."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
@@ -276,7 +276,7 @@ def wired(
     )
     members = Members(org_id=owner.org_id)
     members.roles[owner.user_id] = Role.OWNER
-    principals = automation_principals(storage.get_automation_storage(), members)
+    principals = agent_automation_principals(storage.get_agent_automation_storage(), members)
     service = build_context(
         RequestContext(request_id=new_id(), app=WORKER),
         user_id=EMPTY_UUID,
@@ -370,7 +370,7 @@ def wired(
         owner=owner,
         service=service,
         intake=intake,
-        automations=build_automations(
+        agent_automations=build_agent_automations(
             storage,
             managers,
             project_required=project_required,

@@ -383,7 +383,7 @@ export function outputText(output: string): string {
 /** Who a message is from, when it is not a person: its card's label. */
 export function noteLabel(step: Pick<StepView, "actor" | "origin">): string | null {
   if (step.actor === "person") return null;
-  if (step.origin === "automation") return "From an automation";
+  if (step.origin === "automation") return "From an agent automation";
   if (step.origin === "parent") return "From the parent agent";
   if (step.actor === "program") return "From a program";
   if (step.actor === "external" || step.origin === "integration") return "From an integration";

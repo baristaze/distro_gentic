@@ -10,10 +10,10 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from acme.integrations.events import IntegrationInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
-from acme.om.automations import AutomationsManagerInterface
 from acme.om.base import Platform
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.evidence import EvidenceManagerInterface
@@ -27,14 +27,14 @@ from acme.om.platform_agents.tools import (
     DraftToolPolicyImpl,
     EditFileImpl,
     HandOffToEngineerImpl,
-    ListAutomationsImpl,
+    ListAgentAutomationsImpl,
     ListFilesImpl,
     ListHostsImpl,
     ListProjectsImpl,
     ListSessionsImpl,
     NoteFindingImpl,
     OpenPullRequestImpl,
-    ReadAutomationImpl,
+    ReadAgentAutomationImpl,
     ReadFileImpl,
     ReadKnowledgeImpl,
     ReadProjectImpl,
@@ -100,7 +100,7 @@ def with_shipped(
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
     relay: Callable[[], RelayManagerInterface],
-    automations: Callable[[], AutomationsManagerInterface],
+    agent_automations: Callable[[], AgentAutomationsManagerInterface],
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
     evidence: Callable[[], EvidenceManagerInterface],
@@ -112,7 +112,7 @@ def with_shipped(
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
     callables the root answers once it has built them; `intake`,
-    `knowledge`, and `automations` are built over the managers, so the
+    `knowledge`, and `agent_automations` are built over the managers, so the
     process that builds them answers them. `integrations` answers the
     integration of a name, the forge's among them, which the reviewer's
     reads reach, and the forge's comment when the process wires none of its
@@ -136,8 +136,8 @@ def with_shipped(
         ReadWaitImpl.SPEC,
         ListProjectsImpl.SPEC,
         ReadProjectImpl.SPEC,
-        ListAutomationsImpl.SPEC,
-        ReadAutomationImpl.SPEC,
+        ListAgentAutomationsImpl.SPEC,
+        ReadAgentAutomationImpl.SPEC,
         DraftToolPolicyImpl.SPEC,
         HandOffToEngineerImpl.SPEC,
         ReadPullRequestImpl.SPEC,
@@ -169,8 +169,8 @@ def with_shipped(
         ReadWaitImpl(sessions, work, hosts, relay),
         ListProjectsImpl(projects),
         ReadProjectImpl(projects),
-        ListAutomationsImpl(automations),
-        ReadAutomationImpl(automations),
+        ListAgentAutomationsImpl(agent_automations),
+        ReadAgentAutomationImpl(agent_automations),
         DraftToolPolicyImpl(policies, names, classes),
         HandOffToEngineerImpl(agents),
         ReadPullRequestImpl(intake, integrations),

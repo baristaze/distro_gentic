@@ -278,7 +278,7 @@ async def test_a_pass_within_its_budget_reaches_every_tenant(tmp_path: Path) -> 
 async def test_each_tenant_is_ticked_once_a_pass_and_a_failing_tick_stops_nothing(
     tmp_path: Path,
 ) -> None:
-    """A tick, such as the schedules of a tenant's automations, runs once for
+    """A tick, such as the schedules of a tenant's agent automations, runs once for
     every tenant a pass, before its purges; one that raises is logged, and
     the tenant's other ticks and purges still run."""
     container = build_container(tmp_path)

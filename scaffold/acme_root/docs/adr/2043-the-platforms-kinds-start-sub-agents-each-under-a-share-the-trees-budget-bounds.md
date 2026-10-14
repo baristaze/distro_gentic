@@ -60,9 +60,9 @@ and the assistant name none: a person starts them, and a spawn refuses
 them.
 
 **The tree's budget bounds them all.** A share bounds one child. The
-tree's budget, when the root has one, such as an automation's run cap,
-bounds the whole tree, whatever its shares add up to. A share below the
-tree's budget lets several children run before the tree refuses the
+tree's budget, when the root has one, such as an agent automation's run
+cap, bounds the whole tree, whatever its shares add up to. A share below
+the tree's budget lets several children run before the tree refuses the
 next call. With no budget on the tree, its sub-agents can spend at most
 ten times the largest share, 600, besides what the root spends, and
 every call still passes whatever budget its person, its project, and its
@@ -78,7 +78,8 @@ parent's session. So a parent's share never pays for its children.
   share, the tree up to its budget.
 - A tree with no budget of its own can spend up to 600 through its
   sub-agents. A tenant that wants less sets a budget on the person, the
-  project, or the tenant, or a run cap on the automation that starts it.
+  project, or the tenant, or a run cap on the agent automation that
+  starts it.
 - A session on the engineer's version 4 or analysis's version 2 keeps
   its tools and starts no sub-agent.
 - A product's kind may now spawn analysis too, under its share.

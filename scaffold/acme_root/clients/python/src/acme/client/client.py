@@ -21,10 +21,10 @@ import truststore
 
 from acme.client.types import (
     AdvertisementBody,
+    AgentAutomationRequest,
+    AgentAutomationView,
     AgentSessionPageView,
     AgentSessionView,
-    AutomationRequest,
-    AutomationView,
     ClaimantClaimView,
     ClaimantWorkView,
     ClaimView,
@@ -821,7 +821,7 @@ class ApiClient:
         return fetched.content
 
     # A tenant's configuration: its projects and the credential each one's
-    # repository is read with, its automations, what its sessions recall and
+    # repository is read with, its agent automations, what its sessions recall and
     # follow, and its layer of tool policy.
 
     async def create_project(
@@ -870,44 +870,44 @@ class ApiClient:
         )
         return FetchCredentialView.model_validate(given)
 
-    async def create_automation(
-        self, automation: AutomationRequest, *, idempotency_key: str | None = None
-    ) -> AutomationView:
+    async def create_agent_automation(
+        self, agent_automation: AgentAutomationRequest, *, idempotency_key: str | None = None
+    ) -> AgentAutomationView:
         """Made in person; it runs as its maker unless it says otherwise.
         Always under an idempotency key."""
         made = await self.request(
             "POST",
-            "/v1/automations",
-            json=automation.model_dump(mode="json", exclude_unset=True),
+            "/v1/agent-automations",
+            json=agent_automation.model_dump(mode="json", exclude_unset=True),
             idempotency_key=idempotency_key or str(uuid4()),
         )
-        return AutomationView.model_validate(made)
+        return AgentAutomationView.model_validate(made)
 
-    async def automations(
+    async def agent_automations(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
-    ) -> list[AutomationView]:
+    ) -> list[AgentAutomationView]:
         params: dict[str, Any] = {"limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/automations", params=params)
-        return [AutomationView.model_validate(automation) for automation in found]
+        found = await self.request("GET", "/v1/agent-automations", params=params)
+        return [AgentAutomationView.model_validate(agent_automation) for agent_automation in found]
 
-    async def automation(self, automation_id: UUID) -> AutomationView:
-        read = await self.request("GET", f"/v1/automations/{automation_id}")
-        return AutomationView.model_validate(read)
+    async def agent_automation(self, agent_automation_id: UUID) -> AgentAutomationView:
+        read = await self.request("GET", f"/v1/agent-automations/{agent_automation_id}")
+        return AgentAutomationView.model_validate(read)
 
-    async def update_automation(
-        self, automation_id: UUID, automation: AutomationRequest
-    ) -> AutomationView:
-        """The automation whole, as edited; one that runs as its creator is
-        edited by its creator alone, and one that runs as the automation
+    async def update_agent_automation(
+        self, agent_automation_id: UUID, agent_automation: AgentAutomationRequest
+    ) -> AgentAutomationView:
+        """The agent automation whole, as edited; one that runs as its creator is
+        edited by its creator alone, and one that runs as the agent automation
         principal takes its editor as its creator."""
         edited = await self.request(
             "PUT",
-            f"/v1/automations/{automation_id}",
-            json=automation.model_dump(mode="json", exclude_unset=True),
+            f"/v1/agent-automations/{agent_automation_id}",
+            json=agent_automation.model_dump(mode="json", exclude_unset=True),
         )
-        return AutomationView.model_validate(edited)
+        return AgentAutomationView.model_validate(edited)
 
     async def knowledge(
         self,

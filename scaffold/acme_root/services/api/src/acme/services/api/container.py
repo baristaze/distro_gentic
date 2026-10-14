@@ -20,8 +20,8 @@ from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
-from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
@@ -318,9 +318,9 @@ class AppContainer:
             # Outside a local stack, a session starts in a project.
             project_required=settings.environment != LOCAL,
             intake=intake,
-            # A person writes an automation here, so a product's action kind
+            # A person writes an agent automation here, so a product's action kind
             # is held to its shape when it is saved.
-            automations=build_automations(
+            agent_automations=build_agent_automations(
                 storage,
                 managers,
                 project_required=settings.environment != LOCAL,

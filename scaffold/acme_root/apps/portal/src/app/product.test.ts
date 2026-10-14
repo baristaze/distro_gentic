@@ -11,7 +11,7 @@ const platform: PortalProduct = {
     { path: "/sessions", element: page },
     { path: "/sessions/:sessionId", element: page },
   ],
-  nav: [{ id: "automations", label: "Automations", icon: null, to: "/automations", tip: "" }],
+  nav: [{ id: "agent_automations", label: "Agent automations", icon: null, to: "/agent-automations", tip: "" }],
   sessionTabs: [{ id: "step", label: "Step", icon: null, tip: "", offered: () => true, render: () => null }],
   tools: { run_command: { gist: () => "" } },
   settings: [{ group: "Agents", id: "projects", label: "Projects", icon: null, about: "", routes: [{ path: "/projects", element: page }] }],
@@ -39,7 +39,7 @@ it("joins a product's entries after the platform's, its agents first, its exampl
       examples: { starters: ["a", "b", "c"] },
     }),
   );
-  expect(joined.nav.map((entry) => entry.id)).toEqual(["automations", "lines"]);
+  expect(joined.nav.map((entry) => entry.id)).toEqual(["agent_automations", "lines"]);
   expect(joined.agents.map((agent) => agent.kind)).toEqual(["inspector", "engineer"]);
   expect(joined.examples).toEqual({ composer: "Describe a task", reply: "Reply", starters: ["a", "b", "c"] });
   expect(routePaths(shellRoutes(joined))).toEqual(["/", "/sessions", "/sessions/:", "/lines", "/projects"]);
@@ -64,8 +64,8 @@ it("refuses a product's settings page at a platform address, and a page at a pla
 });
 
 it("refuses a duplicate id of each kind of entry", () => {
-  expect(refusal({ nav: [{ id: "automations", label: "Mine", icon: null, to: "/mine", tip: "" }] })).toContain(
-    'left bar entry "automations"',
+  expect(refusal({ nav: [{ id: "agent_automations", label: "Mine", icon: null, to: "/mine", tip: "" }] })).toContain(
+    'left bar entry "agent_automations"',
   );
   expect(refusal({ sessionTabs: [{ id: "step", label: "Step", icon: null, tip: "", offered: () => true, render: () => null }] })).toContain(
     'session tab "step"',

@@ -650,6 +650,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Automations
+         * @description The tenant's agent automations by id, after the id `after` names.
+         */
+        get: operations["list_agent_automations_v1_agent_automations_get"];
+        put?: never;
+        /**
+         * Create Agent Automation
+         * @description An agent automation that runs as its maker, or as the agent automation principal.
+         */
+        post: operations["create_agent_automation_v1_agent_automations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-automations/principal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Principal */
+        get: operations["get_principal_v1_agent_automations_principal_get"];
+        /**
+         * Grant Principal
+         * @description The principal granted the role; a grant over a standing one keeps it.
+         */
+        put: operations["grant_principal_v1_agent_automations_principal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-automations/{agent_automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Automation */
+        get: operations["get_agent_automation_v1_agent_automations__agent_automation_id__get"];
+        /**
+         * Update Agent Automation
+         * @description The agent automation as edited. One that runs as its creator is edited by
+         *     its creator alone; one that runs as the agent automation principal takes its
+         *     editor as its creator.
+         */
+        put: operations["update_agent_automation_v1_agent_automations__agent_automation_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-billing/payments": {
         parameters: {
             query?: never;
@@ -1552,74 +1620,6 @@ export interface paths {
         put?: never;
         /** Start Sign In */
         post: operations["start_sign_in_v1_auth_sign_in_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Automations
-         * @description The tenant's automations by id, after the id `after` names.
-         */
-        get: operations["list_automations_v1_automations_get"];
-        put?: never;
-        /**
-         * Create Automation
-         * @description An automation that runs as its maker, or as the automation principal.
-         */
-        post: operations["create_automation_v1_automations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/principal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Principal */
-        get: operations["get_principal_v1_automations_principal_get"];
-        /**
-         * Grant Principal
-         * @description The principal granted the role; a grant over a standing one keeps it.
-         */
-        put: operations["grant_principal_v1_automations_principal_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/{automation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Automation */
-        get: operations["get_automation_v1_automations__automation_id__get"];
-        /**
-         * Update Automation
-         * @description The automation as edited. One that runs as its creator is edited by
-         *     its creator alone; one that runs as the automation principal takes its
-         *     editor as its creator.
-         */
-        put: operations["update_automation_v1_automations__automation_id__put"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3880,6 +3880,92 @@ export interface components {
             shell: string;
         };
         /**
+         * AgentAutomationPrincipalView
+         * @description The tenant's agent automation principal: its id, the role it holds, and who
+         *     granted it.
+         */
+        AgentAutomationPrincipalView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Granted By
+             * Format: uuid
+             */
+            granted_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            role: components["schemas"]["Role"];
+        };
+        /**
+         * AgentAutomationRequest
+         * @description An agent automation whole, as made or as edited.
+         */
+        AgentAutomationRequest: {
+            action: components["schemas"]["ActionBody"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            limits: components["schemas"]["LimitsBody"];
+            /** Name */
+            name: string;
+            /**
+             * Own Events
+             * @default false
+             */
+            own_events: boolean;
+            runs_as?: components["schemas"]["RunsAs"] | null;
+            trigger: components["schemas"]["TriggerBody"];
+        };
+        /**
+         * AgentAutomationView
+         * @description An agent automation, whom it runs as, and who made and last edited it.
+         */
+        AgentAutomationView: {
+            action: components["schemas"]["ActionView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            limits: components["schemas"]["LimitsView"];
+            /** Name */
+            name: string;
+            /** Own Events */
+            own_events: boolean;
+            runs_as: components["schemas"]["RunsAs"];
+            trigger: components["schemas"]["TriggerView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+        };
+        /**
          * AgentRefView
          * @description The agent that wrote a message: its kind and the session it runs in.
          *     The session is one of the same tree, which a reader of this session
@@ -4176,92 +4262,6 @@ export interface components {
             kind: string;
             /** Project Id */
             project_id: string | null;
-        };
-        /**
-         * AutomationPrincipalView
-         * @description The tenant's automation principal: its id, the role it holds, and who
-         *     granted it.
-         */
-        AutomationPrincipalView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Granted By
-             * Format: uuid
-             */
-            granted_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            role: components["schemas"]["Role"];
-        };
-        /**
-         * AutomationRequest
-         * @description An automation whole, as made or as edited.
-         */
-        AutomationRequest: {
-            action: components["schemas"]["ActionBody"];
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            limits: components["schemas"]["LimitsBody"];
-            /** Name */
-            name: string;
-            /**
-             * Own Events
-             * @default false
-             */
-            own_events: boolean;
-            runs_as?: components["schemas"]["RunsAs"] | null;
-            trigger: components["schemas"]["TriggerBody"];
-        };
-        /**
-         * AutomationView
-         * @description An automation, whom it runs as, and who made and last edited it.
-         */
-        AutomationView: {
-            action: components["schemas"]["ActionView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            limits: components["schemas"]["LimitsView"];
-            /** Name */
-            name: string;
-            /** Own Events */
-            own_events: boolean;
-            runs_as: components["schemas"]["RunsAs"];
-            trigger: components["schemas"]["TriggerView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
         };
         /**
          * BenchmarkResultRequest
@@ -5736,7 +5736,7 @@ export interface components {
         };
         /**
          * GrantRequest
-         * @description The role the automation principal holds: never above the granter's.
+         * @description The role the agent automation principal holds: never above the granter's.
          */
         GrantRequest: {
             role: components["schemas"]["Role"];
@@ -6594,7 +6594,7 @@ export interface components {
          * @description The most its runs spend in a period, in millionths at list price, and
          *     the share one run may take; the most firings a period; the most runs at
          *     work at once; whether a stopped firing waits, and how many may; and the
-         *     longest chain of automations a firing extends.
+         *     longest chain of agent automations a firing extends.
          */
         LimitsBody: {
             /** Concurrency */
@@ -8019,10 +8019,10 @@ export interface components {
         RunPurpose: "work" | "baseline" | "validation";
         /**
          * RunsAs
-         * @description Whose authority an automation's action runs on.
+         * @description Whose authority an agent automation's action runs on.
          * @enum {string}
          */
-        RunsAs: "creator" | "automation_principal";
+        RunsAs: "creator" | "agent_automation_principal";
         /**
          * SaveKeyRequest
          * @description A key's value. It is written once, under a new reference, and no
@@ -10636,6 +10636,224 @@ export interface operations {
             };
         };
     };
+    list_agent_automations_v1_agent_automations_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_automation_v1_agent_automations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_principal_v1_agent_automations_principal_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_principal_v1_agent_automations_principal_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_automation_v1_agent_automations__agent_automation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agent_automation_v1_agent_automations__agent_automation_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_payment_v1_agent_billing_payments_post: {
         parameters: {
             query?: never;
@@ -12472,224 +12690,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignInStartView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_automations_v1_automations_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_automation_v1_automations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_principal_v1_automations_principal_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    grant_principal_v1_automations_principal_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GrantRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_automation_v1_automations__automation_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_automation_v1_automations__automation_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
                 };
             };
             /** @description Validation Error */

@@ -1179,7 +1179,7 @@ class LimitsBody(BaseModel):
     The most its runs spend in a period, in millionths at list price, and
     the share one run may take; the most firings a period; the most runs at
     work at once; whether a stopped firing waits, and how many may; and the
-    longest chain of automations a firing extends.
+    longest chain of agent automations a firing extends.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -1863,10 +1863,10 @@ class RunPurpose(StrEnum):
 
 class RunsAs(StrEnum):
     """
-    Whose authority an automation's action runs on.
+    Whose authority an agent automation's action runs on.
     """
     creator = 'creator'
-    automation_principal = 'automation_principal'
+    agent_automation_principal = 'agent_automation_principal'
 
 
 class SaveKeyRequest(BaseModel):
@@ -2713,6 +2713,35 @@ class AdvertisementView(BaseModel):
     shell: Annotated[str, Field(title='Shell')]
 
 
+class AgentAutomationPrincipalView(BaseModel):
+    """
+    The tenant's agent automation principal: its id, the role it holds, and who
+    granted it.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    granted_by: Annotated[UUID, Field(title='Granted By')]
+    id: Annotated[UUID, Field(title='Id')]
+    role: Role
+
+
+class AgentAutomationView(BaseModel):
+    """
+    An agent automation, whom it runs as, and who made and last edited it.
+    """
+    action: ActionView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    enabled: Annotated[bool, Field(title='Enabled')]
+    id: Annotated[UUID, Field(title='Id')]
+    limits: LimitsView
+    name: Annotated[str, Field(title='Name')]
+    own_events: Annotated[bool, Field(title='Own Events')]
+    runs_as: RunsAs
+    trigger: TriggerView
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
 class AgentSessionView(BaseModel):
     """
     A session: its kind, its title, and its status, which follows its
@@ -2778,35 +2807,6 @@ class ApproverRuleBody(BaseModel):
 class ApproverRuleView(BaseModel):
     authorization_class: Annotated[str, Field(title='Authorization Class')]
     roles: Annotated[list[Role], Field(title='Roles')]
-
-
-class AutomationPrincipalView(BaseModel):
-    """
-    The tenant's automation principal: its id, the role it holds, and who
-    granted it.
-    """
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    granted_by: Annotated[UUID, Field(title='Granted By')]
-    id: Annotated[UUID, Field(title='Id')]
-    role: Role
-
-
-class AutomationView(BaseModel):
-    """
-    An automation, whom it runs as, and who made and last edited it.
-    """
-    action: ActionView
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    enabled: Annotated[bool, Field(title='Enabled')]
-    id: Annotated[UUID, Field(title='Id')]
-    limits: LimitsView
-    name: Annotated[str, Field(title='Name')]
-    own_events: Annotated[bool, Field(title='Own Events')]
-    runs_as: RunsAs
-    trigger: TriggerView
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    updated_by: Annotated[UUID, Field(title='Updated By')]
 
 
 class BenchmarkResultRequest(BaseModel):
@@ -3133,7 +3133,7 @@ class FindingView(BaseModel):
 
 class GrantRequest(BaseModel):
     """
-    The role the automation principal holds: never above the granter's.
+    The role the agent automation principal holds: never above the granter's.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -3953,6 +3953,22 @@ class ValidationSessionView(BaseModel):
     status: ValidationStatus
 
 
+class AgentAutomationRequest(BaseModel):
+    """
+    An agent automation whole, as made or as edited.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    action: ActionBody
+    enabled: Annotated[bool | None, Field(title='Enabled')] = True
+    limits: LimitsBody
+    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
+    own_events: Annotated[bool | None, Field(title='Own Events')] = False
+    runs_as: RunsAs | None = None
+    trigger: TriggerBody
+
+
 class AgentSessionPageView(BaseModel):
     """
     One page of root sessions, newest first. `next_cursor` fetches the
@@ -3969,22 +3985,6 @@ class ApiKeyPageView(BaseModel):
     """
     items: Annotated[list[ApiKeyView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
-
-
-class AutomationRequest(BaseModel):
-    """
-    An automation whole, as made or as edited.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    action: ActionBody
-    enabled: Annotated[bool | None, Field(title='Enabled')] = True
-    limits: LimitsBody
-    name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
-    own_events: Annotated[bool | None, Field(title='Own Events')] = False
-    runs_as: RunsAs | None = None
-    trigger: TriggerBody
 
 
 class BudgetUsageView(BaseModel):

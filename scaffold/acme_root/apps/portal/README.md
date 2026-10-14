@@ -8,7 +8,7 @@ chip and switch, settings, and one realtime channel.
 ## The shell and the product's slot
 
 A signed-in page sits beside the left bar. From the top: the org chip,
-Search (⌘K), New session, Automations, Knowledge with its count of
+Search (⌘K), New session, Agent automations, Knowledge with its count of
 suggestions to review, the product's entries, and the person's own
 sessions, the ones they made or take part in, grouped by what they ask:
 Needs you, Running, and Recent, each sub-agent under its parent. The user
@@ -84,13 +84,13 @@ conversation only when it is their own
   children, live while it runs, and a playbook invoked into it by name
   from its header. The org's records and settings each have
   their own: `projects/`, `models/` (the org's own provider keys and its
-  model for each role), `automations/`, `playbooks/`, `knowledge/`,
-  `audit/`, `usage/`, and `settings/` (the overview, the profile, the
-  org's general facts, members, API keys, and single sign-on).
-  `providers/` is the banner a page shows while the org's sessions wait
-  on a model provider. A secret field is write-only: the form sends it
-  once, and the page shows only who set it and when. A new API key's
-  secret shows once, until Done.
+  model for each role), `agent_automations/`, `playbooks/`,
+  `knowledge/`, `audit/`, `usage/`, and `settings/` (the overview, the
+  profile, the org's general facts, members, API keys, and single
+  sign-on). `providers/` is the banner a page shows while the org's
+  sessions wait on a model provider. A secret field is write-only: the
+  form sends it once, and the page shows only who set it and when. A new
+  API key's secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
   `flags.ts` reads the session's flags as one snapshot from the API, and a
   view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
@@ -141,10 +141,11 @@ member sees who holds it and End this run, never Run or Give it back.
 The owner ends the run there, which ends the loop cancelled. The records check needs
 only the API, on the scripted providers, and this dev server: in Settings
 the owner makes a project with a read credential, saves a provider key,
-and creates an API key, and then makes an automation; each is read back
-from the API. The credential's password and the provider key come back in
-no reply and on no screen, and the API key shows once, then on no screen.
-Their screenshots land in `e2e/screenshots/`, which git ignores.
+and creates an API key, and then makes an agent automation; each is read
+back from the API. The credential's password and the provider key come
+back in no reply and on no screen, and the API key shows once, then on
+no screen. Their screenshots land in `e2e/screenshots/`, which git
+ignores.
 
 The timeline check plays the engineer's scene: it thinks, takes its
 baseline, plans, starts two analysis sub-agents and waits for their

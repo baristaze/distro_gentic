@@ -24,12 +24,11 @@ from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.integrations.events import OpenedPullRequest
 from acme.integrations.events.twin import IntegrationTwinImpl
-from acme.om.agents.types.result import Claim
-from acme.om.automations.root import build_automations
-from acme.om.automations.types.automation import (
+from acme.om.agent_automations.root import build_agent_automations
+from acme.om.agent_automations.types.agent_automation import (
     Action,
     ActionKind,
-    Automation,
+    AgentAutomation,
     Firing,
     Limits,
     Refusal,
@@ -37,6 +36,7 @@ from acme.om.automations.types.automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agents.types.result import Claim
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, Role, build_context
 from acme.om.evidence.types.provenance import Provenance
@@ -322,10 +322,10 @@ async def test_a_persons_push_to_the_engineers_branch_hands_its_session_over(
     assert held.park is not None and held.park.reason is ParkReason.HANDOVER
 
 
-def automation_named(name: str) -> Automation:
+def agent_automation_named(name: str) -> AgentAutomation:
     now = utcnow()
     dollar = 1_000_000  # micros
-    return Automation(
+    return AgentAutomation(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -349,20 +349,22 @@ def automation_named(name: str) -> Automation:
 async def test_a_check_on_the_engineers_push_follows_its_session_a_hop_on(
     tmp_path: Path, named_by: str
 ) -> None:
-    """An automation starts the engineer, and CI fails on what it pushed.
+    """An agent automation starts the engineer, and CI fails on what it pushed.
     The check names the engineer's branch, or only the commit the
     platform's account pushed for it. Either way its cause is the
-    engineer's session, and the automation it feeds fires a hop past the
+    engineer's session, and the agent automation it feeds fires a hop past the
     run that started that session."""
     platform = Forged(tmp_path)
-    automations = build_automations(
+    agent_automations = build_agent_automations(
         platform.loop.storage,
         platform.loop.managers,
         project_required=False,
         principal_context=live,
     )
     owner = platform.loop.owner
-    starter = await automations.create_automation(owner, automation_named("starter"))
+    starter = await agent_automations.create_agent_automation(
+        owner, agent_automation_named("starter")
+    )
     report = Firing(
         event_id=new_id(),
         occurred_at=utcnow(),
@@ -371,9 +373,9 @@ async def test_a_check_on_the_engineers_push_follows_its_session_a_hop_on(
         effect=Effect.WAKE_AS_DATA.value,
         text="The weekly report misses its total.",
     )
-    (first,) = await automations.fire(platform.service, report)
+    (first,) = await agent_automations.fire(platform.service, report)
     assert first.session_id is not None and first.hop == 1
-    other = await automations.create_automation(owner, automation_named("other"))
+    other = await agent_automations.create_agent_automation(owner, agent_automation_named("other"))
     await opened(platform, first.session_id)
 
     if named_by == "its_branch":
@@ -400,7 +402,10 @@ async def test_a_check_on_the_engineers_push_follows_its_session_a_hop_on(
         platform=routed.platform,
         text=described(check),
     )
-    runs = {run.automation_id: run for run in await automations.fire(platform.service, firing)}
+    runs = {
+        run.agent_automation_id: run
+        for run in await agent_automations.fire(platform.service, firing)
+    }
     assert runs[starter.id].refusal is Refusal.OWN_EVENT
     fed = runs[other.id]
     assert (fed.status, fed.caused_by, fed.hop) == (RunStatus.STARTED, first.session_id, 2)

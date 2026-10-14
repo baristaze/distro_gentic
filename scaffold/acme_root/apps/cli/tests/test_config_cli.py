@@ -1,6 +1,6 @@
 """A tenant's configuration from the terminal, against the whole API
 in-process: a project created on its repository and listed, its fetch
-credential given and never printed, and an automation created from a file
+credential given and never printed, and an agent automation created from a file
 and listed. A member's project is refused by the API; a malformed
 repository or file is usage."""
 
@@ -20,7 +20,7 @@ def created_project(stack: Stack) -> str:
     return result.output.split()[1]
 
 
-def automation_file(tmp_path: Path, project_id: str) -> Path:
+def agent_automation_file(tmp_path: Path, project_id: str) -> Path:
     path = tmp_path / "triage.json"
     path.write_text(
         json.dumps(
@@ -65,15 +65,19 @@ def test_a_project_is_created_listed_and_given_a_credential(stack: Stack) -> Non
     assert PASSWORD not in given.output + shown.output
 
 
-def test_an_automation_is_created_from_a_file_and_listed(stack: Stack, tmp_path: Path) -> None:
+def test_an_agent_automation_is_created_from_a_file_and_listed(
+    stack: Stack, tmp_path: Path
+) -> None:
     project_id = created_project(stack)
-    made = stack.acme("automation", "create", str(automation_file(tmp_path, project_id)))
+    made = stack.acme(
+        "agent-automation", "create", str(agent_automation_file(tmp_path, project_id))
+    )
     assert made.exit_code == 0, made.output
     assert made.output.startswith("created ")
     assert made.output.endswith(" (triage a failed build), runs as creator\n")
-    automation_id = made.output.split()[1]
-    listed = stack.acme("automation", "list", "--json")
-    assert [a["id"] for a in json.loads(listed.output)] == [automation_id]
+    agent_automation_id = made.output.split()[1]
+    listed = stack.acme("agent-automation", "list", "--json")
+    assert [a["id"] for a in json.loads(listed.output)] == [agent_automation_id]
 
 
 def test_a_member_creates_no_project_and_a_malformed_input_is_usage(
@@ -91,5 +95,5 @@ def test_a_member_creates_no_project_and_a_malformed_input_is_usage(
     assert stack.acme("project", "create", "no path", "github.com").exit_code == 2
     broken = tmp_path / "broken.json"
     broken.write_text('{"name": "no trigger"}')
-    assert stack.acme("automation", "create", str(broken)).exit_code == 2
+    assert stack.acme("agent-automation", "create", str(broken)).exit_code == 2
     assert "theirs" not in stack.acme("project", "list").output

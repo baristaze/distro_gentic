@@ -5,8 +5,8 @@ from datetime import timedelta
 
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_billing import AgentBillingManagerInterface
-from acme.om.automations import AutomationsManagerInterface
 from acme.om.connectors import ConnectorsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.knowledge import KnowledgeManagerInterface
@@ -34,15 +34,15 @@ from acme.services.api.services import (
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
+from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
-from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
+from acme.services.api.services.impl.agent_automations import AgentAutomationsServiceImpl
 from acme.services.api.services.impl.agent_billing import AgentBillingServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
-from acme.services.api.services.impl.automations import AutomationsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.connectors import ConnectorsServiceImpl
@@ -100,7 +100,7 @@ class ServicesImpl(ServicesInterface):
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
         agent_billing: AgentBillingServiceInterface,
-        automations: AutomationsServiceInterface,
+        agent_automations: AgentAutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
         matrix: MatrixServiceInterface,
@@ -131,7 +131,7 @@ class ServicesImpl(ServicesInterface):
         self._intake = intake
         self._budgets = budgets
         self._agent_billing = agent_billing
-        self._automations = automations
+        self._automations = agent_automations
         self._notifications = notifications
         self._watch = watch
         self._matrix = matrix
@@ -192,7 +192,7 @@ class ServicesImpl(ServicesInterface):
     def get_agent_billing_service(self) -> AgentBillingServiceInterface:
         return self._agent_billing
 
-    def get_automations_service(self) -> AutomationsServiceInterface:
+    def get_agent_automations_service(self) -> AgentAutomationsServiceInterface:
         return self._automations
 
     def get_notifications_service(self) -> NotificationsServiceInterface:
@@ -248,7 +248,7 @@ def build_services(
     *,
     project_required: bool,
     intake: IntakeManagerInterface,
-    automations: AutomationsManagerInterface,
+    agent_automations: AgentAutomationsManagerInterface,
     notifications: NotificationsManagerInterface,
     matrix: MatrixManagers,
     trust: TrustManagerInterface,
@@ -295,7 +295,7 @@ def build_services(
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets, agent_billing),
         agent_billing=AgentBillingServiceImpl(agent_billing),
-        automations=AutomationsServiceImpl(automations),
+        agent_automations=AgentAutomationsServiceImpl(agent_automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),
         matrix=MatrixServiceImpl(matrix.matrix, matrix.matrix_operator),

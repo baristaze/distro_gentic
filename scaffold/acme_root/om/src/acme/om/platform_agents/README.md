@@ -77,12 +77,12 @@ calls, and holds its workspace warm for a while after a loop.
   part of the platform, on their own permissions. It explains the
   product from its corpus and the knowledge base, and cites them. It
   diagnoses by reading the tenant's live records: its sessions, what a
-  session's park and its loop wait on, its projects, and its automations
-  with their recent runs. It drafts the tenant's tool policy and shows
-  the difference from what is live, and hands engineering work to an
-  engineer. It has no workspace, repository, or shell. A session keeps
-  the version of the assistant it started on, so the one before its
-  readers is still shipped.
+  session's park and its loop wait on, its projects, and its agent
+  automations with their recent runs. It drafts the tenant's tool policy
+  and shows the difference from what is live, and hands engineering work
+  to an engineer. It has no workspace, repository, or shell. A session
+  keeps the version of the assistant it started on, so the one before
+  its readers is still shipped.
 - **The reviewer** reads one pull request through the forge's
   integration: its files and their patches, the checks at its head, and
   a file at its head. It notes each finding with a file, a line, and a
@@ -95,8 +95,8 @@ calls, and holds its workspace warm for a while after a loop.
 - **The operator** reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, its hosts and what
   each offers, its budgets and what they spent, and its projects and
-  automations. Every tool it holds reads. A fix it finds leaves as an
-  objective a person hands to an engineer.
+  agent automations. Every tool it holds reads. A fix it finds leaves as
+  an objective a person hands to an engineer.
 - **A lead** is any kind whose toolsets include `sub_agents`: it starts
   the others, such as an engineer on a change and the reviewer on its
   pull request, and answers with their reports. It holds every tool of
@@ -108,9 +108,9 @@ calls, and holds its workspace warm for a while after a loop.
   holds for approval with the roles that may decide it, and the
   sub-agents it waits for; `read_wait`, its loop's item on the work queue
   and the hosts it may run on; `list_projects` and `read_project`; and
-  `list_automations` and `read_automation`, with its recent runs. Each
-  answers a record's shape, never a session's content, and bounds its
-  list. A product adds readers of its own through its slot.
+  `list_agent_automations` and `read_agent_automation`, with its recent
+  runs. Each answers a record's shape, never a session's content, and
+  bounds its list. A product adds readers of its own through its slot.
 - **The corpus**: what the [knowledge map](../../../../../llms.txt) lists
   for the tenant's users, read once when the process starts. A document
   listed only for the platform's own people is not in it. Among it is
@@ -124,9 +124,9 @@ calls, and holds its workspace warm for a while after a loop.
 
 ## What can happen
 
-- **Review a pull request.** A person, an automation, or a lead starts
-  a reviewer with the pull request named in its objective. It reads the
-  pull request through an installation of the forge its tenant
+- **Review a pull request.** A person, an agent automation, or a lead
+  starts a reviewer with the pull request named in its objective. It
+  reads the pull request through an installation of the forge its tenant
   connected, and a file at its head; one of another tenant's is refused
   before anything is read. A read lists the files it changes while
   they fit one answer, then their patches, and counts the rest.
@@ -275,9 +275,9 @@ nothing. The reviewer's reads take that intake too, and the root's
 integrations, which answer the forge; the forge's `comment` joins the
 platform's tools unless the process wires its own. The root wraps the
 result gate it builds with the review's gate (`impl/gate.py`), which
-judges a reviewer's results and hands every other on unchanged. The automations the assistant reads are built over the managers
-too, by the session runner, and a process with none refuses those
-readers. The maintenance
-worker's `VALIDATION` handler runs a validation session
+judges a reviewer's results and hands every other on unchanged. The
+agent automations the assistant reads are built over the managers too,
+by the session runner, and a process with none refuses those readers.
+The maintenance worker's `VALIDATION` handler runs a validation session
 (`run_validation`); the evidence the root builds over the platform's
 executor runs its check and keeps its execution record.

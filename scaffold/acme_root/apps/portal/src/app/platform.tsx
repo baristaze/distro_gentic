@@ -3,8 +3,8 @@
 // agents it ships, and the examples its fields show. The shell joins it with
 // the product's and refuses an entry the two share.
 import { AuditPage } from "../features/audit/AuditPage";
-import { AutomationPage } from "../features/automations/AutomationPage";
-import { AutomationsPage } from "../features/automations/AutomationsPage";
+import { AgentAutomationPage } from "../features/agent_automations/AgentAutomationPage";
+import { AgentAutomationsPage } from "../features/agent_automations/AgentAutomationsPage";
 import { HomePage } from "../features/home/HomePage";
 import { EntryPage } from "../features/knowledge/EntryPage";
 import { KnowledgePage } from "../features/knowledge/KnowledgePage";
@@ -26,7 +26,7 @@ import { SignOnPage } from "../features/settings/SignOnPage";
 import { UsagePage } from "../features/usage/UsagePage";
 import {
   AuditIcon,
-  AutomationIcon,
+  AgentAutomationIcon,
   BotIcon,
   DocumentIcon,
   KeyIcon,
@@ -77,11 +77,11 @@ export const PLATFORM: PortalProduct = {
         params: { sessionId: "the session's id" },
       },
     },
-    { path: "/automations", element: <AutomationsPage />, handle: { about: "The org's automations, a new one, and the automation principal" } },
+    { path: "/agent-automations", element: <AgentAutomationsPage />, handle: { about: "The org's agent automations, a new one, and the agent automation principal" } },
     {
-      path: "/automations/:automationId",
-      element: <AutomationPage />,
-      handle: { about: "One automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { automationId: "the automation's id" } },
+      path: "/agent-automations/:agentAutomationId",
+      element: <AgentAutomationPage />,
+      handle: { about: "One agent automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { agentAutomationId: "the agent automation's id" } },
     },
     { path: "/knowledge", element: <KnowledgePage />, handle: { about: "Knowledge: what every session should know, and the suggestions waiting on a review" } },
     { path: "/knowledge/:entryId", element: <EntryPage />, handle: { about: "One knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
@@ -95,10 +95,10 @@ export const PLATFORM: PortalProduct = {
   ],
   nav: [
     {
-      id: "automations",
-      label: "Automations",
-      icon: <AutomationIcon />,
-      to: "/automations",
+      id: "agent_automations",
+      label: "Agent automations",
+      icon: <AgentAutomationIcon />,
+      to: "/agent-automations",
       tip: "What starts or messages a session on an event or a schedule",
     },
     {

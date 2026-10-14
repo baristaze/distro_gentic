@@ -105,7 +105,7 @@ describe("timeline", () => {
     expect(kinds(entries)).toEqual(["person", "note", "note", "note"]);
     expect(entries.map((entry) => (entry.kind === "note" ? entry.label : entry.kind))).toEqual([
       "person",
-      "From an automation",
+      "From an agent automation",
       "From the parent agent",
       "From a program",
     ]);

@@ -96,7 +96,7 @@ These are the invariants. Each links the section that states it.
 ## The Running Example
 
 > A team files a ticket: *"The checkout service sometimes drops a
-> request under load. Investigate and fix it."* An automation turns it
+> request under load. Investigate and fix it."* An agent automation turns it
 > into a session pinned to the team's host pool, because its builds and
 > devices must stay there. The agent's loop runs in the platform's cloud;
 > its tool calls run on a workspace host in that pool. At 2 a.m. a model
@@ -149,8 +149,8 @@ flowchart LR
         Ext[Trackers, chat,<br/>source control]
     end
     subgraph Cloud [The platform's cloud]
-        CP[Control plane:<br/>gateway, sessions, intake,<br/>automations, policy, approvals]
-        CW[Control workers:<br/>intake, automations]
+        CP[Control plane:<br/>gateway, sessions, intake,<br/>agent_automations, policy, approvals]
+        CW[Control workers:<br/>intake, agent_automations]
         Q[(Work queue)]
         SR[Session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
@@ -177,7 +177,7 @@ flowchart LR
 
 | Plane | Parts | Where it runs |
 |---|---|---|
-| **Control** | The gateway, sessions, intake and routing, automations, policy, approvals, realtime; the control workers | The platform's cloud |
+| **Control** | The gateway, sessions, intake and routing, agent_automations, policy, approvals, realtime; the control workers | The platform's cloud |
 | **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
 | **Records and money** | Steps, execution records, artifacts; metering, limits, agent_billing, the model matrix | The platform's cloud |
@@ -199,7 +199,7 @@ several kinds of work, and each must run where its environment is:
 | `loop`: run or resume a session's loop | Any session runner | The loop lanes |
 | `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
-| Platform work: intake, automations | Control workers | Their own lanes |
+| Platform work: intake, agent automations | Control workers | Their own lanes |
 
 A lane is the guideline's work-item lane, so every kind is one queue
 with one shape. A runner claims from the queue directly; a host
@@ -651,27 +651,27 @@ guideline's own benchmark does: integrations as twins, the model on real
 providers. The platform carries provenance one step further, into
 evidence ([Execution Records](#execution-records)).
 
-### Automations
+### Agent Automations
 
-**Automations** turn events into bounded work. A trigger, an event with
-filters or a schedule, leads to an action: start a session, or message a
-standing session (a CI triage session, say). A message action is refused
-while its automation is enabled, until a run's cap can end with its run,
-since a standing session outlives the run. A product adds actions of
-its own, each with a check that says when the work it started ended, so
-its run stays at work until then. A product's action may also refuse the
-person who writes the automation, or the principal it is set to run as,
-so one its firings would refuse is never saved, and that person hears
-why when they can fix it. An automation runs as its
-creator or as the tenant's automation principal, and has limits of its
-own: a cost cap, a rate, a concurrency, and whether to queue when
-limited. An automation ignores the events its own sessions caused,
-unless it declares otherwise, and a chain of automations stops at a hop
-limit, so an agent's comment cannot start an endless chain. Every firing
-is a recorded run. A firing while a run is open starts another beside
-it, as the automation's limits allow: it starts, queues, or is
-refused. An event delivered again, or a schedule's slot met again,
-answers the run it made.
+**Agent automations** turn events into bounded work. A trigger, an event
+with filters or a schedule, leads to an action: start a session, or
+message a standing session (a CI triage session, say). A message action
+is refused while its agent automation is enabled, until a run's cap can
+end with its run, since a standing session outlives the run. A product
+adds actions of its own, each with a check that says when the work it
+started ended, so its run stays at work until then. A product's action
+may also refuse the person who writes the agent automation, or the
+principal it is set to run as, so one its firings would refuse is never
+saved, and that person hears why when they can fix it. An agent
+automation runs as its creator or as the tenant's agent automation
+principal, and has limits of its own: a cost cap, a rate, a concurrency,
+and whether to queue when limited. An agent automation ignores the
+events its own sessions caused, unless it declares otherwise, and a
+chain of agent automations stops at a hop limit, so an agent's comment
+cannot start an endless chain. Every firing is a recorded run. A firing
+while a run is open starts another beside it, as the agent automation's
+limits allow: it starts, queues, or is refused. An event delivered
+again, or a schedule's slot met again, answers the run it made.
 
 ### Playbooks and Knowledge
 
@@ -682,10 +682,10 @@ Skills](https://agentskills.io/specification) format, with their gates
 in a namespaced metadata extension, so a brief runs in any agent that
 reads the standard. Only a person publishes a playbook. A principal
 invokes one into a session they may instruct, from the API, the command
-line, or the session's page, and an automation's start invokes one into
-the session it starts. Its brief arrives as that principal's message,
-and its gates compile into the session's policy, where they can only
-narrow it.
+line, or the session's page, and an agent automation's start invokes one
+into the session it starts. Its brief arrives as that principal's
+message, and its gates compile into the session's policy, where they can
+only narrow it.
 
 A person who manages the tenant may also pin a playbook to an [agent
 kind][e-kinds], for the tenant or for one project, as the kind's
@@ -881,7 +881,7 @@ and keeps four apart. Confusing any two is a defect.
 | Identity | What it is | Example |
 |---|---|---|
 | **Executor** | A machine's credential | A workspace host's key |
-| **Principal** | On whose behalf, and with what authority | The person who asked; an automation's creator; a service principal the tenant granted |
+| **Principal** | On whose behalf, and with what authority | The person who asked; an agent automation's creator; a service principal the tenant granted |
 | **Spender** | Who pays for a model call | The author of the latest principal input the model received |
 | **Actor** | Who acted | The engineer agent in one session; a person; the engine |
 
@@ -904,8 +904,8 @@ Instructs][e-principal]). A comment,
 an issue, a chat message relayed by an integration reaches the agent
 quoted and labelled, never as an instruction: the engine renders it so,
 and the platform sets its origin. A principal speaks only through the
-portal, the CLI, the API, an automation, or a mapped user addressing the
-agent in chat or on its work.
+portal, the CLI, the API, an agent automation, or a mapped user
+addressing the agent in chat or on its work.
 
 ### Secrets by Placement
 
@@ -1244,7 +1244,7 @@ story; the rest is its planned shape:
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
   platform, and scaffolds for a session runner, a workspace host, a
   workspace provider, an integration with its twin, an agent kind, an
-  automation trigger, and a product's own kind of work.
+  agent automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of
   [Operations](#operations) in its `.agents/skills/`.
 

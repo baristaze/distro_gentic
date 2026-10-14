@@ -1,8 +1,8 @@
-"""Intake and automations over Postgres: a failing check on a session's
-pull request wakes it as data, and fires an automation whose run starts a
+"""Intake and agent automations over Postgres: a failing check on a session's
+pull request wakes it as data, and fires an agent automation whose run starts a
 session held to its share of the cost cap, recorded once. A schedule
 fires once a slot however many workers tick it at once, and an
-automation run as the tenant's automation principal acts on that
+agent automation run as the tenant's agent automation principal acts on that
 principal's role alone."""
 
 import asyncio
@@ -16,14 +16,11 @@ from contracts.loops import reply, said, use
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
-from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.agents.types.run import RunEnd
-from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.automations.root import build_automations
-from acme.om.automations.types.automation import (
+from acme.om.agent_automations.root import build_agent_automations
+from acme.om.agent_automations.types.agent_automation import (
     Action,
     ActionKind,
-    Automation,
+    AgentAutomation,
     Firing,
     Limits,
     Refusal,
@@ -32,6 +29,9 @@ from acme.om.automations.types.automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
@@ -97,10 +97,10 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
     await platform.managers.agent_sessions.receive(owner, session_id, [said_first])
     platform.anthropic.add(reply(said("Pushed the fix.")))
     assert (await platform.loops.run(owner, session_id)).end is RunEnd.ENDED
-    # A person at the portal makes the automation, and it runs as them.
+    # A person at the portal makes the agent automation, and it runs as them.
     creator = platform.person(Role.ADMIN)
     now = utcnow()
-    automation = Automation(
+    agent_automation = AgentAutomation(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -115,7 +115,7 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
             cost_cap_micros=100_000_000, run_cap_micros=50_000_000, rate=1, concurrency=1
         ),
     )
-    await platform.automations.create_automation(creator, automation)
+    await platform.agent_automations.create_agent_automation(creator, agent_automation)
     check = FeedbackEvent(
         id=new_id(),
         integration="forge",
@@ -139,20 +139,20 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
         effect=routed.effect.value,
         text=described(check),
     )
-    (run,) = await platform.automations.fire(platform.service, firing)
+    (run,) = await platform.agent_automations.fire(platform.service, firing)
     assert run.status is RunStatus.STARTED and run.budget_id is not None
-    assert await platform.automations.fire(platform.service, firing) == (run,)
-    (limited,) = await platform.automations.fire(
+    assert await platform.agent_automations.fire(platform.service, firing) == (run,)
+    (limited,) = await platform.agent_automations.fire(
         platform.service, firing.model_copy(update={"event_id": new_id()})
     )
     assert limited.status is RunStatus.REFUSED
     budget = await platform.managers.budgets.get_budget(owner, run.budget_id)
-    assert budget.cost_micros == automation.limits.run_cap_micros
+    assert budget.cost_micros == agent_automation.limits.run_cap_micros
 
 
-def every_hour(creator: TenantContext, runs_as: RunsAs = RunsAs.CREATOR) -> Automation:
+def every_hour(creator: TenantContext, runs_as: RunsAs = RunsAs.CREATOR) -> AgentAutomation:
     now = utcnow()
-    return Automation(
+    return AgentAutomation(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -179,11 +179,11 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
     owner = await an_owner(storage, tmp_path)
     platform = wired(tmp_path, storage=storage, owner=owner)
     creator = platform.person(Role.ADMIN)
-    mine = await platform.automations.create_automation(creator, every_hour(creator))
-    # Four workers' sweeps, each its own automations manager over the one
+    mine = await platform.agent_automations.create_agent_automation(creator, every_hour(creator))
+    # Four workers' sweeps, each its own agent automations manager over the one
     # database, tick the tenant at once, in each of two slots.
     workers = [
-        build_automations(
+        build_agent_automations(
             storage,
             platform.managers,
             project_required=False,
@@ -195,7 +195,7 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
     for slot in (1, 2):
         await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
         await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
-        runs = await platform.automations.get_runs(owner, mine.id, 10)
+        runs = await platform.agent_automations.get_runs(owner, mine.id, 10)
         assert len(runs) == slot and {r.status for r in runs} == {RunStatus.STARTED}
         page = await platform.managers.agent_sessions.get_sessions(owner, None, None, 100)
         started = [s for s in page.items if s.title == "the nightly records"]
@@ -204,17 +204,17 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
         platform.clock.now += timedelta(hours=1)
 
 
-async def test_an_automation_run_as_the_automation_principal_holds_its_role_alone_over_postgres(
+async def test_an_agent_automation_run_as_the_agent_automation_principal_holds_its_role_alone_over_postgres(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     platform = wired(tmp_path, storage=storage, owner=owner)
     creator = platform.person(Role.ADMIN)
-    granted = await platform.automations.grant_principal(creator, Role.MEMBER)
-    await platform.automations.create_automation(
-        creator, every_hour(creator, RunsAs.AUTOMATION_PRINCIPAL)
+    granted = await platform.agent_automations.grant_principal(creator, Role.MEMBER)
+    await platform.agent_automations.create_agent_automation(
+        creator, every_hour(creator, RunsAs.AGENT_AUTOMATION_PRINCIPAL)
     )
-    (run,) = await platform.automations.tick(platform.service)
+    (run,) = await platform.agent_automations.tick(platform.service)
     assert run.status is RunStatus.STARTED and run.session_id is not None
     session = await platform.managers.agent_sessions.get_session(owner, run.session_id)
     assert session.created_by == granted.id != creator.user_id
@@ -228,9 +228,9 @@ async def test_an_automation_run_as_the_automation_principal_holds_its_role_alon
     )
     assert (live.role, live.security.permissions) == (Role.MEMBER, permissions_of(Role.MEMBER))
     # A role that cannot start the work starts none, though its creator could.
-    await platform.automations.grant_principal(creator, Role.VIEWER)
+    await platform.agent_automations.grant_principal(creator, Role.VIEWER)
     platform.clock.now += timedelta(hours=1)
-    (refused,) = await platform.automations.tick(platform.service)
+    (refused,) = await platform.agent_automations.tick(platform.service)
     assert (refused.status, refused.refusal, refused.session_id) == (
         RunStatus.REFUSED,
         Refusal.ACTION,

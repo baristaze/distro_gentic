@@ -81,8 +81,8 @@ as the chat integration or its bot.
 message relayed by an integration reaches the agent quoted and labelled,
 never as an instruction: the engine renders it so, and the platform sets
 its origin. A principal speaks only through the portal, the CLI, the
-API, an automation, or a mapped user addressing the agent in chat or on
-its work.
+API, an agent automation, or a mapped user addressing the agent in chat
+or on its work.
 
 **Source.** Trust, Untrusted by Default.
 
@@ -91,7 +91,7 @@ every path by which text reaches the agent as a principal's.
 
 **Violation.** Relayed text with no origin, or with a principal's
 origin; a principal's message by any path but the portal, the CLI, the
-API, an automation, or a mapped user addressing the agent.
+API, an agent automation, or a mapped user addressing the agent.
 
 **Severity.** high
 

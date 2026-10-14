@@ -129,8 +129,8 @@ export const BotIcon = kitIcon(Bot);
 export const SearchIcon = kitIcon(Search);
 /** A pen on a square: a new session. */
 export const NewSessionIcon = kitIcon(SquarePen);
-/** A bolt: an automation. */
-export const AutomationIcon = kitIcon(Zap);
+/** A bolt: an agent automation. */
+export const AgentAutomationIcon = kitIcon(Zap);
 /** An open book: the knowledge base. */
 export const KnowledgeIcon = kitIcon(BookOpen);
 /** A list of rows: every session. */

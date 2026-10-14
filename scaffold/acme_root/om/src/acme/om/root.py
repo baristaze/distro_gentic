@@ -15,6 +15,8 @@ from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.actions import AgentAutomationActionInterface
 from acme.om.agent_billing.gate import MoneyGateInterface
 from acme.om.agent_billing.impl.gate import MoneyCallGateImpl
 from acme.om.agent_billing.impl.prices import PriceBookTableImpl
@@ -35,8 +37,6 @@ from acme.om.attribution.impl.manager import (
     AttributionOptions,
     members_context,
 )
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.actions import AutomationActionInterface
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
@@ -274,13 +274,13 @@ def no_tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
     return ()
 
 
-ProductActions = Callable[[Callable[[], Managers]], tuple[AutomationActionInterface, ...]]
-"""A product's own kinds of automation action, built over the managers as
+ProductActions = Callable[[Callable[[], Managers]], tuple[AgentAutomationActionInterface, ...]]
+"""A product's own kinds of agent automation action, built over the managers as
 the root answers them, as a product's tools are."""
 
 
-def no_actions(managers: Callable[[], Managers]) -> tuple[AutomationActionInterface, ...]:
-    """A product with no automation action of its own."""
+def no_actions(managers: Callable[[], Managers]) -> tuple[AgentAutomationActionInterface, ...]:
+    """A product with no agent automation action of its own."""
     return ()
 
 
@@ -305,9 +305,9 @@ class ProductKinds:
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
     claimant kinds of its own that write and read it, if any; its executors, each by
-    the name a check's `executor` gives; and its kinds of automation
+    the name a check's `executor` gives; and its kinds of agent_automation
     action, each acting in a firing, saying when the run it started
-    ended, and checking the person who writes one (`automations.actions`);
+    ended, and checking the person who writes one (`agent_automations.actions`);
     and its resource kinds, each with the shape of its ask, the hooks a
     grant asks, and its check of an ask if it has one (`leases.kinds`).
     Its toolsets join the platform's (`platform_agents.kinds.TOOLSETS`),
@@ -481,10 +481,10 @@ def intake_absent() -> IntakeManagerInterface:
     raise Unavailable("no intake binds a session's work in this process")
 
 
-def automations_absent() -> AutomationsManagerInterface:
-    """No automations in this process: a loud null, so a tool that reads
-    the tenant's automations refuses rather than answer that it has none."""
-    raise Unavailable("no automations are read in this process")
+def agent_automations_absent() -> AgentAutomationsManagerInterface:
+    """No agent automations in this process: a loud null, so a tool that reads
+    the tenant's agent automations refuses rather than answer that it has none."""
+    raise Unavailable("no agent automations are read in this process")
 
 
 def knowledge_absent() -> KnowledgeManagerInterface:
@@ -648,7 +648,7 @@ def build_managers(
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] | None = None,
     knowledge: Callable[[], KnowledgeManagerInterface] | None = None,
-    automations: Callable[[], AutomationsManagerInterface] | None = None,
+    agent_automations: Callable[[], AgentAutomationsManagerInterface] | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -781,8 +781,8 @@ def build_managers(
     where the engineer's pull request is bound to its session; None binds
     nothing, so that tool opens none. `knowledge` answers the knowledge the
     process builds over them, which the agents search, read, and suggest
-    to; None keeps none, so those tools refuse. `automations` answers the
-    automations the process builds over them, which the assistant reads;
+    to; None keeps none, so those tools refuse. `agent_automations` answers the
+    agent automations the process builds over them, which the assistant reads;
     None reads none, so those readers refuse.
 
     The platform's retention takes three. `tenant_keys` says whose key
@@ -840,7 +840,7 @@ def build_managers(
             work=lambda: managers.work,
             hosts=lambda: managers.hosts,
             relay=lambda: managers.relay,
-            automations=automations or automations_absent,
+            agent_automations=agent_automations or agent_automations_absent,
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
             evidence=lambda: managers.evidence,

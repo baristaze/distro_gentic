@@ -12,10 +12,10 @@ from fastapi import APIRouter
 from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
+    agent_automations,
     agent_billing,
     agent_sessions,
     approvals,
-    automations,
     benchmarks,
     budgets,
     claimants,
@@ -72,8 +72,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # What a tenant may spend: a budget's amount, which a raise of wakes the
     # sessions waiting on it, and what each budget's window spent.
     "budgets": (budgets.router, usage.router),
-    # The tenant's automations, and its automation principal and its grant.
-    "automations": (automations.router,),
+    # The tenant's agent automations, and its agent automation principal and its grant.
+    "agent_automations": (agent_automations.router,),
     # A tenant's projects, each bound to its repository, and the fetch
     # credential the platform reads that repository with.
     "projects": (projects.router,),

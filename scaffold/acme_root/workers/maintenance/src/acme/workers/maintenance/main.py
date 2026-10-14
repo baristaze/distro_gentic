@@ -105,9 +105,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
         work=managers.work,
         outbox=managers.outbox,
         # Per tenant, once a pass, what its time sets going: each schedule of
-        # its automations fires once for the slot it is in, whichever
+        # its agent automations fires once for the slot it is in, whichever
         # worker's sweep comes first.
-        ticks={"automations": container.automations.tick},
+        ticks={"agent_automations": container.agent_automations.tick},
         # Per tenant, what only a tenant deleted past its retention has: every
         # row of it goes. Any other tenant costs these nothing.
         purges={
@@ -152,11 +152,11 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
-            # Its identity links and work bindings, its automations and their
+            # Its identity links and work bindings, its agent automations and their
             # runs, its playbooks and their invocations, its knowledge, and
             # who was told what waited on them.
             "intake": container.intake.purge_tenant,
-            "automations": container.automations.purge_tenant,
+            "agent_automations": container.agent_automations.purge_tenant,
             "playbooks": container.playbooks.purge_tenant,
             "knowledge": container.knowledge.purge_tenant,
             # Its connectors, each credential with them, and what sessions pinned.
@@ -259,7 +259,7 @@ def build_consumer(container: WorkerContainer) -> DeliveryConsumer:
         tenancy=container.managers.tenancy,
         providers={
             "identity": IdentityDeliveriesImpl(container.managers.events),
-            "feedback": FeedbackDeliveriesImpl(container.intake, container.automations),
+            "feedback": FeedbackDeliveriesImpl(container.intake, container.agent_automations),
         },
         options=DeliveryOptions(worker_id=container.settings.worker_id),
     )

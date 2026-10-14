@@ -6,7 +6,7 @@ failing, beat liveness in memory and publish it to the cache as best
 effort, sweep on a timer (the expired leases and the outbox relay across
 tenants, then the standing chores of the tenants one read across tenants
 names as due, a page a pass, then per tenant its ticks, such as the
-schedules of its automations, and the purge of a tenant past its retention,
+schedules of its agent automations, and the purge of a tenant past its retention,
 then every namespace's purge of its rows past their retention across tenants,
 then the purges of done outbox rows and settled work items, within a time
 budget, then the tally of the platform's size when it is due, then the four

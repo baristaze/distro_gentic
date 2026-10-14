@@ -179,7 +179,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         work=unbound,  # pyright: ignore[reportArgumentType]
         hosts=unbound,  # pyright: ignore[reportArgumentType]
         relay=unbound,  # pyright: ignore[reportArgumentType]
-        automations=unbound,  # pyright: ignore[reportArgumentType]
+        agent_automations=unbound,  # pyright: ignore[reportArgumentType]
         policies=unbound,  # pyright: ignore[reportArgumentType]
         agents=unbound,  # pyright: ignore[reportArgumentType]
         evidence=unbound,  # pyright: ignore[reportArgumentType]
@@ -357,7 +357,7 @@ def test_analysis_waits_for_every_report_before_it_answers() -> None:
 
 
 def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
-    """An engineer a spawn or an automation starts parks for a person past the
+    """An engineer a spawn or an agent automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share
     pays for its loops at that guard."""
     assert ENGINEER_KIND.limits.step_guard == kinds.ENGINEER_STEP_GUARD
@@ -538,9 +538,9 @@ RENDERED = {
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "763da40ce8397d462e984d71769c53e04a1fbbeb5cf3201941cd4745ec504467",
+    ): "d61d8e70bbb2f2997df93be3be42b4d67957371a9d19aff52e282f85b54c5bce",
     (kinds.REVIEWER, 1): "c1a92e4a377c940c269ee3e8c5e81572ba581f4473f664324d11bd3fe9593396",
-    (kinds.OPERATOR, 1): "edb2ed24dffcbcd62dfaa4c05d94378097d0daf296a99cbde2ec3f65373665d4",
+    (kinds.OPERATOR, 1): "70c04e0432d9846bdcbe3379c06063aa80ca5eb373ab7b42305304dd56f8ea51",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -662,8 +662,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_wait",
         "list_projects",
         "read_project",
-        "list_automations",
-        "read_automation",
+        "list_agent_automations",
+        "read_agent_automation",
         "draft_tool_policy",
         "hand_off_to_engineer",
     ),
@@ -683,8 +683,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_wait",
         "list_projects",
         "read_project",
-        "list_automations",
-        "read_automation",
+        "list_agent_automations",
+        "read_agent_automation",
         "list_hosts",
         "read_spend",
         "search_knowledge",

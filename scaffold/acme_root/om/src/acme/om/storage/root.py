@@ -2,11 +2,11 @@
 
 from abc import ABC, abstractmethod
 
+from acme.om.agent_automations.storage import AgentAutomationStorageInterface
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
-from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
@@ -129,7 +129,7 @@ class StorageInterface(ABC):
     def get_notification_storage(self) -> NotificationStorageInterface: ...
 
     @abstractmethod
-    def get_automation_storage(self) -> AutomationStorageInterface: ...
+    def get_agent_automation_storage(self) -> AgentAutomationStorageInterface: ...
 
     @abstractmethod
     def get_playbook_storage(self) -> PlaybookStorageInterface: ...

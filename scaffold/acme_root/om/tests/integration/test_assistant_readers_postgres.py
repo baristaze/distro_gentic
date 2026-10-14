@@ -1,6 +1,6 @@
 """The platform assistant's readers over Postgres: each reads through the
 asking person's own context, so another tenant's session, project,
-automation, and runs, and a session marked deleted, all read as not
+agent_automation, and runs, and a session marked deleted, all read as not
 found, and no list shows another tenant's row; and asked why a session is
 parked on a held call, the assistant reads it and answers with the call
 and who may decide it, from what it read."""
@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.automation_storage import make_automation, make_run
+from contracts.agent_automation_storage import make_agent_automation, make_run
 from contracts.loops import reply, said
 from contracts.platform_agents import Later, Platform, calls, platform_over
 from contracts.project_storage import in_project
@@ -73,13 +73,13 @@ async def a_session(platform: Platform, owner: TenantContext, kind: str = kinds.
     return (await platform.managers.agents.start_session(owner, start)).id
 
 
-async def an_automation(platform: Platform, owner: TenantContext) -> UUID:
-    """An automation of the tenant's, with one run on record."""
-    automations = platform.storage.get_automation_storage()
-    automation = make_automation()
-    assert await automations.create_automation(owner.org_id, automation, ())
-    await automations.create_run(owner.org_id, make_run(automation.id))
-    return automation.id
+async def an_agent_automation(platform: Platform, owner: TenantContext) -> UUID:
+    """An agent automation of the tenant's, with one run on record."""
+    agent_automations = platform.storage.get_agent_automation_storage()
+    agent_automation = make_agent_automation()
+    assert await agent_automations.create_agent_automation(owner.org_id, agent_automation, ())
+    await agent_automations.create_run(owner.org_id, make_run(agent_automation.id))
+    return agent_automation.id
 
 
 def not_found(answer: tuple[ToolFailure | None, str]) -> bool:
@@ -97,14 +97,14 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     platform.owner = await a_tenant(platform, "Ajax")
     other = await a_tenant(platform, "Bolt")
     projects = storage.get_project_storage()
-    # Another tenant's session, project, and automation with its run.
+    # Another tenant's session, project, and agent automation with its run.
     theirs = await a_session(platform, other)
     their_project = await in_project(projects, other.org_id, theirs)
-    their_automation = await an_automation(platform, other)
+    their_agent_automation = await an_agent_automation(platform, other)
     # The asking person's own, and a session of theirs marked deleted.
     ours = await a_session(platform, platform.owner)
     our_project = await in_project(projects, platform.owner.org_id, ours)
-    our_automation = await an_automation(platform, platform.owner)
+    our_agent_automation = await an_agent_automation(platform, platform.owner)
     deleted = await a_session(platform, platform.owner)
     await platform.managers.agent_sessions.delete_session(platform.owner, deleted)
     asking = await a_session(platform, platform.owner, kinds.PLATFORM_ASSISTANT)
@@ -115,18 +115,26 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
             calls(kinds.READ_SESSION, "their_session", session_id=str(theirs)),
             calls(kinds.READ_WAIT, "their_wait", session_id=str(theirs)),
             calls(kinds.READ_PROJECT, "their_project", project_id=str(their_project)),
-            calls(kinds.READ_AUTOMATION, "their_automation", automation_id=str(their_automation)),
+            calls(
+                kinds.READ_AGENT_AUTOMATION,
+                "their_agent_automation",
+                agent_automation_id=str(their_agent_automation),
+            ),
             calls(kinds.READ_SESSION, "deleted", session_id=str(deleted)),
             calls(kinds.LIST_SESSIONS, "sessions", limit=50),
             calls(kinds.LIST_SESSIONS, "by_project", project_id=str(their_project)),
             calls(kinds.LIST_PROJECTS, "projects", limit=50),
-            calls(kinds.LIST_AUTOMATIONS, "automations", limit=50),
+            calls(kinds.LIST_AGENT_AUTOMATIONS, "agent_automations", limit=50),
         ),
         reply(
             calls(kinds.READ_SESSION, "our_session", session_id=str(ours)),
             calls(kinds.READ_WAIT, "our_wait", session_id=str(ours)),
             calls(kinds.READ_PROJECT, "our_project", project_id=str(our_project)),
-            calls(kinds.READ_AUTOMATION, "our_automation", automation_id=str(our_automation)),
+            calls(
+                kinds.READ_AGENT_AUTOMATION,
+                "our_agent_automation",
+                agent_automation_id=str(our_agent_automation),
+            ),
         ),
         reply(said("Here is what your team has.")),
     )
@@ -134,14 +142,20 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     run = await platform.managers.loop.run(platform.owner, asking)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    for use_id in ("their_session", "their_wait", "their_project", "their_automation", "deleted"):
+    for use_id in (
+        "their_session",
+        "their_wait",
+        "their_project",
+        "their_agent_automation",
+        "deleted",
+    ):
         assert not_found(await platform.answer(asking, use_id)), use_id
     listed: dict[str, set[str]] = {}
     for use_id, field, key in (
         ("sessions", "sessions", "session_id"),
         ("by_project", "sessions", "session_id"),
         ("projects", "projects", "project_id"),
-        ("automations", "automations", "automation_id"),
+        ("agent_automations", "agent_automations", "agent_automation_id"),
     ):
         failure, text = await platform.answer(asking, use_id)
         assert failure is None, use_id
@@ -150,7 +164,7 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     assert not {str(theirs), str(deleted)} & listed["sessions"]
     assert listed["by_project"] == set()
     assert listed["projects"] == {str(our_project)}
-    assert listed["automations"] == {str(our_automation)}
+    assert listed["agent_automations"] == {str(our_agent_automation)}
     # The same readers read the person's own tenant whole.
     failure, text = await platform.answer(asking, "our_session")
     assert failure is None and json.loads(text)["project_id"] == str(our_project)
@@ -158,7 +172,7 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     assert failure is None and json.loads(text)["runs_in"] == "cloud"
     failure, text = await platform.answer(asking, "our_project")
     assert failure is None and json.loads(text)["repository"] == "github.com/octo/reports"
-    failure, text = await platform.answer(asking, "our_automation")
+    failure, text = await platform.answer(asking, "our_agent_automation")
     read = json.loads(text)
     assert failure is None and [r["status"] for r in read["runs"]] == ["refused"]
 

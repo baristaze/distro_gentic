@@ -326,7 +326,7 @@ async def test_a_redelivered_event_is_routed_once(platform: Wired) -> None:
 
 async def test_every_record_of_a_twins_event_names_the_twin(platform: Wired) -> None:
     """The audit entry of the routing, the input the session reads, and the
-    text an automation's run carries each say a twin served the event; a
+    text an agent automation's run carries each say a twin served the event; a
     real system's event is named as such."""
     session_id = await bound(platform)
     twins = event(Arrival.COMMENT)

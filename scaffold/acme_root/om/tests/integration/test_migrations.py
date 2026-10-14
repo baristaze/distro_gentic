@@ -7,8 +7,8 @@ and back, a data migration passes the fence it runs under and fails when it
 misses rows, a workspace's notices move to the one notice and back, every
 tenant's, the one notice leaves the table with every notice kept in the list,
 the validation sessions' station columns leave the table with every session
-this release wrote kept, a platform automation this release writes reads as
-the previous release's after a downgrade, which drops the automations of a
+this release wrote kept, a platform agent automation this release writes reads as
+the previous release's after a downgrade, which drops the agent automations of a
 product's kind, a refused validation session goes back to queued, kept,
 when its reason's column leaves, a playbook version the release before
 wrote reads as never checked by the lever checks, and an invocation it
@@ -21,7 +21,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.automation_storage import make_automation
+from contracts.agent_automation_storage import make_agent_automation
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation, refused
 from contracts.playbook_storage import make_playbook
@@ -29,8 +29,8 @@ from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
-from acme.om.automations.types.automation import Action
+from acme.om.agent_automations.storage.impl.postgres import AgentAutomationStoragePostgresImpl
+from acme.om.agent_automations.types.agent_automation import Action
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
@@ -616,32 +616,32 @@ which forbids any other."""
 
 
 async def actions_of(url: str, org: UUID) -> dict[UUID, dict[str, object]]:
-    """A tenant's stored actions by automation, as the migration login reads
+    """A tenant's stored actions by agent automation, as the migration login reads
     them inside the tenant's fence."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
-            read = await connection.exec_driver_sql("SELECT id, action FROM core.automations")
+            read = await connection.exec_driver_sql("SELECT id, action FROM core.agent_automations")
             return {row[0]: row[1] for row in read}
     finally:
         await engine.dispose()
 
 
-async def test_a_platform_automation_reads_as_the_previous_releases_after_a_downgrade(
+async def test_a_platform_agent_automation_reads_as_the_previous_releases_after_a_downgrade(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """This release writes a platform action with no `params`, and the
-    downgrade strips the key from one that carries it; an automation of a
+    downgrade strips the key from one that carries it; an agent automation of a
     product's kind goes."""
-    storage = AutomationStoragePostgresImpl(pg_sessions)
+    storage = AgentAutomationStoragePostgresImpl(pg_sessions)
     org = new_id()
-    written, carried = make_automation(), make_automation()
-    product = make_automation().model_copy(
+    written, carried = make_agent_automation(), make_agent_automation()
+    product = make_agent_automation().model_copy(
         update={"action": Action(kind="run_job", params={"steps": 2})}
     )
-    for automation in (written, carried, product):
-        assert await storage.create_automation(org, automation, ())
+    for agent_automation in (written, carried, product):
+        assert await storage.create_agent_automation(org, agent_automation, ())
     core = migrated[DatabaseRole.CORE]
     assert "params" not in (await actions_of(core, org))[written.id]
     engine = create_async_engine(core)
@@ -649,7 +649,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                """UPDATE core.automations SET action = action || '{"params": {}}'"""
+                """UPDATE core.agent_automations SET action = action || '{"params": {}}'"""
                 f" WHERE id = '{carried.id}'"
             )
     finally:
@@ -661,7 +661,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
 
     assert set(previous) == {written.id, carried.id}
     assert all(set(action) == PREVIOUS_ACTION for action in previous.values())
-    assert await storage.read_automation(org, written.id) == written
+    assert await storage.read_agent_automation(org, written.id) == written
     assert await check(DatabaseRole.CORE, core) == []
 
 

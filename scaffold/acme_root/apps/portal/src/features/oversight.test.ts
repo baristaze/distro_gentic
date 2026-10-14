@@ -94,15 +94,15 @@ describe("the org's audit, past one page and past a trim", () => {
     expect(buttons()).not.toContain("Load older");
   });
 
-  it("credits the automation principal with what its runs did", async () => {
+  it("credits the agent automation principal with what its runs did", async () => {
     const principal = { id: "pr1", role: "member", granted_by: PEOPLE.a.id, created_at: at };
     net.answer = (call) => {
-      if (call.path === "/v1/automations/principal") return principal;
+      if (call.path === "/v1/agent-automations/principal") return principal;
       if (call.path.startsWith("/v1/events/recent?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
       return answer(call);
     };
     await mount(routes, "/audit");
-    expect(container.querySelector("table[aria-label='Events']")!.textContent).toContain("the automation principal");
+    expect(container.querySelector("table[aria-label='Events']")!.textContent).toContain("the agent automation principal");
     expect(container.textContent).not.toContain("a former member");
   });
 });

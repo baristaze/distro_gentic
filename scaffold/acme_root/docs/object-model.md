@@ -32,7 +32,7 @@ Readers: `list_projects`, `read_project`.
 
 ## Agent sessions
 
-An **agent session** belongs to the org. A person starts it, an
+An **agent session** belongs to the org. A person starts it, an agent
 automation starts it, another session hands work to it, or a session
 spawns it as a **sub-agent**, a child in its tree. Its **kind** fixes
 its tools when it starts. It is a series of **loops** over one history,
@@ -169,11 +169,11 @@ resets.
 Reader: `read_spend` (each budget, what it bounds, its amount and
 window, what the window spent so far, and what calls running now hold).
 
-## Automations
+## Agent automations
 
-An **automation** belongs to the org. A person creates it, and it runs
-as its creator or as the org's automation principal. An event or a
-schedule **fires** it, and every firing is a recorded **run**:
+An **agent automation** belongs to the org. A person creates it, and it
+runs as its creator or as the org's agent automation principal. An event
+or a schedule **fires** it, and every firing is a recorded **run**:
 
 | Run status | Means |
 | --- | --- |
@@ -190,8 +190,8 @@ that cannot run (`action`), a start with no project where one is needed
 (`unattributed`). A person who may write changes its limits or turns it
 off, in person; one that runs as its creator, only its creator.
 
-Readers: `list_automations`, `read_automation` (its trigger, its action,
-its limits, and its recent runs, newest first).
+Readers: `list_agent_automations`, `read_agent_automation` (its trigger,
+its action, its limits, and its recent runs, newest first).
 
 ## Knowledge
 

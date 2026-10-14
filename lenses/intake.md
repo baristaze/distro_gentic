@@ -6,7 +6,7 @@ feedback returns to the same session.
 
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
-it, twins in the suites, automations, playbooks and knowledge,
+it, twins in the suites, agent_automations, playbooks and knowledge,
 connectors, and notifications. It leaves the inbox and how data renders
 to the engine; steering messages to `watch`; who may speak as a
 principal and how outside text is labelled to `wall`; and the provenance
@@ -135,56 +135,57 @@ evidence is EVD-03.)
 
 **Check.** review
 
-## INT-07 An automation runs as its creator or the automation principal
+## INT-07 An agent automation runs as its creator or as its principal
 
-**Principle.** Automations turn events into bounded work. A trigger, an
-event with filters or a schedule, leads to an action: start a session,
-message a standing session (refused while enabled, until a run's cap can
-end with its run), or a product's own action. A product's
-action may refuse the person who writes the automation, or the
+**Principle.** Agent automations turn events into bounded work. A
+trigger, an event with filters or a schedule, leads to an action: start
+a session, message a standing session (refused while enabled, until a
+run's cap can end with its run), or a product's own action. A product's
+action may refuse the person who writes the agent automation, or the
 principal it is set to run as, so one its firings would refuse is never
-saved. An automation runs as its creator or as the tenant's automation
-principal.
+saved. An agent automation runs as its creator or as the tenant's agent
+automation principal.
 
-**Source.** Work In, Results Out, Automations.
+**Source.** Work In, Results Out, Agent Automations.
 
-**Look for.** The principal each automation's action runs under; where
-the create and the edit of an enabled automation of a product's action
-ask its kind's check of the writer (`check_writer`), under the writer's
-own context, with whom the automation runs as.
+**Look for.** The principal each agent automation's action runs under;
+where the create and the edit of an enabled agent automation of a
+product's action ask its kind's check of the writer (`check_writer`),
+under the writer's own context, with whom the agent automation runs as.
 
-**Violation.** An automation that acts as the system, as the agent, or as
-the person whose event triggered it; an enabled automation of a product's
-action written without its kind's check of the writer, or checked under
-a context other than the writer's or blind to whom it runs as.
+**Violation.** An agent automation that acts as the system, as the
+agent, or as the person whose event triggered it; an enabled agent
+automation of a product's action written without its kind's check of the
+writer, or checked under a context other than the writer's or blind to
+whom it runs as.
 
 **Severity.** high
 
 **Check.** review
 
-## INT-08 An automation is bounded, and a chain stops at its hop limit
+## INT-08 An agent automation is bounded, and a chain stops at its hop limit
 
-**Principle.** An automation has limits of its own: a cost cap, a rate,
-a concurrency, and whether to queue when limited. It ignores the events
-its own sessions caused, unless it declares otherwise, and a chain of
-automations stops at a hop limit, so an agent's comment cannot start an
-endless chain. Every firing is a recorded run, and the run of a
-product's action stays at work until its check says the work ended. A
-firing while a run is open starts another beside it, as the limits
-allow, and an event delivered again, or a schedule's slot met again,
-answers the run it made. Autonomy stops exactly where policy says: at
+**Principle.** An agent automation has limits of its own: a cost cap, a
+rate, a concurrency, and whether to queue when limited. It ignores the
+events its own sessions caused, unless it declares otherwise, and a
+chain of agent automations stops at a hop limit, so an agent's comment
+cannot start an endless chain. Every firing is a recorded run, and the
+run of a product's action stays at work until its check says the work
+ended. A firing while a run is open starts another beside it, as the
+limits allow, and an event delivered again, or a schedule's slot met
+again, answers the run it made. Autonomy stops where policy says: at
 an approval, a bound, or a limit.
 
-**Source.** Work In, Results Out, Automations; What Closes a Loop.
+**Source.** Work In, Results Out, Agent Automations; What Closes a Loop.
 
-**Look for.** An automation's limits, and where each is enforced; how it
-knows an event its own sessions caused; the hop count a chain carries;
-the record of each firing.
+**Look for.** An agent automation's limits, and where each is enforced;
+how it knows an event its own sessions caused; the hop count a chain
+carries; the record of each firing.
 
-**Violation.** An automation without a cost cap, a rate, or a
-concurrency, or one whose limits are not enforced; an automation that
-fires on its own sessions' events without declaring it; a chain with no
-hop count or no limit; a firing with no recorded run; a run of a
+**Violation.** An agent automation without a cost cap, a rate, or a
+concurrency, or one whose limits are not enforced; an agent automation
+that fires on its own sessions' events without declaring it; a chain
+with no hop count or no limit; a firing with no recorded run; a run of a
 product's action closed before its check says its work ended; an event
 delivered again, or a slot met again, that makes a second run.
 
@@ -197,12 +198,12 @@ delivered again, or a slot met again, that makes a second run.
 **Principle.** Playbooks are a team's procedures as versioned,
 executable briefs, in the Agent Skills format with their gates in a
 namespaced metadata extension. Only a person publishes a playbook. A
-principal or an automation invokes one, and its gates compile into the
-session's policy, where they can only narrow it. A person who manages
-the tenant pins one to a kind as its manual: each session of the kind
-made after the pin holds its brief as its standing text, whole on every
-request, and its gates in its policy, and keeps that version for its
-life.
+principal or an agent automation invokes one, and its gates compile into
+the session's policy, where they can only narrow it. A person who
+manages the tenant pins one to a kind as its manual: each session of the
+kind made after the pin holds its brief as its standing text, whole on
+every request, and its gates in its policy, and keeps that version for
+its life.
 
 **Source.** Work In, Results Out, Playbooks and Knowledge.
 

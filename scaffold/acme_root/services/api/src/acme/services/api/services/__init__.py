@@ -5,9 +5,9 @@ translates the request, calls one manager, and projects the result."""
 from abc import ABC, abstractmethod
 
 from acme.services.api.services.admin import AdminServiceInterface
+from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
-from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
@@ -37,9 +37,9 @@ from acme.services.api.services.webhooks import WebhooksServiceInterface
 
 __all__ = [
     "AdminServiceInterface",
+    "AgentAutomationsServiceInterface",
     "AgentBillingServiceInterface",
     "AgentSessionsServiceInterface",
-    "AutomationsServiceInterface",
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
     "ConnectorsServiceInterface",
@@ -108,7 +108,7 @@ class ServicesInterface(ABC):
     def get_relay_service(self) -> RelayServiceInterface: ...
 
     @abstractmethod
-    def get_automations_service(self) -> AutomationsServiceInterface: ...
+    def get_agent_automations_service(self) -> AgentAutomationsServiceInterface: ...
 
     @abstractmethod
     def get_budgets_service(self) -> BudgetsServiceInterface: ...

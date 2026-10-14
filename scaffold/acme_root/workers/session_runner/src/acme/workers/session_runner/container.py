@@ -1,6 +1,6 @@
 """The runner boots the way every process does: settings, storage, infra,
 the integrations (the model providers), and the managers, with the
-product's agent kinds and tools, and the automations the platform
+product's agent kinds and tools, and the agent automations the platform
 assistant reads. The claim loop holds the container directly.
 
 The runner holds no purge login: it runs what a model asks for, and the
@@ -15,11 +15,11 @@ from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import ConnectorsLayer
@@ -204,9 +204,9 @@ class RunnerContainer:
         # record each act with intake, and the engineer's pull request binds
         # its work there; the container builds it below.
         acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
-        # The automations the platform assistant reads, built below over the
+        # The agent automations the platform assistant reads, built below over the
         # managers, as the API and the maintenance worker build them.
-        automations: list[AutomationsManagerInterface] = []
+        agent_automations: list[AgentAutomationsManagerInterface] = []
 
         def stage() -> RequestContext:
             """The request stage each relayed operation runs under, minted
@@ -250,7 +250,7 @@ class RunnerContainer:
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
             knowledge=knowledge.manager,
-            automations=lambda: automations[0],
+            agent_automations=lambda: agent_automations[0],
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
@@ -268,15 +268,17 @@ class RunnerContainer:
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
             cloud_pool_stage=stage,
-            # A call of a session the tenant's automation principal started
+            # A call of a session the tenant's agent automation principal started
             # runs on that principal's grant; every other on a member's place.
-            principal_context=automation_principals(storage.get_automation_storage(), members),
+            principal_context=agent_automation_principals(
+                storage.get_agent_automation_storage(), members
+            ),
             stream_sink=stream,
             attached_toolsets=connectors.attached,
         )
         built.append(managers)
-        automations.append(
-            build_automations(
+        agent_automations.append(
+            build_agent_automations(
                 storage,
                 managers,
                 project_required=settings.environment != LOCAL,

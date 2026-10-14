@@ -21,10 +21,10 @@ import inspect
 import pkgutil
 
 from contracts import (
+    agent_automation_storage,
     agent_session_storage,
     agent_storage,
     attribution_storage,
-    automation_storage,
     benchmark_storage,
     budget_storage,
     cloud_pool_storage,
@@ -238,7 +238,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "ToolStorageInterface": tool_storage.CROSS_TENANT_CASES,
     "TrustStorageInterface": trust_storage.CROSS_TENANT_CASES,
     "IntakeStorageInterface": intake_storage.CROSS_TENANT_CASES,
-    "AutomationStorageInterface": automation_storage.CROSS_TENANT_CASES,
+    "AgentAutomationStorageInterface": agent_automation_storage.CROSS_TENANT_CASES,
     "PlaybookStorageInterface": playbook_storage.CROSS_TENANT_CASES,
     "KnowledgeStorageInterface": knowledge_storage.CROSS_TENANT_CASES,
     "NotificationStorageInterface": notification_storage.CROSS_TENANT_CASES,

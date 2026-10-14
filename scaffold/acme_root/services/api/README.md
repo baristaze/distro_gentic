@@ -171,13 +171,14 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   kind started after holds it as its standing text. (`/v1/knowledge`,
   `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
   `/v1/playbooks/{name}`, `.../invocations`, `/v1/playbook-pins`)
-- **Automations.** A person makes one in person, under an
+- **AgentAutomations.** A person makes one in person, under an
   Idempotency-Key, in a project of the tenant; any member lists and
   reads them; its creator edits one that runs as its creator, and a
-  person whose role holds the grant one that runs as the automation
-  principal. The principal's grant is read and set beside them.
-  (`/v1/automations`, `/v1/automations/{automation_id}`,
-  `/v1/automations/principal`)
+  person whose role holds the grant one that runs as the agent
+  automation principal. The principal's grant is read and set beside
+  them. (`/v1/agent-automations`,
+  `/v1/agent-automations/{agent_automation_id}`,
+  `/v1/agent-automations/principal`)
 - **Tool policy.** Any member reads the tenant's layer; an owner or an
   admin writes it whole on the version `If-Match` names.
   (`/v1/tools/policy`)

@@ -77,7 +77,7 @@ PLATFORM_NAMES = sorted(typer.main.get_group(main.app).commands)
 
 def test_the_platform_holds_the_names_the_refusal_below_runs_over() -> None:
     # A group, `session`, and a command, `login`: each name at the top is taken.
-    assert {"session", "project", "automation", "login", "listen"} <= set(PLATFORM_NAMES)
+    assert {"session", "project", "agent-automation", "login", "listen"} <= set(PLATFORM_NAMES)
 
 
 @pytest.mark.parametrize("name", PLATFORM_NAMES)

@@ -109,7 +109,7 @@ let router: ReturnType<typeof createMemoryRouter>;
 const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   nav: [
-    { id: "automations", label: "Automations", icon: null, to: "/automations", tip: "Automations" },
+    { id: "agent_automations", label: "Agent automations", icon: null, to: "/agent-automations", tip: "Agent automations" },
     { id: "knowledge", label: "Knowledge", icon: null, to: "/knowledge", tip: "Knowledge", count: () => 2 },
   ],
   settings: [
@@ -149,7 +149,7 @@ async function mount(path = "/") {
           { path: "/sessions", Component: page("sessions") },
           { path: "/sessions/:id", Component: page("one session") },
           { path: "/settings/*", Component: page("a section") },
-          { path: "/automations", Component: page("automations") },
+          { path: "/agent-automations", Component: page("agent_automations") },
           { path: "/knowledge", Component: page("knowledge") },
         ],
       },
@@ -188,7 +188,7 @@ it("holds the org chip, the search, New session, the slot's entries with their c
   await mount();
   const nav = q("nav[aria-label='Main']")!;
   const links = [...nav.querySelectorAll("a")].map((a) => a.textContent?.trim());
-  expect(links).toEqual(["New session", "Automations", "Knowledge2"]);
+  expect(links).toEqual(["New session", "Agent automations", "Knowledge2"]);
   expect(q("aside")!.textContent).toContain("Search");
   expect(trigger().textContent).toContain("Owner");
   expect(trigger().textContent).toContain("Ajax");
@@ -379,7 +379,7 @@ it("searches the whole app on Cmd-K: what is typed starts a session on Home, and
   const field = q<HTMLInputElement>("input[role='combobox']")!;
   expect(field.placeholder).toBe("Search sessions, settings, and actions");
   const options = () => [...container.querySelectorAll("[role='option']")].map((o) => o.querySelector(".acme-palette-label")?.textContent);
-  expect(options()).toEqual(expect.arrayContaining(["New session", "Automations", "Projects", "Tidy the docs"]));
+  expect(options()).toEqual(expect.arrayContaining(["New session", "Agent automations", "Projects", "Tidy the docs"]));
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Fix the build");
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -501,8 +501,8 @@ describe("the support dock", () => {
     await mount("/sessions");
     await act(async () => ask().click());
     await typeIn("Why is my session parked?");
-    await act(async () => router.navigate("/automations"));
-    expect(container.textContent).toContain("automations");
+    await act(async () => router.navigate("/agent-automations"));
+    expect(container.textContent).toContain("agent_automations");
     expect(dock()!.dataset.mode).toBe("side");
     expect(field().value).toBe("Why is my session parked?");
   });
@@ -525,7 +525,7 @@ describe("the support dock", () => {
     await act(async () => q<HTMLButtonElement>("button[aria-label='Expand']")!.click());
     expect(dock()!.dataset.mode).toBe("expanded");
     expect(q(".acme-main")!.hidden).toBe(true);
-    await act(async () => router.navigate("/automations"));
+    await act(async () => router.navigate("/agent-automations"));
     expect(dock()!.dataset.mode).toBe("side");
     expect(q(".acme-main")!.hidden).toBe(false);
   });

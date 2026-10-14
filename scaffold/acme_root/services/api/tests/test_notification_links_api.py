@@ -305,22 +305,26 @@ async def test_a_missing_keys_link_answers_who_saves_the_orgs_keys_alone(
     assert session.json()["park"] is None, "the saved key clears the park"
 
 
-async def test_the_automation_principals_grant_answers_who_manages_members_alone(
+async def test_the_agent_automation_principals_grant_answers_who_manages_members_alone(
     client: httpx.AsyncClient, ajax: Tenant
 ) -> None:
     grant = {"json": {"role": "member"}}
     for refused in (Role.MEMBER, Role.VIEWER):
-        answered = await follow(client, "PUT", "/v1/automations/principal", ajax[refused], **grant)
+        answered = await follow(
+            client, "PUT", "/v1/agent-automations/principal", ajax[refused], **grant
+        )
         assert answered.status_code == 403, f"{refused}: {answered.text}"
     above = await follow(
-        client, "PUT", "/v1/automations/principal", ajax[Role.ADMIN], json={"role": "owner"}
+        client, "PUT", "/v1/agent-automations/principal", ajax[Role.ADMIN], json={"role": "owner"}
     )
     assert above.status_code == 403, above.text
-    granted = await follow(client, "PUT", "/v1/automations/principal", ajax[Role.ADMIN], **grant)
+    granted = await follow(
+        client, "PUT", "/v1/agent-automations/principal", ajax[Role.ADMIN], **grant
+    )
     assert granted.status_code == 200, granted.text
-    read = await client.get("/v1/automations/principal", headers=ajax[Role.VIEWER])
+    read = await client.get("/v1/agent-automations/principal", headers=ajax[Role.VIEWER])
     assert read.json()["id"] == granted.json()["id"]
-    elsewhere = await client.get("/v1/automations/principal", headers=ajax.stranger)
+    elsewhere = await client.get("/v1/agent-automations/principal", headers=ajax.stranger)
     assert elsewhere.status_code == 404, elsewhere.text
 
 

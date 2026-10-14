@@ -21,7 +21,7 @@ engine runs every one of them the same way.
 - The platform assistant answers the people who run their part of the
   platform, on their own permissions: it reads the corpus, the knowledge
   base, and the tenant's live records (its sessions and what they wait
-  on, its projects, its automations), drafts configuration a person
+  on, its projects, its agent automations), drafts configuration a person
   applies, and hands engineering work to an engineer. It has no
   workspace, repository, or shell.
 - The reviewer reads one pull request through the forge: its files and
@@ -96,8 +96,8 @@ LIST_SESSIONS = "list_sessions"
 READ_WAIT = "read_wait"
 LIST_PROJECTS = "list_projects"
 READ_PROJECT = "read_project"
-LIST_AUTOMATIONS = "list_automations"
-READ_AUTOMATION = "read_automation"
+LIST_AGENT_AUTOMATIONS = "list_agent_automations"
+READ_AGENT_AUTOMATION = "read_agent_automation"
 READ_PULL_REQUEST = "read_pull_request"
 READ_PULL_REQUEST_FILE = "read_pull_request_file"
 NOTE_FINDING = "note_finding"
@@ -112,8 +112,8 @@ ASSISTANT_READERS = (
     READ_WAIT,
     LIST_PROJECTS,
     READ_PROJECT,
-    LIST_AUTOMATIONS,
-    READ_AUTOMATION,
+    LIST_AGENT_AUTOMATIONS,
+    READ_AGENT_AUTOMATION,
 )
 """The assistant's readers of the tenant's live records, each through the
 asking person's own context."""
@@ -155,7 +155,7 @@ SUB_AGENTS_TOOLSET = Toolset(
 RECORDS_TOOLSET = Toolset(
     name="records",
     version=1,
-    summary="Read the tenant's sessions and what they wait on, its projects, and its automations.",
+    summary="Read the tenant's sessions and what they wait on, its projects, and its agent automations.",
     tools=ASSISTANT_READERS,
 )
 HANDOFF_TOOLSET = Toolset(
@@ -542,7 +542,7 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     isolation=NO_WORKSPACE,
 )
 """The platform assistant before it read the tenant's sessions, projects,
-and automations, and its knowledge: kept while a session may still run
+and agent_automations, and its knowledge: kept while a session may still run
 it."""
 
 PLATFORM_ASSISTANT_KIND = AgentKind(
@@ -562,8 +562,8 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "document says, so the person can open it. Diagnose by reading first, "
         "never by guessing. Find sessions with list_sessions and read one with "
         "read_session; read what a waiting session waits on, its place in the work queue "
-        "and the hosts that run it, with read_wait; read projects and automations, and an "
-        "automation's recent runs, the same way, and any other reader you hold. When "
+        "and the hosts that run it, with read_wait; read projects and agent_automations, and an "
+        "agent_automation's recent runs, the same way, and any other reader you hold. When "
         "something waits or is slow, say what it waits on as you read it, what clears it, "
         "who may clear it, and where they do. Draft a change to the tool policy with "
         "draft_tool_policy and show the difference from what is live: a person applies "
@@ -644,7 +644,7 @@ OPERATOR_PROMPT = (
     "Read what a waiting session waits on with read_wait: its loop's place on the work "
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
-    "with read_spend, and its projects and automations with their readers. Explain only from "
+    "with read_spend, and its projects and agent automations with their readers. Explain only from "
     "what search_knowledge finds, and cite the document of every passage you use. Diagnose "
     "by reading first, never by guessing: say what something waits on as you read it, what "
     "clears it, who may clear it, and where they do. When the fix is engineering, write it "
@@ -666,7 +666,7 @@ OPERATOR_KIND = AgentKind(
 )
 """The operator. It reads the tenant's operations on its person's own
 permissions: its sessions and what they wait on, its hosts and what they
-offer, its budgets and their spend, its projects and automations. Every
+offer, its budgets and their spend, its projects and agent automations. Every
 tool it holds reads, so it changes nothing; a fix it finds leaves as an
 objective a person hands to an engineer."""
 

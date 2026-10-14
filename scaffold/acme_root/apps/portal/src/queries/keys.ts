@@ -62,11 +62,11 @@ export const keys = {
     options: ["fill_choice", "options"] as const,
     choices: ["fill_choice", "list"] as const,
   },
-  automations: {
-    all: ["automation"] as const,
-    list: (limit: number) => ["automation", "list", limit] as const,
-    one: (id: string) => ["automation", id] as const,
-    principal: ["automation", "principal"] as const,
+  agentAutomations: {
+    all: ["agent_automation"] as const,
+    list: (limit: number) => ["agent_automation", "list", limit] as const,
+    one: (id: string) => ["agent_automation", id] as const,
+    principal: ["agent_automation", "principal"] as const,
   },
   // A playbook is read by its name, at its latest version.
   playbooks: {

@@ -216,15 +216,16 @@ objective to a validated, reviewable change in a workspace of its own.
 engineer. The **platform assistant** answers the people who set up and
 run their part of the platform: it explains the product from its
 documentation and cites it, reads the tenant's sessions and what they
-wait on, its projects, and its automations, drafts the tool policy for a
-person to apply, and hands engineering work to an engineer. It acts on a person's own permissions, and it has no
-workspace, no repository, and no shell. The **reviewer** reads a pull
-request through the forge, its files at its head and its checks, and
-answers with findings, each with a file, a line, and a grade; it changes
-nothing, and a person approves each comment it posts. The **operator**
-reads the tenant's sessions and what they wait on, its hosts and what
-they offer, and its budgets' spend, on a person's own permissions, and
-acts on none of them.
+wait on, its projects, and its agent automations, drafts the tool policy
+for a person to apply, and hands engineering work to an engineer. It
+acts on a person's own permissions, and it has no workspace, no
+repository, and no shell. The **reviewer** reads a pull request through
+the forge, its files at its head and its checks, and answers with
+findings, each with a file, a line, and a grade; it changes nothing, and
+a person approves each comment it posts. The **operator** reads the
+tenant's sessions and what they wait on, its hosts and what they offer,
+and its budgets' spend, on a person's own permissions, and acts on none
+of them.
 
 A kind whose toolsets include starting sub-agents is a lead: it starts
 the others, such as an engineer on a change and the reviewer on its pull
@@ -306,8 +307,8 @@ arrive twice, so the second copy gets the first one's answer.
   under a project belongs to it, of its own org, from before it exists
   and never moved; a session it spawns or hands work to belongs to the
   same. The API's start names the session's project, and outside
-  `local` refuses a session that names none. An automation's start names
-  its project too, and outside `local` one that names none starts
+  `local` refuses a session that names none. An agent automation's start
+  names its project too, and outside `local` one that names none starts
   nothing.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
@@ -368,7 +369,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Relay](src/acme/om/relay/README.md)
 - [The cloud pool](src/acme/om/cloud_pool/README.md)
 - [Intake](src/acme/om/intake/README.md)
-- [Automations](src/acme/om/automations/README.md)
+- [Agent automations](src/acme/om/agent_automations/README.md)
 - [Playbooks](src/acme/om/playbooks/README.md)
 - [Knowledge](src/acme/om/knowledge/README.md)
 - [Levers](src/acme/om/levers/README.md)

@@ -25,9 +25,9 @@ kinds of thing [Acme is made of](../../../../README.md).
   instruct it. Its brief arrives as that principal's message, and its
   gates hold there, and in every sub-agent below it, from then on, a
   session between them marked deleted or not.
-- **Invoke** a version as an automation's start runs, under the context
-  it runs as, into the session it started. The person who saved the
-  automation chose the playbook then, as they wrote its brief.
+- **Invoke** a version as an agent automation's start runs, under the
+  context it runs as, into the session it started. The person who saved
+  the agent automation chose the playbook then, as they wrote its brief.
 - **Pin** a name's latest version to a kind as its manual, and take it
   away, by a person in person who manages the tenant. A pin for a
   project wins over the tenant's.
@@ -40,9 +40,9 @@ kinds of thing [Acme is made of](../../../../README.md).
 
 ## The rules
 
-- **Only a person publishes,** and only a principal or an automation
-  invokes. Only a person who manages the tenant pins. An agent's call
-  does none of them.
+- **Only a person publishes,** and only a principal or an agent
+  automation invokes. Only a person who manages the tenant pins. An
+  agent's call does none of them.
 - **A manual is whole and fixed.** A brief past what a session's
   standing text holds is refused when it is pinned, and a session never
   takes a manual after it is made.
@@ -59,6 +59,6 @@ a session passes, after the policy beneath it, the gates of the
 playbooks it and each session above it invoked. Where a session of that
 chain cannot be read, its gates are unknown, and the call waits for a
 person. A root that makes sessions also wraps its agents manager in the
-layer, so each session it makes takes its kind's manual. An automation
-reaches the manager through its root, to invoke the playbook a start
-names.
+layer, so each session it makes takes its kind's manual. An agent
+automation reaches the manager through its root, to invoke the playbook
+a start names.

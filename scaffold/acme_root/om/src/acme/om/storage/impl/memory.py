@@ -1,5 +1,7 @@
 """The in-memory storage root: the default for unit tests and the fast gate."""
 
+from acme.om.agent_automations.storage import AgentAutomationStorageInterface
+from acme.om.agent_automations.storage.impl.memory import AgentAutomationStorageMemoryImpl
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_billing.storage.impl.memory import (
     SpendAccountStorageMemoryImpl,
@@ -11,8 +13,6 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
-from acme.om.automations.storage import AutomationStorageInterface
-from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
@@ -116,7 +116,7 @@ class StorageMemoryImpl(StorageInterface):
         self._hosts = HostsStorageMemoryImpl(self._outbox)
         self._cloud_pool = CloudPoolStorageMemoryImpl()
         self._intake = IntakeStorageMemoryImpl()
-        self._automation = AutomationStorageMemoryImpl(self._outbox)
+        self._automation = AgentAutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._connector = ConnectorStorageMemoryImpl(self._outbox)
@@ -212,7 +212,7 @@ class StorageMemoryImpl(StorageInterface):
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake
 
-    def get_automation_storage(self) -> AutomationStorageInterface:
+    def get_agent_automation_storage(self) -> AgentAutomationStorageInterface:
         return self._automation
 
     def get_playbook_storage(self) -> PlaybookStorageInterface:

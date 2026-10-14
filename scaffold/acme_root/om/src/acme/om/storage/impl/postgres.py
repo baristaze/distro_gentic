@@ -10,6 +10,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from acme.om.agent_automations.storage import AgentAutomationStorageInterface
+from acme.om.agent_automations.storage.impl.postgres import AgentAutomationStoragePostgresImpl
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_billing.storage.impl.postgres import (
     SpendAccountStoragePostgresImpl,
@@ -21,8 +23,6 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
-from acme.om.automations.storage import AutomationStorageInterface
-from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.storage.impl.postgres import BenchmarkStoragePostgresImpl
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
@@ -247,7 +247,7 @@ class StoragePostgresImpl(StorageInterface):
         self._hosts = HostsStoragePostgresImpl(sessions)
         self._cloud_pool = CloudPoolStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
-        self._automation = AutomationStoragePostgresImpl(sessions)
+        self._automation = AgentAutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._connector = ConnectorStoragePostgresImpl(sessions)
@@ -343,7 +343,7 @@ class StoragePostgresImpl(StorageInterface):
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake
 
-    def get_automation_storage(self) -> AutomationStorageInterface:
+    def get_agent_automation_storage(self) -> AgentAutomationStorageInterface:
         return self._automation
 
     def get_playbook_storage(self) -> PlaybookStorageInterface:

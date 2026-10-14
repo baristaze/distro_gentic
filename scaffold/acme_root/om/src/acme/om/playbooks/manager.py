@@ -1,7 +1,7 @@
 """The playbooks swimlane: a team's procedures as versioned, executable
 briefs in the Agent Skills format, their gates in a namespaced metadata
 extension. Only a person publishes a playbook. A principal in person, or
-an automation a person saved, invokes one: its brief reaches the session
+an agent automation a person saved, invokes one: its brief reaches the session
 as that principal's message, and its gates join the session's policy,
 where they only narrow it. A person pins one to a kind as its manual:
 each new session of the kind holds its brief as its standing text and
@@ -51,11 +51,11 @@ class PlaybooksManagerInterface(ABC):
     async def invoke_version(
         self, ctx: TenantContext, session_id: UUID, playbook_id: UUID
     ) -> PlaybookInvocation:
-        """Brings one version into a session as an automation's firing runs,
+        """Brings one version into a session as an agent automation's firing runs,
         under the context it runs as, which may instruct the session: as
         `invoke` does, but never in person, since the person who saved the
-        automation chose the playbook then, as they wrote its brief. Only an
-        automation's action calls it, and no tool holds it. A version the
+        agent automation chose the playbook then, as they wrote its brief. Only an
+        agent automation's action calls it, and no tool holds it. A version the
         tenant does not hold is `NotFound`."""
         ...
 

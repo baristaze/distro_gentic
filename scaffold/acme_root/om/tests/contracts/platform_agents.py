@@ -22,6 +22,8 @@ from acme.integrations.model_providers.calls import ModelCall, ModelReply, Strea
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.rules import CHILDREN_PARK
@@ -30,8 +32,6 @@ from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.root import build_automations
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
@@ -110,7 +110,7 @@ class Platform:
     anthropic: ModelProviderReadingImpl
     openai: ModelProviderScriptedImpl
     owner: TenantContext
-    automations: AutomationsManagerInterface
+    agent_automations: AgentAutomationsManagerInterface
     intake: IntakeManagerInterface | None = None
 
     async def connect(self, integration: str, installation: str) -> None:
@@ -178,7 +178,7 @@ def platform_over(
     forge: IntegrationInterface | None = None,
 ) -> Platform:
     """The managers with the platform's agents shipped over `corpus`, each
-    principal a member of the tenant at every call, and the automations the
+    principal a member of the tenant at every call, and the agent automations the
     assistant reads, built over them. `storage` None is the memory storage,
     and `owner` None a fresh tenant's owner; a suite over Postgres hands in
     both. `kinds` are the adopter's beside the shipped ones, `executor` and
@@ -192,7 +192,7 @@ def platform_over(
         {ProviderName.ANTHROPIC: anthropic, ProviderName.OPENAI: openai}
     )
     storage = storage or StorageMemoryImpl()
-    automations: list[AutomationsManagerInterface] = []
+    agent_automations: list[AgentAutomationsManagerInterface] = []
     intakes: list[IntakeManagerInterface] = []
     integrations = IntegrationsOverImpl(
         IdentityProviderAbsentImpl(), providers, {} if forge is None else {FORGE: forge}
@@ -208,15 +208,15 @@ def platform_over(
         executor=executor,
         work_product=work_product,
         product_kinds=product_kinds,
-        automations=lambda: automations[0],
+        agent_automations=lambda: agent_automations[0],
         intake=None if forge is None else lambda: intakes[0],
     )
-    automations.append(build_automations(storage, managers, project_required=False))
+    agent_automations.append(build_agent_automations(storage, managers, project_required=False))
     if forge is not None:
         intakes.append(build_intake(storage, managers, integrations=integrations))
     owner = owner or context(Role.OWNER, make_org())
     intake = intakes[0] if intakes else None
-    return Platform(storage, managers, anthropic, openai, owner, automations[0], intake)
+    return Platform(storage, managers, anthropic, openai, owner, agent_automations[0], intake)
 
 
 def calls(name: str, use_id: str, **tool_input: object) -> ToolUseBlock:

@@ -94,10 +94,11 @@ minutes, then builds again.
 - One migration: the project's `workspace_base`.
 - A host whose owner closed egress serves no workspace base whose setup
   reaches a registry, even one its store already holds.
-- A rebuild on a schedule is a later step, not an automation action
-  here: a base is keyed by what it names, so rebuilding the same one
-  means dropping it first. The trigger is a workspace base whose image or
-  registry moves under a fixed name often enough that a project asks.
+- A rebuild on a schedule is a later step, not an agent automation
+  action here: a base is keyed by what it names, so rebuilding the same
+  one means dropping it first. The trigger is a workspace base whose
+  image or registry moves under a fixed name often enough that a project
+  asks.
 - Each host of a pool that does not share a store builds its own copy
   the first time a session lands on it.
 - A host's build that dies with its process leaves nothing kept, and its

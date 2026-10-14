@@ -1,5 +1,5 @@
 """The worker classes every tool a session can name, as the API and the
-session runner do, since intake, an automation, and a message check a
+session runner do, since intake, an agent automation, and a message check a
 session's tools here: a linked member's comment on the engineer's pull
 request wakes it as their message, and a kind that names the runner's
 `comment` starts."""

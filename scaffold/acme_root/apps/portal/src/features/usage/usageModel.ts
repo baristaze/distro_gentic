@@ -4,7 +4,7 @@
 // holds together. No React, no fetch.
 import type { BudgetUsageView } from "@acme/client";
 import { costLine } from "../../app/recordModel";
-import { spanLine } from "../automations/automationsModel";
+import { spanLine } from "../agent_automations/agentAutomationsModel";
 
 export interface UsageRow {
   id: string;

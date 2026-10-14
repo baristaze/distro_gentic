@@ -37,15 +37,15 @@ from pydantic import Field, field_validator, model_validator
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface, PullRequestRead
 from acme.integrations.exceptions import ProviderRefused
+from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_automations.types.agent_automation import AgentAutomation
+from acme.om.agent_automations.types.agent_automation import Limits as AgentAutomationLimits
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.request import MAX_TITLE, Handoff
 from acme.om.agents.types.result import Claim
-from acme.om.automations import AutomationsManagerInterface
-from acme.om.automations.types.automation import Automation
-from acme.om.automations.types.automation import Limits as AutomationLimits
 from acme.om.base import Platform
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.context import Role, TenantContext
@@ -563,7 +563,7 @@ class OpenPullRequestImpl(NativeToolImpl):
     or the answer. The platform's account pushes for every session, so the
     head is recorded as the session's act and the branch bound to it before
     the push, and the pull request once it opens: a comment, a check, or a
-    person's push on either finds the session, and an automation it feeds
+    person's push on either finds the session, and an agent automation it feeds
     knows its cause."""
 
     SPEC = ToolSpec(
@@ -866,7 +866,7 @@ each with the sub-agents under it, before it filters by status, park reason,
 and project: the call stays one read of a page, a read of each tree's
 children, and at most a lookup of a project for each session it reads, and
 its answer says where to read on."""
-RUNS_MAX = 20  # an automation's recent runs one read answers at most
+RUNS_MAX = 20  # an agent automation's recent runs one read answers at most
 HOSTS_MAX = 20  # a pool's hosts read_wait answers at most
 CHILDREN_MAX = 20  # the sub-agents read_session answers at most
 CHILDREN_PAGE = 100  # the sub-agents of one parent a tree's read takes at a time
@@ -1383,8 +1383,8 @@ class ReadProjectImpl(NativeToolImpl):
         return project_read(await self._projects().get_project(ctx, call_input.project_id))
 
 
-class AutomationLine(Platform):
-    automation_id: UUID
+class AgentAutomationLine(Platform):
+    agent_automation_id: UUID
     name: str
     trigger: str  # an event or a schedule
     action: str
@@ -1392,18 +1392,18 @@ class AutomationLine(Platform):
     runs_as: str
 
 
-class AutomationList(Platform):
-    automations: tuple[AutomationLine, ...]
+class AgentAutomationList(Platform):
+    agent_automations: tuple[AgentAutomationLine, ...]
     next: UUID | None  # pass it as `after` to read on; none once the list is read
 
 
-class AutomationInput(ToolInput):
-    automation_id: UUID
+class AgentAutomationInput(ToolInput):
+    agent_automation_id: UUID
     runs: int = Field(default=5, ge=1, le=RUNS_MAX)
 
 
 class RunLine(Platform):
-    """One firing of an automation, as recorded: started, queued, or refused
+    """One firing of an agent automation, as recorded: started, queued, or refused
     and why, the session it started or messaged, and how it ended."""
 
     run_id: UUID
@@ -1418,11 +1418,11 @@ class RunLine(Platform):
     closed_at: datetime | None = None
 
 
-class AutomationRead(Platform):
-    """An automation's shape and its recent runs: never the text a person
+class AgentAutomationRead(Platform):
+    """An agent automation's shape and its recent runs: never the text a person
     briefed it with or an event brought."""
 
-    automation_id: UUID
+    agent_automation_id: UUID
     name: str
     enabled: bool
     runs_as: str
@@ -1436,31 +1436,31 @@ class AutomationRead(Platform):
     agent_kind: str | None = None
     project_id: UUID | None = None
     session_id: UUID | None = None
-    limits: AutomationLimits
+    limits: AgentAutomationLimits
     runs: tuple[RunLine, ...]  # newest first
 
 
-def automation_line(automation: Automation) -> AutomationLine:
-    return AutomationLine(
-        automation_id=automation.id,
-        name=automation.name,
-        trigger=automation.trigger.kind,
-        action=automation.action.kind,
-        enabled=automation.enabled,
-        runs_as=automation.runs_as,
+def agent_automation_line(agent_automation: AgentAutomation) -> AgentAutomationLine:
+    return AgentAutomationLine(
+        agent_automation_id=agent_automation.id,
+        name=agent_automation.name,
+        trigger=agent_automation.trigger.kind,
+        action=agent_automation.action.kind,
+        enabled=agent_automation.enabled,
+        runs_as=agent_automation.runs_as,
     )
 
 
-class ListAutomationsImpl(NativeToolImpl):
+class ListAgentAutomationsImpl(NativeToolImpl):
     SPEC = ToolSpec(
-        name=kinds.LIST_AUTOMATIONS,
+        name=kinds.LIST_AGENT_AUTOMATIONS,
         description=(
-            "Lists the tenant's automations: each one's id, name, whether an event or a "
+            "Lists the tenant's agent automations: each one's id, name, whether an event or a "
             "schedule fires it, what it does, whether it is on, and whom it runs as. When "
             "the answer carries next, pass it as after to read on."
         ),
         input_model=PageInput,
-        output_model=AutomationList,
+        output_model=AgentAutomationList,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1468,36 +1468,36 @@ class ListAutomationsImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, automations: Callable[[], AutomationsManagerInterface]) -> None:
-        self._automations = automations
+    def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
+        self._automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
-        rows = await self._automations().list_automations(ctx, call_input.after, limit + 1)
+        rows = await self._automations().list_agent_automations(ctx, call_input.after, limit + 1)
         shown = rows[:limit]
-        return AutomationList(
-            automations=tuple(automation_line(a) for a in shown),
+        return AgentAutomationList(
+            agent_automations=tuple(agent_automation_line(a) for a in shown),
             next=shown[-1].id if len(rows) > limit else None,
         )
 
 
-class ReadAutomationImpl(NativeToolImpl):
-    """Reads one automation of the tenant and its recent runs. The automation
+class ReadAgentAutomationImpl(NativeToolImpl):
+    """Reads one agent automation of the tenant and its recent runs. The agent automation
     is read first, so another tenant's is not found before any run is."""
 
     SPEC = ToolSpec(
-        name=kinds.READ_AUTOMATION,
+        name=kinds.READ_AGENT_AUTOMATION,
         description=(
-            "Reads one automation of the tenant: what fires it, what it does, its limits "
+            "Reads one agent automation of the tenant: what fires it, what it does, its limits "
             "(cost cap, rate, concurrency, queue, hop limit), whom it runs as, and its "
             "recent runs, newest first: each started, queued, or refused and why, the "
             "session it started or messaged, and how it ended."
         ),
-        input_model=AutomationInput,
-        output_model=AutomationRead,
+        input_model=AgentAutomationInput,
+        output_model=AgentAutomationRead,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -1505,22 +1505,24 @@ class ReadAutomationImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, automations: Callable[[], AutomationsManagerInterface]) -> None:
-        self._automations = automations
+    def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
+        self._automations = agent_automations
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, AutomationInput)
-        automation = await self._automations().get_automation(ctx, call_input.automation_id)
-        runs = await self._automations().get_runs(ctx, automation.id, call_input.runs)
-        trigger, action = automation.trigger, automation.action
-        return AutomationRead(
-            automation_id=automation.id,
-            name=automation.name,
-            enabled=automation.enabled,
-            runs_as=automation.runs_as,
-            own_events=automation.own_events,
+        assert isinstance(call_input, AgentAutomationInput)
+        agent_automation = await self._automations().get_agent_automation(
+            ctx, call_input.agent_automation_id
+        )
+        runs = await self._automations().get_runs(ctx, agent_automation.id, call_input.runs)
+        trigger, action = agent_automation.trigger, agent_automation.action
+        return AgentAutomationRead(
+            agent_automation_id=agent_automation.id,
+            name=agent_automation.name,
+            enabled=agent_automation.enabled,
+            runs_as=agent_automation.runs_as,
+            own_events=agent_automation.own_events,
             trigger=trigger.kind,
             integrations=trigger.integrations,
             arrivals=trigger.arrivals,
@@ -1530,7 +1532,7 @@ class ReadAutomationImpl(NativeToolImpl):
             agent_kind=action.agent_kind,
             project_id=action.project_id,
             session_id=action.session_id,
-            limits=automation.limits,
+            limits=agent_automation.limits,
             runs=tuple(
                 RunLine(
                     run_id=run.id,

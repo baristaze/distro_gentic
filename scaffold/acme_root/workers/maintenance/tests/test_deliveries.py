@@ -17,10 +17,10 @@ from worker_support import build_container, ended, sign_in
 from acme.infra.queues import QueueMessage, Queues
 from acme.integrations.identity import ProvidedDelivery
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
-from acme.om.automations.types.automation import (
+from acme.om.agent_automations.types.agent_automation import (
     Action,
     ActionKind,
-    Automation,
+    AgentAutomation,
     Limits,
     Refusal,
     Trigger,
@@ -194,7 +194,7 @@ def feedback_body(org_id: str, event: FeedbackEvent) -> bytes:
 
 
 async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
-    """A project of the tenant, which an automation's session starts in."""
+    """A project of the tenant, which an agent automation's session starts in."""
     now = utcnow()
     project = Project(
         id=new_id(),
@@ -208,10 +208,10 @@ async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
     return (await container.managers.projects.create_project(ctx, project)).id
 
 
-def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> Automation:
-    """An automation that starts a triage session on a failing check."""
+def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> AgentAutomation:
+    """An agent automation that starts a triage session on a failing check."""
     now = utcnow()
-    return Automation(
+    return AgentAutomation(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -230,23 +230,25 @@ def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> Autom
     )
 
 
-async def test_outside_a_local_stack_an_automation_starts_in_a_project(tmp_path: Path) -> None:
+async def test_outside_a_local_stack_an_agent_automation_starts_in_a_project(
+    tmp_path: Path,
+) -> None:
     container = build_container(tmp_path)
     ctx = await sign_in(container)
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
     with pytest.raises(ValidationFailed):
-        await container.automations.create_automation(ctx, triage(ctx, None, limits))
+        await container.agent_automations.create_agent_automation(ctx, triage(ctx, None, limits))
 
 
-async def test_an_event_from_outside_is_routed_and_fires_automations_once(
+async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
     tmp_path: Path,
 ) -> None:
     container = build_container(tmp_path)
     ctx = await sign_in(container)
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
-    automation = triage(ctx, await a_project(container, ctx), limits)
-    await container.automations.create_automation(ctx, automation)
+    agent_automation = triage(ctx, await a_project(container, ctx), limits)
+    await container.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
@@ -263,9 +265,9 @@ async def test_an_event_from_outside_is_routed_and_fires_automations_once(
     events = await container.managers.events.get_events(ctx, after_seq=0, limit=100)
     (routed,) = [e for e in events if e.kind == ROUTED]
     assert routed.payload["effect"] == "unrouted"
-    # The automation fired once on the event, and its run is recorded,
+    # The agent automation fired once on the event, and its run is recorded,
     # here refused, since this worker runs no agent kind.
-    (run,) = await container.automations.get_runs(ctx, automation.id, 10)
+    (run,) = await container.agent_automations.get_runs(ctx, agent_automation.id, 10)
     assert (run.event_id, run.refusal) == (event.id, Refusal.ACTION)
     assert await depth(container) == (0, 0)
 
@@ -275,8 +277,8 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     ctx = await sign_in(container)
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True)
-    automation = triage(ctx, await a_project(container, ctx), limits)
-    await container.automations.create_automation(ctx, automation)
+    agent_automation = triage(ctx, await a_project(container, ctx), limits)
+    await container.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
@@ -292,6 +294,6 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     consumer = consumer_of(container)
     body = feedback_body(str(ctx.org_id), event)
     assert await consumer.handle(await queued(container, body)) == "applied"
-    (run,) = await container.automations.get_runs(ctx, automation.id, 10)
+    (run,) = await container.agent_automations.get_runs(ctx, agent_automation.id, 10)
     assert run.event_id == event.id
     assert await depth(container) == (0, 0)
