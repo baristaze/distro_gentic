@@ -69,6 +69,7 @@ from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
+from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.loop_rules import ended_step
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
@@ -91,7 +92,6 @@ from acme.om.tools.impl.bases import base_key
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.types.source import RepositoryBinding
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
 from acme.services.api.seed import CONTENT_LIFETIME, first_repository, seed_platform
@@ -1149,7 +1149,7 @@ async def test_a_projects_workspace_base_is_built_once_and_its_software_engineer
         ACME_WORKSPACE_DEPLOYMENT=deployment,
         E2E_CONTAINERS="1",
     )
-    workspaces = shipped.container.managers.workspaces
+    workspaces = shipped.container.managers.agent_workspaces
     try:
         first = await started(shipped, person, "software_engineer")
         await say(shipped, person, first, "Check that the report's package imports.")

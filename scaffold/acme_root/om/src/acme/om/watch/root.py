@@ -73,7 +73,7 @@ def build_watch(
         managers.loop,
         managers.steps,
         managers.exec_relay,
-        managers.workspaces,
+        managers.agent_workspaces,
         managers.events,
         stream,
         options or WatchOptions(),

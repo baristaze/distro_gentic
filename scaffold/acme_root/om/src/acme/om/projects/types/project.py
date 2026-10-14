@@ -13,9 +13,9 @@ from typing import Annotated, Self
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, WorkspaceBase
+from acme.om.agent_workspaces.types.egress import Destination
 from acme.om.base import Identifiable, Platform, Trackable
 from acme.om.steps.types.content import Stored
-from acme.om.workspaces.types.egress import Destination
 
 MAX_PROJECT_NAME = 200
 

@@ -542,7 +542,7 @@ async def test_a_sessions_delivery_is_its_branch_its_bound_work_and_its_accepted
     path = f"/v1/agent-sessions/{session['id']}"
     ctx = await context_of(container, owner)
     sid = UUID(session["id"])
-    workspace = await container.managers.workspaces.get_workspace(ctx, sid)
+    workspace = await container.managers.agent_workspaces.get_workspace(ctx, sid)
     intake = container.storage.get_intake_storage()
     await intake.create_binding(ctx.org_id, make_binding("acme/checkout#12", sid))
     untouched = await start(client, owner, "nothing yet")

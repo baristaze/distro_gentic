@@ -54,7 +54,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.machine import WorkspaceMachineImpl
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.rules import new_key, seed
-from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.tenancy.rules import hash_token
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -333,7 +333,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     key = new_key()
     now = utcnow()
     await api.container.storage.get_cloud_pool_storage().create_machine(
-        PoolMachine(
+        PoolVm(
             id=new_id(),
             created_at=now,
             name="acme-vm-ptest0000000000",

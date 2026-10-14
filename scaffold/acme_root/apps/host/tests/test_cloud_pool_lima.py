@@ -216,7 +216,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         page = await managers.steps.get_steps(owner, session.id, 0, 200)
         snapshotted = [s for s in page.items if s.type is StepType.SNAPSHOTTED]
         assert len(snapshotted) == 1
-        (record,) = await managers.workspaces.kept_snapshots(owner, session.id)
+        (record,) = await managers.agent_workspaces.kept_snapshots(owner, session.id)
         assert record.machine and record.reference.startswith(PREFIX + "p")
         assert await machines.state(record.reference) is MachineState.STOPPED
         assert not await pool.holds(owner, session.id), "the machine went with the release"

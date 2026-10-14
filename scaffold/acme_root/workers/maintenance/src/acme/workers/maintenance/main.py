@@ -131,7 +131,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "validation_sessions": managers.platform_agents.purge_tenant,
             # Its exec items with their output, its controls, its bindings.
             "relay": managers.exec_relay.purge_tenant,
-            "workspaces": managers.workspaces.purge_tenant,
+            "agent_workspaces": managers.agent_workspaces.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
             # The history, then its sessions, both under the purge login: a

@@ -264,7 +264,7 @@ async def test_a_kept_session_resumes_on_the_tree_it_left_after_the_runner_resta
         named = taken.header.snapshot
         stored = await minio.list(owner.org_id, BUCKET, session_prefix(session_id), 10)
         assert len(stored) == 1, "kept on MinIO"
-        record = await first.managers.workspaces.kept_snapshot(owner, named.id)
+        record = await first.managers.agent_workspaces.kept_snapshot(owner, named.id)
         assert record is not None and not record.on_host and record.hash == named.hash
         name = container_name(session_id)
         shown = await docker("inspect", "--type", "container", name, bound=timedelta(seconds=20))

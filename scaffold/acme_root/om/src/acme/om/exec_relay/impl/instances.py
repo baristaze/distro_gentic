@@ -11,11 +11,11 @@ from uuid import UUID
 
 from acme.infra.transports import TransportInterface
 from acme.infra.workspaces import IsolationSpec, Workspace
+from acme.om.agent_workspaces.placed import PlacedInstancesInterface
 from acme.om.base import utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import Unavailable
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.workspaces.placed import PlacedInstancesInterface
 
 Relayed = Callable[[Callable[[], RequestContext]], TransportInterface]
 """The exec relay's transport, each operation of which runs under the stage it

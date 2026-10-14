@@ -10,18 +10,18 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.cloud_pool.types.erasure import PoolErasure
-from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.cloud_pool.types.machine import PoolVm
 
 
 class CloudPoolStorageInterface(ABC):
     @abstractmethod
-    async def create_machine(self, machine: PoolMachine) -> None:
+    async def create_machine(self, machine: PoolVm) -> None:
         """Global: a machine's row, written before the machine
         starts. `UniqueKeyTaken` for a name or a key another holds."""
         ...
 
     @abstractmethod
-    async def reserve_warm(self, wanted: int, made: Sequence[PoolMachine]) -> int:
+    async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
         """Global: writes the first of `made`, in order, as many as
         keep `wanted` warm machines standing or starting, and answers how
         many it wrote: one process at a time counts and writes, so two
@@ -29,36 +29,36 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_machine(self, machine_id: UUID) -> PoolMachine | None:
+    async def read_machine(self, machine_id: UUID) -> PoolVm | None:
         """Global: a machine by its row's id."""
         ...
 
     @abstractmethod
-    async def read_by_key(self, key_digest: str) -> PoolMachine | None:
+    async def read_by_key(self, key_digest: str) -> PoolVm | None:
         """Global: the machine handed the key whose digest this
         is, until its host traded it."""
         ...
 
     @abstractmethod
-    async def read_by_name(self, name: str) -> PoolMachine | None:
+    async def read_by_name(self, name: str) -> PoolVm | None:
         """Global: the machine under its name in the machines'
         backend."""
         ...
 
     @abstractmethod
-    async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolMachine | None:
+    async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolVm | None:
         """Global: the machine that serves the tenant's session;
         None when none does."""
         ...
 
     @abstractmethod
-    async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolMachine]:
+    async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolVm]:
         """Global: every machine that serves one of the tenant's
         sessions, oldest first, at most `limit`, for the tenant's purge."""
         ...
 
     @abstractmethod
-    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolMachine]:
+    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolVm]:
         """Global: the machines the pool holds, in the order of their
         ids, at most `limit` past `after`: the sweep reads them all, a page
         at a time."""
@@ -73,7 +73,7 @@ class CloudPoolStorageInterface(ABC):
         bound_by: UUID,
         egress_open: bool,
         at: datetime,
-    ) -> PoolMachine | None:
+    ) -> PoolVm | None:
         """Global: binds one started warm machine of the egress
         asked to the tenant's session from `at`, and answers it; None when
         none stands. Two claims never take one machine."""
@@ -104,7 +104,7 @@ class CloudPoolStorageInterface(ABC):
     @abstractmethod
     async def rekey(
         self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
-    ) -> PoolMachine | None:
+    ) -> PoolVm | None:
         """Global: a machine started again under a new key from `at`:
         its host is to enroll anew, and it is not sealed yet. It keeps when
         it first ran, since its disk is the one it ran on. None once it is

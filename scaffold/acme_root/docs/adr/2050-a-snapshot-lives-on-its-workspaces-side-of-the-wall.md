@@ -40,7 +40,7 @@ takes back what its broker attached, takes the snapshot of the instance
 its provider holds by its labels, scans it for the value of every secret
 it keeps for the tenant, and keeps it in its own store, owner-only. It
 answers the reference, the SHA-256 of the bytes, and their size. The
-platform records where each snapshot lives (`workspace_snapshots`): the
+platform records where each snapshot lives (`agent_workspace_snapshots`): the
 bucket, or the pool, the host, the reference, and the digest. The step
 that names a host's snapshot carries the digest's hash keyed by the
 session, so once the key is revoked nothing confirms what it held. The

@@ -7,11 +7,11 @@ from sqlalchemy.exc import IntegrityError
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.hosts.storage import HostsStorageInterface
+from acme.om.hosts.storage.tables.agent_session_placements import AgentSessionPlacements
 from acme.om.hosts.storage.tables.host_credentials import HostCredentials
 from acme.om.hosts.storage.tables.host_enrollment_tokens import HostEnrollmentTokens
 from acme.om.hosts.storage.tables.host_pools import HostPools
 from acme.om.hosts.storage.tables.hosts import Hosts
-from acme.om.hosts.storage.tables.session_placements import SessionPlacements
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import EnrolledClaimant, Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
@@ -22,7 +22,7 @@ from acme.om.placement.kinds import HOST
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted, violated_constraint
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
-PURGED_IN_ORDER = (HostCredentials, Hosts, HostEnrollmentTokens, HostPools, SessionPlacements)
+PURGED_IN_ORDER = (HostCredentials, Hosts, HostEnrollmentTokens, HostPools, AgentSessionPlacements)
 """A deleted tenant's tables, each purged a batch at a time."""
 
 
@@ -293,8 +293,8 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             return claimant
 
     async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None:
-        stmt = select(SessionPlacements).where(
-            SessionPlacements.org_id == org_id, SessionPlacements.session_id == session_id
+        stmt = select(AgentSessionPlacements).where(
+            AgentSessionPlacements.org_id == org_id, AgentSessionPlacements.session_id == session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -313,25 +313,27 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         )
         if expected_version == 0:
             try:
-                created = await self._insert(SessionPlacements, org_id, placement, outbox_rows)
+                created = await self._insert(AgentSessionPlacements, org_id, placement, outbox_rows)
             except UniqueKeyTaken as error:
                 raise stale from error
             if not created:
                 raise stale
             return
-        values = {k: v for k, v in to_values(placement, SessionPlacements).items() if k != "id"}
+        values = {
+            k: v for k, v in to_values(placement, AgentSessionPlacements).items() if k != "id"
+        }
         # The version is in the WHERE, so two writers from one read cannot
         # both land.
         stmt = (
-            update(SessionPlacements)
+            update(AgentSessionPlacements)
             .where(
-                SessionPlacements.org_id == org_id,
-                SessionPlacements.id == placement.id,
-                SessionPlacements.session_id == placement.session_id,
-                SessionPlacements.version == expected_version,
+                AgentSessionPlacements.org_id == org_id,
+                AgentSessionPlacements.id == placement.id,
+                AgentSessionPlacements.session_id == placement.session_id,
+                AgentSessionPlacements.version == expected_version,
             )
             .values(**values)
-            .returning(SessionPlacements.id)
+            .returning(AgentSessionPlacements.id)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             if (await session.execute(stmt)).scalar_one_or_none() is None:

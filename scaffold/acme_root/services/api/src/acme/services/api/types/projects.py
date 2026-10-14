@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 
+from acme.om.agent_workspaces.types.egress import Destination
 from acme.om.projects.types.project import (
     HOST,
     IMAGE,
@@ -17,7 +18,6 @@ from acme.om.projects.types.project import (
     REPOSITORY_PATH,
     SetupCommand,
 )
-from acme.om.workspaces.types.egress import Destination
 from acme.services.api.types.common import RequestBody, View
 
 

@@ -9,8 +9,10 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.infra.workspaces import IsolationSpec
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exec_relay.types.exec import (
+    AgentWorkspaceBinding,
     ExecCall,
     ExecControl,
     ExecDetail,
@@ -19,12 +21,10 @@ from acme.om.exec_relay.types.exec import (
     PrepareAnswer,
     SnapshotAnswer,
     StopKind,
-    WorkspaceBinding,
 )
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.retention.crossing import Crossing
 from acme.om.work.types.work_item import WorkItem
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
 class ExecRelayManagerInterface(ABC):
@@ -33,7 +33,7 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     async def bind_workspace(
         self, ctx: TenantContext, session_id: UUID, host_id: UUID, location: str
-    ) -> WorkspaceBinding:
+    ) -> AgentWorkspaceBinding:
         """Platform-internal: the host that prepared the session's workspace
         holds it from now on, at `location` on the host, and every item of
         the session goes to that host. Refused (`ValidationFailed`) unless
@@ -42,7 +42,9 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def binding_of(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+    async def binding_of(
+        self, ctx: TenantContext, session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         """The host that holds the session's workspace; None when none does."""
         ...
 
@@ -78,7 +80,7 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+    async def holder(self, ctx: TenantContext, session_id: UUID) -> AgentWorkspaceBinding | None:
         """The binding of the session's workspace while the host that holds
         it is a live host of the session's pool and online now: the only
         host a release, or the snapshot before it, can reach. None
@@ -169,7 +171,7 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
-    ) -> WorkspaceBinding | None:
+    ) -> AgentWorkspaceBinding | None:
         """Platform-internal: a host answers a prepare it claimed. A
         workspace it made binds the session to it at the answer's location,
         unless a live host of the pool holds the session's workspace
@@ -336,7 +338,7 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
+    async def bindings(self, after: UUID | None) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         """Platform-internal: across tenants, for the sweep, the bindings in id
         order after the one `after` names, each with its tenant, at most the
         options' sweep batch."""

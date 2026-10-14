@@ -44,6 +44,8 @@ from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.rules import COMMIT
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.request import MAX_TITLE, Handoff
@@ -85,8 +87,6 @@ from acme.om.tools.types.policy import ApproverRule, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.rules import COMMIT
 
 MAX_PATH = 1024
 MAX_READ = 200_000  # bytes one read takes at most
@@ -586,10 +586,10 @@ class OpenPullRequestImpl(NativeToolImpl):
 
     def __init__(
         self,
-        workspaces: Callable[[], WorkspacesManagerInterface],
+        agent_workspaces: Callable[[], AgentWorkspacesManagerInterface],
         intake: Callable[[], IntakeManagerInterface],
     ) -> None:
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._intake = intake
 
     async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
@@ -605,15 +605,15 @@ class OpenPullRequestImpl(NativeToolImpl):
         head = found.stdout.strip()
         if found.exit_code != 0 or not COMMIT.fullmatch(head):
             raise ToolFailed(ToolFailure.PERMANENT, "the workspace holds no commit: commit first")
-        workspaces = self._workspaces()
+        agent_workspaces = self._agent_workspaces()
         try:
             intake = self._intake()
-            token = await workspaces.mint_push_token(ctx, runtime.session_id)
+            token = await agent_workspaces.mint_push_token(ctx, runtime.session_id)
             # Recorded and bound before the push: the forge's events on the
             # commit and the branch may come back before the push answers.
             await intake.record_act(ctx, runtime.session_id, FORGE, (head,))
             await intake.bind_work(ctx, runtime.session_id, HandleKind.BRANCH, token.branch)
-            opened = await workspaces.open_pull_request(
+            opened = await agent_workspaces.open_pull_request(
                 ctx,
                 runtime.session_id,
                 token.token.get_secret_value(),

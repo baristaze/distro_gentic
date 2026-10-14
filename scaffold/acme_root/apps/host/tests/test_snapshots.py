@@ -53,6 +53,7 @@ from acme.infra.workspaces import (
     WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.om.agents.loop_rules import changed_step
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -76,7 +77,6 @@ from acme.om.watch.impl.manager import TAKEN
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 KEPT = IsolationSpec(
@@ -182,7 +182,7 @@ async def test_a_hosts_snapshot_stays_in_its_store_and_the_platform_records_its_
 
     assert item_id is not None
     assert (await managers.exec_relay.workspace_work(api.owner, item_id)).status is WorkStatus.DONE
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None and record.on_host
     assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
     kept = twin.files[session_id]
@@ -211,7 +211,7 @@ async def test_a_restore_travels_with_its_prepare_and_altered_bytes_lose_it(
     snapshot_id = new_id()
     await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None
     restore = HostSnapshot(
         id=record.id, reference=record.reference, digest=record.digest, size=record.size
@@ -253,7 +253,7 @@ async def test_a_snapshot_that_holds_a_hosts_secret_is_refused_and_nothing_is_ke
     row = await managers.exec_relay.workspace_work(api.owner, item_id)
     assert row.status is WorkStatus.FAILED and "SERVICE_TOKEN" in (row.last_error or "")
     assert SECRET not in (row.last_error or "")
-    assert await managers.workspaces.kept_snapshot(api.owner, snapshot_id) is None
+    assert await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id) is None
     assert not (store / str(api.owner.org_id) / str(session_id)).exists()
 
 
@@ -274,7 +274,7 @@ async def test_a_revoked_key_asks_the_host_to_erase_its_copies_and_the_records_g
     await claimed(host)
 
     assert not (store / str(api.owner.org_id) / str(session_id)).exists(), "erased on the host"
-    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    assert await managers.agent_workspaces.kept_snapshots(api.owner, session_id) == ()
 
 
 async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase(
@@ -295,7 +295,7 @@ async def test_a_forks_copy_is_kept_as_the_childs_and_outlives_the_parents_erase
     await managers.exec_relay.ask_snapshot(api.owner, parent, KEPT, new_id())  # the parent's own
     await claimed(host)
 
-    taken = await managers.workspaces.kept_snapshot(api.owner, taken_id)
+    taken = await managers.agent_workspaces.kept_snapshot(api.owner, taken_id)
     assert taken is not None and taken.session_id == parent, "the take is the parent's answer"
     copy = store / taken.reference
     assert copy.is_relative_to(store / org / str(child)), "kept as the child's"
@@ -372,14 +372,14 @@ async def test_taking_control_of_a_released_kept_workspace_restores_its_latest_s
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     twin.files[session_id] = b"the tree and the tool the run installed"
     snapshot_id = new_id()
     await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None
     epoch = await managers.steps.begin_run(api.owner, session_id)
     taken = WorkspaceSnapshot(
@@ -424,7 +424,7 @@ async def kept_on(
     snapshot_id = new_id()
     await managers.exec_relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
     await claimed(host)
-    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None and record.on_host
     return record
 
@@ -454,7 +454,7 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     record = await kept_on(api, host, twin, session_id, b"the snapshot")
@@ -503,7 +503,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     managers = api.container.managers
     pool = await api.pool()
     session_id = await a_pinned_session(api, pool.id)
-    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    await managers.agent_workspaces.pinned(api.owner, session_id, KEPT)
     host, twin, _ = await a_host(api, pool.id, tmp_path)
     await prepared(api, host, session_id)
     record = await kept_on(api, host, twin, session_id, b"the snapshot")
@@ -516,7 +516,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     sweep = HeldWorkspacesSweep(
         api.container.infra.get_workspaces(),
         managers.tools,
-        managers.workspaces,
+        managers.agent_workspaces,
         managers.agent_sessions,
         managers.steps,
         managers.work,
@@ -637,7 +637,7 @@ async def test_a_sessions_purge_asks_each_host_that_keeps_its_snapshots_to_erase
     assert kept.is_dir()
 
     await managers.tools.purge_workspace(api.owner.org_id, session_id)
-    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    assert await managers.agent_workspaces.kept_snapshots(api.owner, session_id) == ()
     await claimed(host)
 
     assert not kept.exists(), "erased on the host, with no key revoked"

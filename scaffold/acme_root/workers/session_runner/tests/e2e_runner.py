@@ -34,12 +34,12 @@ def main() -> int:
 
     from acme.infra.workspaces import WorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
+    from acme.om.agent_workspaces.impl.projects import WorkspaceProjectsBoundImpl
+    from acme.om.agent_workspaces.projects import WorkspaceProjectsInterface
+    from acme.om.agent_workspaces.types.source import RepositoryBinding
     from acme.om.context import TenantContext
     from acme.om.root import PlatformPorts, ProductKinds
     from acme.om.storage.impl.postgres import StoragePostgresImpl
-    from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
-    from acme.om.workspaces.projects import WorkspaceProjectsInterface
-    from acme.om.workspaces.types.source import RepositoryBinding
     from acme.workers.session_runner.main import main as run
     from acme.workers.session_runner.settings import SessionRunnerSettings
 

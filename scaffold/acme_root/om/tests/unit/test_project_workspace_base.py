@@ -17,8 +17,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.agent_workspaces import ProjectsTwin
 from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
-from contracts.workspaces import ProjectsTwin
 
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
@@ -148,7 +148,9 @@ class WorkspaceBases:
         return (await self.loop.loops.run(self.loop.owner, session_id)).outcome
 
     async def pinned(self, session_id: UUID) -> WorkspaceBase | None:
-        return (await self.loop.managers.workspaces.get_workspace(self.loop.owner, session_id)).base
+        return (
+            await self.loop.managers.agent_workspaces.get_workspace(self.loop.owner, session_id)
+        ).base
 
     async def kept(self) -> list[str]:
         buckets = self.infra.get_buckets()
@@ -209,7 +211,7 @@ async def test_a_kind_that_takes_its_projects_workspace_base_pins_its_base(
     assert await workspace_bases.pinned(takes) == WORKSPACE_BASE.base()
     assert await workspace_bases.pinned(own) is None, "its kind keeps its own"
     assert await workspace_bases.pinned(bare) is None, "its project named none when it was created"
-    pinned = await loop.managers.workspaces.get_workspace(loop.owner, takes)
+    pinned = await loop.managers.agent_workspaces.get_workspace(loop.owner, takes)
     assert pinned.egress is EgressMode.NONE, "its workspace keeps its kind's egress"
 
 

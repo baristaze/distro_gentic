@@ -23,6 +23,24 @@ from acme.om.agent_billing.impl.prices import PriceBookTableImpl
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces import rules as workspace_rules
+from acme.om.agent_workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
+from acme.om.agent_workspaces.impl.executor import ExecutorAgentWorkspacesImpl, ExecutorOptions, Pin
+from acme.om.agent_workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
+from acme.om.agent_workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
+from acme.om.agent_workspaces.impl.manager import AgentWorkspacesManagerImpl, AgentWorkspacesOptions
+from acme.om.agent_workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.impl.sessions import AgentSessionsPinnedImpl
+from acme.om.agent_workspaces.impl.tools import HeldWorkspaces, ToolsManagerAgentWorkspacesImpl
+from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
+from acme.om.agent_workspaces.projects import (
+    PullRequestsInterface,
+    SourceControlInterface,
+    WorkspaceProjectsInterface,
+)
+from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
 from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -202,24 +220,6 @@ from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.work.kinds import WorkKindSpec
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces import rules as workspace_rules
-from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl, Pin
-from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
-from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
-from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
-from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
-from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
-from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
-from acme.om.workspaces.projects import (
-    PullRequestsInterface,
-    SourceControlInterface,
-    WorkspaceProjectsInterface,
-)
-from acme.om.workspaces.types.host import HostOffer
 
 
 @dataclass(frozen=True)
@@ -251,7 +251,7 @@ class Managers:
     evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
-    workspaces: WorkspacesManagerInterface
+    agent_workspaces: AgentWorkspacesManagerInterface
     hosts: HostsManagerInterface
     exec_relay: ExecRelayManagerInterface
     cloud_pool: CloudPoolManagerInterface
@@ -632,7 +632,7 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
-    workspaces_options: WorkspacesOptions | None = None,
+    agent_workspaces_options: AgentWorkspacesOptions | None = None,
     workspace_host: HostOffer | None = None,
     workspace_projects: WorkspaceProjectsInterface | None = None,
     pull_requests: PullRequestsInterface | None = None,
@@ -817,7 +817,7 @@ def build_managers(
     session delivered from its repository; None fetches it into a fresh
     repository of this process's own, with the project's fetch credential,
     never from a network no workspace reaches, and from disk in `local`
-    alone. `workspaces_options` names those networks, and the sweep's
+    alone. `agent_workspaces_options` names those networks, and the sweep's
     batch."""
     # The kinds every manager reads through: the platform's own, and the
     # product's beside them. A product's tools read the managers built
@@ -844,7 +844,7 @@ def build_managers(
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
             evidence=lambda: managers.evidence,
-            workspaces=lambda: managers.workspaces,
+            agent_workspaces=lambda: managers.agent_workspaces,
             intake=intake or intake_absent,
             agent_knowledge=agent_knowledge or agent_knowledge_absent,
             integrations=IntegrationAbsentImpl
@@ -984,9 +984,9 @@ def build_managers(
     # What a session delivered is read from its repository, and what it has
     # not from the workspace this process holds for it.
     held = HeldWorkspaces()
-    workspaces_options = workspaces_options or WorkspacesOptions()
-    workspaces = WorkspacesManagerImpl(
-        storage.get_workspace_storage(),
+    agent_workspaces_options = agent_workspaces_options or AgentWorkspacesOptions()
+    agent_workspaces = AgentWorkspacesManagerImpl(
+        storage.get_agent_workspace_storage(),
         tenancy,
         outbox,
         kinds,
@@ -996,10 +996,10 @@ def build_managers(
         workspace_reader
         or RepositoryReaderGitImpl(
             walled=workspace_rules.NEVER_REACHED
-            + workspace_rules.networks(workspaces_options.internal_networks),
+            + workspace_rules.networks(agent_workspaces_options.internal_networks),
             on_disk=environment == LOCAL,
         ),
-        workspaces_options,
+        agent_workspaces_options,
         infra.get_secrets(),
         writes,
         held,
@@ -1055,7 +1055,7 @@ def build_managers(
     # namespace reaches the sessions through the decorators, so no such
     # session stands outside its origin's project, or unpinned.
     agent_sessions = AgentSessionsInProjectImpl(
-        AgentSessionsPinnedImpl(retained, workspaces, retention.keeps_at_rest),
+        AgentSessionsPinnedImpl(retained, agent_workspaces, retention.keeps_at_rest),
         storage.get_project_storage(),
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
@@ -1102,7 +1102,7 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    products = work_product or WorkProductWorkspacesImpl(workspaces, held)
+    products = work_product or WorkProductAgentWorkspacesImpl(agent_workspaces, held)
     # A budget and a validation policy set per project are read through the
     # session's project.
     session_policies = session_policies or SessionProjectsBoundImpl(storage.get_project_storage())
@@ -1262,9 +1262,9 @@ def build_managers(
     # Each workspace is held to its session's pin, refused by this host where
     # it cannot give it, brought up to the session's branch, kept before it
     # goes, and let go by the run that holds it alone.
-    held_to_pins = ToolsManagerWorkspacesImpl(
+    held_to_pins = ToolsManagerAgentWorkspacesImpl(
         engine_tools_manager,
-        workspaces,
+        agent_workspaces,
         steps,
         workspace_host or HostOffer(),
         local=environment == LOCAL,
@@ -1298,17 +1298,19 @@ def build_managers(
 
         async def pinned(ctx: TenantContext, session_id: UUID) -> Pin | None:
             if await inside_wall(hosts_storage, sessions_storage, ctx.org_id, session_id):
-                return Pin((await workspaces.get_workspace(ctx, session_id)).spec(), walled=True)
+                return Pin(
+                    (await agent_workspaces.get_workspace(ctx, session_id)).spec(), walled=True
+                )
             try:
-                kept = await workspaces.get_workspace(ctx, session_id)
+                kept = await agent_workspaces.get_workspace(ctx, session_id)
             except NotFound:
                 return None
             return Pin(kept.spec(), walled=False)
 
-        executor = ExecutorWorkspacesImpl(
+        executor = ExecutorAgentWorkspacesImpl(
             infra.get_workspaces(),
             transport,
-            workspaces.checks_tree,
+            agent_workspaces.checks_tree,
             pinned,
             PlacedInstancesRelayedImpl(
                 lambda: managers.exec_relay,
@@ -1473,7 +1475,7 @@ def build_managers(
                 online_window=(hosts_options or HostsOptions()).online_window,
             ),
         ),
-        workspaces=workspaces,
+        agent_workspaces=agent_workspaces,
         hosts=hosts,
         cloud_pool=cloud_pool,
         # A tool call into a customer's wall as keyed exec work: its items,

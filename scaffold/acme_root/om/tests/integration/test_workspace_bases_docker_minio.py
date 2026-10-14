@@ -31,8 +31,8 @@ from uuid import UUID
 
 import aioboto3
 import pytest
+from contracts.agent_workspaces import ProjectsTwin
 from contracts.loops import ASSISTANT, Loop, loop_over
-from contracts.workspaces import ProjectsTwin
 
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.s3 import BucketsS3Impl

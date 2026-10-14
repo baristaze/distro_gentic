@@ -10,8 +10,8 @@ from uuid import UUID
 from pydantic import model_validator
 
 from acme.infra.workspaces import IsolationSpec
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.base import Platform
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 ExecEffect = Literal["read_only", "idempotent", "unsafe"]
 """What a repeat of an `exec` item may do: its tool's effect, as the engine

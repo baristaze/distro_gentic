@@ -1,0 +1,90 @@
+"""A session's workspace as the platform keeps it between loops. Its isolation
+is pinned when the session is created and never changes: the level, the
+limits, the egress its project allowed then, whether snapshots keep it, and
+the base it starts from. The rest is what the cache knows of the durable
+state it is rebuilt from: the session's branch, whether the remote has held
+it, the last snapshot of its work, and what the next loop must be told of
+every instance let go since."""
+
+from datetime import datetime
+from typing import Annotated, ClassVar
+from uuid import UUID
+
+from pydantic import Field
+
+from acme.infra.workspaces import (
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+    ResourceLimits,
+    WorkspaceBase,
+)
+from acme.om.agent_workspaces.types.egress import EgressRule
+from acme.om.base import Identifiable, Trackable
+
+
+class AgentSessionWorkspace(Identifiable, Trackable):
+    """One row a session; `id` is the session's. The manager sets every field:
+    the pin when the session is created, the rest as its loops run."""
+
+    MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
+        "project_id",
+        "level",
+        "limits",
+        "egress",
+        "rules",
+        "egress_source",
+        "durability",
+        "base",
+        "branch",
+        "branch_seen",
+        "snapshot_ref",
+        "notices",
+        "push_digest",
+        "push_expires_at",
+        "version",
+    )
+
+    project_id: UUID | None = None
+    level: IsolationMode
+    limits: ResourceLimits = ResourceLimits()
+    egress: EgressMode
+    rules: tuple[EgressRule, ...] = ()
+    # Where its egress came from, as a person reads it: its project's
+    # allowlist at its version, with the reason open egress was chosen, or
+    # its kind's own.
+    egress_source: str = Field(min_length=1, max_length=1000)
+    # Whether a snapshot of the whole workspace keeps it between runs, or it
+    # is a cache alone: its kind's, narrowed by its project.
+    durability: Durability = Durability.CACHE
+    base: WorkspaceBase | None = None  # its kind's; None, the provider's own image
+    branch: str = Field(min_length=1, max_length=200)
+    # The remote held the session's branch at a release: gone after that,
+    # it vanished.
+    branch_seen: bool = False
+    snapshot_ref: str | None = Field(default=None, max_length=255)
+    # What the next loop is told before its first call, one entry an
+    # instance let go since a loop was last told: never written over, and
+    # each cleared once told.
+    notices: tuple[Annotated[str, Field(max_length=2000)], ...] = ()
+    # The digest of the one push token the loop holds, and when it expires;
+    # a prepare or a release clears both, so no token outlives its loop.
+    push_digest: str | None = Field(default=None, max_length=64)
+    push_expires_at: datetime | None = None
+    version: int = Field(default=1, ge=1)
+
+    def spec(self) -> IsolationSpec:
+        """The pinned isolation, as a provider prepares it. An allowlist's
+        destinations name its hosts; their methods are the egress proxy's to
+        hold, from the rules here."""
+        hosts = tuple(dict.fromkeys(rule.destination for rule in self.rules))
+        egress = EgressPolicy(mode=self.egress, hosts=hosts)
+        return IsolationSpec(
+            mode=self.level,
+            egress=egress,
+            limits=self.limits,
+            durability=self.durability,
+            base=self.base,
+        )

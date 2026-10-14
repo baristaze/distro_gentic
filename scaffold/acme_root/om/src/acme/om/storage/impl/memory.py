@@ -13,6 +13,8 @@ from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_playbooks.storage.impl.memory import AgentPlaybookStorageMemoryImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
+from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
+from acme.om.agent_workspaces.storage.impl.memory import AgentWorkspaceStorageMemoryImpl
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
@@ -77,8 +79,6 @@ from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.memory import WindowStorageMemoryImpl
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.workspaces.storage import WorkspaceStorageInterface
-from acme.om.workspaces.storage.impl.memory import WorkspaceStorageMemoryImpl
 
 
 class StorageMemoryImpl(StorageInterface):
@@ -124,7 +124,7 @@ class StorageMemoryImpl(StorageInterface):
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._benchmarks = BenchmarkStorageMemoryImpl()
         self._exec_relay = ExecRelayStorageMemoryImpl(self._outbox)
-        self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
+        self._agent_workspaces = AgentWorkspaceStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
         self._matrix_tenants = MatrixTenantStorageMemoryImpl()
 
@@ -236,8 +236,8 @@ class StorageMemoryImpl(StorageInterface):
     def get_exec_relay_storage(self) -> ExecRelayStorageInterface:
         return self._exec_relay
 
-    def get_workspace_storage(self) -> WorkspaceStorageInterface:
-        return self._workspaces
+    def get_agent_workspace_storage(self) -> AgentWorkspaceStorageInterface:
+        return self._agent_workspaces
 
     def get_matrix_storage(self) -> MatrixStorageInterface:
         return self._matrix

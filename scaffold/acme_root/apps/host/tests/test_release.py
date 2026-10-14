@@ -23,7 +23,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.workspaces import ProjectsTwin
+from contracts.agent_workspaces import ProjectsTwin
 from host_support import Pace, Stack, started_host
 from runner_support import TOOLS, assistant
 
@@ -41,6 +41,8 @@ from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om import root as platform_root
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
@@ -52,8 +54,6 @@ from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -189,7 +189,9 @@ class Placed:
 
     async def notices(self) -> int:
         return len(
-            (await self.managers.workspaces.get_workspace(self.owner, self.session_id)).notices
+            (
+                await self.managers.agent_workspaces.get_workspace(self.owner, self.session_id)
+            ).notices
         )
 
     async def release(self) -> WorkItem | None:
@@ -271,7 +273,7 @@ async def placed(
     sweep = HeldWorkspacesSweep(
         runner.infra.get_workspaces(),
         managers.tools,
-        managers.workspaces,
+        managers.agent_workspaces,
         managers.agent_sessions,
         managers.steps,
         managers.work,
@@ -497,7 +499,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
 ) -> None:
     run = await placed(api, tmp_path, remote)
     managers, owner = run.managers, run.owner
-    detach = managers.workspaces.detach
+    detach = managers.agent_workspaces.detach
     pushes: list[int] = []
 
     async def refused(ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
@@ -506,7 +508,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
         pushes.append(epoch)
         raise NotAuthorized("no installation of the forge this tenant connected holds it")
 
-    monkeypatch.setattr(managers.workspaces, "detach", refused)
+    monkeypatch.setattr(managers.agent_workspaces, "detach", refused)
     await managers.work.fail_for_good(owner, run.item, "its runner died")
     assert await run.passes() == 0
     assert await run.passes(GRACE) == 0, "the push was refused: nothing is let go"
@@ -521,7 +523,7 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
     step = changed_step(new_id(), utcnow(), run.session_id, new_id())
     await managers.steps.append_steps(owner, run.session_id, epoch, [step])
     await managers.work.fail_for_good(owner, item, "its runner died")
-    monkeypatch.setattr(managers.workspaces, "detach", detach)
+    monkeypatch.setattr(managers.agent_workspaces, "detach", detach)
     assert await run.passes() == 1, "the next pass pushes it, and asks for the release"
     await run.answers()
     assert len(run.refs()) == 1 and await run.release() is not None

@@ -60,13 +60,15 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.rules import snapshot_at
 from acme.om.agents.loop_rules import kept_snapshot
 from acme.om.base import EMPTY_UUID, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.types.exec import WorkspaceBinding
+from acme.om.exec_relay.types.exec import AgentWorkspaceBinding
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.steps import StepsManagerInterface
@@ -76,8 +78,6 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.manager import WorkspacesManagerInterface
-from acme.om.workspaces.rules import snapshot_at
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class HeldWorkspacesSweep:
         self,
         provider: WorkspaceProviderInterface,
         tools: ToolsManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         sessions: AgentSessionsManagerInterface,
         steps: StepsManagerInterface,
         work: WorkManagerInterface,
@@ -118,7 +118,7 @@ class HeldWorkspacesSweep:
     ) -> None:
         self._provider = provider
         self._tools = tools
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._sessions = sessions
         self._steps = steps
         self._work = work
@@ -176,12 +176,12 @@ class HeldWorkspacesSweep:
                 )
         return let_go
 
-    async def _hosted(self) -> list[tuple[UUID, WorkspaceBinding]]:
+    async def _hosted(self) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         """Every workspace a tenant's host holds, by its binding, a page at a
         time; none when this sweep reaches no host."""
         if self._exec_relay is None:
             return []
-        found: list[tuple[UUID, WorkspaceBinding]] = []
+        found: list[tuple[UUID, AgentWorkspaceBinding]] = []
         after: UUID | None = None
         while page := await self._exec_relay.bindings(after):
             found.extend(page)
@@ -219,7 +219,7 @@ class HeldWorkspacesSweep:
         elif cursor.head in (self._refused.get(instance.id), self._unkept.get(instance.id)):
             return False
         else:
-            pinned = await self._workspaces.get_workspace(ctx, instance.id)
+            pinned = await self._agent_workspaces.get_workspace(ctx, instance.id)
             if await self._unsnapshotted(ctx, instance.id, pinned.durability, cursor.head):
                 return False
             workspace = Workspace(
@@ -242,7 +242,7 @@ class HeldWorkspacesSweep:
         return True
 
     async def _let_go_hosted(
-        self, rctx: RequestContext, org_id: UUID, binding: WorkspaceBinding, now: datetime
+        self, rctx: RequestContext, org_id: UUID, binding: AgentWorkspaceBinding, now: datetime
     ) -> bool:
         """Asks the host that holds one session's workspace to let its
         instance go when no run accounts for it past the grace, once its
@@ -283,7 +283,7 @@ class HeldWorkspacesSweep:
             # Nothing reaches its host now, the snapshot included: a later
             # pass finds it online.
             return False
-        pinned = await self._workspaces.get_workspace(ctx, session_id)
+        pinned = await self._agent_workspaces.get_workspace(ctx, session_id)
         if await self._unsnapshotted(ctx, session_id, pinned.durability, cursor.head):
             return False
         workspace = Workspace(
@@ -293,7 +293,7 @@ class HeldWorkspacesSweep:
             # Kept first, through the exec relay: a push that does not land
             # raises, and the instance and its work stay.
             try:
-                await self._workspaces.detach(ctx, workspace, cursor.epoch)
+                await self._agent_workspaces.detach(ctx, workspace, cursor.epoch)
             except REFUSED as refused:
                 self._refuse(ctx, session_id, cursor.head, refused)
                 return False

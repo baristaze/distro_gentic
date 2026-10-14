@@ -14,9 +14,9 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import absent_model_providers
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.impl.projects import WorkspaceProjectsBoundImpl
 from acme.om.matrix.types.matrix import MatrixStatus
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
 from acme.services.api.seed import (
     CONTENT_LIFETIME,
     FORGE,

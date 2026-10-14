@@ -146,7 +146,7 @@ class PinnedConnector(Platform):
     deferred: bool = True
 
 
-class SessionConnectors(Identifiable, Created):
+class AgentSessionConnectors(Identifiable, Created):
     """The connectors one session holds, pinned as its first run began: the
     row's id is the session's, so a session pins once."""
 

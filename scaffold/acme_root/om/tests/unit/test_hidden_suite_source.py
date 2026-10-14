@@ -31,6 +31,17 @@ from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceBase
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces.impl.executor import (
+    ARCHIVE,
+    LOCK,
+    SEEN,
+    ExecutorAgentWorkspacesImpl,
+    ExecutorOptions,
+    Pin,
+)
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.projects import WorkspaceProjectsInterface
+from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
@@ -41,17 +52,6 @@ from acme.om.evidence.types.record import RunOutcome
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.workspaces.impl.executor import (
-    ARCHIVE,
-    LOCK,
-    SEEN,
-    ExecutorOptions,
-    ExecutorWorkspacesImpl,
-    Pin,
-)
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.projects import WorkspaceProjectsInterface
-from acme.om.workspaces.types.source import RepositoryBinding
 
 AUTHOR = {
     "GIT_AUTHOR_NAME": "Ann",
@@ -370,10 +370,10 @@ class Repositories:
             workspace_projects=Bound({self.project_id: url, self.suite_project_id: self.suite_url}),
             workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
-        executor = ExecutorWorkspacesImpl(
+        executor = ExecutorAgentWorkspacesImpl(
             self._provider,
             self._transport,
-            managers.workspaces.checks_tree,
+            managers.agent_workspaces.checks_tree,
             no_wall,
             options=ExecutorOptions(isolation=IsolationMode.TWIN),
         )

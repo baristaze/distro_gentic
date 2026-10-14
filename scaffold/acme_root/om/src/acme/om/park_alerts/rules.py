@@ -43,6 +43,7 @@ from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from acme.om.agent_billing.rules import FUNDS_UNLOCK
+from acme.om.agent_workspaces.rules import AUTHORITY, FETCHED, SCHEMED, WWW
 from acme.om.agents.loop_rules import fix_cause
 from acme.om.base import derived_id
 from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
@@ -60,7 +61,6 @@ from acme.om.steps.types.step import Step, StepType
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tools.native.ask_person import ASK_PERSON
-from acme.om.workspaces.rules import AUTHORITY, FETCHED, SCHEMED, WWW
 
 NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET, ParkReason.PROVIDER})
 """The reasons whose park can wait on a person of the tenant."""

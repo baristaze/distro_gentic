@@ -18,8 +18,8 @@ from typing import cast
 from uuid import UUID
 
 import pytest
+from contracts.agent_workspaces import GitTwin, ProjectsTwin
 from contracts.platform_agents import CORPUS
-from contracts.workspaces import GitTwin, ProjectsTwin
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -37,6 +37,10 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.agent_workspaces import rules
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
@@ -48,10 +52,6 @@ from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
-from acme.om.workspaces import rules
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.types.credential import FetchCredential
 
 GIT = shutil.which("git")
 pytestmark = [
@@ -297,18 +297,20 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
 
     # A wrong one too, and its value is in no message.
     wrong = FetchCredential(username=USER, password=SecretStr("not-the-password"))
-    await managers.workspaces.put_fetch_credential(owner, projects.project_id, wrong)
+    await managers.agent_workspaces.put_fetch_credential(owner, projects.project_id, wrong)
     with pytest.raises(Unavailable) as refused:
         await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     assert "not-the-password" not in str(refused.value)
 
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
-    record = await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
+    record = await managers.agent_workspaces.put_fetch_credential(
+        owner, projects.project_id, credential
+    )
     assert record.version == 2
     workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     here = Path(workspace.location)
     (here / "notes.txt").write_text("the agent's own work\n")
-    delivered = await managers.workspaces.work_product(owner, workspace)
+    delivered = await managers.agent_workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed) == (main, pushed, ("total.py",))
     assert private_git.authorized > 0, "read with the fetch credential"
 
@@ -317,7 +319,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     header = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
     found = grep(here, PASSWORD, header)
     assert found.returncode == 1 and found.stdout == "", found.stdout
-    held = await managers.workspaces.get_workspace(owner, session.id)
+    held = await managers.agent_workspaces.get_workspace(owner, session.id)
     assert PASSWORD not in held.model_dump_json()
 
 
@@ -352,7 +354,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     )
     connected.append(owner.org_id)
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
-    await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
+    await managers.agent_workspaces.put_fetch_credential(owner, projects.project_id, credential)
     session = await managers.agents.start_session(
         owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER.name, title="a fix")
     )
@@ -379,8 +381,8 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     git(here, "tag", "v9")
     git(here, "update-ref", "refs/heads/main", head)
 
-    token = await managers.workspaces.mint_push_token(owner, session.id)
-    opened = await managers.workspaces.open_pull_request(
+    token = await managers.agent_workspaces.mint_push_token(owner, session.id)
+    opened = await managers.agent_workspaces.open_pull_request(
         owner, session.id, token.token.get_secret_value(), head, "Add the total", ""
     )
     assert forge.pull_requests[0].id == opened.id
@@ -390,7 +392,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     assert held.splitlines() == [f"refs/heads/main {main}", f"refs/heads/{branch} {head}"]
 
     # Its work product reads with its commits, with the fetch credential.
-    delivered = await managers.workspaces.work_product(owner, workspace)
+    delivered = await managers.agent_workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed, delivered.dirty) == (
         main,
         head,

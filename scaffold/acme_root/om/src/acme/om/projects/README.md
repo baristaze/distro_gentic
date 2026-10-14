@@ -14,7 +14,7 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
   an image, the commands that set it up, and the package registries the
   setup reaches. It is built once and kept, and a session of a kind that
   takes it starts from it with no network of its own
-  ([workspaces](../workspaces/README.md)).
+  ([workspaces](../agent_workspaces/README.md)).
 - **Repository**: where a project's code lives, named by its host and
   its path, such as `github.com` and `octo/reports`. Names are compared
   without case, as the hosts compare them.
@@ -33,7 +33,7 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
   and remove it while no session belongs to it. A project with sessions
   stays: they read their policies and their work product through it.
   Its repository's fetch credential goes with it
-  ([workspaces](../workspaces/README.md)).
+  ([workspaces](../agent_workspaces/README.md)).
 - **Start a session under a project.** A session started here belongs
   to its project from its first moment. A project of another tenant is
   not found, and nothing is started. The API's start names the

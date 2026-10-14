@@ -445,7 +445,7 @@ async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_
 ) -> None:
     api = relayed.api
     session_id = relayed.workspace.id
-    await api.container.managers.workspaces.pinned(api.owner, session_id, DIRECTORY)
+    await api.container.managers.agent_workspaces.pinned(api.owner, session_id, DIRECTORY)
     watch = build_watch(api.container.managers, api.container.stream)
     person = _in_person(api.owner)
     await watch.take_control(person, session_id)

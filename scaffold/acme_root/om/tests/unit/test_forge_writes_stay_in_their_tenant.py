@@ -15,6 +15,8 @@ from contracts.intake import APP, Wired, wired
 
 from acme.integrations.events import OpenedPullRequest, PostedMessage
 from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.base import new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import NotAuthorized, ToolFailed
@@ -23,8 +25,6 @@ from acme.om.intake.types.link import Installation
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolRuntime
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.types.source import RepositoryBinding
 
 REPOSITORY = "https://forge.example/beta/widgets.git"
 """The repository the forge's installation of its owner, `beta`, holds."""

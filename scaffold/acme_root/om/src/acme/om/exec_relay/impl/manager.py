@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from acme.infra.observability import OUTCOMES
 from acme.infra.workspaces import IsolationSpec
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
 from acme.om.context import AppType, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
@@ -36,6 +37,7 @@ from acme.om.exec_relay.rules import (
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.types.exec import (
     REQUESTS,
+    AgentWorkspaceBinding,
     ExecCall,
     ExecControl,
     ExecDetail,
@@ -50,7 +52,6 @@ from acme.om.exec_relay.types.exec import (
     PrepareAnswer,
     SnapshotAnswer,
     StopKind,
-    WorkspaceBinding,
 )
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
@@ -72,11 +73,10 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 log = logging.getLogger(__name__)
 
-BINDING_KIND = "exec_relay.workspace_binding.updated"
+BINDING_KIND = "exec_relay.agent_workspace_binding.updated"
 
 STREAMS = frozenset({"stdout", "stderr"})
 
@@ -167,7 +167,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     async def bind_workspace(
         self, ctx: TenantContext, session_id: UUID, host_id: UUID, location: str
-    ) -> WorkspaceBinding:
+    ) -> AgentWorkspaceBinding:
         return await self._bind(ctx, session_id, host_id, location, None)
 
     async def _bind(
@@ -177,7 +177,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         host_id: UUID,
         location: str,
         instance_of: UUID | None,
-    ) -> WorkspaceBinding:
+    ) -> AgentWorkspaceBinding:
         """Binds the workspace under `session_id` to the host: a session's
         own, or an instance made for the session `instance_of` names, which
         is held to that session's pool."""
@@ -193,7 +193,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         stored = await self._storage.read_binding(ctx.org_id, session_id)
         now = self._clock()
         if stored is None:
-            binding = WorkspaceBinding(
+            binding = AgentWorkspaceBinding(
                 id=new_id(),
                 created_at=now,
                 updated_at=now,
@@ -222,7 +222,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         await self._relay.relay_all(ctx.org_id, rows)
         return binding
 
-    async def binding_of(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+    async def binding_of(
+        self, ctx: TenantContext, session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         ctx.require(Permission.READ)
         return await self._storage.read_binding(ctx.org_id, session_id)
 
@@ -278,7 +280,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         OUTCOMES.labels(subsystem="relay", outcome="purge_asked").inc()
         return True
 
-    async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+    async def holder(self, ctx: TenantContext, session_id: UUID) -> AgentWorkspaceBinding | None:
         ctx.require(Permission.READ)
         binding = await self._storage.read_binding(ctx.org_id, session_id)
         if binding is None:
@@ -456,7 +458,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
-    ) -> WorkspaceBinding | None:
+    ) -> AgentWorkspaceBinding | None:
         ctx = await self._service(rctx, host.org_id)
         row, payload = await self._prepare_held(ctx, host, item_id)
         assert payload.session_id is not None  # `_prepare_held` holds it
@@ -872,7 +874,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             settled += 1
         return settled
 
-    async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
+    async def bindings(self, after: UUID | None) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         return await self._storage.read_bindings(after, self._options.sweep_batch)
 
     async def end_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> int:

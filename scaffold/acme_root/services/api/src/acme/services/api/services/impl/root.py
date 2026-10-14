@@ -305,11 +305,11 @@ def build_services(
         evidence=EvidenceServiceImpl(
             managers.agent_sessions,
             managers.evidence,
-            managers.workspaces,
+            managers.agent_workspaces,
             managers.steps,
             intake,
         ),
-        projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
+        projects=ProjectsServiceImpl(managers.projects, managers.agent_workspaces),
         agent_knowledge=AgentKnowledgeServiceImpl(agent_knowledge),
         agent_playbooks=AgentPlaybooksServiceImpl(agent_playbooks),
         connectors=ConnectorsServiceImpl(connectors),

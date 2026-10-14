@@ -263,7 +263,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
             and step.header.command is ControlCommand.RESTORE
         )
         assert restore.snapshot is not None
-        record = await managers.workspaces.kept_snapshot(owner, restore.snapshot.id)
+        record = await managers.agent_workspaces.kept_snapshot(owner, restore.snapshot.id)
         assert record is not None and record.on_host and record.session_id == child
         assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
         kept = store / record.reference
@@ -357,8 +357,8 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
         assert (await managers.agents.tree_of(owner, parent)).size == before, "no slot taken"
         with pytest.raises(NotFound):
             await managers.agent_sessions.get_session(owner, request.id)
-        assert await managers.workspaces.kept_snapshots(owner, request.id) == ()
-        assert await managers.workspaces.kept_snapshots(owner, parent) == ()
+        assert await managers.agent_workspaces.kept_snapshots(owner, request.id) == ()
+        assert await managers.agent_workspaces.kept_snapshots(owner, parent) == ()
         latest = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, parent)
         assert latest is not None
         asked = latest.payload["operation"]

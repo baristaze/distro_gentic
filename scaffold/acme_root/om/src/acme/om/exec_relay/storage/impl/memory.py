@@ -4,11 +4,11 @@ from uuid import UUID
 from acme.om.exceptions import PreconditionFailed
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.types.exec import (
+    AgentWorkspaceBinding,
     ExecControl,
     ExecItem,
     ExecPart,
     ExecState,
-    WorkspaceBinding,
 )
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
@@ -21,7 +21,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
         self._items: MemoryTable[ExecItem] = {}
         self._parts: MemoryTable[ExecPart] = {}
         self._controls: MemoryTable[ExecControl] = {}
-        self._bindings: MemoryTable[WorkspaceBinding] = {}
+        self._bindings: MemoryTable[AgentWorkspaceBinding] = {}
 
     async def create_item(self, org_id: UUID, item: ExecItem) -> bool:
         async with self._lock:
@@ -105,7 +105,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
     async def write_binding(
         self,
         org_id: UUID,
-        binding: WorkspaceBinding,
+        binding: AgentWorkspaceBinding,
         expected_version: int,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -123,7 +123,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
                 raise PreconditionFailed(f"binding {binding.id} is another session's")
             self._put(self._bindings, org_id, binding, outbox_rows)
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> WorkspaceBinding | None:
+    async def read_binding(self, org_id: UUID, session_id: UUID) -> AgentWorkspaceBinding | None:
         for binding in self._rows(self._bindings, org_id):
             if binding.session_id == session_id:
                 return binding
@@ -131,7 +131,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
 
     async def read_bindings(
         self, after: UUID | None, limit: int
-    ) -> list[tuple[UUID, WorkspaceBinding]]:
+    ) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         found = sorted(self._rows_across_tenants(self._bindings), key=lambda row: row[1].id)
         return [(org_id, b) for org_id, b in found if after is None or b.id > after][:limit]
 

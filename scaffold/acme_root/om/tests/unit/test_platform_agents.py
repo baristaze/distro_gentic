@@ -183,7 +183,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         policies=unbound,  # pyright: ignore[reportArgumentType]
         agents=unbound,  # pyright: ignore[reportArgumentType]
         evidence=unbound,  # pyright: ignore[reportArgumentType]
-        workspaces=unbound,  # pyright: ignore[reportArgumentType]
+        agent_workspaces=unbound,  # pyright: ignore[reportArgumentType]
         intake=unbound,  # pyright: ignore[reportArgumentType]
         agent_knowledge=unbound,  # pyright: ignore[reportArgumentType]
         integrations=unbound,  # pyright: ignore[reportArgumentType]

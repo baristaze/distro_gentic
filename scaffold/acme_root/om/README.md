@@ -376,7 +376,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Connectors](src/acme/om/connectors/README.md)
 - [Park alerts](src/acme/om/park_alerts/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
-- [Workspaces](src/acme/om/workspaces/README.md)
+- [Agent workspaces](src/acme/om/agent_workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

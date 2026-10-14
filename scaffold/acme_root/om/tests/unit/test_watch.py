@@ -154,7 +154,7 @@ async def watched(tmp_path: Path) -> Watched:
     session = await managers.agent_sessions.create_session(owner, make_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, host.host_id, "/srv/work/session")
-    await managers.workspaces.pinned(owner, session.id, CONTAINER)
+    await managers.agent_workspaces.pinned(owner, session.id, CONTAINER)
     epoch = await managers.steps.begin_run(owner, session.id)
     clock = Clock()
     infra = InfraLocalImpl(tmp_path / "streams")

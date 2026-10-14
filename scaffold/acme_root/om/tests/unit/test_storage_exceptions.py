@@ -26,6 +26,7 @@ from contracts import (
     agent_playbook_storage,
     agent_session_storage,
     agent_storage,
+    agent_workspace_storage,
     attribution_storage,
     benchmark_storage,
     budget_storage,
@@ -58,7 +59,6 @@ from contracts import (
     trust_storage,
     window_storage,
     work_storage,
-    workspace_storage,
 )
 
 import acme.om
@@ -243,7 +243,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AgentKnowledgeStorageInterface": agent_knowledge_storage.CROSS_TENANT_CASES,
     "ParkAlertStorageInterface": park_alert_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
-    "WorkspaceStorageInterface": workspace_storage.CROSS_TENANT_CASES,
+    "AgentWorkspaceStorageInterface": agent_workspace_storage.CROSS_TENANT_CASES,
 }
 """Which contract suite carries the cross-tenant cases of each storage
 interface. A namespace whose suite is not here has no evidence behind its
@@ -297,11 +297,11 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("AgentsManagerInterface", "purge_tree"),
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
-        ("WorkspacesManagerInterface", "purge_session"),
-        ("WorkspacesManagerInterface", "forget_snapshots"),
+        ("AgentWorkspacesManagerInterface", "purge_session"),
+        ("AgentWorkspacesManagerInterface", "forget_snapshots"),
         # And the hosts whose stores keep its snapshots, which that purge asks
         # to erase them before their records go.
-        ("WorkspacesManagerInterface", "snapshot_hosts"),
+        ("AgentWorkspacesManagerInterface", "snapshot_hosts"),
         ("ExecRelayManagerInterface", "erase_purged"),
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),

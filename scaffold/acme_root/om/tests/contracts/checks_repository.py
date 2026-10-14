@@ -10,10 +10,10 @@ from uuid import UUID
 
 from acme.infra.workspaces import WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces.projects import WorkspaceProjectsInterface
+from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.context import TenantContext
 from acme.om.evidence.types.contract import CheckDeclaration
-from acme.om.workspaces.projects import WorkspaceProjectsInterface
-from acme.om.workspaces.types.source import RepositoryBinding
 
 AUTHOR = {
     "GIT_AUTHOR_NAME": "Ann",

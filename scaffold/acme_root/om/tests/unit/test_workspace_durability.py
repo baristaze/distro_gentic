@@ -18,10 +18,10 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from contracts.agent_workspaces import GitTwin, ProjectsTwin, ReaderTwin
 from contracts.doubles import APP
 from contracts.loops import ASSISTANT, Asked, Found, Lookup, Loop, call, loop_over, reply, said
 from contracts.project_storage import make_project
-from contracts.workspaces import GitTwin, ProjectsTwin, ReaderTwin
 
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
@@ -38,6 +38,11 @@ from acme.infra.workspaces import (
     WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_workspaces.impl.tools import PinnedToolsOptions, ToolsManagerAgentWorkspacesImpl
+from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
+from acme.om.agent_workspaces.rules import session_branch
+from acme.om.agent_workspaces.types.host import HostOffer
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.base import Platform, new_id, utcnow
@@ -54,11 +59,6 @@ from acme.om.steps.types.step import Step, StepType
 from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
-from acme.om.workspaces.impl.tools import PinnedToolsOptions, ToolsManagerWorkspacesImpl
-from acme.om.workspaces.placed import PlacedWorkspacesInterface
-from acme.om.workspaces.rules import session_branch
-from acme.om.workspaces.types.host import HostOffer
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 KEPT = IsolationSpec(
     mode=IsolationMode.TWIN,
@@ -169,7 +169,7 @@ async def test_a_kept_kind_is_pinned_kept_and_a_project_that_keeps_caches_narrow
     narrowed = await projects.start_session(
         loop.owner, caches.id, Start(id=new_id(), kind=KEEPER.name, title="a cache")
     )
-    workspaces = loop.managers.workspaces
+    workspaces = loop.managers.agent_workspaces
 
     pinned = await workspaces.get_workspace(loop.owner, kept)
     assert (
@@ -195,7 +195,7 @@ async def test_a_session_that_keeps_no_content_at_rest_is_refused_a_kept_workspa
         await loop.start(KEEPER.name)
 
     cache = await loop.start(CACHER.name)
-    assert (await loop.managers.workspaces.get_workspace(loop.owner, cache)).durability is (
+    assert (await loop.managers.agent_workspaces.get_workspace(loop.owner, cache)).durability is (
         Durability.CACHE
     )
 
@@ -217,7 +217,7 @@ async def test_a_cache_sessions_release_takes_no_snapshot_and_its_next_loop_star
 
     assert not of_type(await loop.history(session_id), StepType.SNAPSHOTTED), "no snapshot"
     assert await in_bucket(loop, session_id) == []
-    assert await loop.managers.workspaces.kept_snapshots(loop.owner, session_id) == ()
+    assert await loop.managers.agent_workspaces.kept_snapshots(loop.owner, session_id) == ()
     assert started == [None, None], "each loop starts from no snapshot"
     assert git.cuts == [branch], "its first loop cut the branch, and the next kept it"
     assert git.synced == [branch, branch], "each loop's checkout was brought up to its branch"
@@ -252,7 +252,7 @@ async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over
     assert started[-1] is not None, "the run started from the snapshot"
     assert twin.files[session_id] == b"as the run left it"
     assert git.cuts == [branch] and git.synced == [branch], "no branch was brought over it"
-    (record, *_) = await loop.managers.workspaces.kept_snapshots(loop.owner, session_id)
+    (record, *_) = await loop.managers.agent_workspaces.kept_snapshots(loop.owner, session_id)
     assert record.id == taken.header.snapshot.id and not record.on_host, "in the bucket"  # type: ignore[union-attr]
 
 
@@ -326,7 +326,7 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
     )
     staying = await loop.start(KEEPER.name)
     assert await wrote(loop, staying, "kept for good") is LoopOutcome.SUCCEEDED
-    workspaces = loop.managers.workspaces
+    workspaces = loop.managers.agent_workspaces
     assert len(await in_bucket(loop, expiring)) == 1
     assert len(await workspaces.kept_snapshots(loop.owner, expiring)) == 1
 
@@ -361,7 +361,7 @@ class Placed(PlacedWorkspacesInterface):
     prepare carried, the snapshots asked, and the host's answer to each,
     recorded as the relay records it."""
 
-    def __init__(self, tools: list[ToolsManagerWorkspacesImpl], pool_id: UUID) -> None:
+    def __init__(self, tools: list[ToolsManagerAgentWorkspacesImpl], pool_id: UUID) -> None:
         self._tools = tools
         self.pool_id, self.host_id = pool_id, new_id()
         self.restores: list[HostSnapshot | None] = []
@@ -412,7 +412,7 @@ class Placed(PlacedWorkspacesInterface):
         return None
 
 
-def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerWorkspacesImpl]) -> None:
+def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerAgentWorkspacesImpl]) -> None:
     """The platform's tools over the loop's, with a pool of one host; the
     inner tools never take a hosted workspace's snapshot."""
 
@@ -422,9 +422,9 @@ def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerWorkspacesImpl])
     inner = loop.managers.tools
     inner.snapshot_workspace = never  # type: ignore[method-assign]
     tools.append(
-        ToolsManagerWorkspacesImpl(
+        ToolsManagerAgentWorkspacesImpl(
             inner,
-            loop.managers.workspaces,
+            loop.managers.agent_workspaces,
             loop.managers.steps,
             HostOffer(),
             local=True,
@@ -443,7 +443,7 @@ async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_
     declared. The next prepare decides its restore first: it travels with
     the ask, by the reference and the digest the record holds."""
     loop, _ = kept_loop(tmp_path)
-    tools: list[ToolsManagerWorkspacesImpl] = []
+    tools: list[ToolsManagerAgentWorkspacesImpl] = []
     placed = Placed(tools, new_id())
     on_host(loop, placed, tools)
     session_id = await loop.start(KEEPER.name)
@@ -457,7 +457,7 @@ async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_
 
     assert step.type is StepType.SNAPSHOTTED and step.header is not None
     named: WorkspaceSnapshot = step.header.snapshot  # type: ignore[union-attr]
-    record = await loop.managers.workspaces.kept_snapshot(loop.owner, named.id)
+    record = await loop.managers.agent_workspaces.kept_snapshot(loop.owner, named.id)
     assert record is not None and record.on_host and placed.asked == [named.id]
     assert (named.hash, named.size) == (record.hash, record.size)
 
@@ -483,7 +483,7 @@ async def test_a_hosts_refusal_keeps_no_snapshot_and_a_bucket_snapshot_never_rea
     assert await wrote(loop, session_id, "kept in the bucket") is LoopOutcome.SUCCEEDED
     (taken,) = of_type(await loop.history(session_id), StepType.SNAPSHOTTED)
     in_the_bucket: WorkspaceSnapshot = taken.header.snapshot  # type: ignore[union-attr]
-    tools: list[ToolsManagerWorkspacesImpl] = []
+    tools: list[ToolsManagerAgentWorkspacesImpl] = []
     placed = Placed(tools, new_id())
     on_host(loop, placed, tools)
     epoch = await loop.managers.steps.begin_run(loop.owner, session_id)

@@ -29,6 +29,8 @@ from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
+from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.base import new_id
@@ -79,8 +81,6 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
-from acme.om.workspaces.impl.executor import ExecutorOptions
-from acme.om.workspaces.impl.manager import WorkspacesOptions
 from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
 
@@ -223,7 +223,7 @@ def worker_managers(
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
         relay_options=ExecRelayOptions(purge_batch=batch),
-        workspaces_options=WorkspacesOptions(purge_batch=batch),
+        agent_workspaces_options=AgentWorkspacesOptions(purge_batch=batch),
         cloud_pool_options=cloud_pool_options(settings),
         cloud_pool_stage=stage,
         budget_gate=ports.budget_gate or build_money_gate(storage),

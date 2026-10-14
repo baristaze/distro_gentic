@@ -10,11 +10,11 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.infra.workspaces import IsolationSpec, Workspace
+from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.cloud_pool.types.machine import MachineSnapshot
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Enrollment
-from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 
 class CloudPoolManagerInterface(ABC):

@@ -10,13 +10,13 @@ from uuid import UUID
 
 from acme.integrations.mcp import McpHttp, McpServer
 from acme.om.connectors.types.connector import (
+    AgentSessionConnectors,
     Connector,
     ConnectorPlace,
     ConnectorReview,
     ConnectorTool,
     ListedTool,
     PinnedConnector,
-    SessionConnectors,
 )
 from acme.om.exceptions import ValidationFailed
 from acme.om.levers.rules import checked
@@ -182,7 +182,7 @@ def pinned(
     project_id: UUID | None,
     *,
     inside_wall: bool,
-    parent: SessionConnectors | None,
+    parent: AgentSessionConnectors | None,
     child: bool,
 ) -> tuple[PinnedConnector, ...]:
     """What a session of `kind` in `project_id` pins of its tenant's

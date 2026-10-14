@@ -4,11 +4,11 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.connectors.storage import ConnectorStorageInterface
-from acme.om.connectors.storage.tables.connectors import Connectors
-from acme.om.connectors.storage.tables.session_connectors import (
-    SessionConnectors as SessionConnectorRows,
+from acme.om.connectors.storage.tables.agent_session_connectors import (
+    AgentSessionConnectors as SessionConnectorRows,
 )
-from acme.om.connectors.types.connector import Connector, SessionConnectors
+from acme.om.connectors.storage.tables.connectors import Connectors
+from acme.om.connectors.types.connector import AgentSessionConnectors, Connector
 from acme.om.exceptions import PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
@@ -63,7 +63,7 @@ class ConnectorStoragePostgresImpl(PgStorageBase, ConnectorStorageInterface):
                 db.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await db.commit()
 
-    async def create_pin(self, org_id: UUID, pin: SessionConnectors) -> SessionConnectors:
+    async def create_pin(self, org_id: UUID, pin: AgentSessionConnectors) -> AgentSessionConnectors:
         stmt = (
             insert(SessionConnectorRows)
             .values({**to_values(pin, SessionConnectorRows), "org_id": org_id})
@@ -77,13 +77,13 @@ class ConnectorStoragePostgresImpl(PgStorageBase, ConnectorStorageInterface):
             raise TenantMismatch(f"session {pin.id} is not in {org_id}")
         return held
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> SessionConnectors | None:
+    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None:
         stmt = select(SessionConnectorRows).where(
             SessionConnectorRows.org_id == org_id, SessionConnectorRows.id == session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
-            return None if row is None else to_model(row, SessionConnectors)
+            return None if row is None else to_model(row, AgentSessionConnectors)
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0

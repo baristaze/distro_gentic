@@ -190,7 +190,7 @@ async def test_a_projects_retention_narrowing_reaches_its_sessions(
     snapshots = await rows(
         pg_sessions,
         "SELECT session_id, project_id, policy->>'content_lifetime' AS content"
-        " FROM core.session_retention ORDER BY session_id",
+        " FROM core.agent_session_retention ORDER BY session_id",
         ctx.org_id,
     )
     assert snapshots == [

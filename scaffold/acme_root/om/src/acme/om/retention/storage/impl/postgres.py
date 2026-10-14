@@ -10,8 +10,8 @@ from acme.om.exceptions import PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.retention.storage.tables.agent_session_retention import AgentSessionRetentionRows
 from acme.om.retention.storage.tables.retention_policies import RetentionPolicies
-from acme.om.retention.storage.tables.session_retention import SessionRetentionRows
 from acme.om.retention.types.policy import TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete_batch, deleted
@@ -61,9 +61,10 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
             await db.commit()
 
     @staticmethod
-    def _snapshot(org_id: UUID, session_id: UUID) -> Select[tuple[SessionRetentionRows]]:
-        return select(SessionRetentionRows).where(
-            SessionRetentionRows.org_id == org_id, SessionRetentionRows.session_id == session_id
+    def _snapshot(org_id: UUID, session_id: UUID) -> Select[tuple[AgentSessionRetentionRows]]:
+        return select(AgentSessionRetentionRows).where(
+            AgentSessionRetentionRows.org_id == org_id,
+            AgentSessionRetentionRows.session_id == session_id,
         )
 
     async def create_snapshot(self, org_id: UUID, snapshot: SessionRetention) -> SessionRetention:
@@ -71,14 +72,17 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
         snapshot of it, and lands nothing; another tenant's id is the
         primary key's, and refused."""
         insert = (
-            pg_insert(SessionRetentionRows)
-            .values(org_id=org_id, **to_values(snapshot, SessionRetentionRows))
+            pg_insert(AgentSessionRetentionRows)
+            .values(org_id=org_id, **to_values(snapshot, AgentSessionRetentionRows))
             .on_conflict_do_nothing(
-                index_elements=[SessionRetentionRows.org_id, SessionRetentionRows.session_id]
+                index_elements=[
+                    AgentSessionRetentionRows.org_id,
+                    AgentSessionRetentionRows.session_id,
+                ]
             )
-            .returning(SessionRetentionRows.id)
+            .returning(AgentSessionRetentionRows.id)
         )
-        async with self._session_for(SessionRetentionRows, org_id=org_id) as session:
+        async with self._session_for(AgentSessionRetentionRows, org_id=org_id) as session:
             try:
                 landed = (await session.execute(insert)).scalar_one_or_none() is not None
                 if landed:
@@ -106,19 +110,19 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
     ) -> bool:
         values = {
             k: v
-            for k, v in to_values(snapshot, SessionRetentionRows).items()
+            for k, v in to_values(snapshot, AgentSessionRetentionRows).items()
             if k not in {"id", "session_id", "created_at"}
         }
         stmt = (
-            update(SessionRetentionRows)
+            update(AgentSessionRetentionRows)
             .where(
-                SessionRetentionRows.org_id == org_id,
-                SessionRetentionRows.id == snapshot.id,
-                SessionRetentionRows.session_id == snapshot.session_id,
-                SessionRetentionRows.version == expected_version,
+                AgentSessionRetentionRows.org_id == org_id,
+                AgentSessionRetentionRows.id == snapshot.id,
+                AgentSessionRetentionRows.session_id == snapshot.session_id,
+                AgentSessionRetentionRows.version == expected_version,
             )
             .values(**values)
-            .returning(SessionRetentionRows.id)
+            .returning(AgentSessionRetentionRows.id)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             landed = (await session.execute(stmt)).scalar_one_or_none() is not None
@@ -131,13 +135,13 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
         # A snapshot whose fold failed waits out its next attempt, so the
         # ones that cannot fold never fill every pass's batch.
         stmt = (
-            select(SessionRetentionRows, RetentionPolicies)
-            .join(RetentionPolicies, RetentionPolicies.org_id == SessionRetentionRows.org_id)
+            select(AgentSessionRetentionRows, RetentionPolicies)
+            .join(RetentionPolicies, RetentionPolicies.org_id == AgentSessionRetentionRows.org_id)
             .where(
-                SessionRetentionRows.policy_version < RetentionPolicies.version,
+                AgentSessionRetentionRows.policy_version < RetentionPolicies.version,
                 or_(
-                    SessionRetentionRows.next_attempt_at.is_(None),
-                    SessionRetentionRows.next_attempt_at <= now,
+                    AgentSessionRetentionRows.next_attempt_at.is_(None),
+                    AgentSessionRetentionRows.next_attempt_at <= now,
                 ),
             )
             .limit(limit)
@@ -161,22 +165,22 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
         # A row a pass could not finish waits out its next attempt, so the
         # rows that cannot move yet never fill every pass's batch.
         stmt = (
-            select(SessionRetentionRows)
+            select(AgentSessionRetentionRows)
             .where(
                 or_(
-                    SessionRetentionRows.next_attempt_at.is_(None),
-                    SessionRetentionRows.next_attempt_at <= now,
+                    AgentSessionRetentionRows.next_attempt_at.is_(None),
+                    AgentSessionRetentionRows.next_attempt_at <= now,
                 ),
                 or_(
                     and_(
-                        SessionRetentionRows.content_expires_at.is_not(None),
-                        SessionRetentionRows.content_expired_at.is_(None),
-                        SessionRetentionRows.content_expires_at <= now,
+                        AgentSessionRetentionRows.content_expires_at.is_not(None),
+                        AgentSessionRetentionRows.content_expired_at.is_(None),
+                        AgentSessionRetentionRows.content_expires_at <= now,
                     ),
                     and_(
-                        SessionRetentionRows.shape_expires_at.is_not(None),
-                        SessionRetentionRows.shape_expired_at.is_(None),
-                        SessionRetentionRows.shape_expires_at <= now,
+                        AgentSessionRetentionRows.shape_expires_at.is_not(None),
+                        AgentSessionRetentionRows.shape_expired_at.is_(None),
+                        AgentSessionRetentionRows.shape_expires_at <= now,
                     ),
                 ),
             )
@@ -192,7 +196,7 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         """The snapshots first, so the policy goes last."""
         gone = 0
-        for table in (SessionRetentionRows, RetentionPolicies):
+        for table in (AgentSessionRetentionRows, RetentionPolicies):
             if gone >= limit:
                 break
             stmt = delete_batch(table, table.org_id == org_id, limit=limit - gone)

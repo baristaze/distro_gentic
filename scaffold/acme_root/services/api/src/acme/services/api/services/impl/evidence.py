@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.types.record import ExecutionRecord
@@ -11,7 +12,6 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ToolResponseHeader
 from acme.om.steps.types.step import Step
-from acme.om.workspaces import WorkspacesManagerInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.common import LIMIT_MAX, clamp_limit
@@ -86,13 +86,13 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
         self,
         sessions: AgentSessionsManagerInterface,
         evidence: EvidenceManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         steps: StepsManagerInterface,
         intake: IntakeManagerInterface,
     ) -> None:
         self._sessions = sessions
         self._evidence = evidence
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._steps = steps
         self._intake = intake
 
@@ -119,7 +119,7 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
     async def get_work_product(self, ctx: TenantContext, session_id: UUID) -> WorkProductView:
         await self._sessions.get_session(ctx, session_id)
         try:
-            workspace = await self._workspaces.get_workspace(ctx, session_id)
+            workspace = await self._agent_workspaces.get_workspace(ctx, session_id)
         except NotFound:
             # A session that was never pinned to a workspace has no branch.
             workspace = None

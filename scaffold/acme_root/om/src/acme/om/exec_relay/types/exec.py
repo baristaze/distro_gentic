@@ -12,9 +12,9 @@ from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 
 from acme.infra.transports import FileEntry, SecretUse
 from acme.infra.workspaces import IsolationSpec
+from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.placement.types.work import ExecEffect, ExecOperation
-from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 
 Stream = Literal["stdout", "stderr"]
 
@@ -238,7 +238,7 @@ class ExecControl(Identifiable, Trackable):
     kind: StopKind
 
 
-class WorkspaceBinding(Identifiable, Trackable):
+class AgentWorkspaceBinding(Identifiable, Trackable):
     """The host that holds a session's workspace, and where on it. A
     workspace lives where it was prepared, so every item of the session goes
     to that host. An instance a run made for a session under an id of its

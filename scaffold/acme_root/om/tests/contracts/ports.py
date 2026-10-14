@@ -4,12 +4,12 @@ and each port a namespace declared, and the engine's own gate in place of
 agent billing's. Every root's suite builds its root over each, outside `local`,
 and expects the boot refused, naming what is missing."""
 
+from acme.om.agent_workspaces.impl.projects import WorkspaceProjectsNullImpl
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateNullImpl, BudgetGateOptions
 from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.root import PlatformPorts
 from acme.om.storage.root import StorageInterface
-from acme.om.workspaces.impl.projects import WorkspaceProjectsNullImpl
 
 
 def open_ports(storage: StorageInterface) -> list[tuple[str, PlatformPorts]]:

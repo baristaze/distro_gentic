@@ -17,6 +17,9 @@ from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om.agent_playbooks.impl.agents import AgentsManagerKindManualImpl
+from acme.om.agent_workspaces.impl.executor import ExecutorAgentWorkspacesImpl, Pin
+from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
+from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.impl.manager import AgentsManagerImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
@@ -27,9 +30,6 @@ from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl, Pin
-from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
-from acme.om.workspaces.types.workspace import SessionWorkspace
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
@@ -68,7 +68,7 @@ def test_the_runners_container_builds_the_evidence_gate(tmp_path: Path) -> None:
     work = WorkProductMemoryImpl()
     for container, reads in (
         (runner(tmp_path, work_product=work), WorkProductMemoryImpl),
-        (runner(tmp_path), WorkProductWorkspacesImpl),
+        (runner(tmp_path), WorkProductAgentWorkspacesImpl),
     ):
         # Each session is made with its kind manual, by the engine's agents.
         kind_manual = container.managers.agents
@@ -86,7 +86,7 @@ def test_the_runners_executor_records_the_image_its_workspaces_run(tmp_path: Pat
     evidence = container.managers.evidence
     assert isinstance(evidence, EvidenceManagerImpl)
     executor = evidence._executors.platform  # pyright: ignore[reportPrivateUsage]
-    assert isinstance(executor, ExecutorWorkspacesImpl)
+    assert isinstance(executor, ExecutorAgentWorkspacesImpl)
     assert executor._options.image == "registry.example/checks:2"  # pyright: ignore[reportPrivateUsage]
 
 
@@ -98,11 +98,11 @@ async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned
     evidence = container.managers.evidence
     assert isinstance(evidence, EvidenceManagerImpl)
     executor = evidence._executors.platform  # pyright: ignore[reportPrivateUsage]
-    assert isinstance(executor, ExecutorWorkspacesImpl)
+    assert isinstance(executor, ExecutorAgentWorkspacesImpl)
     assert executor._bases is not None, "a base with setup is read, never refused"  # pyright: ignore[reportPrivateUsage]
     ctx = context(Role.OWNER, make_org())
     now = utcnow()
-    pinned = SessionWorkspace(
+    pinned = AgentSessionWorkspace(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -115,7 +115,7 @@ async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned
         base=WorkspaceBase(image="registry.example/toolchain:3", setup=("make deps",)),
         branch="sessions/one",
     )
-    await storage.get_workspace_storage().create_workspace(ctx.org_id, pinned)
+    await storage.get_agent_workspace_storage().create_workspace(ctx.org_id, pinned)
 
     read = executor._pinned  # pyright: ignore[reportPrivateUsage]
     assert await read(ctx, pinned.id) == Pin(pinned.spec(), walled=False)

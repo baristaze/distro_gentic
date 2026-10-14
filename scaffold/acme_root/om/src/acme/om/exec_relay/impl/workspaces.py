@@ -33,18 +33,18 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceLost,
 )
+from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import asks
-from acme.om.exec_relay.types.exec import WorkspaceBinding
+from acme.om.exec_relay.types.exec import AgentWorkspaceBinding
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import SNAPSHOTS, snapshots_advertised
 from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.work.types.work_item import WorkStatus
-from acme.om.workspaces.placed import PlacedWorkspacesInterface
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
 class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
@@ -208,6 +208,6 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
 
 
 def _held(
-    ctx: TenantContext, session_id: UUID, spec: IsolationSpec, binding: WorkspaceBinding
+    ctx: TenantContext, session_id: UUID, spec: IsolationSpec, binding: AgentWorkspaceBinding
 ) -> Workspace:
     return Workspace(id=session_id, org_id=ctx.org_id, spec=spec, location=binding.location)

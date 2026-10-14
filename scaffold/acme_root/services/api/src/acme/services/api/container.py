@@ -24,6 +24,7 @@ from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
@@ -56,7 +57,6 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.impl.root import build_services

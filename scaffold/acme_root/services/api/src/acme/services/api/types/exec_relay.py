@@ -10,9 +10,9 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.exec_relay.rules import RESULT_CHARS
 from acme.om.retention.crossing import SHA256, CrossingKind
-from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.services.api.types.common import RequestBody, View
 
 

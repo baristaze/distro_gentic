@@ -9,10 +9,10 @@ from uuid import UUID
 import httpx
 from tenant_support import person, refused, tenant
 
+from acme.om.agent_workspaces.rules import fetch_secret_name
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
 from acme.om.projects.types.binding import SessionProject
-from acme.om.workspaces.rules import fetch_secret_name
 from acme.services.api.container import AppContainer
 
 PROJECT = {
@@ -81,7 +81,7 @@ async def test_a_fetch_credential_is_written_to_the_store_and_never_read_back(
     assert removed.status_code == 200, removed.text
     assert PASSWORD not in removed.text
     assert not await secrets.has(ajax.org_id, name)
-    workspaces = container.storage.get_workspace_storage()
+    workspaces = container.storage.get_agent_workspace_storage()
     assert await workspaces.read_credential(ajax.org_id, project_id) is None
 
 
@@ -119,7 +119,7 @@ async def test_a_member_reads_projects_and_writes_none(
         for response in writes:
             refused(response, 403, "not_authorized")
     assert (await client.get(url, headers=ajax.owner)).json()["name"] == PROJECT["name"]
-    workspaces = container.storage.get_workspace_storage()
+    workspaces = container.storage.get_agent_workspace_storage()
     assert await workspaces.read_credential(ajax.org_id, project_id) is None
 
 

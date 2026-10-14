@@ -47,11 +47,11 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_workspaces.impl.git import INCOMING
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.projects.types.project import SetupCommand
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.impl.git import INCOMING
 
 SETUP = ("pip install acme-tools", "echo built >> /opt/count")
 BASE = WorkspaceBase(

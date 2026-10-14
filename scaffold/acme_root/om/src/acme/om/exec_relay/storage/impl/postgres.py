@@ -6,23 +6,23 @@ from sqlalchemy import select, update
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.exec_relay.storage.tables.agent_workspace_bindings import AgentWorkspaceBindings
 from acme.om.exec_relay.storage.tables.exec_controls import ExecControls
 from acme.om.exec_relay.storage.tables.exec_items import ExecItems
 from acme.om.exec_relay.storage.tables.exec_parts import ExecParts
-from acme.om.exec_relay.storage.tables.workspace_bindings import WorkspaceBindings
 from acme.om.exec_relay.types.exec import (
+    AgentWorkspaceBinding,
     ExecControl,
     ExecItem,
     ExecPart,
     ExecState,
-    WorkspaceBinding,
 )
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
-PURGED_IN_ORDER = (ExecParts, ExecControls, ExecItems, WorkspaceBindings)
+PURGED_IN_ORDER = (ExecParts, ExecControls, ExecItems, AgentWorkspaceBindings)
 """The exec relay's tables, each purged a batch at a time: the parts and the
 controls before the items they name."""
 
@@ -151,7 +151,7 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
     async def write_binding(
         self,
         org_id: UUID,
-        binding: WorkspaceBinding,
+        binding: AgentWorkspaceBinding,
         expected_version: int,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -161,23 +161,23 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
         )
         if expected_version == 0:
             try:
-                created = await self._insert(WorkspaceBindings, org_id, binding, outbox_rows)
+                created = await self._insert(AgentWorkspaceBindings, org_id, binding, outbox_rows)
             except UniqueKeyTaken as error:
                 raise stale from error
             if not created:
                 raise stale
             return
-        values = {k: v for k, v in to_values(binding, WorkspaceBindings).items() if k != "id"}
+        values = {k: v for k, v in to_values(binding, AgentWorkspaceBindings).items() if k != "id"}
         stmt = (
-            update(WorkspaceBindings)
+            update(AgentWorkspaceBindings)
             .where(
-                WorkspaceBindings.org_id == org_id,
-                WorkspaceBindings.id == binding.id,
-                WorkspaceBindings.session_id == binding.session_id,
-                WorkspaceBindings.version == expected_version,
+                AgentWorkspaceBindings.org_id == org_id,
+                AgentWorkspaceBindings.id == binding.id,
+                AgentWorkspaceBindings.session_id == binding.session_id,
+                AgentWorkspaceBindings.version == expected_version,
             )
             .values(**values)
-            .returning(WorkspaceBindings.id)
+            .returning(AgentWorkspaceBindings.id)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             if (await session.execute(stmt)).scalar_one_or_none() is None:
@@ -187,24 +187,24 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
                 session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await session.commit()
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> WorkspaceBinding | None:
-        stmt = select(WorkspaceBindings).where(
-            WorkspaceBindings.org_id == org_id, WorkspaceBindings.session_id == session_id
+    async def read_binding(self, org_id: UUID, session_id: UUID) -> AgentWorkspaceBinding | None:
+        stmt = select(AgentWorkspaceBindings).where(
+            AgentWorkspaceBindings.org_id == org_id, AgentWorkspaceBindings.session_id == session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
-            return None if row is None else to_model(row, WorkspaceBinding)
+            return None if row is None else to_model(row, AgentWorkspaceBinding)
 
     async def read_bindings(
         self, after: UUID | None, limit: int
-    ) -> list[tuple[UUID, WorkspaceBinding]]:
-        stmt = select(WorkspaceBindings).order_by(WorkspaceBindings.id).limit(limit)
+    ) -> list[tuple[UUID, AgentWorkspaceBinding]]:
+        stmt = select(AgentWorkspaceBindings).order_by(AgentWorkspaceBindings.id).limit(limit)
         if after is not None:
-            stmt = stmt.where(WorkspaceBindings.id > after)
+            stmt = stmt.where(AgentWorkspaceBindings.id > after)
         # Every tenant's bindings, so the system scope, spelled here.
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             rows = (await session.execute(stmt)).scalars().all()
-            return [(row.org_id, to_model(row, WorkspaceBinding)) for row in rows]
+            return [(row.org_id, to_model(row, AgentWorkspaceBinding)) for row in rows]
 
     async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
         purged = 0

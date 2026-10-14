@@ -15,13 +15,13 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.types.exec import (
+    AgentWorkspaceBinding,
     ExecControl,
     ExecItem,
     ExecOutcome,
     ExecPart,
     ExecState,
     StopKind,
-    WorkspaceBinding,
 )
 from acme.om.placement.types.work import ExecOperation
 
@@ -114,10 +114,10 @@ def make_control(item: ExecItem, kind: StopKind = StopKind.CANCEL) -> ExecContro
     )
 
 
-def make_binding(session_id: UUID) -> WorkspaceBinding:
+def make_binding(session_id: UUID) -> AgentWorkspaceBinding:
     now = utcnow()
     actor = new_id()
-    return WorkspaceBinding(
+    return AgentWorkspaceBinding(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -318,7 +318,7 @@ class ExecRelayStorageContract:
         for tenant, binding in mine.items():
             await storage.write_binding(tenant, binding, 0, ())
         # The database may hold other suites' rows: the pages are read to the end.
-        found: list[tuple[UUID, WorkspaceBinding]] = []
+        found: list[tuple[UUID, AgentWorkspaceBinding]] = []
         after: UUID | None = None
         while page := await storage.read_bindings(after, 2):
             assert len(page) <= 2

@@ -13,6 +13,7 @@ from acme.integrations.events import IntegrationInterface
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import Platform
@@ -61,7 +62,6 @@ from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work import WorkManagerInterface
-from acme.om.workspaces import WorkspacesManagerInterface
 
 KNOWLEDGE_MAP = "llms.txt"
 
@@ -104,7 +104,7 @@ def with_shipped(
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
     evidence: Callable[[], EvidenceManagerInterface],
-    workspaces: Callable[[], WorkspacesManagerInterface],
+    agent_workspaces: Callable[[], AgentWorkspacesManagerInterface],
     intake: Callable[[], IntakeManagerInterface],
     agent_knowledge: Callable[[], AgentKnowledgeManagerInterface],
     integrations: Callable[[str], IntegrationInterface],
@@ -161,7 +161,7 @@ def with_shipped(
         ReadAgentKnowledgeImpl(shipped.corpus, agent_knowledge),
         SuggestAgentKnowledgeImpl(agent_knowledge),
         ValidateImpl(evidence),
-        OpenPullRequestImpl(workspaces, intake),
+        OpenPullRequestImpl(agent_workspaces, intake),
         SubmitResultImpl(),
         SearchCorpusImpl(shipped.corpus),
         ReadSessionImpl(sessions, steps, policies, projects),

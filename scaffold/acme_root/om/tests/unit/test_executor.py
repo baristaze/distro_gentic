@@ -34,6 +34,9 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_workspaces.impl import executor as executor_module
+from acme.om.agent_workspaces.impl.executor import ExecutorAgentWorkspacesImpl, ExecutorOptions, Pin
+from acme.om.agent_workspaces.placed import PlacedInstancesInterface
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.collector import collect, digest
@@ -43,9 +46,6 @@ from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import Unavailable
-from acme.om.workspaces.impl import executor as executor_module
-from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl, Pin
-from acme.om.workspaces.placed import PlacedInstancesInterface
 
 HEAD = "c" * 40
 BASE = "b" * 40
@@ -182,7 +182,7 @@ class Executor:
         self.bases: list[IsolationSpec] = []
         self.written: list[dict[str, bytes]] = []
         self.transport.handler = self._answer
-        self.executor = ExecutorWorkspacesImpl(
+        self.executor = ExecutorAgentWorkspacesImpl(
             self.cloud,
             transport,
             self._tree,

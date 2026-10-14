@@ -14,9 +14,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from contracts.agent_workspaces import REPOSITORY, GitTwin, ProjectsTwin, ReaderTwin
 from contracts.loops import Loop, live, loop_over, reply, said
 from contracts.platform_agents import CORPUS, calls
-from contracts.workspaces import REPOSITORY, GitTwin, ProjectsTwin, ReaderTwin
 from pydantic import SecretStr
 
 from acme.infra.transports import CommandSpec
@@ -36,6 +36,12 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agent_workspaces import rules
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
+from acme.om.agent_workspaces.types.credential import FetchCredential
+from acme.om.agent_workspaces.types.source import RepositoryBinding, RepositoryWrite, WriteKind
+from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.result import Claim
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, Role, build_context
@@ -59,12 +65,6 @@ from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
 from acme.om.tenancy.rules import permissions_of
-from acme.om.workspaces import rules
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.impl.manager import WorkspacesOptions
-from acme.om.workspaces.types.credential import FetchCredential
-from acme.om.workspaces.types.source import RepositoryBinding, RepositoryWrite, WriteKind
-from acme.om.workspaces.types.workspace import SessionWorkspace
 
 TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
 SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
@@ -126,8 +126,8 @@ class Forged:
     async def software_engineer(self) -> UUID:
         return await self.loop.start(kinds.SOFTWARE_ENGINEER)
 
-    async def held(self, session_id: UUID) -> SessionWorkspace:
-        return await self.loop.managers.workspaces.get_workspace(self.loop.owner, session_id)
+    async def held(self, session_id: UUID) -> AgentSessionWorkspace:
+        return await self.loop.managers.agent_workspaces.get_workspace(self.loop.owner, session_id)
 
     async def answer(self, session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
         for step in await self.loop.history(session_id):
@@ -142,9 +142,9 @@ class Forged:
         raise AssertionError(f"no answer to {use_id}")
 
 
-def held_with(digest: str | None, expires_in: timedelta) -> SessionWorkspace:
+def held_with(digest: str | None, expires_in: timedelta) -> AgentSessionWorkspace:
     now = utcnow()
-    return SessionWorkspace(
+    return AgentSessionWorkspace(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -415,8 +415,10 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     tmp_path: Path,
 ) -> None:
     lifetime = timedelta(minutes=7)
-    platform = Forged(tmp_path, workspaces_options=WorkspacesOptions(push_token_lifetime=lifetime))
-    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    platform = Forged(
+        tmp_path, agent_workspaces_options=AgentWorkspacesOptions(push_token_lifetime=lifetime)
+    )
+    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
     one, other = await platform.software_engineer(), await platform.software_engineer()
     before = utcnow()
     token = await workspaces.mint_push_token(owner, one)
@@ -479,7 +481,7 @@ async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refus
     tmp_path: Path, body: str
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
     one = await platform.software_engineer()
     await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
     token = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
@@ -501,7 +503,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
     project_id = platform.projects.project_id
     secrets = platform.loop.infra.get_secrets()
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
@@ -540,7 +542,7 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
     project_id = platform.projects.project_id
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
     await workspaces.put_fetch_credential(owner, project_id, credential)

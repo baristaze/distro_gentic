@@ -53,7 +53,7 @@ unless it says otherwise. A name a kind's toolsets take is refused.
 
 **A session pins its connectors once.** As a session's first run
 begins, it pins every reviewed connector attached to its kind for its
-project, on its side of the wall, in `core.session_connectors`, keyed by
+project, on its side of the wall, in `core.agent_session_connectors`, keyed by
 the session. The pin is written even when it holds nothing. Every later
 run reads it, so a review or an attachment reaches the next session, and
 a session's tool definitions never move under it. A sub-agent pins only

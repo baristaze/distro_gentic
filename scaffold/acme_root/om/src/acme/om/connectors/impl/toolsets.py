@@ -28,11 +28,11 @@ from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.rules import cloud_server, pinned, still_reviewed, toolset_of
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.connectors.types.connector import (
+    AgentSessionConnectors,
     Connector,
     ConnectorPlace,
     ConnectorTool,
     PinnedConnector,
-    SessionConnectors,
 )
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
@@ -145,7 +145,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
             tools.extend(self._tool(connector, tool) for tool in connector.tools)
         return Attached(held=tuple(held), deferred=tuple(deferred), tools=tuple(tools))
 
-    async def _pin(self, ctx: TenantContext, session: AgentSession) -> SessionConnectors:
+    async def _pin(self, ctx: TenantContext, session: AgentSession) -> AgentSessionConnectors:
         """What the session holds of its tenant's connectors, written once:
         a run that pinned first wins, and every run after reads it."""
         root = session.root_id
@@ -164,7 +164,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
             if connector.name not in taken
             and not {tool.name for tool in connector.tools} & set(kind.tools)
         ]
-        pin = SessionConnectors(
+        pin = AgentSessionConnectors(
             id=session.id,
             created_at=self._clock(),
             connectors=pinned(

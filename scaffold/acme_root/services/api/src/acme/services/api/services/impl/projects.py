@@ -2,12 +2,12 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.types.project import AgentWorkspaceBase, Project
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.types.credential import FetchCredential
 from acme.services.api.services.impl.built import built
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.types.projects import (
@@ -24,11 +24,11 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
     def __init__(
         self,
         projects: ProjectsManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._projects = projects
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._clock = clock
 
     async def create_project(
@@ -79,7 +79,7 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
         removed = await self._projects.remove_project(ctx, project_id)
         # After the project, never before: a project a session belongs to
         # stays, and keeps the credential its sessions' work is read with.
-        await self._workspaces.remove_fetch_credential(ctx, project_id)
+        await self._agent_workspaces.remove_fetch_credential(ctx, project_id)
         return ProjectView.model_validate(removed)
 
     async def put_fetch_credential(
@@ -89,7 +89,7 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
             FetchCredential,
             {"username": body.username, "password": body.password.get_secret_value()},
         )
-        record = await self._workspaces.put_fetch_credential(ctx, project_id, credential)
+        record = await self._agent_workspaces.put_fetch_credential(ctx, project_id, credential)
         return FetchCredentialView(
             project_id=record.id,
             version=record.version,

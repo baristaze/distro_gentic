@@ -44,7 +44,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         session = await managers.agent_sessions.create_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
         await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
-        await managers.workspaces.pinned(ctx, session.id, SPEC)
+        await managers.agent_workspaces.pinned(ctx, session.id, SPEC)
         agents_epoch = await managers.steps.begin_run(ctx, session.id)
 
         step = new_id()

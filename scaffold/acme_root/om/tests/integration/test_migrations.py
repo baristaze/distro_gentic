@@ -23,15 +23,16 @@ from uuid import UUID
 import pytest
 from contracts.agent_automation_storage import make_agent_automation
 from contracts.agent_playbook_storage import make_agent_playbook
+from contracts.agent_workspace_storage import make_workspace
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation, refused
-from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from acme.om.agent_automations.storage.impl.postgres import AgentAutomationStoragePostgresImpl
 from acme.om.agent_automations.types.agent_automation import Action
 from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
+from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
@@ -52,7 +53,6 @@ from acme.om.storage.migrate import (
 )
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
-from acme.om.workspaces.storage.impl.postgres import WorkspaceStoragePostgresImpl
 
 pytestmark = pytest.mark.integration
 
@@ -289,7 +289,7 @@ async def notices_of(url: str, org: UUID, session_id: UUID, column: str = "notic
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             read = await connection.exec_driver_sql(
-                f"SELECT {column} FROM core.session_workspaces WHERE id = '{session_id}'"
+                f"SELECT {column} FROM core.agent_session_workspaces WHERE id = '{session_id}'"
             )
             return read.scalar_one()
     finally:
@@ -301,7 +301,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
 ) -> None:
     """Down, the last notice written is the one the previous release holds;
     up, it is the list's one entry, in both tenants' rows."""
-    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    storage = AgentWorkspaceStoragePostgresImpl(pg_sessions)
     held: dict[UUID, UUID] = {}
     for org in (new_id(), new_id()):
         workspace = make_workspace().model_copy(update={"notices": ("older", "newer")})
@@ -326,7 +326,7 @@ async def notice_shape(url: str) -> list[tuple[object, ...]]:
     return await on_core(
         url,
         "SELECT column_name, column_default FROM information_schema.columns"
-        " WHERE table_schema = 'core' AND table_name = 'session_workspaces'"
+        " WHERE table_schema = 'core' AND table_name = 'agent_session_workspaces'"
         " AND column_name IN ('notice', 'notices') ORDER BY column_name",
     )
 
@@ -339,7 +339,7 @@ async def told_before(url: str, org: UUID, session_id: UUID) -> None:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                f"UPDATE core.session_workspaces SET notice = 'told' WHERE id = '{session_id}'"
+                f"UPDATE core.agent_session_workspaces SET notice = 'told' WHERE id = '{session_id}'"
             )
     finally:
         await engine.dispose()
@@ -349,7 +349,7 @@ async def seed_notices(
     pg_sessions: LoginSessions, *notices: tuple[str, ...]
 ) -> dict[UUID, tuple[UUID, tuple[str, ...]]]:
     """One workspace a tenant, each holding its notices."""
-    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    storage = AgentWorkspaceStoragePostgresImpl(pg_sessions)
     held: dict[UUID, tuple[UUID, tuple[str, ...]]] = {}
     for listed in notices:
         org = new_id()
@@ -376,7 +376,7 @@ async def seed_notices_before(
                 await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
                 await connection.execute(
                     text(
-                        "INSERT INTO core.session_workspaces (id, org_id, created_at,"
+                        "INSERT INTO core.agent_session_workspaces (id, org_id, created_at,"
                         " updated_at, created_by, updated_by, project_id, level, limits,"
                         " egress, rules, egress_source, branch, branch_seen, notices, version)"
                         " VALUES (:id, :org, :at, :at, :by, :by, :project, :level,"

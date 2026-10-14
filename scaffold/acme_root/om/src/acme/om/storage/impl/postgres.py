@@ -23,6 +23,8 @@ from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
+from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
+from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
 from acme.om.attribution.storage import AttributionStorageInterface
@@ -93,8 +95,6 @@ from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.postgres import WindowStoragePostgresImpl
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.storage.impl.postgres import WorkStoragePostgresImpl
-from acme.om.workspaces.storage import WorkspaceStorageInterface
-from acme.om.workspaces.storage.impl.postgres import WorkspaceStoragePostgresImpl
 
 
 def connect_args(pool: RolePool) -> dict[str, Any]:
@@ -255,7 +255,7 @@ class StoragePostgresImpl(StorageInterface):
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._benchmarks = BenchmarkStoragePostgresImpl(sessions)
         self._exec_relay = ExecRelayStoragePostgresImpl(sessions)
-        self._workspaces = WorkspaceStoragePostgresImpl(sessions)
+        self._agent_workspaces = AgentWorkspaceStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
 
@@ -367,8 +367,8 @@ class StoragePostgresImpl(StorageInterface):
     def get_exec_relay_storage(self) -> ExecRelayStorageInterface:
         return self._exec_relay
 
-    def get_workspace_storage(self) -> WorkspaceStorageInterface:
-        return self._workspaces
+    def get_agent_workspace_storage(self) -> AgentWorkspaceStorageInterface:
+        return self._agent_workspaces
 
     def get_matrix_storage(self) -> MatrixStorageInterface:
         return self._matrix

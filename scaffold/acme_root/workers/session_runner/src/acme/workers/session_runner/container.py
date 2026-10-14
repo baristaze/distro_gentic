@@ -20,6 +20,7 @@ from acme.om.agent_automations.root import agent_automation_principals, build_ag
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import new_id
@@ -50,7 +51,6 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.workers.maintenance.container import cloud_pool_options
 from acme.workers.session_runner.settings import SessionRunnerSettings
 

@@ -33,6 +33,8 @@ from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import EgressMode, IsolationMode, Workspace, WorkspaceBase
 from acme.infra.workspaces.container import DEFAULT_IMAGE, container_name
+from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id, utcnow
@@ -49,8 +51,6 @@ from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
-from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
 def docker_runs() -> bool:
@@ -398,14 +398,14 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
 async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
     """The session's workspace pinned to `WORKSPACE_BASE`, in a container with
     no egress, as its kind would pin it to its project's workspace base."""
-    rows = storage.get_workspace_storage()
+    rows = storage.get_agent_workspace_storage()
     kept = await rows.read_workspace(ctx.org_id, session_id)
     if kept is not None:
         moved = kept.model_copy(update={"base": WORKSPACE_BASE, "version": kept.version + 1})
         await rows.write_workspace(ctx.org_id, moved, kept.version)
         return
     now = utcnow()
-    pinned = SessionWorkspace(
+    pinned = AgentSessionWorkspace(
         id=session_id,
         created_at=now,
         updated_at=now,

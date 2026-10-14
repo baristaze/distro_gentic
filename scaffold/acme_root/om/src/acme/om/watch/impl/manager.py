@@ -7,6 +7,9 @@ from pydantic import Field, SecretStr
 from acme.infra.workspaces import Durability
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
+from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.loop_rules import kept_snapshot
@@ -56,9 +59,6 @@ from acme.om.watch.types.live import (
     Seen,
 )
 from acme.om.work import WorkManagerInterface
-from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.placed import PlacedWorkspacesInterface
-from acme.om.workspaces.types.snapshot import HostSnapshot
 
 TAKEN = "watch.control.taken"
 SENT = "watch.command.sent"
@@ -81,7 +81,7 @@ class WatchManagerImpl(WatchManagerInterface):
         loop: LoopManagerInterface,
         steps: StepsManagerInterface,
         exec_relay: ExecRelayManagerInterface,
-        workspaces: WorkspacesManagerInterface,
+        agent_workspaces: AgentWorkspacesManagerInterface,
         events: EventsManagerInterface,
         stream: StreamServiceInterface,
         options: WatchOptions,
@@ -97,7 +97,7 @@ class WatchManagerImpl(WatchManagerInterface):
         self._loop = loop
         self._steps = steps
         self._exec_relay = exec_relay
-        self._workspaces = workspaces
+        self._agent_workspaces = agent_workspaces
         self._events = events
         self._stream = stream
         self._options = options
@@ -229,7 +229,7 @@ class WatchManagerImpl(WatchManagerInterface):
         same restore. One that something touched since its last snapshot
         stands as it is."""
         try:
-            pin = await self._workspaces.get_workspace(ctx, session_id)
+            pin = await self._agent_workspaces.get_workspace(ctx, session_id)
         except NotFound:
             return
         if pin.durability is not Durability.SNAPSHOT:
@@ -238,7 +238,7 @@ class WatchManagerImpl(WatchManagerInterface):
         named = None if latest is None else named_snapshot(latest)
         if named is None:
             return
-        record = await self._workspaces.kept_snapshot(ctx, named.id)
+        record = await self._agent_workspaces.kept_snapshot(ctx, named.id)
         if self._placed is None or record is None or not record.on_host:
             return
         if record.hash != named.hash:
@@ -279,7 +279,7 @@ class WatchManagerImpl(WatchManagerInterface):
             raise NotAuthorized(f"session {session_id} is held by another person")
         if await self._exec_relay.binding_of(ctx, session_id) is None:
             raise NoWorkspaceHost(f"no host holds session {session_id}'s workspace")
-        workspace = await self._workspaces.get_workspace(ctx, session_id)
+        workspace = await self._agent_workspaces.get_workspace(ctx, session_id)
         request = RunRequest(argv=command.argv, cwd=command.cwd)
         item_id = exec_id(command.key, REQUESTS.dump_json(request), 0)
         # Recorded as the person's before it is sent: no command runs that

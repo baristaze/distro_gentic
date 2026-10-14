@@ -59,7 +59,7 @@ the kinds of thing [Acme is made of](../../../../README.md).
 <!-- agents-only
 The loop asks `root.ConnectorsLayer` (an `AttachedToolsetsInterface`) for
 a session's toolsets once a run; a root that runs loops hands it to
-`build_managers` as `attached_toolsets`. The pin is `SessionConnectors`,
+`build_managers` as `attached_toolsets`. The pin is `AgentSessionConnectors`,
 keyed by the session's id (`storage.create_pin`), and a sub-agent pins
 only what its parent pinned (`rules.pinned`). Each tool is the engine's
 `McpToolImpl` over an `McpBinding` whose input schema is the server's

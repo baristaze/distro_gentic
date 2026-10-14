@@ -186,7 +186,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     (snapshot,) = await rows(
         pg_sessions,
         DatabaseRole.CORE,
-        "SELECT content_expired_at, destruction::text AS destruction FROM core.session_retention"
+        "SELECT content_expired_at, destruction::text AS destruction FROM core.agent_session_retention"
         " WHERE org_id = :org AND session_id = :session",
         org,
         session=session,

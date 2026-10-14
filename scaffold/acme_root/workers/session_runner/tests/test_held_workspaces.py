@@ -20,8 +20,8 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.agent_workspaces import GitTwin, ProjectsTwin, PullRequestsTwin, ReaderTwin
 from contracts.step_storage import make_message
-from contracts.workspaces import GitTwin, ProjectsTwin, PullRequestsTwin, ReaderTwin
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import TransportInterface
@@ -37,6 +37,8 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
@@ -48,8 +50,6 @@ from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import snapshotted_step
 from acme.om.work.types.work_item import WorkItem, WorkKind
-from acme.om.workspaces.impl.forge import SourceControlForgeImpl
-from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.workers.session_runner.workspaces import Graces, HeldWorkspacesSweep
 
 GIT = shutil.which("git")
@@ -149,7 +149,7 @@ class Host:
         self.sweep = HeldWorkspacesSweep(
             provider,
             managers.tools,
-            managers.workspaces,
+            managers.agent_workspaces,
             managers.agent_sessions,
             managers.steps,
             managers.work,
@@ -251,7 +251,7 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
     (ref,) = git(remote, "for-each-ref", "--format=%(refname)", f"{SNAPSHOT_PREFIX}/").split()
     assert ref.startswith(f"{SNAPSHOT_PREFIX}/{session_branch(killed)}/")
     assert git(remote, "show", f"{ref}:notes.txt") == "half done", "its work is on the snapshot"
-    told = await managers.workspaces.get_workspace(host.owner, killed)
+    told = await managers.agent_workspaces.get_workspace(host.owner, killed)
     assert any(ref in notice for notice in told.notices), "the next loop is told"
     assert await host.held() == {live}, "the live loop's instance is left alone"
     assert (here / "notes.txt").read_text() == "half done\n", "a release keeps the files"

@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from acme.om.connectors.storage import ConnectorStorageInterface
-from acme.om.connectors.types.connector import Connector, SessionConnectors
+from acme.om.connectors.types.connector import AgentSessionConnectors, Connector
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
@@ -12,7 +12,7 @@ class ConnectorStorageMemoryImpl(MemoryStorageBase, ConnectorStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
         self._connectors: MemoryTable[Connector] = {}
-        self._pins: MemoryTable[SessionConnectors] = {}
+        self._pins: MemoryTable[AgentSessionConnectors] = {}
 
     async def create_connector(
         self, org_id: UUID, connector: Connector, outbox_rows: tuple[OutboxRow, ...]
@@ -42,7 +42,7 @@ class ConnectorStorageMemoryImpl(MemoryStorageBase, ConnectorStorageInterface):
                 raise PreconditionFailed(f"connector {connector.id} moved meanwhile")
             self._put(self._connectors, org_id, connector, outbox_rows)
 
-    async def create_pin(self, org_id: UUID, pin: SessionConnectors) -> SessionConnectors:
+    async def create_pin(self, org_id: UUID, pin: AgentSessionConnectors) -> AgentSessionConnectors:
         async with self._lock:
             held = self._get(self._pins, org_id, pin.id)
             if held is not None:
@@ -50,7 +50,7 @@ class ConnectorStorageMemoryImpl(MemoryStorageBase, ConnectorStorageInterface):
             self._put(self._pins, org_id, pin)
             return pin
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> SessionConnectors | None:
+    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None:
         return self._get(self._pins, org_id, session_id)
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
@@ -58,7 +58,9 @@ class ConnectorStorageMemoryImpl(MemoryStorageBase, ConnectorStorageInterface):
             return _drop(self._pins, org_id, limit) + _drop(self._connectors, org_id, limit)
 
 
-def _drop[E: Connector | SessionConnectors](table: MemoryTable[E], org_id: UUID, limit: int) -> int:
+def _drop[E: Connector | AgentSessionConnectors](
+    table: MemoryTable[E], org_id: UUID, limit: int
+) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]
     for row_id in ids:
         del table[row_id]

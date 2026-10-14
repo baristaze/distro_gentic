@@ -7,6 +7,7 @@ from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLed
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
@@ -37,7 +38,6 @@ from acme.om.tools.storage import ToolStorageInterface
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.work.storage import WorkStorageInterface
-from acme.om.workspaces.storage import WorkspaceStorageInterface
 
 
 class StorageInterface(ABC):
@@ -150,7 +150,7 @@ class StorageInterface(ABC):
     def get_exec_relay_storage(self) -> ExecRelayStorageInterface: ...
 
     @abstractmethod
-    def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
+    def get_agent_workspace_storage(self) -> AgentWorkspaceStorageInterface: ...
 
     @abstractmethod
     def get_matrix_storage(self) -> MatrixStorageInterface: ...

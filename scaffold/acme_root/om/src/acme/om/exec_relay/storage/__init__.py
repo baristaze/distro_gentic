@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.exec_relay.types.exec import ExecControl, ExecItem, ExecPart, WorkspaceBinding
+from acme.om.exec_relay.types.exec import AgentWorkspaceBinding, ExecControl, ExecItem, ExecPart
 from acme.om.outbox.types.row import OutboxRow
 
 
@@ -79,7 +79,7 @@ class ExecRelayStorageInterface(ABC):
     async def write_binding(
         self,
         org_id: UUID,
-        binding: WorkspaceBinding,
+        binding: AgentWorkspaceBinding,
         expected_version: int,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -89,12 +89,14 @@ class ExecRelayStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> WorkspaceBinding | None: ...
+    async def read_binding(
+        self, org_id: UUID, session_id: UUID
+    ) -> AgentWorkspaceBinding | None: ...
 
     @abstractmethod
     async def read_bindings(
         self, after: UUID | None, limit: int
-    ) -> list[tuple[UUID, WorkspaceBinding]]:
+    ) -> list[tuple[UUID, AgentWorkspaceBinding]]:
         """Cross-tenant, for the sweep: the bindings in id order after the one
         `after` names when it names one, each with its tenant, at most
         `limit`."""
