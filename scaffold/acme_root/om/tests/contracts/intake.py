@@ -1,8 +1,8 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, agent_automations, playbooks, agent_knowledge, and notifications
+with the intake, agent_automations, agent_playbooks, agent_knowledge, and notifications
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
-the playbooks layer, and the agent knowledge layer, and each manager built over
+the agent playbooks layer, and the agent knowledge layer, and each manager built over
 the engine's. What
 their suites share: a tenant whose members a case names with a role, the
 tenant's service context, and the steps a session holds."""
@@ -26,6 +26,8 @@ from acme.om.agent_automations.manager import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
+from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -51,8 +53,6 @@ from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
-from acme.om.playbooks.manager import PlaybooksManagerInterface
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
 from acme.om.steps.types.step import Step
@@ -154,7 +154,7 @@ class Wired:
     service: TenantContext
     intake: IntakeManagerInterface
     agent_automations: AgentAutomationsManagerInterface
-    playbooks: PlaybooksManagerInterface
+    agent_playbooks: AgentPlaybooksManagerInterface
     agent_knowledge: AgentKnowledgeManagerInterface
     notifications: NotificationsManagerInterface
     chat: IntegrationTwinImpl
@@ -303,11 +303,11 @@ def wired(
         probe=KeyProbeTwinImpl(refused=frozenset()),
         clock=clock,
     )
-    playbooks = PlaybooksLayer(storage, clock=clock)
+    agent_playbooks = AgentPlaybooksLayer(storage, clock=clock)
     agent_knowledge = AgentKnowledgeLayer(storage, clock=clock)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        return agent_knowledge.tools(playbooks.tools(trust.tools(inner)))
+        return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
 
     managers = build_managers(
         storage,
@@ -317,7 +317,7 @@ def wired(
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
-        agents_layer=playbooks.agents,
+        agents_layer=agent_playbooks.agents,
     )
     trust.build(managers)
 
@@ -377,9 +377,9 @@ def wired(
             principal_context=members,
             clock=clock,
             actions=actions,
-            playbooks=lambda: playbooks.build(managers),
+            agent_playbooks=lambda: agent_playbooks.build(managers),
         ),
-        playbooks=playbooks.build(managers),
+        agent_playbooks=agent_playbooks.build(managers),
         agent_knowledge=agent_knowledge.build(managers),
         notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
         chat=chat,

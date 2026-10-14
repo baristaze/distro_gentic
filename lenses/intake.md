@@ -6,7 +6,7 @@ feedback returns to the same session.
 
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
-it, twins in the suites, agent_automations, playbooks and agent
+it, twins in the suites, agent automations, agent playbooks and agent
 knowledge, connectors, and notifications. It leaves the inbox and how
 data renders to the engine; steering messages to `watch`; who may speak
 as a principal and how outside text is labelled to `wall`; and the
@@ -193,29 +193,29 @@ delivered again, or a slot met again, that makes a second run.
 
 **Check.** review
 
-## INT-09 Only a person publishes a playbook, and its gates only narrow
+## INT-09 Only a person publishes an agent playbook, and its gates only narrow
 
-**Principle.** Playbooks are a team's procedures as versioned,
+**Principle.** Agent playbooks are a team's procedures as versioned,
 executable briefs, in the Agent Skills format with their gates in a
-namespaced metadata extension. Only a person publishes a playbook. A
-principal or an agent automation invokes one, and its gates compile into
-the session's policy, where they can only narrow it. A person who
-manages the tenant pins one to a kind as its manual: each session of the
-kind made after the pin holds its brief as its standing text, whole on
-every request, and its gates in its policy, and keeps that version for
-its life.
+namespaced metadata extension. Only a person publishes an agent
+playbook. A principal or an agent automation invokes one, and its gates
+compile into the session's policy, where they can only narrow it. A
+person who manages the tenant pins one to a kind as its kind manual:
+each session of the kind made after the pin holds its brief as its
+standing text, whole on every request, and its gates in its policy, and
+keeps that version for its life.
 
-**Source.** Work In, Results Out, Playbooks and Agent Knowledge.
+**Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
-**Look for.** Who may publish a playbook; who may invoke one, and who
-may pin one; how its gates compile into the session's policy; where a
-manual renders, and when a session takes it.
+**Look for.** Who may publish an agent playbook; who may invoke one, and
+who may pin one; how its gates compile into the session's policy; where
+a kind manual renders, and when a session takes it.
 
-**Violation.** A playbook an agent publishes, invokes on its own, or
-pins; one run unversioned; a gate that widens a session's policy, adds
-a tool, or lifts an approval; a manual rendered as a message or cut to
-an excerpt, or one that changes under a session already made; a manual
-whose gates hold only after the session's first call.
+**Violation.** An agent playbook an agent publishes, invokes on its own,
+or pins; one run unversioned; a gate that widens a session's policy,
+adds a tool, or lifts an approval; a kind manual rendered as a message
+or cut to an excerpt, or one that changes under a session already made;
+a kind manual whose gates hold only after the session's first call.
 
 **Severity.** high
 
@@ -229,7 +229,7 @@ It renders as data. An agent may suggest agent knowledge, and a person
 reviews it before any session recalls it, so one session cannot plant
 instructions for the next.
 
-**Source.** Work In, Results Out, Playbooks and Agent Knowledge.
+**Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
 **Look for.** How agent knowledge is suggested, reviewed, and recalled;
 how recalled agent knowledge renders.

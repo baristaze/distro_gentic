@@ -36,8 +36,8 @@ gets onto the plane.
 - `stress` runs a scenario and judges it against its target.
 - `signals check` reads one request id's log lines, metric, trace, and error event.
 - `size` prints the platform's size, the traffic run's tenants left out.
-- `levers` prints which playbooks and agent knowledge an org's sessions
-  reached before they stalled.
+- `levers` prints which agent playbooks and agent knowledge an org's
+  sessions reached before they stalled.
 - `token` writes an operator token into its file, or lists and revokes your own.
 - `work requeue` sends one failed work item back to the queue.
 - `workos-bootstrap` reconciles the WorkOS application with `deployment/workos/environments.yaml`.
@@ -91,7 +91,7 @@ provider calls and credentials, and adds `audit-matrix-spend`,
 | `audit-database-calls` | none (local) | The round trips and transactions of each endpoint and worker flow. |
 | `audit-credential-lifetimes` | none (local) | How long each credential works after it is revoked, on each channel. |
 | `audit-provider-calls` | none (local) | Every call to a provider, flow by flow, and which to remove, fold, move, or cache. |
-| `audit-agent-levers` | Supporter (the `read` operator token alone) | Which playbooks and agent knowledge an org's sessions reached before they stalled, ranked against the sessions that did not reach them. |
+| `audit-agent-levers` | Supporter (the `read` operator token alone) | Which agent playbooks and agent knowledge an org's sessions reached before they stalled, ranked against the sessions that did not reach them. |
 | `audit-model-spend` | Supporter (the `read` operator token alone) | What an org's model calls spend by agent kind, kind version, and model role, the cache's hit rate, and what rebuilt caches cost. |
 | `audit-deploy-time` | Investigator | Where a deploy's minutes go, and what would shorten it. |
 | `audit-matrix-spend` | Investigator | What model calls spend by matrix version and plan tier, across the environment, the cache's hit rate, and what rebuilt caches cost. |

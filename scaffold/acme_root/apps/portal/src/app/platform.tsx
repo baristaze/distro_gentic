@@ -10,7 +10,7 @@ import { EntryPage } from "../features/agent_knowledge/EntryPage";
 import { AgentKnowledgePage } from "../features/agent_knowledge/AgentKnowledgePage";
 import { ModelsPage } from "../features/models/ModelsPage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
-import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
+import { AgentPlaybooksPage } from "../features/agent_playbooks/AgentPlaybooksPage";
 import { ProjectPage } from "../features/projects/ProjectPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { PLATFORM_TABS } from "../features/session/PaneTabs";
@@ -55,7 +55,7 @@ export const MOVED: readonly { from: string; to: string }[] = [
   { from: "/projects", to: "/settings/projects" },
   { from: "/projects/:projectId", to: "/settings/projects/:projectId" },
   { from: "/models", to: "/settings/models" },
-  { from: "/playbooks", to: "/settings/playbooks" },
+  { from: "/agent-playbooks", to: "/settings/agent-playbooks" },
   { from: "/audit", to: "/settings/audit" },
   { from: "/usage", to: "/settings/usage" },
   { from: "/approvals", to: "/sessions?needs=you" },
@@ -180,11 +180,11 @@ export const PLATFORM: PortalProduct = {
     },
     {
       group: "Agents",
-      id: "playbooks",
-      label: "Playbooks",
+      id: "agent_playbooks",
+      label: "Agent playbooks",
       icon: <DocumentIcon />,
       about: "The team's procedures, as versioned briefs",
-      routes: [{ path: "/settings/playbooks", element: <PlaybooksPage /> }],
+      routes: [{ path: "/settings/agent-playbooks", element: <AgentPlaybooksPage /> }],
     },
     {
       group: "Security",

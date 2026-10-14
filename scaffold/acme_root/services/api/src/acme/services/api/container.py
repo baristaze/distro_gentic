@@ -23,6 +23,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import build_agent_knowledge
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
@@ -35,7 +36,6 @@ from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.root import (
     LOCAL,
@@ -259,8 +259,8 @@ class AppContainer:
         starts and is messaged."""
         ports = ports or PlatformPorts()
         held: list[IntakeManagerInterface] = []
-        # A start makes each session with its kind's manual.
-        playbooks = PlaybooksLayer(storage)
+        # A start makes each session with its kind manual.
+        agent_playbooks = AgentPlaybooksLayer(storage)
         managers = build_managers(
             storage,
             infra,
@@ -278,7 +278,7 @@ class AppContainer:
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,
             product_kinds=ports.kinds,
-            agents_layer=playbooks.agents,
+            agents_layer=agent_playbooks.agents,
         )
         refuse_open_money(settings.environment, managers)
         # A tenant's own provider keys, saved and listed here and never read
@@ -325,7 +325,7 @@ class AppContainer:
                 managers,
                 project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
-                playbooks=lambda: playbooks.build(managers),
+                agent_playbooks=lambda: agent_playbooks.build(managers),
             ),
             notifications=build_notifications(storage, managers, integrations, intake),
             matrix=matrix,
@@ -337,10 +337,10 @@ class AppContainer:
                 storage, managers, payments or PaymentProviderAbsentImpl()
             ),
             # A person writes and reviews what sessions recall; the runner
-            # recalls them. A person publishes the playbooks sessions follow,
+            # recalls them. A person publishes the agent playbooks sessions follow,
             # invokes one into a session, and pins one to a kind.
             agent_knowledge=build_agent_knowledge(storage, managers),
-            playbooks=playbooks.build(managers),
+            agent_playbooks=agent_playbooks.build(managers),
             # An operator reads which of them the sessions that stalled reached.
             levers=build_levers(storage),
             # A person connects the tenant's servers and reviews their tools;

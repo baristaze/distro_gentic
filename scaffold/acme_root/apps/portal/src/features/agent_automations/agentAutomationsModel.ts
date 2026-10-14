@@ -17,8 +17,8 @@ export const QUEUE_DEPTH = 50;
 export const HOP_LIMIT = 3;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A playbook's name as it is published: lowercase words joined by single hyphens, at most 64 characters. */
-const PLAYBOOK_NAME = /^(?=.{1,64}$)[a-z0-9]+(-[a-z0-9]+)*$/;
+/** An agent playbook's name as it is published: lowercase words joined by single hyphens, at most 64 characters. */
+const AGENT_PLAYBOOK_NAME = /^(?=.{1,64}$)[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** An ISO 8601 duration (`PT1H`, `P1D`, `PT1M30S`) in seconds; null for any
  * other text. */
@@ -85,7 +85,7 @@ export function actionLine(action: AgentAutomationView["action"], projects: read
   if (!platformAction(action.kind)) return `run the product's action ${action.kind}`;
   if (action.kind === "message_session") return `message the session ${action.session_id ?? ""}`.trim();
   const project = action.project_id ? (projects.find((each) => each.id === action.project_id)?.name ?? "a project") : null;
-  return `start a session of the kind ${action.agent_kind ?? ""}${project ? ` in ${project}` : ""}${action.playbook ? `, invoking ${action.playbook}` : ""}`;
+  return `start a session of the kind ${action.agent_kind ?? ""}${project ? ` in ${project}` : ""}${action.agent_playbook ? `, invoking ${action.agent_playbook}` : ""}`;
 }
 
 export function limitsLine(limits: AgentAutomationView["limits"]): string {
@@ -155,8 +155,8 @@ export interface AgentAutomationDraft {
   title: string;
   projectId: string;
   sessionId: string;
-  /** The playbook a start invokes into its session first, by name; empty for none. */
-  playbook: string;
+  /** The agent playbook a start invokes into its session first, by name; empty for none. */
+  agentPlaybook: string;
   brief: string;
   costCap: string;
   runCap: string;
@@ -184,7 +184,7 @@ export const EMPTY_DRAFT: AgentAutomationDraft = {
   title: "",
   projectId: "",
   sessionId: "",
-  playbook: "",
+  agentPlaybook: "",
   brief: "",
   costCap: "",
   runCap: "",
@@ -233,7 +233,7 @@ export function draftOf(agentAutomation: AgentAutomationView): AgentAutomationDr
     title: action.title ?? "",
     projectId: action.project_id ?? "",
     sessionId: action.session_id ?? "",
-    playbook: action.playbook ?? "",
+    agentPlaybook: action.agent_playbook ?? "",
     brief: action.brief ?? "",
     costCap: String(limits.cost_cap_micros / 1_000_000),
     runCap: String(limits.run_cap_micros / 1_000_000),
@@ -302,9 +302,9 @@ export function agentAutomationRequest(
     if (!title) return { problem: "Give the sessions it starts a title." };
     if (title.length > TITLE_MAX) return { problem: `A title is at most ${TITLE_MAX} characters.` };
     if (projectRequired && !draft.projectId) return { problem: "Choose the project its sessions work in." };
-    const playbook = draft.playbook.trim();
-    if (playbook && !PLAYBOOK_NAME.test(playbook)) return { problem: "A playbook's name is lowercase words joined by hyphens, as it was published." };
-    action = { kind: "start_session", brief, agent_kind: agentKind, title, project_id: draft.projectId || null, session_id: null, ...(playbook ? { playbook } : {}) };
+    const agentPlaybook = draft.agentPlaybook.trim();
+    if (agentPlaybook && !AGENT_PLAYBOOK_NAME.test(agentPlaybook)) return { problem: "An agent playbook's name is lowercase words joined by hyphens, as it was published." };
+    action = { kind: "start_session", brief, agent_kind: agentKind, title, project_id: draft.projectId || null, session_id: null, ...(agentPlaybook ? { agent_playbook: agentPlaybook } : {}) };
   } else {
     const sessionId = draft.sessionId.trim();
     if (!UUID.test(sessionId)) return { problem: "Name the standing session by its id." };

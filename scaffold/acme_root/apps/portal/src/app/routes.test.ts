@@ -183,7 +183,7 @@ it.each([
   ["/projects", "/settings/projects", "Projects"],
   ["/projects/p1?from=mail#credential", "/settings/projects/p1?from=mail#credential", null],
   ["/models", "/settings/models", "Models and keys"],
-  ["/playbooks?name=release-notes", "/settings/playbooks?name=release-notes", "Playbooks"],
+  ["/agent-playbooks?name=release-notes", "/settings/agent-playbooks?name=release-notes", "Agent playbooks"],
   ["/audit", "/settings/audit", "Audit"],
   ["/usage", "/settings/usage", "Usage"],
   ["/approvals", "/sessions?needs=you", "Sessions"],

@@ -19,6 +19,8 @@ from acme.om.agent_billing.storage.impl.postgres import (
 )
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_knowledge.storage.impl.postgres import AgentKnowledgeStoragePostgresImpl
+from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
+from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -67,8 +69,6 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
-from acme.om.playbooks.storage import PlaybookStorageInterface
-from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.projects.storage import ProjectStorageInterface
@@ -248,7 +248,7 @@ class StoragePostgresImpl(StorageInterface):
         self._cloud_pool = CloudPoolStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
         self._automation = AgentAutomationStoragePostgresImpl(sessions)
-        self._playbook = PlaybookStoragePostgresImpl(sessions)
+        self._playbook = AgentPlaybookStoragePostgresImpl(sessions)
         self._knowledge = AgentKnowledgeStoragePostgresImpl(sessions)
         self._connector = ConnectorStoragePostgresImpl(sessions)
         self._notification = NotificationStoragePostgresImpl(sessions)
@@ -346,7 +346,7 @@ class StoragePostgresImpl(StorageInterface):
     def get_agent_automation_storage(self) -> AgentAutomationStorageInterface:
         return self._automation
 
-    def get_playbook_storage(self) -> PlaybookStorageInterface:
+    def get_agent_playbook_storage(self) -> AgentPlaybookStorageInterface:
         return self._playbook
 
     def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface:

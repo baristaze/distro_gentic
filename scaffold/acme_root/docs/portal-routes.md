@@ -26,7 +26,7 @@ person is on, the route it matched, and the parameters it named, as data.
 | `/projects` | An old address: it lands on `/settings/projects` |  |
 | `/projects/:projectId` | An old address: it lands on `/settings/projects/:projectId` | `projectId`: as `/settings/projects/:projectId` names it |
 | `/models` | An old address: it lands on `/settings/models` |  |
-| `/playbooks` | An old address: it lands on `/settings/playbooks` |  |
+| `/agent-playbooks` | An old address: it lands on `/settings/agent-playbooks` |  |
 | `/audit` | An old address: it lands on `/settings/audit` |  |
 | `/usage` | An old address: it lands on `/settings/usage` |  |
 | `/approvals` | An old address: it lands on `/sessions?needs=you` |  |
@@ -38,6 +38,6 @@ person is on, the route it matched, and the parameters it named, as data.
 | `/settings/projects` | Settings › Projects: Each bound to its repository, and the credential it is read with |  |
 | `/settings/projects/:projectId` | One project: its repository, the credential it is read with, its name, and its removal | `projectId`: the project's id |
 | `/settings/models` | Settings › Models and keys: The org's own provider keys, and its model for each role |  |
-| `/settings/playbooks` | Settings › Playbooks: The team's procedures, as versioned briefs |  |
+| `/settings/agent-playbooks` | Settings › Agent playbooks: The team's procedures, as versioned briefs |  |
 | `/settings/api-keys` | Settings › API keys: Keys a program calls the API with, as the org |  |
 | `/settings/sign-on` | Settings › Single sign-on: Sign-in through the org's own identity provider |  |

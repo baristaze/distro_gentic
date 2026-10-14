@@ -29,7 +29,7 @@
       },
       "ActionBody": {
         "additionalProperties": false,
-        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`, and invoke the tenant's `playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
+        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`, and invoke the tenant's `agent_playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
         "properties": {
           "agent_kind": {
             "anyOf": [
@@ -43,6 +43,20 @@
               }
             ],
             "title": "Agent Kind"
+          },
+          "agent_playbook": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Playbook"
           },
           "brief": {
             "anyOf": [
@@ -68,20 +82,6 @@
             },
             "title": "Params",
             "type": "object"
-          },
-          "playbook": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 1,
-                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playbook"
           },
           "project_id": {
             "anyOf": [
@@ -140,6 +140,17 @@
             ],
             "title": "Agent Kind"
           },
+          "agent_playbook": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Playbook"
+          },
           "brief": {
             "anyOf": [
               {
@@ -161,17 +172,6 @@
             },
             "title": "Params",
             "type": "object"
-          },
-          "playbook": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playbook"
           },
           "project_id": {
             "anyOf": [
@@ -216,7 +216,7 @@
           "title",
           "project_id",
           "session_id",
-          "playbook",
+          "agent_playbook",
           "params"
         ],
         "title": "ActionView",
@@ -653,6 +653,76 @@
           "findings"
         ],
         "title": "AgentKnowledgeView",
+        "type": "object"
+      },
+      "AgentPlaybookView": {
+        "description": "A version as published, with what the lever checks found in it as it\nwas: advice, which never refused the publish. `findings` is null on a\nversion the checks never read, one published before they ran, and an\nempty list on one they read and found nothing in.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "findings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FindingView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Findings"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/GateView"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "published_by": {
+            "format": "uuid",
+            "title": "Published By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "description",
+          "body",
+          "gates",
+          "published_by",
+          "created_at",
+          "findings"
+        ],
+        "title": "AgentPlaybookView",
         "type": "object"
       },
       "AgentRefView": {
@@ -4849,8 +4919,13 @@
         "type": "object"
       },
       "InvocationView": {
-        "description": "A version brought into a session. `pinned` marks the manual the\nsession was made with, whose brief is its standing text; every other\ninvocation's brief arrived as its invoker's message.",
+        "description": "A version brought into a session. `pinned` marks the kind manual the\nsession was made with, whose brief is its standing text; every other\ninvocation's brief arrived as its invoker's message.",
         "properties": {
+          "agent_playbook_id": {
+            "format": "uuid",
+            "title": "Agent Playbook Id",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4874,11 +4949,6 @@
             "title": "Pinned",
             "type": "boolean"
           },
-          "playbook_id": {
-            "format": "uuid",
-            "title": "Playbook Id",
-            "type": "string"
-          },
           "session_id": {
             "format": "uuid",
             "title": "Session Id",
@@ -4892,7 +4962,7 @@
         "required": [
           "id",
           "session_id",
-          "playbook_id",
+          "agent_playbook_id",
           "name",
           "version",
           "invoked_by",
@@ -5803,7 +5873,7 @@
       },
       "LeverKind": {
         "enum": [
-          "playbook",
+          "agent_playbook",
           "agent_knowledge"
         ],
         "title": "LeverKind",
@@ -7565,7 +7635,7 @@
       },
       "PinRequest": {
         "additionalProperties": false,
-        "description": "A kind's manual: the name whose latest version is pinned to `kind`,\nfor the tenant's sessions of it, or with `project_id` those of one\nproject, where it wins over the tenant's.",
+        "description": "A kind manual: the name whose latest version is pinned to `kind`,\nfor the tenant's sessions of it, or with `project_id` those of one\nproject, where it wins over the tenant's.",
         "properties": {
           "kind": {
             "maxLength": 200,
@@ -7601,8 +7671,13 @@
         "type": "object"
       },
       "PinView": {
-        "description": "A version pinned to a kind as its manual. Each session of the kind\nmade after it was pinned holds it; one made before keeps its own.",
+        "description": "A version pinned to a kind as its kind manual. Each session of the kind\nmade after it was pinned holds it; one made before keeps its own.",
         "properties": {
+          "agent_playbook_id": {
+            "format": "uuid",
+            "title": "Agent Playbook Id",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -7624,11 +7699,6 @@
           },
           "name": {
             "title": "Name",
-            "type": "string"
-          },
-          "playbook_id": {
-            "format": "uuid",
-            "title": "Playbook Id",
             "type": "string"
           },
           "project_id": {
@@ -7662,7 +7732,7 @@
           "id",
           "kind",
           "project_id",
-          "playbook_id",
+          "agent_playbook_id",
           "name",
           "version",
           "created_at",
@@ -7810,76 +7880,6 @@
           "counted_at"
         ],
         "title": "PlatformSizeView",
-        "type": "object"
-      },
-      "PlaybookView": {
-        "description": "A version as published, with what the lever checks found in it as it\nwas: advice, which never refused the publish. `findings` is null on a\nversion the checks never read, one published before they ran, and an\nempty list on one they read and found nothing in.",
-        "properties": {
-          "body": {
-            "title": "Body",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "findings": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FindingView"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Findings"
-          },
-          "gates": {
-            "items": {
-              "$ref": "#/components/schemas/GateView"
-            },
-            "title": "Gates",
-            "type": "array"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "published_by": {
-            "format": "uuid",
-            "title": "Published By",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "version",
-          "description",
-          "body",
-          "gates",
-          "published_by",
-          "created_at",
-          "findings"
-        ],
-        "title": "PlaybookView",
         "type": "object"
       },
       "PolicyRuleBody": {
@@ -8318,7 +8318,7 @@
       },
       "PublishRequest": {
         "additionalProperties": false,
-        "description": "The next version of a playbook's name: its description, its body, and\nits gates.",
+        "description": "The next version of an agent playbook's name: its description, its body, and\nits gates.",
         "properties": {
           "body": {
             "maxLength": 50000,
@@ -14071,7 +14071,7 @@
     },
     "/v1/admin/orgs/{org_id}/levers": {
       "get": {
-        "description": "The playbooks and agent knowledge the org's sessions created in `[since,\nuntil)` reached, ranked by how much more often the sessions that\nreached them stalled, with the sessions behind each figure. A stall is\nread from the steps' headers, never from what a step says, and a lever\nis answered by its kind, id, and version, never by its name or its\nslug. A window that does not end after it starts is `422`.",
+        "description": "The agent playbooks and agent knowledge the org's sessions created in `[since,\nuntil)` reached, ranked by how much more often the sessions that\nreached them stalled, with the sessions behind each figure. A stall is\nread from the steps' headers, never from what a step says, and a lever\nis answered by its kind, id, and version, never by its name or its\nslug. A window that does not end after it starts is `422`.",
         "operationId": "read_levers_v1_admin_orgs__org_id__levers_get",
         "parameters": [
           {
@@ -16875,6 +16875,614 @@
         "summary": "Review Entry",
         "tags": [
           "agent_knowledge"
+        ]
+      }
+    },
+    "/v1/agent-playbook-pins": {
+      "delete": {
+        "description": "The kind's pin for the tenant, or for one project, taken away. A\nsession made with it keeps it.",
+        "operationId": "unpin_v1_agent_playbook_pins_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unpin",
+        "tags": [
+          "agent_playbooks"
+        ]
+      },
+      "get": {
+        "description": "The tenant's pins, by kind, the tenant's before a project's.",
+        "operationId": "list_pins_v1_agent_playbook_pins_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PinView"
+                  },
+                  "title": "Response List Pins V1 Agent Playbook Pins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pins",
+        "tags": [
+          "agent_playbooks"
+        ]
+      },
+      "put": {
+        "description": "The name's latest version pinned to the kind as its kind manual, for the\ntenant or one project; pinned again, the version then latest.",
+        "operationId": "pin_v1_agent_playbook_pins_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin",
+        "tags": [
+          "agent_playbooks"
+        ]
+      }
+    },
+    "/v1/agent-playbooks": {
+      "post": {
+        "description": "The next version of the name.",
+        "operationId": "publish_v1_agent_playbooks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPlaybookView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "agent_playbooks"
+        ]
+      }
+    },
+    "/v1/agent-playbooks/{name}": {
+      "get": {
+        "description": "The latest version of the name.",
+        "operationId": "get_agent_playbook_v1_agent_playbooks__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPlaybookView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Playbook",
+        "tags": [
+          "agent_playbooks"
+        ]
+      }
+    },
+    "/v1/agent-playbooks/{name}/invocations": {
+      "post": {
+        "description": "The latest version brought into the session: its gates hold there\nfrom now on, and its brief arrives as the caller's message. Invoked\nagain, the version's invocation answers, and nothing is sent twice.",
+        "operationId": "invoke_v1_agent_playbooks__name__invocations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvocationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invoke",
+        "tags": [
+          "agent_playbooks"
         ]
       }
     },
@@ -30742,614 +31350,6 @@
         "summary": "Sso Link",
         "tags": [
           "tenancy"
-        ]
-      }
-    },
-    "/v1/playbook-pins": {
-      "delete": {
-        "description": "The kind's pin for the tenant, or for one project, taken away. A\nsession made with it keeps it.",
-        "operationId": "unpin_v1_playbook_pins_delete",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "project_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Project Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PinView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Unpin",
-        "tags": [
-          "playbooks"
-        ]
-      },
-      "get": {
-        "description": "The tenant's pins, by kind, the tenant's before a project's.",
-        "operationId": "list_pins_v1_playbook_pins_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PinView"
-                  },
-                  "title": "Response List Pins V1 Playbook Pins Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Pins",
-        "tags": [
-          "playbooks"
-        ]
-      },
-      "put": {
-        "description": "The name's latest version pinned to the kind as its manual, for the\ntenant or one project; pinned again, the version then latest.",
-        "operationId": "pin_v1_playbook_pins_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PinRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PinView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Pin",
-        "tags": [
-          "playbooks"
-        ]
-      }
-    },
-    "/v1/playbooks": {
-      "post": {
-        "description": "The next version of the name.",
-        "operationId": "publish_v1_playbooks_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "idempotency-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 255,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PublishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlaybookView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Publish",
-        "tags": [
-          "playbooks"
-        ]
-      }
-    },
-    "/v1/playbooks/{name}": {
-      "get": {
-        "description": "The latest version of the name.",
-        "operationId": "get_playbook_v1_playbooks__name__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "maxLength": 64,
-              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlaybookView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Playbook",
-        "tags": [
-          "playbooks"
-        ]
-      }
-    },
-    "/v1/playbooks/{name}/invocations": {
-      "post": {
-        "description": "The latest version brought into the session: its gates hold there\nfrom now on, and its brief arrives as the caller's message. Invoked\nagain, the version's invocation answers, and nothing is sent twice.",
-        "operationId": "invoke_v1_playbooks__name__invocations_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "maxLength": 64,
-              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "idempotency-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 255,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InvokeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvocationView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Invoke",
-        "tags": [
-          "playbooks"
         ]
       }
     },

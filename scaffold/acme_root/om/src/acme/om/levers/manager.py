@@ -1,5 +1,5 @@
 """The levers swimlane: the texts a tenant customizes its agents with, a
-playbook or a reviewed agent knowledge entry, read before a person publishes
+agent_playbook or a reviewed agent knowledge entry, read before a person publishes
 them by checks of their own, and read back from the sessions that stalled
 after them. A check advises and never refuses a publish; its findings are
 kept with the version they read, by the swimlane that keeps the lever.

@@ -54,7 +54,7 @@ project, and `work_repository` none, so no write of it is work product.
 
 **An agent automation's session starts through the projects' start,** in
 the project its action names, which is read as the tenant's when the
-agent_automation is saved. Outside a local stack, an agent automation
+agent automation is saved. Outside a local stack, an agent automation
 whose start names none is refused when it is saved, and one stored with
 none starts nothing when it fires
 ([ADR

@@ -10,9 +10,9 @@ the validation sessions' station columns leave the table with every session
 this release wrote kept, a platform agent automation this release writes reads as
 the previous release's after a downgrade, which drops the agent automations of a
 product's kind, a refused validation session goes back to queued, kept,
-when its reason's column leaves, a playbook version the release before
+when its reason's column leaves, an agent playbook version the release before
 wrote reads as never checked by the lever checks, and an invocation it
-wrote reads as a principal's, never a session's manual."""
+wrote reads as a principal's, never a session's kind manual."""
 
 import asyncio
 import json
@@ -22,20 +22,20 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_automation_storage import make_agent_automation
+from contracts.agent_playbook_storage import make_agent_playbook
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation, refused
-from contracts.playbook_storage import make_playbook
 from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from acme.om.agent_automations.storage.impl.postgres import AgentAutomationStoragePostgresImpl
 from acme.om.agent_automations.types.agent_automation import Action
+from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
-from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.logins import MIGRATION_LOGIN, PURGE_LOGIN, RUNTIME_LOGIN, SYSTEM_LOGIN
 from acme.om.storage.migrate import (
@@ -666,61 +666,67 @@ async def test_a_platform_agent_automation_reads_as_the_previous_releases_after_
 
 
 BEFORE_LEVERS = "202610121800"
-"""The core head before a playbook version carried what the lever checks
+"""The core head before an agent playbook version carried what the lever checks
 found in it."""
 
 
 async def test_a_version_the_release_before_wrote_reads_as_never_checked(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
-    """At the release before, a playbook version is written with no
+    """At the release before, an agent playbook version is written with no
     findings column. Forward, its findings are null: it reads as never
     checked, which is not checked and clean."""
     core = migrated[DatabaseRole.CORE]
-    org, playbook = new_id(), make_playbook()
+    org, agent_playbook = new_id(), make_agent_playbook()
     await downgrade(DatabaseRole.CORE, core, BEFORE_LEVERS)
-    gates = json.dumps([gate.model_dump(mode="json") for gate in playbook.gates])
+    gates = json.dumps([gate.model_dump(mode="json") for gate in agent_playbook.gates])
     await in_tenant(
         core,
         org,
-        "INSERT INTO core.playbooks (id, org_id, created_at, name, version, description,"
+        "INSERT INTO core.agent_playbooks (id, org_id, created_at, name, version, description,"
         " body, gates, published_by) VALUES"
-        f" ('{playbook.id}', '{org}', now(), '{playbook.name}', 1, 'Cut a build.',"
-        f" 'Build.', '{gates}'::jsonb, '{playbook.published_by}')",
+        f" ('{agent_playbook.id}', '{org}', now(), '{agent_playbook.name}', 1, 'Cut a build.',"
+        f" 'Build.', '{gates}'::jsonb, '{agent_playbook.published_by}')",
     )
 
     await upgrade(DatabaseRole.CORE, core)
 
-    stored = await PlaybookStoragePostgresImpl(pg_sessions).read_playbook(org, playbook.id)
+    stored = await AgentPlaybookStoragePostgresImpl(pg_sessions).read_agent_playbook(
+        org, agent_playbook.id
+    )
     assert stored is not None and stored.findings is None
-    assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.playbooks") == [(True,)]
+    assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.agent_playbooks") == [
+        (True,)
+    ]
     assert await check(DatabaseRole.CORE, core) == []
 
 
 BEFORE_PINS = "202610121801"
-"""The core head before a playbook was pinned to a kind as its manual."""
+"""The core head before an agent playbook was pinned to a kind as its kind manual."""
 
 
-async def test_an_invocation_the_release_before_wrote_reads_as_no_manual(
+async def test_an_invocation_the_release_before_wrote_reads_as_no_kind_manual(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """At the release before, an invocation is written with no `pinned`
     column, as it still is through a roll. It reads as a principal's: its
     brief was a message, and the session's standing text holds none of it."""
     core = migrated[DatabaseRole.CORE]
-    org, session, playbook = new_id(), new_id(), make_playbook()
+    org, session, agent_playbook = new_id(), new_id(), make_agent_playbook()
     await downgrade(DatabaseRole.CORE, core, BEFORE_PINS)
     await in_tenant(
         core,
         org,
-        "INSERT INTO core.playbook_invocations (id, org_id, created_at, session_id,"
-        " playbook_id, name, version, invoked_by) VALUES"
-        f" ('{new_id()}', '{org}', now(), '{session}', '{playbook.id}', '{playbook.name}', 1,"
+        "INSERT INTO core.agent_playbook_invocations (id, org_id, created_at, session_id,"
+        " agent_playbook_id, name, version, invoked_by) VALUES"
+        f" ('{new_id()}', '{org}', now(), '{session}', '{agent_playbook.id}', '{agent_playbook.name}', 1,"
         f" '{new_id()}')",
     )
 
     await upgrade(DatabaseRole.CORE, core)
 
-    (stored,) = await PlaybookStoragePostgresImpl(pg_sessions).read_invocations(org, session, 10)
+    (stored,) = await AgentPlaybookStoragePostgresImpl(pg_sessions).read_invocations(
+        org, session, 10
+    )
     assert not stored.pinned
     assert await check(DatabaseRole.CORE, core) == []

@@ -10,11 +10,11 @@ from uuid import UUID
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
+from acme.om.agent_playbooks.types.agent_playbook import MAX_SKILL_NAME, SKILL_NAME
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.context import Role
-from acme.om.playbooks.types.playbook import MAX_SKILL_NAME, SKILL_NAME
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
@@ -76,7 +76,7 @@ class Action(Platform):
     2036); or a product's own action,
     which its kind runs with `params`. The brief is the creator's word; the
     event that fired it reaches the session beside it, as data. A start may
-    also invoke the tenant's `playbook` of that name into the session it
+    also invoke the tenant's `agent_playbook` of that name into the session it
     starts, its latest version at the firing, as the creator's. A product's
     action reaches no session, so it carries no brief, and `params` are
     held to its kind's shape when the agent automation is written."""
@@ -88,7 +88,7 @@ class Action(Platform):
     project_id: UUID | None = None
     session_id: UUID | None = None
     params: FrozenMapping = Field(default_factory=dict, validate_default=True)
-    playbook: Stored | None = Field(
+    agent_playbook: Stored | None = Field(
         default=None, min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME
     )
 
@@ -107,21 +107,23 @@ class Action(Platform):
             raise ValueError("a message names its standing session, and a start does not")
         if not starts and self.project_id is not None:
             raise ValueError("a message names no project: its session keeps its own")
-        if not starts and self.playbook is not None:
-            raise ValueError("a start invokes a playbook into its session, and a message none")
+        if not starts and self.agent_playbook is not None:
+            raise ValueError(
+                "a start invokes an agent playbook into its session, and a message none"
+            )
         return self
 
     @model_serializer(mode="wrap")
     def _params_only_when_set(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
         """A platform action's stored value carries no `params`, and one that
-        invokes no playbook no `playbook`, so the previous release, which
+        invokes no agent playbook no `agent_playbook`, so the previous release, which
         forbids a field it does not know, reads it through a roll and after
         a downgrade."""
         dumped: dict[str, object] = handler(self)
         if not self.params:
             dumped.pop("params", None)
-        if self.playbook is None:
-            dumped.pop("playbook", None)
+        if self.agent_playbook is None:
+            dumped.pop("agent_playbook", None)
         return dumped
 
     def plain_params(self) -> dict[str, object]:
@@ -135,7 +137,7 @@ class Action(Platform):
             self.title,
             self.project_id,
             self.session_id,
-            self.playbook,
+            self.agent_playbook,
         )
         if any(name is not None for name in names):
             raise ValueError("a product's action carries its params, and no brief or session")

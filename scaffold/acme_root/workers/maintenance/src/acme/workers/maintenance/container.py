@@ -26,6 +26,8 @@ from acme.om.agent_billing.root import (
 from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
 from acme.om.agent_knowledge.impl.manager import AgentKnowledgeOptions
 from acme.om.agent_knowledge.root import build_agent_knowledge
+from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
@@ -54,8 +56,6 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.impl.manager import PlaybooksOptions
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
@@ -236,8 +236,8 @@ def worker_managers(
         product_kinds=ports.kinds,
         models_layer=matrix.layer,
         # An agent automation's start and an intake event make sessions here, each
-        # with its kind's manual.
-        agents_layer=PlaybooksLayer(storage).agents,
+        # with its kind manual.
+        agents_layer=AgentPlaybooksLayer(storage).agents,
     )
     refuse_open_money(settings.environment, managers)
     return managers
@@ -274,7 +274,7 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # playbooks, agent_knowledge, and notifications, for their purges.
+        # agent_playbooks, agent_knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
         # Outside a local stack, an agent automation's session starts in a project:
@@ -285,11 +285,11 @@ class WorkerContainer:
             project_required=settings.environment != LOCAL,
             options=AgentAutomationsOptions(purge_batch=batch),
             actions=kinds.actions,
-            playbooks=lambda: self.playbooks,
+            agent_playbooks=lambda: self.agent_playbooks,
         )
-        self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
-            managers
-        )
+        self.agent_playbooks = AgentPlaybooksLayer(
+            storage, options=AgentPlaybooksOptions(purge_batch=batch)
+        ).build(managers)
         self.agent_knowledge = build_agent_knowledge(
             storage, managers, options=AgentKnowledgeOptions(purge_batch=batch)
         )

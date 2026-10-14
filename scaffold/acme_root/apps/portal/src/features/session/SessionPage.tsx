@@ -149,7 +149,7 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
           <span>Resume</span>
         </button>
       ) : null}
-      {may?.send ? <InvokePlaybook vm={vm} /> : null}
+      {may?.send ? <InvokeAgentPlaybook vm={vm} /> : null}
       <Menu label="More" trigger={<MoreIcon />} triggerLabel="More" triggerClassName="acme-icon-button" align="end">
         {may?.compact ? <MenuItem onSelect={() => vm.control("compact")}>Compact history</MenuItem> : null}
         {may?.cancel ? (
@@ -248,11 +248,11 @@ function Composer({ vm }: { vm: SessionVm }) {
   );
 }
 
-/** In the header, for one who may instruct the session: a playbook brought
+/** In the header, for one who may instruct the session: an agent playbook brought
  * into it by its name, its latest version. Its brief arrives as the
  * person's message, and its gates hold in the session, and its sub-agents,
  * from then on. */
-function InvokePlaybook({ vm }: { vm: SessionVm }) {
+function InvokeAgentPlaybook({ vm }: { vm: SessionVm }) {
   const [name, setName] = useState("");
   const [open, setOpen] = useState(0);
   const onSubmit = (event: FormEvent) => {
@@ -263,10 +263,10 @@ function InvokePlaybook({ vm }: { vm: SessionVm }) {
     });
   };
   return (
-    <Popover key={open} label="Invoke a playbook" trigger={<span>Playbook</span>} triggerClassName="acme-chip" align="end" width={320}>
-      <form className="acme-invoke-playbook" aria-label="Invoke a playbook" onSubmit={onSubmit}>
+    <Popover key={open} label="Invoke an agent playbook" trigger={<span>Agent playbook</span>} triggerClassName="acme-chip" align="end" width={320}>
+      <form className="acme-invoke-agent-playbook" aria-label="Invoke an agent playbook" onSubmit={onSubmit}>
         <TextField
-          label="Playbook"
+          label="Agent playbook"
           value={name}
           placeholder="release-check"
           onChange={setName}

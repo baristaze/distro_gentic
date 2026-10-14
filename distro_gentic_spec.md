@@ -9,10 +9,10 @@ does not always own.
 
 - It **defines** an agent as an [agent
   kind](#the-agents-a-platform-ships): its toolsets, the model size
-  each of its roles asks, the bounds it runs in, and a manual a tenant
-  may pin to it. The kinds it ships are templates a product copies. A
-  tenant shapes them with [playbooks and
-  agent knowledge](#playbooks-and-agent-knowledge) and
+  each of its roles asks, the bounds it runs in, and a kind manual a
+  tenant may pin to it. The kinds it ships are templates a product
+  copies. A tenant shapes them with [agent playbooks and
+  agent knowledge](#agent-playbooks-and-agent-knowledge) and
   [connectors](#connectors), each read for what would mislead an agent before a person publishes
   it.
 - It **runs** each agent as a [session on the work
@@ -149,8 +149,8 @@ flowchart LR
         Ext[Trackers, chat,<br/>source control]
     end
     subgraph Cloud [The platform's cloud]
-        CP[Control plane:<br/>gateway, sessions, intake,<br/>agent_automations, policy, approvals]
-        CW[Control workers:<br/>intake, agent_automations]
+        CP[Control plane:<br/>gateway, sessions, intake,<br/>agent automations, policy, approvals]
+        CW[Control workers:<br/>intake, agent automations]
         Q[(Work queue)]
         SR[Session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
@@ -177,10 +177,10 @@ flowchart LR
 
 | Plane | Parts | Where it runs |
 |---|---|---|
-| **Control** | The gateway, sessions, intake and routing, agent_automations, policy, approvals, realtime; the control workers | The platform's cloud |
+| **Control** | The gateway, sessions, intake and routing, agent automations, policy, approvals, realtime; the control workers | The platform's cloud |
 | **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
-| **Records and money** | Steps, execution records, artifacts; metering, limits, agent_billing, the model matrix | The platform's cloud |
+| **Records and money** | Steps, execution records, artifacts; metering, limits, agent billing, the model matrix | The platform's cloud |
 
 Every connection that crosses a customer's wall is opened from inside
 it.
@@ -673,32 +673,32 @@ while a run is open starts another beside it, as the agent automation's
 limits allow: it starts, queues, or is refused. An event delivered
 again, or a schedule's slot met again, answers the run it made.
 
-### Playbooks and Agent Knowledge
+### Agent Playbooks and Agent Knowledge
 
-**Playbooks** are a team's procedures as versioned, executable briefs:
-what is needed, the steps, the safety requirements, the approval gates,
-the success measures, and what is forbidden. They follow the [Agent
-Skills](https://agentskills.io/specification) format, with their gates
+**Agent playbooks** are a team's procedures as versioned, executable
+briefs: what is needed, the steps, the safety requirements, the approval
+gates, the success measures, and what is forbidden. They follow the
+[Agent Skills](https://agentskills.io/specification) format, with their gates
 in a namespaced metadata extension, so a brief runs in any agent that
-reads the standard. Only a person publishes a playbook. A principal
-invokes one into a session they may instruct, from the API, the command
-line, or the session's page, and an agent automation's start invokes one
-into the session it starts. Its brief arrives as that principal's
-message, and its gates compile into the session's policy, where they can
-only narrow it.
+reads the standard. Only a person publishes an agent playbook. A
+principal invokes one into a session they may instruct, from the API,
+the command line, or the session's page, and an agent automation's start
+invokes one into the session it starts. Its brief arrives as that
+principal's message, and its gates compile into the session's policy,
+where they can only narrow it.
 
-A person who manages the tenant may also pin a playbook to an [agent
-kind][e-kinds], for the tenant or for one project, as the kind's
-**manual**: the standing instructions of every session of that kind.
-It is one noun, invoked as a procedure or pinned as a manual. Each
-session of the kind made after the pin, a sub-agent and a hand-over
-among them, pins the manual's brief as its [standing text][e-rendering]:
-whole in the system layer of every request, before and after every
-compaction, and cached with the kind's prompts. Its gates narrow the
-session's policy as an invoked playbook's do. A pin names one version,
-and a session keeps the manual it was made with: a later pin reaches
-only the sessions made after it. A brief longer than the standing text
-holds is refused when it is pinned.
+A person who manages the tenant may also pin an agent playbook to an
+[agent kind][e-kinds], for the tenant or for one project, as the kind's
+**kind manual**: the standing instructions of every session of that
+kind. It is one noun, invoked as a procedure or pinned as a kind manual.
+Each session of the kind made after the pin, a sub-agent and a hand-over
+among them, pins the kind manual's brief as its [standing
+text][e-rendering]: whole in the system layer of every request, before
+and after every compaction, and cached with the kind's prompts. Its
+gates narrow the session's policy as an invoked agent playbook's do. A
+pin names one version, and a session keeps the kind manual it was made
+with: a later pin reaches only the sessions made after it. A brief
+longer than the standing text holds is refused when it is pinned.
 
 **Agent knowledge** is recalled into a session when its trigger matches,
 so a new session does not rediscover its environment. It renders as
@@ -706,15 +706,15 @@ data. An agent may suggest agent knowledge, and a person reviews it
 before any session recalls it, so one session cannot plant instructions
 for the next.
 
-A playbook and a reviewed entry are a tenant's **levers**: texts written
-for people that an agent then follows. A lever is read as a person
-publishes it, by checks that call no model, for what makes an agent
-spin: a phrase repeated until it looks load-bearing, a must and a
+An agent playbook and a reviewed entry are a tenant's **levers**: texts
+written for people that an agent then follows. A lever is read as a
+person publishes it, by checks that call no model, for what makes an
+agent spin: a phrase repeated until it looks load-bearing, a must and a
 must-not on one subject, a tool no kind it reaches holds, a retry with
 no stopping condition, a brief longer than a session holds whole. A
 finding advises and never refuses the publish; it is kept with the
 version it read. Afterwards, an operator reads which levers the
-sessions that stalled reached, the manual each was made with among
+sessions that stalled reached, the kind manual each was made with among
 them, against the sessions that did not reach them, from the steps'
 headers alone. The same checks read a connector's tool
 descriptions as a person reviews them ([Connectors](#connectors)).
@@ -760,7 +760,7 @@ eligible approvers, a budget's owner) on their channels, with a link to
 the one action that clears it.
 
 > **Principle:** Only some feedback wakes the agent, and only a principal
-> instructs it. A playbook narrows policy; agent knowledge a person has not
+> instructs it. An agent playbook narrows policy; agent knowledge a person has not
 > reviewed is never recalled.
 
 ## Evidence
@@ -854,7 +854,7 @@ collector serves every place a check can run.
 its root cause. A hidden suite must pass beside the visible one, and the
 result is judged by behavior, so any valid fix passes. Editing the
 checks or the system under test is forbidden and checked. No surface the
-agent reads (prompts, agent_knowledge, tool sources, evidence, pull
+agent reads (prompts, agent knowledge, tool sources, evidence, pull
 requests) mentions the hidden suite, and a scanner checks every one. The
 harness judges the chain of evidence (a failing baseline, the runs, the
 hypotheses resolved, a clean validation, a cited report), never the
@@ -1188,7 +1188,7 @@ provider calls and credentials:
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
-| `audit-agent-levers` | supporter | Which playbooks and agent knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
+| `audit-agent-levers` | supporter | Which agent playbooks and agent knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
 | `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
 
 The gates hold the layers consistent with each other. They cannot say

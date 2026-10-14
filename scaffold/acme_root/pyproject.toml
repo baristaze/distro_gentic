@@ -168,7 +168,7 @@ reason = "the watch keeps no rows: its buffers are a cache, and its records are 
 
 # The levers keep no table: a finding is kept in its lever's own row, with
 # the version it read, and a reading is read from the sessions, the
-# playbooks they invoked, and the agent knowledge they recalled (ADR 2054).
+# agent playbooks they invoked, and the agent knowledge they recalled (ADR 2054).
 [[tool.arch-check.exception]]
 rule = "OM-14"
 path = "om/src/acme/om/levers/__init__.py"

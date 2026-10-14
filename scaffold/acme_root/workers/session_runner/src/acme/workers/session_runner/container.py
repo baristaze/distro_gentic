@@ -19,6 +19,7 @@ from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import new_id
@@ -36,7 +37,6 @@ from acme.om.notifications.root import build_notifications
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
@@ -184,13 +184,13 @@ class RunnerContainer:
             clients=lambda: trust.managers.provider_clients,
             kinds=ports.kinds.agents,
         )
-        playbooks = PlaybooksLayer(storage)
+        agent_playbooks = AgentPlaybooksLayer(storage)
         agent_knowledge = AgentKnowledgeLayer(storage)
 
         def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-            # The wall and the audit first, then the session's playbook gates,
+            # The wall and the audit first, then the session's agent playbook gates,
             # then the agent knowledge a session recalls as its first loop starts.
-            return agent_knowledge.tools(playbooks.tools(trust.tools(inner)))
+            return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
 
         async def members(
             rctx: RequestContext, org_id: UUID, principal: Principal
@@ -262,8 +262,8 @@ class RunnerContainer:
             models_layer=matrix.layer,
             tools_layer=layers,
             # A spawn and a hand-off make sessions here, each with its kind's
-            # manual.
-            agents_layer=playbooks.agents,
+            # kind manual.
+            agents_layer=agent_playbooks.agents,
             transport_layer=placed,
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
@@ -283,13 +283,13 @@ class RunnerContainer:
                 managers,
                 project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
-                playbooks=lambda: playbooks.build(managers),
+                agent_playbooks=lambda: agent_playbooks.build(managers),
             )
         )
         refuse_open_money(settings.environment, managers)
         trust.build(managers)
         matrix.build(managers)
-        playbooks.build(managers)
+        agent_playbooks.build(managers)
         agent_knowledge.build(managers)
         connectors.build(managers)
         container = cls(

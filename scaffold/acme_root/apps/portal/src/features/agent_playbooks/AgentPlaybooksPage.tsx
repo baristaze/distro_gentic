@@ -1,0 +1,103 @@
+import type { FormEvent } from "react";
+import { errorMessage } from "../../app/errorMessage";
+import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, TextArea, TextField } from "../../design/kit";
+import { tokens } from "../../design/tokens";
+import { Findings } from "../levers/Findings";
+import { ProviderNotice } from "../providers/ProviderNotice";
+import { shortTime } from "../sessions/sessionsModel";
+import { gateLine } from "./agentPlaybooksModel";
+import { useAgentPlaybooksVm } from "./useAgentPlaybooksVm";
+
+const grid = { display: "grid", gap: tokens.space.md } as const;
+
+export function AgentPlaybooksPage() {
+  const vm = useAgentPlaybooksVm();
+  const onFind = (event: FormEvent) => {
+    event.preventDefault();
+    vm.find();
+  };
+  const onPublish = (event: FormEvent) => {
+    event.preventDefault();
+    vm.submit();
+  };
+  return (
+    <Page title="Agent playbooks" notice={<ProviderNotice />}>
+      <Card title="Open an agent playbook" id="open">
+        <form onSubmit={onFind} style={{ display: "flex", gap: tokens.space.sm, alignItems: "end", flexWrap: "wrap" }} aria-label="Open an agent playbook">
+          <TextField label="Agent playbook name" value={vm.lookup} placeholder="release-notes" onChange={vm.setLookup} />
+          <Button type="submit">Open</Button>
+        </form>
+      </Card>
+      {vm.error ? <Banner>{errorMessage(vm.error, "The agent playbook could not be read.")}</Banner> : null}
+      {vm.loading ? <Muted>Loading</Muted> : null}
+      {vm.name && vm.agentPlaybook === null ? (
+        <Card>
+          <Muted>The org has no agent playbook named {vm.name}.</Muted>
+        </Card>
+      ) : null}
+      {vm.agentPlaybook ? (
+        <Card title={`${vm.agentPlaybook.name}, version ${vm.agentPlaybook.version}`} id="agent_playbook">
+          <div style={grid} data-agent-playbook>
+            <p style={{ margin: 0 }}>{vm.agentPlaybook.description}</p>
+            <Muted style={{ fontSize: tokens.font.size.sm }}>
+              Published by {vm.agentPlaybook.publishedBy}, {shortTime(vm.agentPlaybook.publishedAt)}.
+            </Muted>
+            <Markdown text={vm.agentPlaybook.body} />
+            {vm.agentPlaybook.gates.length > 0 ? (
+              <ul aria-label="Gates" style={{ margin: 0 }}>
+                {vm.agentPlaybook.gates.map((gate, index) => (
+                  <li key={index}>{gateLine(gate)}</li>
+                ))}
+              </ul>
+            ) : (
+              <Muted>No gate: the session&apos;s own policy holds.</Muted>
+            )}
+            <Findings findings={vm.agentPlaybook.findings} />
+            {vm.mayWrite ? (
+              <div>
+                <Button tone="plain" onClick={vm.startNext}>
+                  Write the next version
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
+      {vm.mayWrite ? (
+        <Card title="Publish" id="publish">
+          <form onSubmit={onPublish} style={grid} aria-label="Publish an agent playbook">
+            <TextField label="Name" value={vm.draft.name} placeholder="release-notes" onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
+            <TextField
+              label="Description"
+              placeholder="e.g. Drafts release notes from merged pull requests"
+              value={vm.draft.description}
+              onChange={(description) => vm.setDraft({ ...vm.draft, description })}
+            />
+            <TextArea
+              label="Steps (Markdown)"
+              placeholder="e.g. 1. List the pull requests merged since the last tag."
+              value={vm.draft.body}
+              onChange={(body) => vm.setDraft({ ...vm.draft, body })}
+            />
+            <TextArea
+              label="Gates, one a line"
+              placeholder="e.g. approve tool git_push"
+              info="Calls that wait for a person's approval, or are denied, while a session follows this agent playbook"
+              value={vm.draft.gates}
+              onChange={(gates) => vm.setDraft({ ...vm.draft, gates })}
+            />
+            <Muted style={{ fontSize: tokens.font.size.sm }}>
+              A gate reads &quot;approve tool git_push&quot; or &quot;deny class network&quot;. It only narrows the session&apos;s policy.
+            </Muted>
+            {vm.problem ? <ErrorText>{vm.problem}</ErrorText> : null}
+            <div>
+              <Button type="submit" disabled={vm.publishing}>
+                {vm.publishing ? "Publishing" : "Publish"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+    </Page>
+  );
+}

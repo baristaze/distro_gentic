@@ -23,12 +23,12 @@ is made of](../../../../README.md).
 
 - **Create** an agent automation, by a person in person. A start names a
   project of the tenant; outside a local stack, one that names none is
-  refused. A start may name a [playbook](../playbooks/README.md) of the
-  tenant's to invoke into the session it starts; one with no version is
-  refused. A product's action names a kind the product declares, and its
-  params hold to that kind's shape; any other is refused. An enabled one
-  is refused, with the kind's reason, when its kind refuses the person
-  writing it.
+  refused. A start may name a [agent
+  playbook](../agent_playbooks/README.md) of the tenant's to invoke into
+  the session it starts; one with no version is refused. A product's
+  action names a kind the product declares, and its params hold to that
+  kind's shape; any other is refused. An enabled one is refused, with
+  the kind's reason, when its kind refuses the person writing it.
 - **Edit** an agent automation, by a person in person, held to the
   create's checks. One that runs as its creator is edited by its creator
   alone. One that runs as the agent automation principal takes its
@@ -102,10 +102,10 @@ is made of](../../../../README.md).
   is never asked about, so its writer can always turn it off, and
   turning it on is an edit the kind checks. Its firings still act under
   the run's live context, which refuses what changed since.
-- **The brief is the creator's word; the event is data.** A playbook a
-  start names is the creator's word too: its latest version at the
-  firing is read before the session starts, and invoked into it before
-  the event and the brief arrive.
+- **The brief is the creator's word; the event is data.** An agent
+  playbook a start names is the creator's word too: its latest version
+  at the firing is read before the session starts, and invoked into it
+  before the event and the brief arrive.
 - **Every firing is a recorded run,** and one event makes one run.
 
 <!-- agents-only

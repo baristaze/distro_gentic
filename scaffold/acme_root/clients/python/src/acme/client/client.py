@@ -25,6 +25,7 @@ from acme.client.types import (
     AgentAutomationView,
     AgentKnowledgeStatus,
     AgentKnowledgeView,
+    AgentPlaybookView,
     AgentSessionPageView,
     AgentSessionView,
     ClaimantClaimView,
@@ -70,7 +71,6 @@ from acme.client.types import (
     OutputStream,
     PinView,
     PlatformSizeView,
-    PlaybookView,
     PreparedView,
     ProjectView,
     PublishRequest,
@@ -953,16 +953,18 @@ class ApiClient:
         )
         return AgentKnowledgeView.model_validate(reviewed)
 
-    async def playbook(self, name: str) -> PlaybookView:
+    async def agent_playbook(self, name: str) -> AgentPlaybookView:
         """The latest version of the name."""
-        return PlaybookView.model_validate(await self.request("GET", f"/v1/playbooks/{name}"))
+        return AgentPlaybookView.model_validate(
+            await self.request("GET", f"/v1/agent-playbooks/{name}")
+        )
 
-    async def publish_playbook(self, draft: PublishRequest) -> PlaybookView:
+    async def publish_agent_playbook(self, draft: PublishRequest) -> AgentPlaybookView:
         """The next version of the draft's name, published in person."""
         published = await self.request(
-            "POST", "/v1/playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
+            "POST", "/v1/agent-playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
         )
-        return PlaybookView.model_validate(published)
+        return AgentPlaybookView.model_validate(published)
 
     async def connectors(
         self, *, after: UUID | None = None, limit: int = LIMIT_MAX
@@ -1047,7 +1049,7 @@ class ApiClient:
         )
         return ConnectorView.model_validate(detached)
 
-    async def invoke_playbook(
+    async def invoke_agent_playbook(
         self, name: str, session_id: UUID, *, idempotency_key: str | None = None
     ) -> InvocationView:
         """The name's latest version brought into the session, in person: its
@@ -1055,35 +1057,38 @@ class ApiClient:
         message. Invoked again, the same invocation."""
         invoked = await self.request(
             "POST",
-            f"/v1/playbooks/{name}/invocations",
+            f"/v1/agent-playbooks/{name}/invocations",
             json={"session_id": str(session_id)},
             idempotency_key=idempotency_key or str(uuid4()),
         )
         return InvocationView.model_validate(invoked)
 
-    async def playbook_pins(self) -> list[PinView]:
+    async def agent_playbook_pins(self) -> list[PinView]:
         """The tenant's pins, by kind, the tenant's before a project's."""
         return [
-            PinView.model_validate(pin) for pin in await self.request("GET", "/v1/playbook-pins")
+            PinView.model_validate(pin)
+            for pin in await self.request("GET", "/v1/agent-playbook-pins")
         ]
 
-    async def pin_playbook(
+    async def pin_agent_playbook(
         self, kind: str, name: str, *, project_id: UUID | None = None
     ) -> PinView:
-        """The name's latest version pinned to the kind as its manual, for the
+        """The name's latest version pinned to the kind as its kind manual, for the
         tenant, or for one project; each session of the kind made from now
         on holds it, and one made before keeps its own."""
         body: dict[str, Any] = {"kind": kind, "name": name}
         if project_id is not None:
             body["project_id"] = str(project_id)
-        return PinView.model_validate(await self.request("PUT", "/v1/playbook-pins", json=body))
+        return PinView.model_validate(
+            await self.request("PUT", "/v1/agent-playbook-pins", json=body)
+        )
 
-    async def unpin_playbook(self, kind: str, *, project_id: UUID | None = None) -> PinView:
+    async def unpin_agent_playbook(self, kind: str, *, project_id: UUID | None = None) -> PinView:
         """The kind's pin for the tenant, or for one project, taken away."""
         params: dict[str, Any] = {"kind": kind}
         if project_id is not None:
             params["project_id"] = str(project_id)
-        unpinned = await self.request("DELETE", "/v1/playbook-pins", params=params)
+        unpinned = await self.request("DELETE", "/v1/agent-playbook-pins", params=params)
         return PinView.model_validate(unpinned)
 
     async def tool_policy(self) -> ToolPolicyView:
@@ -1552,7 +1557,7 @@ class ApiClient:
     async def admin_levers(
         self, org_id: UUID, since: datetime, until: datetime
     ) -> LeverReadingView:
-        """The playbooks and agent knowledge the org's sessions created in `[since,
+        """The agent playbooks and agent knowledge the org's sessions created in `[since,
         until)` reached, ranked by how much more often the sessions that
         reached them stalled; a read under `read`."""
         body = await self.request(

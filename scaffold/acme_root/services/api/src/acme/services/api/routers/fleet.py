@@ -101,7 +101,7 @@ async def read_levers(
     since: Annotated[AwareDatetime, Query()],
     until: Annotated[AwareDatetime, Query()],
 ) -> LeverReadingView:
-    """The playbooks and agent knowledge the org's sessions created in `[since,
+    """The agent playbooks and agent knowledge the org's sessions created in `[since,
     until)` reached, ranked by how much more often the sessions that
     reached them stalled, with the sessions behind each figure. A stall is
     read from the steps' headers, never from what a step says, and a lever

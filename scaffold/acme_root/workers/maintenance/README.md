@@ -17,7 +17,7 @@ side, started in `main.py`.
   other failure comes back. An integration's event (`feedback`) is routed
   to the session it names by [intake](../../om/src/acme/om/intake/README.md),
   then fires the tenant's
-  [agent_automations](../../om/src/acme/om/agent_automations/README.md).
+  [agent automations](../../om/src/acme/om/agent_automations/README.md).
 - **The sweep** (`loop.py`) runs on a timer, within a budget. It requeues
   expired leases, relays the outbox, runs the standing chores of the
   tenants one read names as due, ticks each tenant once (its agent

@@ -12,8 +12,8 @@ policies. `actions` are the product's own kinds of action
 agent automation hands it the same, and a kind named as one of the platform's,
 or twice, is refused here, at boot.
 
-`playbooks` answers the playbooks a start invokes into the session it
-starts: the process's playbooks manager, which a root builds after the
+`agent_playbooks` answers the agent playbooks a start invokes into the session it
+starts: the process's agent playbooks manager, which a root builds after the
 managers, so the edge is bound at call time. None keeps none, and a start
 that names one is refused.
 
@@ -35,12 +35,12 @@ from acme.om.agent_automations.impl.manager import (
 )
 from acme.om.agent_automations.manager import AgentAutomationsManagerInterface
 from acme.om.agent_automations.storage import AgentAutomationStorageInterface
+from acme.om.agent_playbooks import AgentPlaybooksManagerInterface
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import utcnow
 from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
-from acme.om.playbooks import PlaybooksManagerInterface
 from acme.om.root import Managers, ProductActions, no_actions
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
@@ -79,7 +79,7 @@ def build_agent_automations(
     options: AgentAutomationsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
     actions: ProductActions = no_actions,
-    playbooks: Callable[[], PlaybooksManagerInterface] | None = None,
+    agent_playbooks: Callable[[], AgentPlaybooksManagerInterface] | None = None,
 ) -> AgentAutomationsManagerInterface:
     held = storage.get_agent_automation_storage()
     return AgentAutomationsManagerImpl(
@@ -96,5 +96,5 @@ def build_agent_automations(
         clock,
         project_required=project_required,
         actions=AgentAutomationActions(actions(lambda: managers)),
-        playbooks=playbooks,
+        agent_playbooks=agent_playbooks,
     )

@@ -24,7 +24,7 @@ grants no service principal.
 every period after it. A tick fires the slot it is in, under a run id
 derived from the agent automation and the slot, so the ticks of several
 workers in one slot meet one run, and the admission's lock on the
-agent_automation's row serializes them. A slot that passed while no tick
+agent automation's row serializes them. A slot that passed while no tick
 came is not fired late: a schedule fires at most once a period, never in
 a burst after an outage.
 

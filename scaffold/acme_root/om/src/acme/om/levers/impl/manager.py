@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
+from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.base import Platform
@@ -13,7 +14,6 @@ from acme.om.exceptions import ValidationFailed
 from acme.om.levers.manager import LeversManagerInterface
 from acme.om.levers.rules import id_floor, spin_of, standings
 from acme.om.levers.types.lever import LeverKind, LeverReading, LeverRef, SessionLevers
-from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.trust.types.shape import StepShape, shape_of
 
@@ -27,7 +27,7 @@ class LeversOptions(Platform):
     # The most steps of one session it reads, a page at a time.
     steps: int = Field(default=10_000, gt=0)
     page: int = Field(default=500, gt=0)
-    # The most playbooks, and agent knowledge entries, of one session it names.
+    # The most agent playbooks, and agent knowledge entries, of one session it names.
     levers: int = Field(default=50, gt=0)
     # The most sessions a standing names behind its figure.
     named: int = Field(default=20, gt=0)
@@ -41,13 +41,13 @@ class LeversManagerImpl(LeversManagerInterface):
         self,
         sessions: AgentSessionStorageInterface,
         shapes: StepStorageInterface,
-        playbooks: PlaybookStorageInterface,
+        agent_playbooks: AgentPlaybookStorageInterface,
         agent_knowledge: AgentKnowledgeStorageInterface,
         options: LeversOptions,
     ) -> None:
         self._sessions = sessions
         self._shapes = shapes
-        self._playbooks = playbooks
+        self._playbooks = agent_playbooks
         self._knowledge = agent_knowledge
         self._options = options
 
@@ -108,7 +108,11 @@ class LeversManagerImpl(LeversManagerInterface):
         # A lever is answered by its kind, its id, and its version alone: its
         # name or its slug is the tenant's words, which `read` never sees.
         levers = [
-            LeverRef(kind=LeverKind.PLAYBOOK, id=invocation.playbook_id, version=invocation.version)
+            LeverRef(
+                kind=LeverKind.AGENT_PLAYBOOK,
+                id=invocation.agent_playbook_id,
+                version=invocation.version,
+            )
             for invocation in await self._playbooks.read_invocations(
                 org_id, session.id, self._options.levers
             )

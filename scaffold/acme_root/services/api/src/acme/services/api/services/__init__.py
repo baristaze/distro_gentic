@@ -8,6 +8,7 @@ from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
 from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
+from acme.services.api.services.agent_playbooks import AgentPlaybooksServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
@@ -22,7 +23,6 @@ from acme.services.api.services.leases import LeasesServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
-from acme.services.api.services.playbooks import PlaybooksServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
@@ -40,6 +40,7 @@ __all__ = [
     "AgentAutomationsServiceInterface",
     "AgentBillingServiceInterface",
     "AgentKnowledgeServiceInterface",
+    "AgentPlaybooksServiceInterface",
     "AgentSessionsServiceInterface",
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
@@ -54,7 +55,6 @@ __all__ = [
     "MatrixServiceInterface",
     "MediaServiceInterface",
     "NotificationsServiceInterface",
-    "PlaybooksServiceInterface",
     "ProjectsServiceInterface",
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
@@ -150,7 +150,7 @@ class ServicesInterface(ABC):
     def get_connectors_service(self) -> ConnectorsServiceInterface: ...
 
     @abstractmethod
-    def get_playbooks_service(self) -> PlaybooksServiceInterface: ...
+    def get_agent_playbooks_service(self) -> AgentPlaybooksServiceInterface: ...
 
     @abstractmethod
     def get_tools_service(self) -> ToolsServiceInterface: ...

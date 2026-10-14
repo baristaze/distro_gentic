@@ -41,7 +41,7 @@ const AGENT_AUTOMATION: AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "engineer", title: "Update dependencies", project_id: null, session_id: null, params: {}, playbook: null },
+  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "engineer", title: "Update dependencies", project_id: null, session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -110,7 +110,7 @@ function answer(path: string): unknown {
     if (part === "validations") return [];
     if (part === "usage") return { calls: 0, input: 0, output: 0, thinking: 0, cache_read: 0, cache_write: 0, fills: [] };
   }
-  // A playbook not yet published, the principal not yet granted, and every
+  // An agent playbook not yet published, the principal not yet granted, and every
   // other read: not found, as the API says it.
   throw new ApiError(404, "not_found", `nothing at ${path}`, "req-1");
 }
@@ -201,7 +201,7 @@ it("mounts every platform screen, and finds no text field on any without a water
   expect(seen.get("/settings/projects")).toEqual(expect.arrayContaining(["Name", "Repository"]));
   expect(seen.get("/settings/projects/p1")).toEqual(expect.arrayContaining(["User", "Password or token"]));
   expect(seen.get("/settings/models")).toEqual(expect.arrayContaining(["New key to Anthropic", "New key to OpenAI"]));
-  expect(seen.get("/settings/playbooks")).toEqual(expect.arrayContaining(["Playbook name", "Description", "Steps (Markdown)", "Gates, one a line"]));
+  expect(seen.get("/settings/agent-playbooks")).toEqual(expect.arrayContaining(["Agent playbook name", "Description", "Steps (Markdown)", "Gates, one a line"]));
   expect(seen.get("/settings/members")).toContain("Invite by email");
   expect(seen.get("/settings/api-keys")).toContain("New key name");
   expect(seen.get("/settings/profile")).toEqual(expect.arrayContaining(["Name", `Type your email, ${user.email}, to confirm`]));

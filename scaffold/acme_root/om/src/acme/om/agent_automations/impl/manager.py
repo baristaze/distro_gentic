@@ -22,6 +22,8 @@ from acme.om.agent_automations.types.agent_automation import (
     RunsAs,
     RunStatus,
 )
+from acme.om.agent_playbooks import AgentPlaybooksManagerInterface
+from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybook
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents import AgentsManagerInterface
@@ -38,8 +40,6 @@ from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, Valid
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.playbooks import PlaybooksManagerInterface
-from acme.om.playbooks.types.playbook import Playbook
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
@@ -88,13 +88,13 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         *,
         project_required: bool,
         actions: AgentAutomationActions | None = None,
-        playbooks: Callable[[], PlaybooksManagerInterface] | None = None,
+        agent_playbooks: Callable[[], AgentPlaybooksManagerInterface] | None = None,
     ) -> None:
         """`project_required` refuses a start that names no project: what
         every stack but a local one sets, so no per-project policy is
         skipped by a session an agent automation starts. `actions` are the
-        product's own kinds of action; None declares none. `playbooks`
-        answers the playbooks a start invokes; None keeps none, so a start
+        product's own kinds of action; None declares none. `agent_playbooks`
+        answers the agent playbooks a start invokes; None keeps none, so a start
         that names one is refused when it is saved and when it fires."""
         self._storage = storage
         self._agents = agents
@@ -109,7 +109,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         self._options = options
         self._clock = clock
         self._actions = actions or AgentAutomationActions(())
-        self._playbooks = playbooks
+        self._playbooks = agent_playbooks
 
     async def create_agent_automation(
         self, ctx: TenantContext, agent_automation: AgentAutomation
@@ -120,7 +120,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         await self._check_principal(ctx, agent_automation)
         await self._check_kind(ctx, agent_automation)
         await self._check_project(ctx, agent_automation)
-        await self._check_playbook(ctx, agent_automation)
+        await self._check_agent_playbook(ctx, agent_automation)
         now = self._clock()
         made = AgentAutomation.model_validate(
             {
@@ -152,7 +152,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         await self._check_principal(ctx, agent_automation)
         await self._check_kind(ctx, agent_automation)
         await self._check_project(ctx, agent_automation)
-        await self._check_playbook(ctx, agent_automation)
+        await self._check_agent_playbook(ctx, agent_automation)
         # The editor is its creator from here on: one that runs as its
         # creator is its creator's to edit, and one that runs as the
         # principal fires on its creator's role, which is the editor's that
@@ -357,7 +357,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
     ) -> AgentAutomationRun:
         """The action of a started run, as its creator. A started session is
         held to the run's reservation by a budget on its tree before anything
-        wakes it; the playbook it invokes arrives first, the event reaches
+        wakes it; the agent playbook it invokes arrives first, the event reaches
         it as data, and the brief as the creator's message. A product's
         action is its kind's to run. A message to a standing session is
         refused before it gets here."""
@@ -368,10 +368,12 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         assert action.kind == ActionKind.START_SESSION  # `_admit` refuses a message
         assert action.brief is not None and action.agent_kind is not None
         assert action.title is not None
-        # The playbook's version is read before anything is made: a name
+        # The agent playbook's version is read before anything is made: a name
         # with none refuses the run, and no session is started.
-        playbook = (
-            None if action.playbook is None else await self._playbook(creator, action.playbook)
+        agent_playbook = (
+            None
+            if action.agent_playbook is None
+            else await self._playbook(creator, action.agent_playbook)
         )
         start = Start(
             id=derived_id(run.id, run.created_at, "session"),
@@ -398,10 +400,10 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         )
         await self._budgets.create_budget(ctx, budget)
         session_id, budget_id = session.id, budget.id
-        if playbook is not None and self._playbooks is not None:
+        if agent_playbook is not None and self._playbooks is not None:
             # Its gates hold before anything else arrives, and its brief is
             # the creator's message, as an invocation in person is.
-            await self._playbooks().invoke_version(creator, session_id, playbook.id)
+            await self._playbooks().invoke_version(creator, session_id, agent_playbook.id)
         inputs: list[Step] = []
         if run.event_text:
             inputs.append(self._event_step(ctx, run, session_id))
@@ -615,24 +617,26 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         kind = agent_automation.action.kind
         return kind not in PLATFORM_ACTIONS and self._actions.get(kind) is None
 
-    async def _check_playbook(self, ctx: TenantContext, agent_automation: AgentAutomation) -> None:
-        """A start that invokes a playbook names one the tenant published:
+    async def _check_agent_playbook(
+        self, ctx: TenantContext, agent_automation: AgentAutomation
+    ) -> None:
+        """A start that invokes an agent playbook names one the tenant published:
         otherwise it is `ValidationFailed`, so no agent automation is written
         whose firings would all be refused."""
-        name = agent_automation.action.playbook
+        name = agent_automation.action.agent_playbook
         if name is None:
             return
         try:
             await self._playbook(ctx, name)
         except NotFound as missing:
-            raise ValidationFailed(f"no playbook {name} is published to invoke") from missing
+            raise ValidationFailed(f"no agent playbook {name} is published to invoke") from missing
 
-    async def _playbook(self, ctx: TenantContext, name: str) -> Playbook:
-        """The name's latest version; none, or no playbooks in this
+    async def _playbook(self, ctx: TenantContext, name: str) -> AgentPlaybook:
+        """The name's latest version; none, or no agent playbooks in this
         process, is `NotFound`."""
         if self._playbooks is None:
-            raise NotFound(f"no playbook {name} is kept in this process")
-        return await self._playbooks().get_playbook(ctx, name)
+            raise NotFound(f"no agent playbook {name} is kept in this process")
+        return await self._playbooks().get_agent_playbook(ctx, name)
 
     async def _check_project(self, ctx: TenantContext, agent_automation: AgentAutomation) -> None:
         """A start's project is one of the caller's tenant: another tenant's

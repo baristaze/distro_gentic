@@ -5,7 +5,7 @@
 ## Context
 
 A product adds its own kind of agent automation action (ADR 2031). When
-an agent_automation of that kind is written, the platform holds its
+an agent automation of that kind is written, the platform holds its
 params to the kind's shape, and nothing more. No hook sees who writes
 it. A product whose action only named approvers may start refuses the
 others only in the firing, under the run's context. So a member outside
@@ -35,7 +35,7 @@ told `runs_as`, and refuses that agent automation when its `act` would
 refuse the principal.
 
 **A disabled agent automation is never asked about.** Nothing deletes an
-agent_automation, so turning one off is how its writer stops it. A
+agent automation, so turning one off is how its writer stops it. A
 writer the kind no longer admits can still do that. Turning it on again
 is an edit, and the kind checks that editor.
 

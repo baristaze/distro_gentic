@@ -27,10 +27,11 @@ What is set up once lives in Settings (`/settings`, ⌘,), out of the bar a
 person scans every day. There, Settings' own bar takes the left bar's
 place: back to the app, a search (`/`), and the sections by group.
 Personal holds the profile; Organization its general facts, members,
-usage, and audit; Agents the projects, models and keys, and playbooks;
-Security the API keys and single sign-on; and a product adds its own. An
-old address (`/projects`, `/models`, `/playbooks`, `/audit`, `/usage`)
-lands on its section, and `/approvals` on the sessions that need you.
+usage, and audit; Agents the projects, models and keys, and agent
+playbooks; Security the API keys and single sign-on; and a product adds
+its own. An old address (`/projects`, `/models`, `/agent-playbooks`,
+`/audit`, `/usage`) lands on its section, and `/approvals` on the
+sessions that need you.
 
 Every text field shows a realistic example of what goes in, and an ⓘ says
 what a field means where its name does not. `watermarks.test.ts` holds
@@ -82,10 +83,10 @@ conversation only when it is their own
   session on an agent and a project. `sessions/` is Sessions, with its two
   views and its filters; `session/` is
   one session's page: its thread, timeline, tools, evidence, changes, and
-  children, live while it runs, and a playbook invoked into it by name
-  from its header. The org's records and settings each have
+  children, live while it runs, and an agent playbook invoked into it by
+  name from its header. The org's records and settings each have
   their own: `projects/`, `models/` (the org's own provider keys and its
-  model for each role), `agent_automations/`, `playbooks/`,
+  model for each role), `agent_automations/`, `agent_playbooks/`,
   `agent_knowledge/`, `audit/`, `usage/`, and `settings/` (the overview,
   the profile, the org's general facts, members, API keys, and single
   sign-on). `providers/` is the banner a page shows while the org's

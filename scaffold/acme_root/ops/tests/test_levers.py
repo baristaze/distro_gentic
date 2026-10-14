@@ -27,7 +27,7 @@ READING = {
             # A name the API should never answer, which the command never
             # prints: what it prints of a lever is its shape.
             "lever": {
-                "kind": "playbook",
+                "kind": "agent_playbook",
                 "id": "0199a4c0-0000-7000-8000-0000000000b1",
                 "name": "flaky-deploys",
                 "version": 2,
@@ -79,7 +79,7 @@ async def test_levers_reads_the_window_with_the_read_token_and_prints_the_readin
     printed = json.loads(capsys.readouterr().out)
     (standing,) = printed["standings"]
     assert standing["lever"] == {
-        "kind": "playbook",
+        "kind": "agent_playbook",
         "id": "0199a4c0-0000-7000-8000-0000000000b1",
         "version": 2,
     }

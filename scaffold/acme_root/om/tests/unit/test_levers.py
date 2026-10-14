@@ -1,5 +1,5 @@
 """Levers, as the platform reads them: each check finds its defect in a
-playbook and none in a plain one, nor in quoted words, a playbook's
+agent_playbook and none in a plain one, nor in quoted words, an agent playbook's
 gates, or a thing not to stop; a publish with a finding lands and keeps
 it with the version; and a reading of recorded sessions names the lever
 that came before the stalls, by its kind, id, and version alone, with the
@@ -15,6 +15,13 @@ from contracts.intake import Wired, wired
 from contracts.loops import reply, said, use
 
 from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledgeStatus
+from acme.om.agent_playbooks.impl.manager import AgentPlaybooksManagerImpl, AgentPlaybooksOptions
+from acme.om.agent_playbooks.rules import skill_md
+from acme.om.agent_playbooks.types.agent_playbook import (
+    AgentPlaybook,
+    AgentPlaybookDraft,
+    AgentPlaybookGate,
+)
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
@@ -45,13 +52,6 @@ from acme.om.levers.types.lever import (
     SessionLevers,
     SpinTally,
 )
-from acme.om.playbooks.impl.manager import PlaybooksManagerImpl, PlaybooksOptions
-from acme.om.playbooks.rules import skill_md
-from acme.om.playbooks.types.playbook import (
-    Playbook,
-    PlaybookDraft,
-    PlaybookGate,
-)
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.tools.types.policy import Decision
@@ -81,8 +81,8 @@ DEFECTS = {
 }
 
 
-def playbook(body: str, *gates: PlaybookGate) -> Playbook:
-    return Playbook(
+def agent_playbook(body: str, *gates: AgentPlaybookGate) -> AgentPlaybook:
+    return AgentPlaybook(
         id=new_id(),
         created_at=utcnow(),
         name="answer-a-question",
@@ -111,26 +111,26 @@ def platform(tmp_path: Path) -> Wired:
     return wired(tmp_path)
 
 
-def test_a_plain_playbook_has_no_finding() -> None:
-    gated = playbook(PLAIN, PlaybookGate(tool="call_api", decision=Decision.DENY))
+def test_a_plain_agent_playbook_has_no_finding() -> None:
+    gated = agent_playbook(PLAIN, AgentPlaybookGate(tool="call_api", decision=Decision.DENY))
     assert checked(skill_md(gated), REACH, bound=BOUND, tools=("call_api",)) == ()
 
 
 @pytest.mark.parametrize("defect", list(DEFECTS))
 def test_each_check_finds_its_defect_and_only_it(defect: LeverCheck) -> None:
-    found = checked(skill_md(playbook(DEFECTS[defect])), REACH, bound=BOUND)
+    found = checked(skill_md(agent_playbook(DEFECTS[defect])), REACH, bound=BOUND)
     assert [finding.check for finding in found] == [defect]
     assert all(len(finding.detail) <= 500 for finding in found)
 
 
 def test_a_gate_on_a_tool_no_kind_holds_is_a_finding() -> None:
-    gated = playbook(PLAIN, PlaybookGate(tool="deploy", decision=Decision.DENY))
+    gated = agent_playbook(PLAIN, AgentPlaybookGate(tool="deploy", decision=Decision.DENY))
     (found,) = checked(skill_md(gated), REACH, bound=BOUND, tools=("deploy",))
     assert (found.check, found.excerpt) == (LeverCheck.UNKNOWN_NAME, "deploy")
 
 
 def test_a_reach_of_no_kind_judges_no_name() -> None:
-    gated = playbook(DEFECTS[LeverCheck.UNKNOWN_NAME])
+    gated = agent_playbook(DEFECTS[LeverCheck.UNKNOWN_NAME])
     assert checked(skill_md(gated), LeverReach(), bound=BOUND, tools=("deploy",)) == ()
 
 
@@ -143,24 +143,24 @@ QUOTED = """## Steps
 
 Do not stop the database during the migration.
 """
-"""A playbook a person writes: an environment variable and a configuration
+"""An agent playbook a person writes: an environment variable and a configuration
 key in backticks, and a thing not to stop."""
 
 GATED = ("deploy", "publish", "push", "merge", "tag", "rollback")
 """Six tools, each gated for a person's approval."""
 
 
-def publisher(platform: Wired) -> PlaybooksManagerImpl:
-    """The platform's playbooks, against kinds that hold the six tools."""
+def publisher(platform: Wired) -> AgentPlaybooksManagerImpl:
+    """The platform's agent playbooks, against kinds that hold the six tools."""
     managers, storage = platform.managers, platform.storage
-    return PlaybooksManagerImpl(
-        storage.get_playbook_storage(),
+    return AgentPlaybooksManagerImpl(
+        storage.get_agent_playbook_storage(),
         managers.agent_sessions,
         storage.get_agent_session_storage(),
         managers.agents,
         managers.tenancy,
         managers.outbox,
-        PlaybooksOptions(session_bound=BOUND),
+        AgentPlaybooksOptions(session_bound=BOUND),
         REACH.model_copy(update={"tools": REACH.tools | set(GATED)}),
         managers.kinds,
         SessionProjectsBoundImpl(storage.get_project_storage()),
@@ -171,8 +171,8 @@ async def test_quoted_words_six_gates_and_a_thing_not_to_stop_are_no_findings(
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    gates = tuple(PlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
-    draft = PlaybookDraft(
+    gates = tuple(AgentPlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
+    draft = AgentPlaybookDraft(
         name="migrate-the-records", description="Migrate the records.", body=QUOTED, gates=gates
     )
     published = await publisher(platform).publish(author, draft)
@@ -187,9 +187,11 @@ async def test_the_checks_read_the_persons_words_and_the_size_the_whole_brief(
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    gates = tuple(PlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
+    gates = tuple(AgentPlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
     body = (PLAIN + "\n" + " ".join(f"r{n}" for n in range(2_000)))[: BOUND - 100]
-    draft = PlaybookDraft(name="long-brief", description="A long brief.", body=body, gates=gates)
+    draft = AgentPlaybookDraft(
+        name="long-brief", description="A long brief.", body=body, gates=gates
+    )
     published = await publisher(platform).publish(author, draft)
     # The person's words fit; the brief a session receives, with its
     # frontmatter and its gates, does not.
@@ -238,16 +240,16 @@ async def test_a_publish_with_a_finding_lands_and_keeps_it_with_the_version(
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    draft = PlaybookDraft(
+    draft = AgentPlaybookDraft(
         name="flaky-deploys",
         description="Deploy the service.",
         body=DEFECTS[LeverCheck.UNBOUNDED_RETRY],
     )
-    published = await platform.playbooks.publish(author, draft)
+    published = await platform.agent_playbooks.publish(author, draft)
     assert published.version == 1
     assert [f.check for f in published.findings or ()] == [LeverCheck.UNBOUNDED_RETRY]
-    assert (await platform.playbooks.get_playbook(author, "flaky-deploys")) == published
-    plain = await platform.playbooks.publish(author, draft.model_copy(update={"body": PLAIN}))
+    assert (await platform.agent_playbooks.get_agent_playbook(author, "flaky-deploys")) == published
+    plain = await platform.agent_playbooks.publish(author, draft.model_copy(update={"body": PLAIN}))
     assert (plain.version, plain.findings) == (2, ())
 
 
@@ -296,8 +298,8 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
 ) -> None:
     author = platform.person(Role.MEMBER)
     flaky, house = [
-        await platform.playbooks.publish(
-            author, PlaybookDraft(name=name, description="A brief.", body=body)
+        await platform.agent_playbooks.publish(
+            author, AgentPlaybookDraft(name=name, description="A brief.", body=body)
         )
         for name, body in (("flaky-deploys", DEFECTS[LeverCheck.UNBOUNDED_RETRY]), ("house", PLAIN))
     ]
@@ -315,7 +317,7 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
     }
     for at, session_id in enumerate(sessions):
         for name in reached[at]:
-            await platform.playbooks.invoke(platform.owner, session_id, name)
+            await platform.agent_playbooks.invoke(platform.owner, session_id, name)
         if at in (0, 2, 4):
             await platform.agent_knowledge.recall(platform.owner, session_id, "the totals")
         if at in (0, 1, 2):
@@ -331,7 +333,7 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
     )
     assert (reading.sessions, reading.spun, reading.complete) == (5, 3, True)
     first, second = reading.standings
-    assert first.lever == LeverRef(kind=LeverKind.PLAYBOOK, id=flaky.id, version=1)
+    assert first.lever == LeverRef(kind=LeverKind.AGENT_PLAYBOOK, id=flaky.id, version=1)
     assert set(first.spun_sessions) == {sessions[0], sessions[1]}
     assert (first.spun, first.sessions, first.spun_without, first.sessions_without) == (2, 2, 1, 3)
     assert second.lever == LeverRef(
@@ -355,12 +357,12 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
     assert note.slug is not None
     since = platform.clock.now - timedelta(minutes=1)
     sessions = [await platform.start() for _ in range(3)]
-    await platform.playbooks.publish(
-        author, PlaybookDraft(name="house", description="A brief.", body=PLAIN)
+    await platform.agent_playbooks.publish(
+        author, AgentPlaybookDraft(name="house", description="A brief.", body=PLAIN)
     )
-    # Every session is woken by the same playbook, which ranks nowhere.
+    # Every session is woken by the same agent playbook, which ranks nowhere.
     for session_id in sessions:
-        await platform.playbooks.invoke(platform.owner, session_id, "house")
+        await platform.agent_playbooks.invoke(platform.owner, session_id, "house")
     agent = await platform.agents_call(platform.owner)
     # What `read_agent_knowledge` does: the entry by its slug, and a read again.
     for _ in range(2):
@@ -382,8 +384,8 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
 async def test_a_reading_is_an_operators_over_a_window_that_ends_after_it_starts(
     platform: Wired,
 ) -> None:
-    await platform.playbooks.publish(
-        platform.person(), PlaybookDraft(name="house", description="A brief.", body=PLAIN)
+    await platform.agent_playbooks.publish(
+        platform.person(), AgentPlaybookDraft(name="house", description="A brief.", body=PLAIN)
     )
     levers = build_levers(platform.storage, options=LeversOptions(sessions=1))
     since, now = platform.clock.now - timedelta(minutes=1), utcnow() + timedelta(minutes=1)
@@ -394,15 +396,15 @@ async def test_a_reading_is_an_operators_over_a_window_that_ends_after_it_starts
         await levers.read_levers(reader, platform.owner.org_id, since, now)
     for _ in range(2):
         session_id = await platform.start()
-        await platform.playbooks.invoke(platform.owner, session_id, "house")
+        await platform.agent_playbooks.invoke(platform.owner, session_id, "house")
         await answer(platform, session_id)
     bounded = await levers.read_levers(operator(), platform.owner.org_id, since, now)
     assert (bounded.sessions, bounded.complete) == (1, False)
 
 
 def test_a_lever_present_everywhere_or_no_more_often_with_a_stall_ranks_nowhere() -> None:
-    everywhere = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), version=1)
-    even = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), version=1)
+    everywhere = LeverRef(kind=LeverKind.AGENT_PLAYBOOK, id=new_id(), version=1)
+    even = LeverRef(kind=LeverKind.AGENT_PLAYBOOK, id=new_id(), version=1)
     stalled = SpinTally(inconclusive=1)
     sessions = [
         SessionLevers(session_id=new_id(), spin=stalled, levers=(everywhere, even)),

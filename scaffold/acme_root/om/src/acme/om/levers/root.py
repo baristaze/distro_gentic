@@ -3,7 +3,7 @@ reading, over the history at rest, read for its headers and never opened.
 
     levers = build_levers(storage)
 
-The checks are pure rules (`rules.py`): the playbooks and the agent knowledge
+The checks are pure rules (`rules.py`): the agent playbooks and the agent knowledge
 swimlanes run them as a person publishes, against the reach `reach_of`
 reads from the managers' kinds."""
 
@@ -18,7 +18,7 @@ def build_levers(
     return LeversManagerImpl(
         storage.get_agent_session_storage(),
         storage.get_step_storage(),
-        storage.get_playbook_storage(),
+        storage.get_agent_playbook_storage(),
         storage.get_agent_knowledge_storage(),
         options or LeversOptions(),
     )

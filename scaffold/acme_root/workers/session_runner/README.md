@@ -70,14 +70,14 @@ workspaces its settings name. It holds no purge login. Every call it
 runs passes the [trust](../../om/src/acme/om/trust/README.md) layer
 first: its audit entry is written with this runner as its executor, and
 a call whose secret would cross its session's wall is refused. Then the
-gates of the session's [playbooks](../../om/src/acme/om/playbooks/README.md)
-hold it, the manual its kind's pin gave it among them, and only narrow
-what policy let through. A session's first loop
-recalls the [agent
+gates of the session's [agent
+playbooks](../../om/src/acme/om/agent_playbooks/README.md) hold it, the
+kind manual its kind's pin gave it among them, and only narrow what
+policy let through. A session's first loop recalls the [agent
 knowledge](../../om/src/acme/om/agent_knowledge/README.md) its subject
 triggers before its first model call. A call of a session the tenant's
 agent automation principal started runs on that principal's grant alone
-([agent_automations](../../om/src/acme/om/agent_automations/README.md)).
+([agent automations](../../om/src/acme/om/agent_automations/README.md)).
 
 A run that parks on what only a person clears tells whoever can clear it,
 on their channels, before its item completes

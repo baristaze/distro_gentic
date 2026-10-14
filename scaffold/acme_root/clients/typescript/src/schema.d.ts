@@ -388,7 +388,7 @@ export interface paths {
         };
         /**
          * Read Levers
-         * @description The playbooks and agent knowledge the org's sessions created in `[since,
+         * @description The agent playbooks and agent knowledge the org's sessions created in `[since,
          *     until)` reached, ranked by how much more often the sessions that
          *     reached them stalled, with the sessions behind each figure. A stall is
          *     read from the steps' headers, never from what a step says, and a lever
@@ -800,6 +800,98 @@ export interface paths {
          * @description A suggestion kept, so sessions recall it, or rejected.
          */
         post: operations["review_entry_v1_agent_knowledge__entry_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbook-pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pins
+         * @description The tenant's pins, by kind, the tenant's before a project's.
+         */
+        get: operations["list_pins_v1_agent_playbook_pins_get"];
+        /**
+         * Pin
+         * @description The name's latest version pinned to the kind as its kind manual, for the
+         *     tenant or one project; pinned again, the version then latest.
+         */
+        put: operations["pin_v1_agent_playbook_pins_put"];
+        post?: never;
+        /**
+         * Unpin
+         * @description The kind's pin for the tenant, or for one project, taken away. A
+         *     session made with it keeps it.
+         */
+        delete: operations["unpin_v1_agent_playbook_pins_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description The next version of the name.
+         */
+        post: operations["publish_v1_agent_playbooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Playbook
+         * @description The latest version of the name.
+         */
+        get: operations["get_agent_playbook_v1_agent_playbooks__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-playbooks/{name}/invocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invoke
+         * @description The latest version brought into the session: its gates hold there
+         *     from now on, and its brief arrives as the caller's message. Invoked
+         *     again, the version's invocation answers, and nothing is sent twice.
+         */
+        post: operations["invoke_v1_agent_playbooks__name__invocations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3250,98 +3342,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/playbook-pins": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Pins
-         * @description The tenant's pins, by kind, the tenant's before a project's.
-         */
-        get: operations["list_pins_v1_playbook_pins_get"];
-        /**
-         * Pin
-         * @description The name's latest version pinned to the kind as its manual, for the
-         *     tenant or one project; pinned again, the version then latest.
-         */
-        put: operations["pin_v1_playbook_pins_put"];
-        post?: never;
-        /**
-         * Unpin
-         * @description The kind's pin for the tenant, or for one project, taken away. A
-         *     session made with it keeps it.
-         */
-        delete: operations["unpin_v1_playbook_pins_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish
-         * @description The next version of the name.
-         */
-        post: operations["publish_v1_playbooks_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Playbook
-         * @description The latest version of the name.
-         */
-        get: operations["get_playbook_v1_playbooks__name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks/{name}/invocations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Invoke
-         * @description The latest version brought into the session: its gates hold there
-         *     from now on, and its brief arrives as the caller's message. Invoked
-         *     again, the version's invocation answers, and nothing is sent twice.
-         */
-        post: operations["invoke_v1_playbooks__name__invocations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -3775,7 +3775,7 @@ export interface components {
         /**
          * ActionBody
          * @description `start_session`: start a session of `agent_kind` titled `title` in the
-         *     tenant's project `project_id`, and invoke the tenant's `playbook` of
+         *     tenant's project `project_id`, and invoke the tenant's `agent_playbook` of
          *     that name into it first, its latest version at each firing, when one is
          *     named; a name with no version is refused. `message_session`: send the brief to the
          *     standing session `session_id`; an enabled one is refused, since nothing
@@ -3786,6 +3786,8 @@ export interface components {
         ActionBody: {
             /** Agent Kind */
             agent_kind?: string | null;
+            /** Agent Playbook */
+            agent_playbook?: string | null;
             /** Brief */
             brief?: string | null;
             /** Kind */
@@ -3794,8 +3796,6 @@ export interface components {
             params?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Playbook */
-            playbook?: string | null;
             /** Project Id */
             project_id?: string | null;
             /** Session Id */
@@ -3807,6 +3807,8 @@ export interface components {
         ActionView: {
             /** Agent Kind */
             agent_kind: string | null;
+            /** Agent Playbook */
+            agent_playbook: string | null;
             /** Brief */
             brief: string | null;
             /** Kind */
@@ -3815,8 +3817,6 @@ export interface components {
             params: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-            /** Playbook */
-            playbook: string | null;
             /** Project Id */
             project_id: string | null;
             /** Session Id */
@@ -4021,6 +4021,42 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * AgentPlaybookView
+         * @description A version as published, with what the lever checks found in it as it
+         *     was: advice, which never refused the publish. `findings` is null on a
+         *     version the checks never read, one published before they ran, and an
+         *     empty list on one they read and found nothing in.
+         */
+        AgentPlaybookView: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][] | null;
+            /** Gates */
+            gates: components["schemas"]["GateView"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Published By
+             * Format: uuid
+             */
+            published_by: string;
             /** Version */
             version: number;
         };
@@ -6030,11 +6066,16 @@ export interface components {
         };
         /**
          * InvocationView
-         * @description A version brought into a session. `pinned` marks the manual the
+         * @description A version brought into a session. `pinned` marks the kind manual the
          *     session was made with, whose brief is its standing text; every other
          *     invocation's brief arrived as its invoker's message.
          */
         InvocationView: {
+            /**
+             * Agent Playbook Id
+             * Format: uuid
+             */
+            agent_playbook_id: string;
             /**
              * Created At
              * Format: date-time
@@ -6054,11 +6095,6 @@ export interface components {
             name: string;
             /** Pinned */
             pinned: boolean;
-            /**
-             * Playbook Id
-             * Format: uuid
-             */
-            playbook_id: string;
             /**
              * Session Id
              * Format: uuid
@@ -6524,7 +6560,7 @@ export interface components {
          * LeverKind
          * @enum {string}
          */
-        LeverKind: "playbook" | "agent_knowledge";
+        LeverKind: "agent_playbook" | "agent_knowledge";
         /**
          * LeverReadingView
          * @description The levers of one tenant's sessions created in `[since, until)`, best
@@ -7332,7 +7368,7 @@ export interface components {
         Permission: "read" | "write" | "manage_members" | "manage_keys" | "manage_sessions";
         /**
          * PinRequest
-         * @description A kind's manual: the name whose latest version is pinned to `kind`,
+         * @description A kind manual: the name whose latest version is pinned to `kind`,
          *     for the tenant's sessions of it, or with `project_id` those of one
          *     project, where it wins over the tenant's.
          */
@@ -7346,10 +7382,15 @@ export interface components {
         };
         /**
          * PinView
-         * @description A version pinned to a kind as its manual. Each session of the kind
+         * @description A version pinned to a kind as its kind manual. Each session of the kind
          *     made after it was pinned holds it; one made before keeps its own.
          */
         PinView: {
+            /**
+             * Agent Playbook Id
+             * Format: uuid
+             */
+            agent_playbook_id: string;
             /**
              * Created At
              * Format: date-time
@@ -7369,11 +7410,6 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
-            /**
-             * Playbook Id
-             * Format: uuid
-             */
-            playbook_id: string;
             /** Project Id */
             project_id: string | null;
             /**
@@ -7457,42 +7493,6 @@ export interface components {
             tenants: number;
             /** Users */
             users: number;
-        };
-        /**
-         * PlaybookView
-         * @description A version as published, with what the lever checks found in it as it
-         *     was: advice, which never refused the publish. `findings` is null on a
-         *     version the checks never read, one published before they ran, and an
-         *     empty list on one they read and found nothing in.
-         */
-        PlaybookView: {
-            /** Body */
-            body: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description: string;
-            /** Findings */
-            findings: components["schemas"]["FindingView"][] | null;
-            /** Gates */
-            gates: components["schemas"]["GateView"][];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /**
-             * Published By
-             * Format: uuid
-             */
-            published_by: string;
-            /** Version */
-            version: number;
         };
         /**
          * PolicyRuleBody
@@ -7689,7 +7689,7 @@ export interface components {
         ProviderName: "anthropic" | "openai";
         /**
          * PublishRequest
-         * @description The next version of a playbook's name: its description, its body, and
+         * @description The next version of an agent playbook's name: its description, its body, and
          *     its gates.
          */
         PublishRequest: {
@@ -11066,6 +11066,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pins_v1_agent_playbook_pins_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pin_v1_agent_playbook_pins_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_v1_agent_playbook_pins_delete: {
+        parameters: {
+            query: {
+                kind: string;
+                project_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_v1_agent_playbooks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_playbook_v1_agent_playbooks__name__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentPlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoke_v1_agent_playbooks__name__invocations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvocationView"];
                 };
             };
             /** @description Validation Error */
@@ -16239,225 +16458,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SsoLinkView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_pins_v1_playbook_pins_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    pin_v1_playbook_pins_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PinRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    unpin_v1_playbook_pins_delete: {
-        parameters: {
-            query: {
-                kind: string;
-                project_id?: string | null;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PinView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    publish_v1_playbooks_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublishRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_playbook_v1_playbooks__name__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    invoke_v1_playbooks__name__invocations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InvokeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InvocationView"];
                 };
             };
             /** @description Validation Error */

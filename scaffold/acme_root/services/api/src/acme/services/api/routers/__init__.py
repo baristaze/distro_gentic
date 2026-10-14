@@ -15,6 +15,7 @@ from acme.services.api.routers import (
     agent_automations,
     agent_billing,
     agent_knowledge,
+    agent_playbooks,
     agent_sessions,
     approvals,
     benchmarks,
@@ -32,7 +33,6 @@ from acme.services.api.routers import (
     matrix_operator,
     media,
     notifications,
-    playbooks,
     projects,
     provider_keys,
     relay,
@@ -78,9 +78,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # credential the platform reads that repository with.
     "projects": (projects.router,),
     # What sessions recall, and the procedures they follow, each invoked
-    # into a session or pinned to a kind as its manual.
+    # into a session or pinned to a kind as its kind manual.
     "agent_knowledge": (agent_knowledge.router,),
-    "playbooks": (playbooks.router, playbooks.pins),
+    "agent_playbooks": (agent_playbooks.router, agent_playbooks.pins),
     # A tenant's own MCP servers, reviewed and attached to its kinds.
     "connectors": (connectors.router,),
     # The tenant's layer of tool policy.

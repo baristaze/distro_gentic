@@ -260,7 +260,7 @@ class Managers:
     benchmarks: BenchmarksManagerInterface
     kinds: AgentKindCatalog
     """The kinds every session starts on, each version they run: what a
-    text a person writes for them, such as a playbook, reaches."""
+    text a person writes for them, such as an agent playbook, reaches."""
 
 
 ProductTools = Callable[[Callable[[], Managers]], tuple[ToolInterface, ...]]

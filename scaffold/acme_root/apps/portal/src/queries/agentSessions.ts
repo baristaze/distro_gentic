@@ -397,11 +397,11 @@ export function useSessionActions(id: string) {
       mutationFn: () => api.post<AgentSessionView>(`${path(id)}/restore`),
       onSettled: listed,
     }),
-    /** A playbook's latest version brought into the session: its brief
+    /** An agent playbook's latest version brought into the session: its brief
      * arrives as the person's message, and its gates hold from now on. */
     invoke: useMutation({
       mutationFn: (name: string) =>
-        api.post<InvocationView>(`/v1/playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
+        api.post<InvocationView>(`/v1/agent-playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
           idempotencyKey: crypto.randomUUID(),
         }),
       onSettled: settled,

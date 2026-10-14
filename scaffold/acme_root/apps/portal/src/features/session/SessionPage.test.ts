@@ -154,7 +154,7 @@ vi.mock("../../app/api", () => ({
     post: (path: string, body?: unknown) => {
       net.posts.push({ path, body });
       if (path.endsWith("/invocations"))
-        return Promise.resolve({ id: "i1", session_id: "sa", playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
+        return Promise.resolve({ id: "i1", session_id: "sa", agent_playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
       if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: StepView["command"] }).command }));
       return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
     },
@@ -331,11 +331,11 @@ describe("the org's own session", () => {
     expect([...composer.querySelectorAll("button")].map((button) => button.textContent || button.getAttribute("aria-label"))).toEqual(["Pause", "Send"]);
   });
 
-  it("invokes a playbook by its name from its header, into this session", async () => {
+  it("invokes an agent playbook by its name from its header, into this session", async () => {
     await open("a", "/sessions/sa");
-    const chip = [...container.querySelectorAll<HTMLButtonElement>(".acme-session-head button")].find((button) => button.textContent === "Playbook")!;
+    const chip = [...container.querySelectorAll<HTMLButtonElement>(".acme-session-head button")].find((button) => button.textContent === "Agent playbook")!;
     await act(async () => chip.click());
-    const form = document.querySelector<HTMLFormElement>("form[aria-label='Invoke a playbook']")!;
+    const form = document.querySelector<HTMLFormElement>("form[aria-label='Invoke an agent playbook']")!;
     const field = form.querySelector<HTMLInputElement>("input")!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "release-check");
@@ -345,8 +345,8 @@ describe("the org's own session", () => {
     expect(invoke.disabled).toBe(false);
     await act(async () => invoke.click());
     await settle();
-    expect(net.posts).toContainEqual({ path: "/v1/playbooks/release-check/invocations", body: { session_id: "sa" } });
-    expect(document.querySelector("form[aria-label='Invoke a playbook']")).toBeNull();
+    expect(net.posts).toContainEqual({ path: "/v1/agent-playbooks/release-check/invocations", body: { session_id: "sa" } });
+    expect(document.querySelector("form[aria-label='Invoke an agent playbook']")).toBeNull();
   });
 
   it("says a person has control in place of Send while they hold it", async () => {

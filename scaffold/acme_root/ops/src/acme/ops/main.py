@@ -618,7 +618,7 @@ async def own_tokens_command(
 async def levers_command(
     args: argparse.Namespace, transport: httpx.AsyncBaseTransport | None = None
 ) -> int:
-    """Which playbooks and agent knowledge an org's sessions reached before they
+    """Which agent playbooks and agent knowledge an org's sessions reached before they
     stalled, over the last `--days`: the operator plane's reading, under the
     env file's `read` token, printed as JSON for the audit to read. It names
     each lever by its kind, id, and version, and the sessions behind it,
@@ -750,7 +750,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_levers = sub.add_parser(
         "levers",
-        help="the playbooks and agent knowledge an org's sessions reached before they stalled",
+        help="the agent playbooks and agent knowledge an org's sessions reached before they stalled",
     )
     p_levers.add_argument("--env", required=True)
     p_levers.add_argument("--org", required=True, type=UUID, help="the org whose sessions to read")

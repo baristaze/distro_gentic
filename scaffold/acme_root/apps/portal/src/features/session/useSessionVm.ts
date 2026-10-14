@@ -190,7 +190,7 @@ export function useSessionVm(id: string) {
 
   const send = (text: string, done: () => void) =>
     actions.message.mutate(text, { onSuccess: done, onError: fail("The message was not sent.") });
-  /** A playbook's latest version, by its name, brought into the session in
+  /** An agent playbook's latest version, by its name, brought into the session in
    * the person's name; a name with no version is refused with the reason. */
   const invoke = (name: string, done: () => void) =>
     actions.invoke.mutate(name, {
@@ -198,7 +198,7 @@ export function useSessionVm(id: string) {
         notify(`Invoked ${invoked.name}, version ${invoked.version}.`);
         done();
       },
-      onError: fail("The playbook was not invoked."),
+      onError: fail("The agent playbook was not invoked."),
     });
   const control = (command: "pause" | "resume" | "cancel" | "compact" | "unlock") =>
     actions.control.mutate({ command }, { onError: fail(`The ${command} was not sent.`) });

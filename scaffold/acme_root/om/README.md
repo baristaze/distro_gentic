@@ -370,7 +370,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [The cloud pool](src/acme/om/cloud_pool/README.md)
 - [Intake](src/acme/om/intake/README.md)
 - [Agent automations](src/acme/om/agent_automations/README.md)
-- [Playbooks](src/acme/om/playbooks/README.md)
+- [Agent playbooks](src/acme/om/agent_playbooks/README.md)
 - [Agent knowledge](src/acme/om/agent_knowledge/README.md)
 - [Levers](src/acme/om/levers/README.md)
 - [Connectors](src/acme/om/connectors/README.md)

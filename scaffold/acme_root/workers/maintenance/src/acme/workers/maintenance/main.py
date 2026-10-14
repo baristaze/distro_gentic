@@ -153,11 +153,11 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
             # Its identity links and work bindings, its agent automations and their
-            # runs, its playbooks and their invocations, its agent knowledge, and
+            # runs, its agent playbooks and their invocations, its agent knowledge, and
             # who was told what waited on them.
             "intake": container.intake.purge_tenant,
             "agent_automations": container.agent_automations.purge_tenant,
-            "playbooks": container.playbooks.purge_tenant,
+            "agent_playbooks": container.agent_playbooks.purge_tenant,
             "agent_knowledge": container.agent_knowledge.purge_tenant,
             # Its connectors, each credential with them, and what sessions pinned.
             "connectors": container.connectors.purge_tenant,

@@ -26,8 +26,8 @@ just hopes for it.
 gate, a refusal, a check.
 
 **Violation.** A promise held only by an instruction in a prompt, a
-playbook, or a skill the agent may skip; a promise with no mechanism
-that refuses its breach.
+agent playbook, or a skill the agent may skip; a promise with no
+mechanism that refuses its breach.
 
 **Severity.** high
 
@@ -291,7 +291,7 @@ a cited report), never the presence of files.
 surfaces it covers; what the harness scores.
 
 **Violation.** An acceptance verdict without the hidden suite; a prompt,
-agent_knowledge, a tool source, evidence, or a pull request that names
+agent knowledge, a tool source, evidence, or a pull request that names
 the hidden suite, or a surface the scanner skips; a harness that scores
 the presence of files; an edit to the checks or the system under test
 that goes uncaught.

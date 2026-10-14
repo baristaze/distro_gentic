@@ -80,7 +80,7 @@ def public(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 def findings_of(definition: McpToolDefinition, reach: LeverReach) -> tuple[LeverFinding, ...]:
     """What the lever checks find in a tool's description, as they read a
-    playbook's text: a model reads it to choose the tool. The tools of its
+    agent playbook's text: a model reads it to choose the tool. The tools of its
     own server are among those it may name."""
     return checked(definition.description, reach) if definition.description.strip() else ()
 

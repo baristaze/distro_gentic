@@ -91,11 +91,11 @@ export function AgentAutomationForm({
           <TextField label="Session title" placeholder="e.g. Update dependencies" value={draft.title} onChange={set("title")} />
           {projectOptions.length > 0 ? <Select label="Project" value={draft.projectId} options={projectOptions} onChange={set("projectId")} /> : null}
           <TextField
-            label="Playbook"
+            label="Agent playbook"
             placeholder="e.g. release-check"
             info="Invoked into each session it starts, before the brief: its latest version, and its gates hold there. Optional."
-            value={draft.playbook}
-            onChange={set("playbook")}
+            value={draft.agentPlaybook}
+            onChange={set("agentPlaybook")}
           />
         </div>
       ) : (

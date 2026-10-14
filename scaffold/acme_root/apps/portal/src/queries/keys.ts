@@ -68,10 +68,10 @@ export const keys = {
     one: (id: string) => ["agent_automation", id] as const,
     principal: ["agent_automation", "principal"] as const,
   },
-  // A playbook is read by its name, at its latest version.
-  playbooks: {
-    all: ["playbook"] as const,
-    one: (name: string) => ["playbook", name] as const,
+  // An agent playbook is read by its name, at its latest version.
+  agentPlaybooks: {
+    all: ["agent_playbook"] as const,
+    one: (name: string) => ["agent_playbook", name] as const,
   },
   agentKnowledge: {
     all: ["agent_knowledge"] as const,

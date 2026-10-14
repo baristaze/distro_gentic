@@ -5,8 +5,8 @@ runs, and hosts agents: a fleet of them, for many tenants, unattended,
 on machines it does not always own.
 
 - It **defines** an agent as an agent kind: its toolsets, the model
-  size each of its roles asks, the bounds it runs in, and a manual a
-  tenant may pin to it. The kinds it ships are templates a product
+  size each of its roles asks, the bounds it runs in, and a kind manual
+  a tenant may pin to it. The kinds it ships are templates a product
   copies: an engineer, an analysis agent, a planner, an assistant, a
   reviewer, and an operator. A lead is a kind that starts the others as
   sub-agents.
@@ -17,9 +17,10 @@ on machines it does not always own.
   snapshot, on the platform's own machines or on a customer's host
   inside its wall.
 
-A tenant shapes its agents with levers: playbooks, agent_knowledge, and
-MCP connectors. Each is read for what would mislead an agent before a
-person publishes it, and read back from the sessions that stalled.
+A tenant shapes its agents with levers: agent playbooks, agent
+knowledge, and MCP connectors. Each is read for what would mislead an
+agent before a person publishes it, and read back from the sessions that
+stalled.
 
 The platform stands on two foundations and repeats neither. The
 [Software Design and Architecture
