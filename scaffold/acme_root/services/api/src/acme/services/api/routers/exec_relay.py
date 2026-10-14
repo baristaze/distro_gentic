@@ -11,7 +11,7 @@ from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.hosts import Host
-from acme.services.api.gateway.resolve import ExecRelayService
+from acme.services.api.gateway.platform_resolve import ExecRelayService
 from acme.services.api.types.exec_relay import (
     ExecDetailView,
     ExecLeaseView,

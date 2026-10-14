@@ -20,7 +20,7 @@ from fastapi import APIRouter, Response
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.payments import PaymentDelivery
-from acme.services.api.gateway.resolve import AgentBillingService
+from acme.services.api.gateway.platform_resolve import AgentBillingService
 from acme.services.api.types.agent_billing import CostApprovalRequest, RaiseRequest
 from acme.services.api.types.spend_ledgers import SpendLedgerEntryView
 

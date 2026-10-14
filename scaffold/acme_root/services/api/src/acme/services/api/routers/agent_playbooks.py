@@ -12,7 +12,7 @@ from acme.om.agent_playbooks.types.agent_playbook import MAX_SKILL_NAME, SKILL_N
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import AgentPlaybooksService
+from acme.services.api.gateway.platform_resolve import AgentPlaybooksService
 from acme.services.api.types.agent_playbooks import (
     AgentPlaybookView,
     InvocationView,

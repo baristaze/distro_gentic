@@ -12,8 +12,8 @@ from fastapi import APIRouter, Response
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.hosts import EnrollmentBearer, Host
 from acme.services.api.gateway.idempotency import Idem
+from acme.services.api.gateway.platform_resolve import HostsService
 from acme.services.api.gateway.ratelimit import rate_limited
-from acme.services.api.gateway.resolve import HostsService
 from acme.services.api.types.hosts import (
     ClaimRequest,
     ClaimView,

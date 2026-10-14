@@ -9,8 +9,8 @@ from fastapi import APIRouter, Response
 from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledgeStatus
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
+from acme.services.api.gateway.platform_resolve import AgentKnowledgeService
 from acme.services.api.gateway.precondition import IfMatch
-from acme.services.api.gateway.resolve import AgentKnowledgeService
 from acme.services.api.types.agent_knowledge import (
     AgentKnowledgeRequest,
     AgentKnowledgeView,

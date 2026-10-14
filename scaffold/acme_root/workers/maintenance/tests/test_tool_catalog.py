@@ -88,10 +88,10 @@ async def test_a_linked_members_comment_on_the_software_engineers_pull_request_w
     session = await container.managers.agents.start_session(
         owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER, title="the total")
     )
-    await container.intake.bind_work(owner, session.id, HandleKind.PULL_REQUEST, PR)
-    await container.intake.link_account(owner, "forge", "U-ANN", owner.user_id)
+    await container.platform.intake.bind_work(owner, session.id, HandleKind.PULL_REQUEST, PR)
+    await container.platform.intake.link_account(owner, "forge", "U-ANN", owner.user_id)
 
-    routed = await container.intake.route(service(owner), comment("U-ANN"))
+    routed = await container.platform.intake.route(service(owner), comment("U-ANN"))
 
     assert (routed.effect, routed.session_id, routed.principal_id) == (
         Effect.WAKE,

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Query
 from pydantic import AwareDatetime
 
 from acme.services.api.gateway.admin import OperatorCtx
-from acme.services.api.gateway.resolve import AgentFleetService
+from acme.services.api.gateway.platform_resolve import AgentFleetService
 from acme.services.api.types.agent_fleet import (
     HostStandingView,
     SessionStandingView,

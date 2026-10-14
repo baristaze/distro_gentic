@@ -6,7 +6,7 @@ from fastapi import APIRouter, Response
 
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import IntakeService
+from acme.services.api.gateway.platform_resolve import IntakeService
 from acme.services.api.types.common import ErrorResponse
 from acme.services.api.types.intake import ConnectInstallationRequest, InstallationView
 

@@ -237,7 +237,9 @@ async def test_outside_a_local_stack_an_agent_automation_starts_in_an_agent_proj
     ctx = await sign_in(container)
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
     with pytest.raises(ValidationFailed):
-        await container.agent_automations.create_agent_automation(ctx, triage(ctx, None, limits))
+        await container.platform.agent_automations.create_agent_automation(
+            ctx, triage(ctx, None, limits)
+        )
 
 
 async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
@@ -248,7 +250,7 @@ async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
     agent_automation = triage(ctx, await an_agent_project(container, ctx), limits)
-    await container.agent_automations.create_agent_automation(ctx, agent_automation)
+    await container.platform.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
@@ -267,7 +269,7 @@ async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
     assert routed.payload["effect"] == "unrouted"
     # The agent automation fired once on the event, and its run is recorded,
     # here refused, since this worker runs no agent kind.
-    (run,) = await container.agent_automations.get_runs(ctx, agent_automation.id, 10)
+    (run,) = await container.platform.agent_automations.get_runs(ctx, agent_automation.id, 10)
     assert (run.event_id, run.refusal) == (event.id, Refusal.ACTION)
     assert await depth(container) == (0, 0)
 
@@ -278,7 +280,7 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     now = utcnow()
     limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True)
     agent_automation = triage(ctx, await an_agent_project(container, ctx), limits)
-    await container.agent_automations.create_agent_automation(ctx, agent_automation)
+    await container.platform.agent_automations.create_agent_automation(ctx, agent_automation)
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
@@ -294,6 +296,6 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     consumer = consumer_of(container)
     body = feedback_body(str(ctx.org_id), event)
     assert await consumer.handle(await queued(container, body)) == "applied"
-    (run,) = await container.agent_automations.get_runs(ctx, agent_automation.id, 10)
+    (run,) = await container.platform.agent_automations.get_runs(ctx, agent_automation.id, 10)
     assert run.event_id == event.id
     assert await depth(container) == (0, 0)

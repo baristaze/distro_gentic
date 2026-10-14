@@ -13,8 +13,8 @@ from fastapi import APIRouter, Path, Query
 from acme.om.watch.kinds import STREAM_KIND
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.hosts import Claimant, ClaimToken, EnrollmentBearer
+from acme.services.api.gateway.platform_resolve import HostsService, WatchService
 from acme.services.api.gateway.ratelimit import rate_limited
-from acme.services.api.gateway.resolve import HostsService, WatchService
 from acme.services.api.types.claimants import (
     ClaimantAppendRequest,
     ClaimantClaimView,

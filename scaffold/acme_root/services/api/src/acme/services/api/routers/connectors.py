@@ -10,7 +10,7 @@ from fastapi import APIRouter, Response
 
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import ConnectorsService
+from acme.services.api.gateway.platform_resolve import ConnectorsService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.connectors import (
     AttachRequest,

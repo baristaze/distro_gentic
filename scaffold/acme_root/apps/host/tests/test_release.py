@@ -280,7 +280,7 @@ async def placed(
         managers.steps,
         managers.work,
         managers.tenancy,
-        runner.kinds.warm_grace,
+        runner.platform.kinds.warm_grace,
         clock=clock,
         exec_relay=managers.exec_relay,
     )

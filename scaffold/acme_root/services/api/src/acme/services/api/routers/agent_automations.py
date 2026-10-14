@@ -8,7 +8,7 @@ from fastapi import APIRouter, Response
 
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import AgentAutomationsService
+from acme.services.api.gateway.platform_resolve import AgentAutomationsService
 from acme.services.api.types.agent_automations import (
     AgentAutomationPrincipalView,
     AgentAutomationRequest,

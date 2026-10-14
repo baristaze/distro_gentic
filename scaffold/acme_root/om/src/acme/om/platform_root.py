@@ -7,10 +7,10 @@ platform's kinds is `ProductKinds`, declared once in
 `acme.om.product_kinds`. Every process builds its managers with
 `build_platform_managers`."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
 from acme.infra.cache import CacheScope
@@ -346,6 +346,92 @@ class ProductKinds:
         if kind in self.graces:
             return self.graces[kind]
         return GRACES.get(kind, WARM_GRACE)
+
+
+TenantPurge = Callable[[TenantContext], Awaitable[int]]
+"""A namespace's purge of a tenant deleted past its retention: a batch per
+statement, answering how many rows went."""
+
+SystemPurge = Callable[[RequestContext], Awaitable[int]]
+"""A namespace's purge of its rows past their retention across tenants,
+under the sweep's request stage, answering how many rows went."""
+
+
+@dataclass(frozen=True)
+class ProductPurge[M]:
+    """A purge of a tenant a product's namespace runs, built over the
+    namespace's managers: its name in the sweep, its step, and the purge it
+    runs before (`before`), so its rows go before the rows they name. None
+    runs it after every other."""
+
+    name: str
+    step: Callable[[M], TenantPurge]
+    before: str | None = None
+
+
+@dataclass(frozen=True)
+class ProductSweep[M]:
+    """A purge across tenants a product's namespace runs, built over the
+    namespace's managers: its name in the sweep, its step, and the batch a
+    whole one of says there may be more, None the sweep's own."""
+
+    name: str
+    step: Callable[[M], SystemPurge]
+    batch: int | None = None
+
+
+@dataclass(frozen=True)
+class SweptNamespace:
+    """A product's namespace as one process built it: its managers, and its
+    purges bound to them, each with the purge it runs before."""
+
+    name: str
+    managers: object
+    purges: tuple[tuple[str, TenantPurge, str | None], ...]
+    sweeps: tuple[tuple[str, SystemPurge, int | None], ...]
+
+
+@dataclass(frozen=True)
+class ProductNamespace[M]:
+    """A namespace a product adds: its name, how its managers are built over
+    the storage and the platform's managers, once in each process that
+    reads them, and the purges the maintenance worker runs of it."""
+
+    name: str
+    build: Callable[[StorageInterface, PlatformManagers], M]
+    purges: tuple[ProductPurge[M], ...] = ()
+    sweeps: tuple[ProductSweep[M], ...] = ()
+
+    def swept(self, storage: StorageInterface, managers: PlatformManagers) -> SweptNamespace:
+        """The namespace's managers, built once, and its purges over them."""
+        own = self.build(storage, managers)
+        return SweptNamespace(
+            self.name,
+            own,
+            tuple((purge.name, purge.step(own), purge.before) for purge in self.purges),
+            tuple((sweep.name, sweep.step(own), sweep.batch) for sweep in self.sweeps),
+        )
+
+
+@dataclass(frozen=True)
+class ProductNamespaces:
+    """What a product adds to the platform's namespaces, each once
+    (`acme.om.product_namespaces`): the API serves each one's routes beside
+    the platform's, and the maintenance worker runs its purges in order. A
+    name declared twice is refused."""
+
+    namespaces: tuple[ProductNamespace[Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        names = [namespace.name for namespace in self.namespaces]
+        if len(set(names)) != len(names):
+            raise ValueError("the product declares a namespace twice")
+
+    def swept(
+        self, storage: StorageInterface, managers: PlatformManagers
+    ) -> tuple[SweptNamespace, ...]:
+        """Every namespace's managers, built once, with its purges."""
+        return tuple(namespace.swept(storage, managers) for namespace in self.namespaces)
 
 
 @dataclass(frozen=True)

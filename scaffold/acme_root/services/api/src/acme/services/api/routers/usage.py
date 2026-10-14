@@ -5,7 +5,7 @@ route."""
 from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Ctx
-from acme.services.api.gateway.resolve import BudgetsService
+from acme.services.api.gateway.platform_resolve import BudgetsService
 from acme.services.api.types.budgets import UsagePageView
 from acme.services.api.types.common import LIMIT_DEFAULT
 

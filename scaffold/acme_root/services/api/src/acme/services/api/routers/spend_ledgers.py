@@ -13,7 +13,7 @@ from fastapi import APIRouter, Response
 from acme.om.agent_billing.types.spend_ledger import EntryKind
 from acme.services.api.gateway.admin import OperatorCtx
 from acme.services.api.gateway.idempotency import OperatorIdem
-from acme.services.api.gateway.resolve import SpendLedgersService
+from acme.services.api.gateway.platform_resolve import SpendLedgersService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.spend_ledgers import (
     SpendLedgerEntryView,
