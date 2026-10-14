@@ -13,6 +13,7 @@ import pytest
 from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.step_storage import make_message, make_request, make_response, make_tool_request
 
+from acme.om.agent_billing.rules import ANOMALY_UNLOCK
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -20,7 +21,6 @@ from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import EMPTY_UUID, new_id, utcnow
-from acme.om.billing.rules import ANOMALY_UNLOCK
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.intake.root import build_intake

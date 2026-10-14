@@ -2,10 +2,10 @@
 credit and granted unit, every one-time raise, and every approval a person
 gives a call past its session's norm, as entries written once.
 
-A hold carries what the gate read: the account's funding as it stood, the
+A hold carries what the gate read: the spend account's funding as it stood, the
 price version the cap was read at, and the call's worst case in units. The
 ledger then draws the buckets on the hold alone, under the lock of their
-counts, so it never reads the account. A settlement and its charge are
+counts, so it never reads the spend account. A settlement and its charge are
 written together, once per hold; the charge is priced from the hold's own
 version, so a cap and a bill read the same price."""
 
@@ -15,9 +15,9 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_billing.types.spend_account import FundingMode
+from acme.om.agent_billing.types.unit_plan import MAX_NAME, UnitPlanRef
 from acme.om.base import Created, Identifiable, Platform
-from acme.om.billing.types.account import FundingMode
-from acme.om.billing.types.plan import MAX_NAME, PlanRef
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.hold import Hold, Settlement
 
@@ -25,7 +25,7 @@ from acme.om.budgets.types.hold import Hold, Settlement
 class Bucket(StrEnum):
     """What pays for a call on the platform's key, drawn in this order."""
 
-    INCLUDED = "included"  # the plan's units, each billing period
+    INCLUDED = "included"  # the unit plan's units, each billing period
     GRANTED = "granted"  # units the platform granted
     CREDITS = "credits"  # prepaid credits, in millionths, once confirmed
     LINE = "line"  # an enterprise line of credit, in millionths, each billing period
@@ -39,11 +39,11 @@ MONEY_BUCKETS = frozenset({Bucket.CREDITS, Bucket.LINE})
 
 
 class Funding(Platform):
-    """The account as the gate read it for one hold."""
+    """The spend account as the gate read it for one hold."""
 
     mode: FundingMode
     credential: str = Field(min_length=1, max_length=MAX_NAME)
-    plan: PlanRef
+    unit_plan: UnitPlanRef
     included_units: int = Field(ge=0)
     unit_price_micros: int = Field(ge=1)
     micros_per_unit: int = Field(ge=1)
@@ -82,7 +82,7 @@ NO_DRAW = Draw()
 
 
 class FundedHold(Platform):
-    """The engine's hold, and what billing reads beside it. It is the hold's
+    """The engine's hold, and what agent billing reads beside it. It is the hold's
     entry in the ledger, under the hold's own id."""
 
     hold: Hold
@@ -202,7 +202,7 @@ class Shortfall(Platform):
     """Units of a call's worst case no bucket covers. `units` is None when
     the call's cost is unknown, so no bucket can be drawn for it.
     `resets_at` is when a fresh billing period covers it, or None when only
-    a person can: a top-up, a grant, a plan with room, or a price."""
+    a person can: a top-up, a grant, a unit plan with room, or a price."""
 
     units: int | None = Field(ge=0)
     short: int = Field(ge=1)

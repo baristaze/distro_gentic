@@ -16,11 +16,11 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_billing.storage import SpendAccountStorageInterface
+from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.base import Platform, new_id, utcnow
-from acme.om.billing.storage import AccountStorageInterface
-from acme.om.billing.types.account import FundingMode
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound, UnpricedModel, UnresolvedRole, ValidationFailed
 from acme.om.matrix import rules
@@ -82,7 +82,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
         tenants: MatrixTenantStorageInterface,
         sessions: AgentSessionStorageInterface,
         shares: PlacementStorageInterface,
-        accounts: AccountStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
         keys: TrustStorageInterface,
         prices: ModelPricesInterface,
         options: MatrixOptions,
@@ -93,7 +93,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
         self._tenants = tenants
         self._sessions = sessions
         self._shares = shares
-        self._accounts = accounts
+        self._spend_accounts = spend_accounts
         self._keys = keys
         self._prices = prices
         self._options = options
@@ -262,11 +262,11 @@ class MatrixResolverImpl(MatrixResolverInterface):
 
     async def _tenant(self, ctx: TenantContext) -> _Tenant:
         try:
-            account = await self._accounts.read_account(ctx.org_id)
+            account = await self._spend_accounts.read_spend_account(ctx.org_id)
         except (ValidationFailed, ValidationError) as unread:
             # Who pays is the call's to refuse; the fills are not narrowed on
             # an account this process cannot read.
-            log.error("the billing account of org %s cannot be read: %s", ctx.org_id, unread)
+            log.error("the spend account of org %s cannot be read: %s", ctx.org_id, unread)
             account = None
         if account is None or account.funding is not FundingMode.OWN_KEY:
             return _Tenant(held=None, chosen={})

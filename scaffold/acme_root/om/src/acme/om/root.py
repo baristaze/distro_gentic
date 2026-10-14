@@ -15,6 +15,9 @@ from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_billing.gate import MoneyGateInterface
+from acme.om.agent_billing.impl.gate import MoneyCallGateImpl
+from acme.om.agent_billing.impl.prices import PriceBookTableImpl
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
@@ -37,9 +40,6 @@ from acme.om.automations.actions import AutomationActionInterface
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
-from acme.om.billing.gate import MoneyGateInterface
-from acme.om.billing.impl.gate import MoneyCallGateImpl
-from acme.om.billing.impl.prices import PriceBookTableImpl
 from acme.om.budgets import (
     BudgetGateInterface,
     BudgetsManagerInterface,
@@ -411,7 +411,7 @@ class ProductKinds:
 @dataclass(frozen=True)
 class PlatformPorts:
     """The platform's ports a product hands each of its roots, each None for
-    the platform's own: billing's money gate as the budget gate, the
+    the platform's own: agent billing's money gate as the budget gate, the
     evidence's result gate over the work product, the platform's executor
     (the loud null in `local`), the workspaces' work product, and the
     projects' rows for a session's project, which its workspace binds and
@@ -686,7 +686,7 @@ def build_managers(
     compaction's, and `prompt_hash` the key service's hash a request's
     header records. None wires the budgets' gate behind the one, and the
     privacy namespace's keyed hash behind the other. `budget_gate` None is
-    the gate over the ledger; billing's money gate puts billing's call gate
+    the gate over the ledger; agent billing's money gate puts agent billing's call gate
     behind the one, priced from the price book by version. Outside
     `environment` `local`, a quiet null gate or ledger is refused at boot
     (`UnsafeConfiguration`).
@@ -1070,10 +1070,10 @@ def build_managers(
         storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
     )
     refuse_quiet_nulls(
-        environment, gate, storage.get_ledger_storage(), storage.get_money_ledger_storage()
+        environment, gate, storage.get_ledger_storage(), storage.get_spend_ledger_storage()
     )
     # The one source of prices, which the resolver asks before it answers a
-    # fill and the gate prices every call by. Behind billing's gate it is the
+    # fill and the gate prices every call by. Behind agent billing's gate it is the
     # price book, read by version, so a call held at one is billed at it.
     book = PriceBookTableImpl() if isinstance(gate, MoneyGateInterface) else None
     pricing: PricingInterface = book or PricingTableImpl()

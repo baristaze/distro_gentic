@@ -9,7 +9,7 @@ of](../../../../README.md).
 - **Installation**: a system's installation of the platform, by the
   system's own id, connected by one tenant. Every delivery that names it
   belongs to that tenant.
-- **Account link**: an account in an outside system, mapped to a user
+- **Identity link**: an account in an outside system, mapped to a user
   of the tenant. Only a mapped user speaks to an agent as a principal
   from outside.
 - **Work binding**: a pull request or a branch that is a session's

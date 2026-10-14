@@ -11,8 +11,8 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.integrations.model_providers.types import ProviderName
-from acme.om.billing.storage import AccountStorageInterface
-from acme.om.billing.types.account import FundingMode
+from acme.om.agent_billing.storage import SpendAccountStorageInterface
+from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.context import TenantContext
 from acme.om.exceptions import NoCredential, NotFound, SpenderUnknown, ValidationFailed
 from acme.om.models.credentials import PLATFORM_CREDENTIAL, CallClient, CallCredentialsInterface
@@ -29,23 +29,23 @@ class CallCredentialsByFundingImpl(CallCredentialsInterface):
     def __init__(
         self,
         platform: CallCredentialsInterface,
-        accounts: AccountStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
         clients: Callable[[], ProviderClientsInterface | None],
     ) -> None:
         self._platform = platform
-        self._accounts = accounts
+        self._spend_accounts = spend_accounts
         self._clients = clients
 
     async def client_for(self, ctx: TenantContext, provider: ProviderName) -> CallClient:
         try:
-            account = await self._accounts.read_account(ctx.org_id)
+            account = await self._spend_accounts.read_spend_account(ctx.org_id)
         except (ValidationFailed, ValidationError) as unread:
-            log.error("the billing account of org %s cannot be read: %s", ctx.org_id, unread)
+            log.error("the spend account of org %s cannot be read: %s", ctx.org_id, unread)
             raise SpenderUnknown(
-                "the tenant's billing account cannot be read; nothing is spent"
+                "the tenant's spend account cannot be read; nothing is spent"
             ) from unread
         if account is None or account.funding is not FundingMode.OWN_KEY:
-            # The platform's key, which billing refuses for a tenant with no
+            # The platform's key, which agent billing refuses for a tenant with no
             # account, as it refuses everything that tenant would spend.
             return await self._platform.client_for(ctx, provider)
         clients = self._clients()

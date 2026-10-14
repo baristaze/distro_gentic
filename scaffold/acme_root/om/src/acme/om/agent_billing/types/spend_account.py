@@ -1,4 +1,4 @@
-"""A tenant's billing account: who pays, on which plan, in which time zone,
+"""A tenant's spend account: who pays, on which unit plan, in which time zone,
 and from when its billing periods run. One per org, under the org's own id.
 
 The funding mode says who pays the provider: the platform's key, billed to
@@ -12,11 +12,11 @@ from typing import ClassVar, Self
 
 from pydantic import Field, model_validator
 
+from acme.om.agent_billing.types.unit_plan import MAX_NAME, UnitPlanRef
 from acme.om.base import Identifiable, Platform, Trackable
-from acme.om.billing.types.plan import MAX_NAME, PlanRef
 
 MAX_ZONES = 32
-"""The zone changes an account keeps: enough to place every window still
+"""The zone changes a spend account keeps: enough to place every window still
 open, since a change reaches back one window at most."""
 
 PLATFORM_KEY = "platform"
@@ -36,7 +36,7 @@ class ZoneChange(Platform):
     at: datetime
 
 
-class Account(Identifiable, Trackable):
+class SpendAccount(Identifiable, Trackable):
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("version", "zones", "credit_line_micros")
     """The zones change by `set_time_zone`, the line of credit by an operator,
     and every change is a compare-and-set on the version."""
@@ -44,8 +44,8 @@ class Account(Identifiable, Trackable):
     funding: FundingMode
     key_ref: str | None = Field(default=None, min_length=1, max_length=MAX_NAME)
     """The reference of the tenant's own key, for `own_key`; never its value."""
-    plan_id: str = Field(min_length=1, max_length=MAX_NAME)
-    plan_version: int = Field(ge=1)
+    unit_plan_id: str = Field(min_length=1, max_length=MAX_NAME)
+    unit_plan_version: int = Field(ge=1)
     period_anchor: datetime
     """When the first billing period began: every month window and every
     period of a periodic bucket counts from it."""
@@ -58,18 +58,18 @@ class Account(Identifiable, Trackable):
     def _zones_in_order(self) -> Self:
         times = [change.at for change in self.zones]
         if times != sorted(times):
-            raise ValueError("an account's zone changes are kept in the order they happened")
+            raise ValueError("a spend account's zone changes are kept in the order they happened")
         return self
 
     @property
-    def plan(self) -> PlanRef:
-        return PlanRef(id=self.plan_id, version=self.plan_version)
+    def unit_plan(self) -> UnitPlanRef:
+        return UnitPlanRef(id=self.unit_plan_id, version=self.unit_plan_version)
 
 
-class AccountRequest(Platform):
-    """What an owner sets when the tenant's account opens."""
+class SpendAccountRequest(Platform):
+    """What an owner sets when the tenant's spend account opens."""
 
     funding: FundingMode
     key_ref: str | None = Field(default=None, min_length=1, max_length=MAX_NAME)
-    plan_id: str = Field(min_length=1, max_length=MAX_NAME)
+    unit_plan_id: str = Field(min_length=1, max_length=MAX_NAME)
     zone: str = Field(min_length=1, max_length=MAX_NAME)

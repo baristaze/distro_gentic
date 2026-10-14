@@ -1,5 +1,5 @@
 """Storage of the intake swimlane: the installations the tenant connected,
-its account links, the work bindings of its sessions, and the acts its
+its identity links, the work bindings of its sessions, and the acts its
 sessions made through the platform's account. Every operation takes org_id
 first, but the ingress's read of the tenant an installation names, which
 no tenant scopes."""
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.intake.types.link import (
-    AccountLink,
     HandleKind,
+    IdentityLink,
     Installation,
     PlatformAct,
     WorkBinding,
@@ -35,7 +35,7 @@ class IntakeStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
+    async def create_link(self, org_id: UUID, link: IdentityLink) -> IdentityLink:
         """The link, or the one the tenant holds for the account already,
         which answers instead: one link an account."""
         ...
@@ -43,10 +43,10 @@ class IntakeStorageInterface(ABC):
     @abstractmethod
     async def read_link(
         self, org_id: UUID, integration: str, external_id: str
-    ) -> AccountLink | None: ...
+    ) -> IdentityLink | None: ...
 
     @abstractmethod
-    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[IdentityLink]:
         """The accounts linked to a user of the tenant, by integration."""
         ...
 

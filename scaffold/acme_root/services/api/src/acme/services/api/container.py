@@ -20,9 +20,9 @@ from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
-from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.intake import IntakeManagerInterface
@@ -243,7 +243,7 @@ class AppContainer:
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
         `ports` are the platform's ports the product sets, None each for the
-        platform's own: billing's money gate, and the evidence's result gate.
+        platform's own: agent billing's money gate, and the evidence's result gate.
         `payments` checks a payment a tenant posts; None refuses every one.
         Their `kinds` are the product's: a session starts on one of its agent
         kinds, and the session runner runs its loop with the same kinds,
@@ -333,7 +333,9 @@ class AppContainer:
             # The ledger the operators read and grant units on, and the
             # payments a tenant posts, each checked by the provider's
             # signature: with no provider wired, every one is refused.
-            billing=build_billing(storage, managers, payments or PaymentProviderAbsentImpl()),
+            agent_billing=build_agent_billing(
+                storage, managers, payments or PaymentProviderAbsentImpl()
+            ),
             # A person writes and reviews what sessions recall; the runner
             # recalls them. A person publishes the playbooks sessions follow,
             # invokes one into a session, and pins one to a kind.

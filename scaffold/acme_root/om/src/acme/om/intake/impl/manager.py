@@ -23,8 +23,8 @@ from acme.om.intake.rules import DELIVERED, Facts, effect_of, in_person, input_s
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.types.event import AuthorKind, ChatApproval, FeedbackEvent
 from acme.om.intake.types.link import (
-    AccountLink,
     HandleKind,
+    IdentityLink,
     Installation,
     PlatformAct,
     WorkBinding,
@@ -38,7 +38,7 @@ from acme.om.tools.manager import ToolsManagerInterface
 
 ROUTED = "intake.event.routed"
 CONNECTED = "intake.installation.created"
-UNLINKED = "intake.account_link.deleted"
+UNLINKED = "intake.identity_link.deleted"
 APPROVED = "intake.chat_approval.decided"
 REFUSED = "intake.chat_approval.refused"
 
@@ -114,7 +114,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
 
     async def link_account(
         self, ctx: TenantContext, integration: str, external_id: str, user_id: UUID
-    ) -> AccountLink:
+    ) -> IdentityLink:
         ctx.require(Permission.MANAGE_MEMBERS)
         if not in_person(ctx):
             raise NotAuthorized("an account is linked by a person, never by an agent's call")
@@ -122,7 +122,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         # id, and hold the account from the next one it is linked to.
         if not await self._holds_place(ctx, user_id):
             raise NotFound(f"user {user_id} holds no place in the tenant")
-        link = AccountLink(
+        link = IdentityLink(
             id=new_id(),
             created_at=self._clock(),
             integration=integration,
@@ -162,7 +162,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
             if len(links) < batch:
                 return forgotten
 
-    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
+    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[IdentityLink, ...]:
         ctx.require(Permission.READ)
         return tuple(await self._storage.read_user_links(ctx.org_id, user_id, self._options.links))
 
@@ -396,7 +396,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
     ) -> None:
         await self._events.append_event(ctx, audit_event(ctx, new_id(), kind, target, facts))
 
-    async def _unlinked(self, ctx: TenantContext, link: AccountLink) -> None:
+    async def _unlinked(self, ctx: TenantContext, link: IdentityLink) -> None:
         """A link's end, audited before its delete under an id the link
         derives: a stop between the two leaves the link, and the rerun
         appends the same entry, which answers as the one held, then deletes.

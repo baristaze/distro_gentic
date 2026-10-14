@@ -5789,167 +5789,6 @@
         "title": "LeaseView",
         "type": "object"
       },
-      "LedgerEntryView": {
-        "description": "One entry, written once. A field a kind does not carry is null:\n\n- `hold`: `session_id`, `units` (the worst case, null when no price\n  applies), and `cost_micros` (the exposure).\n- `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).\n- `charge`: `hold_id`, `units`, and `amount_micros` (what the money\n  buckets paid).\n- `credit`: `amount_micros` and `reference` (the payment's).\n- `grant`: `units`, `reason`, and `by` (the operator).\n- `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.\n- `approval`: `session_id`, `amount_micros` (the cost it allows), and\n  `by`.",
-        "properties": {
-          "amount_micros": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Amount Micros"
-          },
-          "budget_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Id"
-          },
-          "by": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "By"
-          },
-          "cost_micros": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Micros"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "hold_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hold Id"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/EntryKind"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reference"
-          },
-          "session_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Session Id"
-          },
-          "tokens": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tokens"
-          },
-          "units": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Units"
-          }
-        },
-        "required": [
-          "kind",
-          "id",
-          "created_at"
-        ],
-        "title": "LedgerEntryView",
-        "type": "object"
-      },
-      "LedgerPageView": {
-        "description": "One read of a tenant's ledger, the newest first. `has_more` says the\nread was cut at its limit and older entries match it too: narrow it by\nkind, hold, or session to reach them.",
-        "properties": {
-          "has_more": {
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/LedgerEntryView"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "required": [
-          "items",
-          "has_more"
-        ],
-        "title": "LedgerPageView",
-        "type": "object"
-      },
       "LeverCheck": {
         "description": "What a check found in a lever's text.",
         "enum": [
@@ -9995,6 +9834,191 @@
         "title": "SnapshotView",
         "type": "object"
       },
+      "SpendLedgerEntryView": {
+        "description": "One entry, written once. A field a kind does not carry is null:\n\n- `hold`: `session_id`, `units` (the worst case, null when no price\n  applies), and `cost_micros` (the exposure).\n- `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).\n- `charge`: `hold_id`, `units`, and `amount_micros` (what the money\n  buckets paid).\n- `credit`: `amount_micros` and `reference` (the payment's).\n- `grant`: `units`, `reason`, and `by` (the operator).\n- `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.\n- `approval`: `session_id`, `amount_micros` (the cost it allows), and\n  `by`.",
+        "properties": {
+          "amount_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Micros"
+          },
+          "budget_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Id"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "cost_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hold_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "created_at"
+        ],
+        "title": "SpendLedgerEntryView",
+        "type": "object"
+      },
+      "SpendLedgerPageView": {
+        "description": "One read of a tenant's ledger, the newest first. `has_more` says the\nread was cut at its limit and older entries match it too: narrow it by\nkind, hold, or session to reach them.",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpendLedgerEntryView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "SpendLedgerPageView",
+        "type": "object"
+      },
+      "SpendUnitsGrantRequest": {
+        "additionalProperties": false,
+        "description": "Units the platform grants the tenant for its life, and why.",
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "units": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000000.0,
+            "title": "Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "units",
+          "reason"
+        ],
+        "title": "SpendUnitsGrantRequest",
+        "type": "object"
+      },
       "SsoLinkRequest": {
         "additionalProperties": false,
         "description": "What the identity provider's admin portal opens on: the single sign-on\nconnection (`sso`) or the org's domains (`domain_verification`), and the\npage of this environment's portal it links back to.",
@@ -11267,30 +11291,6 @@
           "every"
         ],
         "title": "TriggerView",
-        "type": "object"
-      },
-      "UnitsGrantRequest": {
-        "additionalProperties": false,
-        "description": "Units the platform grants the tenant for its life, and why.",
-        "properties": {
-          "reason": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          },
-          "units": {
-            "exclusiveMinimum": 0.0,
-            "maximum": 1000000000000000.0,
-            "title": "Units",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "units",
-          "reason"
-        ],
-        "title": "UnitsGrantRequest",
         "type": "object"
       },
       "UpdateIdentityRequest": {
@@ -13933,7 +13933,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnitsGrantRequest"
+                "$ref": "#/components/schemas/SpendUnitsGrantRequest"
               }
             }
           },
@@ -13944,7 +13944,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LedgerEntryView"
+                  "$ref": "#/components/schemas/SpendLedgerEntryView"
                 }
               }
             },
@@ -14064,158 +14064,6 @@
           }
         },
         "summary": "Host Standing",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/orgs/{org_id}/ledger": {
-      "get": {
-        "description": "The tenant's entries, the newest first, narrowed to one kind, one\nhold (its hold, settlement, and charge), or one session (its holds and\napprovals) when named. `has_more` says the read was cut at its limit.",
-        "operationId": "get_ledger_v1_admin_orgs__org_id__ledger_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "org_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Org Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "kind",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/EntryKind"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Kind"
-            }
-          },
-          {
-            "in": "query",
-            "name": "hold_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Hold Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "session_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Session Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LedgerPageView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Ledger",
         "tags": [
           "admin"
         ]
@@ -15145,6 +14993,158 @@
         ]
       }
     },
+    "/v1/admin/orgs/{org_id}/spend-ledger": {
+      "get": {
+        "description": "The tenant's entries, the newest first, narrowed to one kind, one\nhold (its hold, settlement, and charge), or one session (its holds and\napprovals) when named. `has_more` says the read was cut at its limit.",
+        "operationId": "get_ledger_v1_admin_orgs__org_id__spend_ledger_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EntryKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hold_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hold Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendLedgerPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ledger",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/orgs/{org_id}/work/lanes/{lane}/cap": {
       "delete": {
         "description": "Removes the org's own cap on the lane and answers the cap it removed;\nthe lane's cap holds for it from the next claim on. `404` when it has\nnone.",
@@ -15635,6 +15635,122 @@
         "summary": "Platform Size",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/v1/agent-billing/payments": {
+      "post": {
+        "description": "The credit of a payment the provider confirmed: the body is the\nprovider's confirmation, byte for byte, and `Payment-Signature` its\nsignature. `webhook_signature_invalid` when the signature does not\ncheck out, and nothing is credited.",
+        "operationId": "confirm_payment_v1_agent_billing_payments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Payment-Signature",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Payment-Signature"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendLedgerEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Payment",
+        "tags": [
+          "billing"
         ]
       }
     },
@@ -17355,7 +17471,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LedgerEntryView"
+                  "$ref": "#/components/schemas/SpendLedgerEntryView"
                 }
               }
             },
@@ -21207,122 +21323,6 @@
         ]
       }
     },
-    "/v1/billing/payments": {
-      "post": {
-        "description": "The credit of a payment the provider confirmed: the body is the\nprovider's confirmation, byte for byte, and `Payment-Signature` its\nsignature. `webhook_signature_invalid` when the signature does not\ncheck out, and nothing is credited.",
-        "operationId": "confirm_payment_v1_billing_payments_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Payment-Signature",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Payment-Signature"
-            }
-          },
-          {
-            "in": "header",
-            "name": "idempotency-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 255,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LedgerEntryView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Confirm Payment",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
     "/v1/budgets": {
       "get": {
         "description": "The tenant's budgets by id, after the id `after` names.",
@@ -21852,7 +21852,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LedgerEntryView"
+                  "$ref": "#/components/schemas/SpendLedgerEntryView"
                 }
               }
             },

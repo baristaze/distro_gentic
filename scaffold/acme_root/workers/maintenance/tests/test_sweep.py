@@ -20,9 +20,9 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from contracts.account_storage import make_account
 from contracts.matrix_storage import make_choice, make_pin
-from contracts.money_ledger_storage import a_funded_hold, funding
+from contracts.spend_account_storage import make_spend_account
+from contracts.spend_ledger_storage import a_funded_hold, funding
 from prometheus_client import REGISTRY
 from worker_support import (
     build_container,
@@ -52,12 +52,12 @@ from acme.infra.workspaces import (
     Workspace,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agent_billing.types.spend_ledger import FundedHold
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.tree import AgentTree
 from acme.om.attribution.types.authority import AuthorityMode, SessionAuthority
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import EMPTY_UUID, new_id, utcnow
-from acme.om.billing.types.ledger import FundedHold
 from acme.om.budgets.rules import lines_of
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
@@ -985,15 +985,15 @@ async def test_a_deleted_tenants_account_goes_and_it_is_marked_purged_with_its_m
     tmp_path: Path,
 ) -> None:
     """Every hold, settlement, and charge behind the money gate is an entry
-    of billing's ledger. The tenant's account goes with its other rows; its
+    of agent billing's ledger. The tenant's account goes with its other rows; its
     entries stay, since no serving login deletes one, and they never keep
     the tenant from being marked purged, so the sweep runs its purges no
     more."""
     container = build_container(tmp_path)
     org_id, _ = await deleted_org(container, days_ago=40)
-    accounts = container.storage.get_account_storage()
-    ledger = container.storage.get_money_ledger_storage()
-    assert await accounts.create_account(org_id, make_account(org_id), ())
+    accounts = container.storage.get_spend_account_storage()
+    ledger = container.storage.get_spend_ledger_storage()
+    assert await accounts.create_spend_account(org_id, make_spend_account(org_id), ())
     held = await ledger.open_hold(org_id, a_funded_hold(units=1, paid_by=funding(included=10)))
     assert isinstance(held, FundedHold)
     loop = build_loop(container)
@@ -1001,7 +1001,7 @@ async def test_a_deleted_tenants_account_goes_and_it_is_marked_purged_with_its_m
 
     for _ in range(3):
         await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
-    assert await accounts.read_account(org_id) is None
+    assert await accounts.read_spend_account(org_id) is None
     assert await ledger.count_tenant(org_id, 10) > 0, "the hold and its counts stay"
     marked = await tenancy.read_org(org_id)
     assert marked is not None and marked.purged_at is not None, "its ledger holds no mark"

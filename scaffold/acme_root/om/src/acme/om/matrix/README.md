@@ -107,7 +107,7 @@ and 2055 record the decisions.
 
 The engine's loop resolves a session's fills through the matrix, renews
 them at each new loop, and asks before each call which key it goes out
-on. [Billing](../billing/README.md) holds a call on a tenant's own key
+on. [Agent billing](../agent_billing/README.md) holds a call on a tenant's own key
 only when the call carries that key. The tenant's keys are
 [trust](../trust/README.md)'s, and its retention
 [retention](../retention/README.md)'s.

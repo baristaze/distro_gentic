@@ -1,4 +1,4 @@
-"""Pure rules of billing: the windows a limit counts in, who pays, the unit,
+"""Pure rules of agent billing: the windows a limit counts in, who pays, the unit,
 the buckets a hold draws and a settlement takes, the charge, the anomaly
 guard, and what a person is told of each park. Values in, values out; no
 clock, no storage. Both ledgers ask `open_answer` and `moved` under their
@@ -13,9 +13,13 @@ from zoneinfo import ZoneInfo
 
 from pydantic import Field
 
-from acme.om.base import Platform
-from acme.om.billing.types.account import PLATFORM_KEY, Account, FundingMode, ZoneChange
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.types.spend_account import (
+    PLATFORM_KEY,
+    FundingMode,
+    SpendAccount,
+    ZoneChange,
+)
+from acme.om.agent_billing.types.spend_ledger import (
     BUCKET_ORDER,
     MONEY_BUCKETS,
     NO_DRAW,
@@ -28,7 +32,8 @@ from acme.om.billing.types.ledger import (
     Shortfall,
     Turned,
 )
-from acme.om.billing.types.plan import PlanCatalog, UnitScale
+from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
+from acme.om.base import Platform
 from acme.om.budgets.rules import EPOCH, HOLD_RETRY, breaches, window_bounds
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.breach import BreachAction, Refusal
@@ -113,7 +118,7 @@ def add_months(anchor: datetime, months: int) -> datetime:
 
 
 def billing_period(anchor: datetime, at: datetime) -> tuple[datetime, datetime]:
-    """The billing period `at` falls in: a month from the account's anchor,
+    """The billing period `at` falls in: a month from the spend account's anchor,
     and each month after it."""
     at = at.astimezone(UTC)
     months = (at.year - anchor.year) * 12 + (at.month - anchor.month)
@@ -125,7 +130,7 @@ def billing_period(anchor: datetime, at: datetime) -> tuple[datetime, datetime]:
 
 
 def window_of(
-    window: BudgetWindow, account: Account, at: datetime
+    window: BudgetWindow, spend_account: SpendAccount, at: datetime
 ) -> tuple[datetime, datetime | None]:
     """The start of the window `at` falls in, and when it resets (None for
     one that never does). Days and weeks follow the tenant's time zone,
@@ -133,19 +138,21 @@ def window_of(
     the engine's own."""
     match window.kind:
         case WindowKind.DAY | WindowKind.WEEK:
-            return zoned_window(window.kind, account.zones, at)
+            return zoned_window(window.kind, spend_account.zones, at)
         case WindowKind.MONTH:
-            return billing_period(account.period_anchor, at)
+            return billing_period(spend_account.period_anchor, at)
         case WindowKind.LIFE | WindowKind.HOUR | WindowKind.SPAN:
             return window_bounds(window, at)
 
 
-def lines_of(budgets: Iterable[Budget], account: Account, now: datetime) -> tuple[HoldLine, ...]:
+def lines_of(
+    budgets: Iterable[Budget], spend_account: SpendAccount, now: datetime
+) -> tuple[HoldLine, ...]:
     """Each budget as a line of a hold made at `now`, in its window as the
     tenant counts it, in the order the ledger locks them: by budget."""
     lines = []
     for budget in sorted(budgets, key=lambda b: b.id):
-        start, resets_at = window_of(budget.window, account, now)
+        start, resets_at = window_of(budget.window, spend_account, now)
         lines.append(
             HoldLine(
                 budget_id=budget.id,
@@ -161,22 +168,22 @@ def lines_of(budgets: Iterable[Budget], account: Account, now: datetime) -> tupl
 # Who pays.
 
 
-def credential_of(account: Account | None) -> str:
+def credential_of(spend_account: SpendAccount | None) -> str:
     """The credential a call of the tenant runs on: the platform's key, or
-    the tenant's own key's reference. An account that cannot say is
+    the tenant's own key's reference. A spend account that cannot say is
     `SpenderUnknown`; nothing falls back to the platform's key."""
-    if account is None:
+    if spend_account is None:
         raise SpenderUnknown(
-            "the tenant has no billing account; nothing is spent until one is "
+            "the tenant has no spend account; nothing is spent until one is "
             "opened, which `make seed` does locally"
         )
-    match account.funding:
+    match spend_account.funding:
         case FundingMode.PLATFORM:
             return PLATFORM_KEY
         case FundingMode.OWN_KEY:
-            if account.key_ref is None:
+            if spend_account.key_ref is None:
                 raise SpenderUnknown("the tenant's own key is not named; nothing is spent")
-            return account.key_ref
+            return spend_account.key_ref
 
 
 def carries_own_key(carried: str | None) -> bool:
@@ -193,27 +200,27 @@ def carries_own_key(carried: str | None) -> bool:
 
 
 def funding_of(
-    account: Account | None,
-    plans: PlanCatalog,
-    units: UnitScale,
+    spend_account: SpendAccount | None,
+    unit_plans: UnitPlanCatalog,
+    spend_units: SpendUnitScale,
     now: datetime,
     *,
     carried: str | None = None,
 ) -> Funding:
-    """The account as one hold carries it, for a call going out on the key
+    """The spend account as one hold carries it, for a call going out on the key
     `carried` names: the platform's, a tenant key's reference
-    (`carries_own_key`), or None when the caller cannot say. An account that
-    is missing, whose funding names no key, or whose plan the catalog does
+    (`carries_own_key`), or None when the caller cannot say. A spend account that
+    is missing, whose funding names no key, or whose unit plan the catalog does
     not hold, cannot say who pays: `SpenderUnknown`, and nothing is spent.
 
-    So is an account on its own key for a call that does not carry one of
+    So is a spend account on its own key for a call that does not carry one of
     the tenant's keys: held for the tenant's key and run on the platform's,
-    it would be billed nothing. And so is an account the platform pays for a
+    it would be billed nothing. And so is a spend account the platform pays for a
     call that carries a tenant's key, which the tenant would pay twice."""
-    credential = credential_of(account)
-    assert account is not None
+    credential = credential_of(spend_account)
+    assert spend_account is not None
     own = carries_own_key(carried)
-    if account.funding is FundingMode.OWN_KEY:
+    if spend_account.funding is FundingMode.OWN_KEY:
         if not own:
             raise SpenderUnknown(
                 "the call does not carry the tenant's own key; nothing is spent on the platform's"
@@ -222,18 +229,20 @@ def funding_of(
         credential = carried
     elif own:
         raise SpenderUnknown("the call carries a tenant's key, and the platform pays this tenant")
-    plan = plans.get(account.plan)
-    if plan is None:
-        raise SpenderUnknown(f"the tenant's plan {account.plan_id} is unknown; nothing is spent")
-    start, end = billing_period(account.period_anchor, now)
+    unit_plan = unit_plans.get(spend_account.unit_plan)
+    if unit_plan is None:
+        raise SpenderUnknown(
+            f"the tenant's unit plan {spend_account.unit_plan_id} is unknown; nothing is spent"
+        )
+    start, end = billing_period(spend_account.period_anchor, now)
     return Funding(
-        mode=account.funding,
+        mode=spend_account.funding,
         credential=credential,
-        plan=plan.ref,
-        included_units=plan.included_units,
-        unit_price_micros=plan.unit_price_micros,
-        micros_per_unit=units.micros_per_unit,
-        credit_line_micros=account.credit_line_micros,
+        unit_plan=unit_plan.ref,
+        included_units=unit_plan.included_units,
+        unit_price_micros=unit_plan.unit_price_micros,
+        micros_per_unit=spend_units.micros_per_unit,
+        credit_line_micros=spend_account.credit_line_micros,
         period_start=start,
         period_end=end,
     )
@@ -274,7 +283,7 @@ def raise_keys(budget_id: UUID, window_start: datetime) -> tuple[CountKey, Count
 
 def bucket_key(bucket: Bucket, funding: Funding) -> CountKey:
     """A bucket's counter: the included units and the line of credit each
-    billing period, the granted units and the credits for the account's
+    billing period, the granted units and the credits for the spend account's
     life."""
     if bucket in (Bucket.INCLUDED, Bucket.LINE):
         return (f"bucket:{bucket.value}", funding.period_start)
@@ -352,7 +361,7 @@ def available(bucket: Bucket, funding: Funding, count: Count) -> int:
 
 def draw_of(units: int, funding: Funding, counts: Mapping[CountKey, Count]) -> tuple[Draw, int]:
     """The draw of `units` across the buckets, in the fixed order: each takes
-    what it holds, a money bucket in whole units at the plan's price. The
+    what it holds, a money bucket in whole units at the unit plan's price. The
     second figure is what no bucket covers. Prepaid and postpaid differ only
     in which bucket holds room."""
     remaining = units
@@ -469,7 +478,7 @@ def moved(count: Count, held: int, spent: int) -> Count:
 def taken_by(hold: FundedHold, units: int) -> Draw:
     """What a call's spent units take of the buckets: in the fixed order,
     each within what the hold reserved there. Units past the whole hold
-    are charged in full to the last money bucket the account has, never
+    are charged in full to the last money bucket the spend account has, never
     absorbed."""
     funding = hold.funding
     if funding.mode is not FundingMode.PLATFORM:
@@ -590,7 +599,7 @@ class Notice(Platform):
 def notice_of(park: Park) -> Notice:
     """A park in a person's words. A rate limit and a spend limit are told
     apart, always: the provider's pace is never a budget to top up, and a
-    budget is never a provider's pace to wait out. A key or an account the
+    budget is never a provider's pace to wait out. A key or a spend account the
     provider refused is neither: it is told by its cause, which names who
     fixes it."""
     match park.reason:
@@ -613,13 +622,13 @@ def notice_of(park: Park) -> Notice:
             when = "a person adds credit" if park.retry_at is None else "the next billing period"
             return Notice(
                 limit=LimitKind.SPEND,
-                text=f"The account's balance does not cover this call. It waits until {when}.",
+                text=f"The spend account's balance does not cover this call. It waits until {when}.",
             )
         case ParkReason.BUDGET if park.unlock == HELD_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=(
-                    "Other calls hold the account's balance for now. "
+                    "Other calls hold the spend account's balance for now. "
                     "The session tries again when they settle."
                 ),
             )

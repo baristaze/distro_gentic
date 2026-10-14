@@ -10,26 +10,30 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response
 
-from acme.om.billing.types.ledger import EntryKind
+from acme.om.agent_billing.types.spend_ledger import EntryKind
 from acme.services.api.gateway.admin import OperatorCtx
 from acme.services.api.gateway.idempotency import OperatorIdem
-from acme.services.api.gateway.resolve import LedgersService
+from acme.services.api.gateway.resolve import SpendLedgersService
 from acme.services.api.types.common import LIMIT_DEFAULT
-from acme.services.api.types.ledgers import LedgerEntryView, LedgerPageView, UnitsGrantRequest
+from acme.services.api.types.spend_ledgers import (
+    SpendLedgerEntryView,
+    SpendLedgerPageView,
+    SpendUnitsGrantRequest,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.get("/orgs/{org_id}/ledger", response_model=LedgerPageView)
+@router.get("/orgs/{org_id}/spend-ledger", response_model=SpendLedgerPageView)
 async def get_ledger(
     admin: OperatorCtx,
-    service: LedgersService,
+    service: SpendLedgersService,
     org_id: UUID,
     kind: EntryKind | None = None,
     hold_id: UUID | None = None,
     session_id: UUID | None = None,
     limit: int = LIMIT_DEFAULT,
-) -> LedgerPageView:
+) -> SpendLedgerPageView:
     """The tenant's entries, the newest first, narrowed to one kind, one
     hold (its hold, settlement, and charge), or one session (its holds and
     approvals) when named. `has_more` says the read was cut at its limit."""
@@ -38,12 +42,12 @@ async def get_ledger(
     )
 
 
-@router.post("/orgs/{org_id}/grants", response_model=LedgerEntryView, status_code=201)
+@router.post("/orgs/{org_id}/grants", response_model=SpendLedgerEntryView, status_code=201)
 async def grant_units(
     admin: OperatorCtx,
-    service: LedgersService,
+    service: SpendLedgersService,
     org_id: UUID,
-    body: UnitsGrantRequest,
+    body: SpendUnitsGrantRequest,
     idem: OperatorIdem,
 ) -> Response:
     """Units granted the tenant for its life, and why; its sessions parked

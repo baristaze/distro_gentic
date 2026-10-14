@@ -118,7 +118,7 @@ class MatrixLayer:
                 storage.get_matrix_tenant_storage(),
                 storage.get_agent_session_storage(),
                 storage.get_placement_storage(),
-                storage.get_account_storage(),
+                storage.get_spend_account_storage(),
                 storage.get_trust_storage(),
                 prices,
                 self.options,
@@ -158,7 +158,7 @@ class MatrixLayer:
         clients = self._clients
         return CallCredentialsByFundingImpl(
             CallCredentialsPlatformImpl(providers),
-            self._storage.get_account_storage(),
+            self._storage.get_spend_account_storage(),
             (lambda: None) if clients is None else clients,
         )
 
@@ -174,7 +174,7 @@ class MatrixLayer:
             matrix=MatrixManagerImpl(
                 storage.get_matrix_storage(),
                 storage.get_matrix_tenant_storage(),
-                storage.get_account_storage(),
+                storage.get_spend_account_storage(),
                 storage.get_trust_storage(),
                 self.options,
                 self._clock,

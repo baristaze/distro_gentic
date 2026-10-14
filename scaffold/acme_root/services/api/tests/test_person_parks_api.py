@@ -24,7 +24,7 @@ from api_support import (
     PROJECT_ID,
     add_member,
     build_container,
-    open_account,
+    open_spend_account,
     seed_request,
     sign_in,
     sign_in_as,
@@ -198,7 +198,7 @@ async def owner(client: httpx.AsyncClient, container: AppContainer) -> dict[str,
     """The owner, signed in, the tenant's account open: a loop's calls have
     someone to charge."""
     headers = await sign_in(client, container)
-    await open_account(container, headers)
+    await open_spend_account(container, headers)
     return headers
 
 

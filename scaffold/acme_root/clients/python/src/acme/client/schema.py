@@ -1147,46 +1147,6 @@ class LeaseView(BaseModel):
     term_seconds: Annotated[int, Field(title='Term Seconds')]
 
 
-class LedgerEntryView(BaseModel):
-    """
-    One entry, written once. A field a kind does not carry is null:
-
-    - `hold`: `session_id`, `units` (the worst case, null when no price
-      applies), and `cost_micros` (the exposure).
-    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
-      buckets paid).
-    - `credit`: `amount_micros` and `reference` (the payment's).
-    - `grant`: `units`, `reason`, and `by` (the operator).
-    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
-      `by`.
-    """
-    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
-    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
-    by: Annotated[UUID | None, Field(title='By')] = None
-    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
-    id: Annotated[UUID, Field(title='Id')]
-    kind: EntryKind
-    reason: Annotated[str | None, Field(title='Reason')] = None
-    reference: Annotated[str | None, Field(title='Reference')] = None
-    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
-    tokens: Annotated[int | None, Field(title='Tokens')] = None
-    units: Annotated[int | None, Field(title='Units')] = None
-
-
-class LedgerPageView(BaseModel):
-    """
-    One read of a tenant's ledger, the newest first. `has_more` says the
-    read was cut at its limit and older entries match it too: narrow it by
-    kind, hold, or session to reach them.
-    """
-    has_more: Annotated[bool, Field(title='Has More')]
-    items: Annotated[list[LedgerEntryView], Field(title='Items')]
-
-
 class LeverCheck(StrEnum):
     """
     What a check found in a lever's text.
@@ -2143,6 +2103,57 @@ class SnapshotView(BaseModel):
     workspace_id: Annotated[UUID, Field(title='Workspace Id')]
 
 
+class SpendLedgerEntryView(BaseModel):
+    """
+    One entry, written once. A field a kind does not carry is null:
+
+    - `hold`: `session_id`, `units` (the worst case, null when no price
+      applies), and `cost_micros` (the exposure).
+    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+      buckets paid).
+    - `credit`: `amount_micros` and `reference` (the payment's).
+    - `grant`: `units`, `reason`, and `by` (the operator).
+    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+      `by`.
+    """
+    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
+    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
+    by: Annotated[UUID | None, Field(title='By')] = None
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
+    id: Annotated[UUID, Field(title='Id')]
+    kind: EntryKind
+    reason: Annotated[str | None, Field(title='Reason')] = None
+    reference: Annotated[str | None, Field(title='Reference')] = None
+    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
+    tokens: Annotated[int | None, Field(title='Tokens')] = None
+    units: Annotated[int | None, Field(title='Units')] = None
+
+
+class SpendLedgerPageView(BaseModel):
+    """
+    One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[SpendLedgerEntryView], Field(title='Items')]
+
+
+class SpendUnitsGrantRequest(BaseModel):
+    """
+    Units the platform grants the tenant for its life, and why.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    reason: Annotated[str, Field(max_length=200, min_length=1, title='Reason')]
+    units: Annotated[int, Field(gt=0, le=1000000000000000, title='Units')]
+
+
 class Intent(StrEnum):
     sso = 'sso'
     domain_verification = 'domain_verification'
@@ -2404,17 +2415,6 @@ class TriggerView(BaseModel):
     every: Annotated[timedelta | None, Field(title='Every')]
     integrations: Annotated[list[str], Field(title='Integrations')]
     kind: TriggerKind
-
-
-class UnitsGrantRequest(BaseModel):
-    """
-    Units the platform grants the tenant for its life, and why.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    reason: Annotated[str, Field(max_length=200, min_length=1, title='Reason')]
-    units: Annotated[int, Field(gt=0, le=1000000000000000, title='Units')]
 
 
 class UpdateIdentityRequest(BaseModel):

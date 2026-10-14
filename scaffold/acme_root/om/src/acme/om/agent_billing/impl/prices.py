@@ -6,7 +6,7 @@ prices nothing."""
 from collections.abc import Sequence
 from types import MappingProxyType
 
-from acme.om.billing.prices import PriceBookInterface
+from acme.om.agent_billing.prices import PriceBookInterface
 from acme.om.budgets.impl.pricing import LIST_PRICES
 from acme.om.budgets.pricing import ModelPrice, PriceTable
 

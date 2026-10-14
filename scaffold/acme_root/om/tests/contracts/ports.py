@@ -1,7 +1,7 @@
 """The platform's ports a root refuses outside `local`, each set to what
 would ship a gate open: a quiet null for the money gate, the result gate,
 and each port a namespace declared, and the engine's own gate in place of
-billing's. Every root's suite builds its root over each, outside `local`,
+agent billing's. Every root's suite builds its root over each, outside `local`,
 and expects the boot refused, naming what is missing."""
 
 from acme.om.agents.impl.gate import ResultGateNullImpl

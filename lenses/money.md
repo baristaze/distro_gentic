@@ -4,7 +4,7 @@ Group id: `money`. Covers Money and Models Are a Fleet Decision of
 `distro_gentic_spec.md`.
 
 This group judges everything behind the engine's budget gate: metering,
-limits and their windows, units, charges, and billing, rate and spend
+limits and their windows, units, charges, and agent billing, rate and spend
 limits, outages and anomalies, the one ledger and the one price source,
 and the model matrix. It leaves the gate itself, the hold, and usage to
 the engine; the park a provider outage causes across the fleet and the
@@ -66,20 +66,20 @@ carries into later windows, or changes the limit itself.
 
 **Check.** review
 
-## MNY-04 A unit beside usage and cost, and a charge apart from both
+## MNY-04 A spend unit beside usage and cost, and a charge apart from both
 
 **Principle.** Beside native usage and reference cost, the platform
-defines an abstract unit: a token unit weighted by cost, so a plan can
+defines a spend unit: a token unit weighted by cost, so a unit plan can
 include usage across models and providers without promising dollars or
 a token count. The weights are the platform's to publish. The charge is
 what a tenant is billed.
 
-**Source.** Money, Units, Charges, and Billing.
+**Source.** Money, Spend Units, Charges, and Agent Billing.
 
-**Look for.** The unit's definition, and where its weights come from;
+**Look for.** The spend unit's definition, and where its weights come from;
 the fields for usage, reference cost, units, and charge.
 
-**Violation.** A plan that promises dollars or a token count; unit
+**Violation.** A unit plan that promises dollars or a token count; unit
 weights a tenant or a session sets; one figure standing for two of
 usage, reference cost, units, and charge.
 
@@ -89,13 +89,13 @@ usage, reference cost, units, and charge.
 
 ## MNY-05 The ledger is append-only, and a hold draws in a fixed order
 
-**Principle.** Billing keeps accounts, versioned plans, and an
-append-only ledger. A hold draws on buckets in a fixed order: the plan's
-included units, granted units, prepaid credits, and an enterprise line
-of credit. Prepaid and postpaid differ in which bucket pays, never in
-the path a call takes.
+**Principle.** Agent billing keeps spend accounts, versioned unit plans,
+and an append-only spend ledger. A hold draws on buckets in a fixed
+order: the unit plan's included units, granted units, prepaid
+credits, and an enterprise line of credit. Prepaid and postpaid differ
+in which bucket pays, never in the path a call takes.
 
-**Source.** Money, Units, Charges, and Billing.
+**Source.** Money, Spend Units, Charges, and Agent Billing.
 
 **Look for.** The ledger's writes; the order a hold draws buckets in;
 every branch on how a tenant pays.
@@ -114,7 +114,7 @@ prepaid or postpaid.
 confirmation, and a top-up never raises a limit. No top-up relaxes a
 rate limit either.
 
-**Source.** Money, Units, Charges, and Billing; Rate Limits Are Not
+**Source.** Money, Spend Units, Charges, and Agent Billing; Rate Limits Are Not
 Spend Limits.
 
 **Look for.** When a bought credit becomes spendable; what a top-up

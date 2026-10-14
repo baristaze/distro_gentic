@@ -1,34 +1,34 @@
 from uuid import UUID
 
-from acme.om.billing import BillingManagerInterface
+from acme.om.agent_billing import AgentBillingManagerInterface
 from acme.om.budgets.types.amount import Amount
 from acme.om.context import TenantContext
-from acme.services.api.services.billing import BillingServiceInterface
-from acme.services.api.services.impl.ledgers import entry_view
-from acme.services.api.types.billing import CostApprovalRequest, RaiseRequest
-from acme.services.api.types.ledgers import LedgerEntryView
+from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.impl.spend_ledgers import entry_view
+from acme.services.api.types.agent_billing import CostApprovalRequest, RaiseRequest
+from acme.services.api.types.spend_ledgers import SpendLedgerEntryView
 
 
-class BillingServiceImpl(BillingServiceInterface):
-    def __init__(self, billing: BillingManagerInterface) -> None:
-        self._billing = billing
+class AgentBillingServiceImpl(AgentBillingServiceInterface):
+    def __init__(self, agent_billing: AgentBillingManagerInterface) -> None:
+        self._agent_billing = agent_billing
 
     async def approve_call(
         self, ctx: TenantContext, session_id: UUID, body: CostApprovalRequest, approval_id: UUID
-    ) -> LedgerEntryView:
-        approval = await self._billing.approve_call(
+    ) -> SpendLedgerEntryView:
+        approval = await self._agent_billing.approve_call(
             ctx, session_id, body.up_to_micros, approval_id=approval_id
         )
         return entry_view(approval)
 
     async def raise_once(
         self, ctx: TenantContext, budget_id: UUID, body: RaiseRequest, raise_id: UUID
-    ) -> LedgerEntryView:
+    ) -> SpendLedgerEntryView:
         amount = Amount(cost_micros=body.cost_micros, tokens=body.tokens)
-        raised = await self._billing.raise_once(ctx, budget_id, amount, raise_id=raise_id)
+        raised = await self._agent_billing.raise_once(ctx, budget_id, amount, raise_id=raise_id)
         return entry_view(raised)
 
     async def confirm_payment(
         self, ctx: TenantContext, payload: bytes, signature: str | None
-    ) -> LedgerEntryView:
-        return entry_view(await self._billing.confirm_payment(ctx, payload, signature))
+    ) -> SpendLedgerEntryView:
+        return entry_view(await self._agent_billing.confirm_payment(ctx, payload, signature))

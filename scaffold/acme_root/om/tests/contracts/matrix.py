@@ -13,10 +13,10 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import Effort, ProviderName
+from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
-from acme.om.billing.types.account import FundingMode
 from acme.om.context import (
     AppContext,
     AppType,

@@ -8,13 +8,10 @@ from pydantic import ValidationError
 from acme.infra.observability import OUTCOMES
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
-from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.attribution.types.principal import Principal
-from acme.om.base import Platform, new_id, utcnow
-from acme.om.billing.gate import MoneyGateInterface
-from acme.om.billing.pager import AnomalyPage, OperatorPagerInterface
-from acme.om.billing.prices import PriceBookInterface
-from acme.om.billing.rules import (
+from acme.om.agent_billing.gate import MoneyGateInterface
+from acme.om.agent_billing.pager import AnomalyPage, OperatorPagerInterface
+from acme.om.agent_billing.prices import PriceBookInterface
+from acme.om.agent_billing.rules import (
     AnomalyGuard,
     anomaly_park,
     charge_of,
@@ -27,10 +24,13 @@ from acme.om.billing.rules import (
     shortfall_park,
     units_of,
 )
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.types.account import Account
-from acme.om.billing.types.ledger import Approval, FundedHold, PricedAt, Turned
-from acme.om.billing.types.plan import PlanCatalog, UnitScale
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.types.spend_account import SpendAccount
+from acme.om.agent_billing.types.spend_ledger import Approval, FundedHold, PricedAt, Turned
+from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
+from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.attribution.types.principal import Principal
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.budgets.rules import call_exposure, job_exposure, settlement_of, usage_spend
 from acme.om.budgets.storage import BudgetStorageInterface
@@ -88,20 +88,20 @@ class MoneyGateImpl(MoneyGateInterface):
     def __init__(
         self,
         budgets: BudgetStorageInterface,
-        accounts: AccountStorageInterface,
-        ledger: MoneyLedgerStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
+        ledger: SpendLedgerStorageInterface,
         pager: OperatorPagerInterface,
-        plans: PlanCatalog,
-        units: UnitScale,
+        unit_plans: UnitPlanCatalog,
+        spend_units: SpendUnitScale,
         options: MoneyGateOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._budgets = budgets
-        self._accounts = accounts
+        self._spend_accounts = spend_accounts
         self._ledger = ledger
         self._pager = pager
-        self._plans = plans
-        self._units = units
+        self._unit_plans = unit_plans
+        self._spend_units = spend_units
         self._options = options
         self._clock = clock
 
@@ -122,9 +122,11 @@ class MoneyGateImpl(MoneyGateInterface):
         if request.spender_id is None:
             raise SpenderUnknown("the engine cannot tell who pays for this call; nothing is spent")
         now = self._clock()
-        account = await self._account(ctx)
-        funding = funding_of(account, self._plans, self._units, now, carried=credential)
-        assert account is not None
+        spend_account = await self._spend_account(ctx)
+        funding = funding_of(
+            spend_account, self._unit_plans, self._spend_units, now, carried=credential
+        )
+        assert spend_account is not None
         bound = self._options.max_lines
         found = await self._budgets.read_budgets_for(ctx.org_id, request.scopes, bound + 1)
         if len(found) > bound:
@@ -142,7 +144,7 @@ class MoneyGateImpl(MoneyGateInterface):
                 purpose=request.purpose,
                 exposure=request.exposure,
                 own=request.own,
-                lines=lines_of(found, account, now),
+                lines=lines_of(found, spend_account, now),
             ),
             funding=funding,
             units=units_of(request.exposure.cost_micros, funding.micros_per_unit),
@@ -184,16 +186,16 @@ class MoneyGateImpl(MoneyGateInterface):
             raise NotFound(f"hold {hold_id} not found")
         return hold
 
-    async def _account(self, ctx: TenantContext) -> Account | None:
-        """The tenant's account. One this process cannot read is no answer to
+    async def _spend_account(self, ctx: TenantContext) -> SpendAccount | None:
+        """The tenant's spend account. One this process cannot read is no answer to
         who pays: nothing is spent, and nothing falls back to the platform's
         key."""
         try:
-            return await self._accounts.read_account(ctx.org_id)
+            return await self._spend_accounts.read_spend_account(ctx.org_id)
         except (ValidationFailed, ValidationError) as unread:
-            log.error("the billing account of org %s cannot be read: %s", ctx.org_id, unread)
+            log.error("the spend account of org %s cannot be read: %s", ctx.org_id, unread)
             raise SpenderUnknown(
-                "the tenant's billing account cannot be read; nothing is spent"
+                "the tenant's spend account cannot be read; nothing is spent"
             ) from unread
 
     async def _guard(self, ctx: TenantContext, request: HoldRequest) -> UUID | None:
@@ -273,7 +275,7 @@ class MoneyCallGateImpl(CallGateInterface):
     `projects` reads of its session among them. Its usage is billed from
     that same row, after the next version is read and in another process
     too. Every settled call counts its tokens and its spend under the
-    matrix version `version` reads of its session at the hold, and the plan
+    matrix version `version` reads of its session at the hold, and the unit plan
     tier `tier` reads; a settle in another process counts them under
     `none`. A billed model call leaves its usage record through `budgets`,
     as the budgets' gate does (`windows.impl.gate.record_settled`). A

@@ -12,11 +12,11 @@ from fastapi import APIRouter
 from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
+    agent_billing,
     agent_sessions,
     approvals,
     automations,
     benchmarks,
-    billing,
     budgets,
     claimants,
     connectors,
@@ -28,7 +28,6 @@ from acme.services.api.routers import (
     intake,
     knowledge,
     leases,
-    ledgers,
     matrix,
     matrix_operator,
     media,
@@ -38,6 +37,7 @@ from acme.services.api.routers import (
     provider_keys,
     relay,
     retention,
+    spend_ledgers,
     tenancy,
     tools,
     usage,
@@ -102,7 +102,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "benchmarks": (benchmarks.router,),
     # The tenant's writes that clear a park on its money, and the operators'
     # read of a tenant's ledger and their grant of units.
-    "billing": (billing.router, ledgers.router),
+    "agent_billing": (agent_billing.router, spend_ledgers.router),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 

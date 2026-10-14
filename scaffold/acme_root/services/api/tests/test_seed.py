@@ -20,8 +20,8 @@ from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
 from acme.services.api.seed import (
     CONTENT_LIFETIME,
     FORGE,
-    PLAN,
     PROVISIONER,
+    UNIT_PLAN,
     first_repository,
     seed_platform,
 )
@@ -40,8 +40,8 @@ async def test_a_seed_readies_the_tenant_once_and_a_second_run_writes_nothing(
     first = await seed_platform(container.storage, container.managers, owner)
     second = await seed_platform(container.storage, container.managers, owner)
 
-    account = await container.storage.get_account_storage().read_account(org.id)
-    assert account is not None and account.plan_id == PLAN
+    account = await container.storage.get_spend_account_storage().read_spend_account(org.id)
+    assert account is not None and account.unit_plan_id == UNIT_PLAN
     assert first.project is not None and second.project is None
     project = await container.managers.projects.get_project(owner, first.project.id)
     assert project.repository == first_repository("ajax")
@@ -74,10 +74,10 @@ async def test_make_seed_readies_both_local_orgs_each_with_its_account(tmp_path:
         for owner, _ in (first, second)
     ]
 
-    accounts = container.storage.get_account_storage()
+    accounts = container.storage.get_spend_account_storage()
     for _, org in (first, second):
-        account = await accounts.read_account(org.id)
-        assert account is not None and account.plan_id == PLAN, org.slug
+        account = await accounts.read_spend_account(org.id)
+        assert account is not None and account.unit_plan_id == UNIT_PLAN, org.slug
     assert all(each.project is not None for each in seeded)
     assert seeded[0].matrix_version == seeded[1].matrix_version
 

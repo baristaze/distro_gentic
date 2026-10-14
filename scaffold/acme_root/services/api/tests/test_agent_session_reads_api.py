@@ -31,12 +31,12 @@ from contracts.step_storage import (
 
 from acme.integrations.model_providers.types import Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Hold, HoldRequest
@@ -592,10 +592,14 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         )
         for kind, key in keys.items()
     ]
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    await billing.open_account(
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
+    await agent_billing.open_spend_account(
         ctx,
-        AccountRequest(funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"),
+        SpendAccountRequest(
+            funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
+        ),
     )
     request = HoldRequest(
         spender_id=ctx.user_id,

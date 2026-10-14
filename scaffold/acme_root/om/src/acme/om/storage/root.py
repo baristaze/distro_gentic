@@ -2,12 +2,12 @@
 
 from abc import ABC, abstractmethod
 
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.connectors.storage import ConnectorStorageInterface
@@ -93,10 +93,10 @@ class StorageInterface(ABC):
     def get_ledger_storage(self) -> LedgerStorageInterface: ...
 
     @abstractmethod
-    def get_account_storage(self) -> AccountStorageInterface: ...
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface: ...
 
     @abstractmethod
-    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface: ...
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface: ...
 
     @abstractmethod
     def get_fill_set_storage(self) -> FillSetStorageInterface: ...

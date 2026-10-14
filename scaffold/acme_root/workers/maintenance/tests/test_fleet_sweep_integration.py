@@ -4,7 +4,7 @@ runner died is requeued, and its next run takes a new writer epoch. A hold
 nobody settled settles at the bill the provider gives, else whole, never
 below what the provider billed, and is released only on its proof. A
 session pending with no loop has its run asked for again, once, and one
-whose run holds its loop is never asked for. The holds are billing's, in
+whose run holds its loop is never asked for. The holds are agent billing's, in
 the one ledger the worker's money gate settles."""
 
 import asyncio
@@ -14,17 +14,17 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.money_ledger_storage import funding
+from contracts.spend_ledger_storage import funding
 from worker_support import request
 
+from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.agent_billing.rules import line_keys, tally_of
+from acme.om.agent_billing.sweep import ProviderBillsInterface
+from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
 from acme.om.agent_sessions.rules import resumed_step
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import derived_id, new_id, utcnow
-from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
-from acme.om.billing.rules import line_keys, tally_of
-from acme.om.billing.sweep import ProviderBillsInterface
-from acme.om.billing.types.ledger import FundedHold, PricedAt
 from acme.om.budgets.types.amount import Amount, Spend
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.budgets.types.hold import (
@@ -204,7 +204,7 @@ def a_line() -> HoldLine:
 async def settlement(
     container: WorkerContainer, org_id: UUID, hold: FundedHold
 ) -> Settlement | None:
-    ledger = container.storage.get_money_ledger_storage()
+    ledger = container.storage.get_spend_ledger_storage()
     entries = await ledger.read_entries(org_id, hold_id=hold.id, limit=5)
     return next((entry for entry in entries if isinstance(entry, Settlement)), None)
 
@@ -217,7 +217,7 @@ async def test_a_hold_nobody_settled_settles_whole_once_its_call_is_past(
     is never below the bill. A hold its run settled keeps that settlement,
     and a hold whose call may still stream is left open."""
     owner = await an_owner(container)
-    ledger, now = container.storage.get_money_ledger_storage(), utcnow()
+    ledger, now = container.storage.get_spend_ledger_storage(), utcnow()
     line = a_line()
     stale = a_hold(line, now - timedelta(hours=2))
     settled = a_hold(line, now - timedelta(hours=2))
@@ -262,7 +262,7 @@ async def test_a_hold_settles_at_the_providers_bill_and_is_released_only_on_its_
     hold too, never less; a release only with the proof that nothing was
     billed. A provider that cannot answer leaves the hold whole."""
     owner = await an_owner(container)
-    ledger, now = container.storage.get_money_ledger_storage(), utcnow()
+    ledger, now = container.storage.get_spend_ledger_storage(), utcnow()
     line = a_line()
     billed, over, released, unanswered = (a_hold(line, now - timedelta(hours=2)) for _ in range(4))
     for hold in (billed, over, released, unanswered):

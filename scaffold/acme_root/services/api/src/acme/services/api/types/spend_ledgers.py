@@ -7,13 +7,13 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.billing.types.ledger import EntryKind
-from acme.om.billing.types.plan import MAX_NAME
-from acme.services.api.types.billing import MOST
+from acme.om.agent_billing.types.spend_ledger import EntryKind
+from acme.om.agent_billing.types.unit_plan import MAX_NAME
+from acme.services.api.types.agent_billing import MOST
 from acme.services.api.types.common import RequestBody, View
 
 
-class LedgerEntryView(View):
+class SpendLedgerEntryView(View):
     """One entry, written once. A field a kind does not carry is null:
 
     - `hold`: `session_id`, `units` (the worst case, null when no price
@@ -42,16 +42,16 @@ class LedgerEntryView(View):
     by: UUID | None = None
 
 
-class LedgerPageView(View):
+class SpendLedgerPageView(View):
     """One read of a tenant's ledger, the newest first. `has_more` says the
     read was cut at its limit and older entries match it too: narrow it by
     kind, hold, or session to reach them."""
 
-    items: list[LedgerEntryView]
+    items: list[SpendLedgerEntryView]
     has_more: bool
 
 
-class UnitsGrantRequest(RequestBody):
+class SpendUnitsGrantRequest(RequestBody):
     """Units the platform grants the tenant for its life, and why."""
 
     units: int = Field(gt=0, le=MOST)

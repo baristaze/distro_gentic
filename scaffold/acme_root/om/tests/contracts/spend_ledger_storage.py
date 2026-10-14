@@ -11,11 +11,10 @@ from uuid import UUID
 
 import pytest
 
-from acme.om.base import new_id, utcnow
-from acme.om.billing.rules import bucket_key, charge_of, line_keys
-from acme.om.billing.storage import MoneyLedgerStorageInterface
-from acme.om.billing.types.account import FundingMode
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.rules import bucket_key, charge_of, line_keys
+from acme.om.agent_billing.storage import SpendLedgerStorageInterface
+from acme.om.agent_billing.types.spend_account import FundingMode
+from acme.om.agent_billing.types.spend_ledger import (
     Approval,
     Bucket,
     Charge,
@@ -28,7 +27,8 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.billing.types.plan import PlanRef
+from acme.om.agent_billing.types.unit_plan import UnitPlanRef
+from acme.om.base import new_id, utcnow
 from acme.om.budgets.rules import settlement_of
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.hold import Billed, BillUnknown, Hold, HoldLine, Settlement
@@ -50,7 +50,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_hold",
     }
 )
-"""Every method of `MoneyLedgerStorageInterface` that takes a tenant has a
+"""Every method of `SpendLedgerStorageInterface` that takes a tenant has a
 case in this module that presents another tenant's."""
 
 PERIOD = datetime(2026, 10, 1, tzinfo=UTC)
@@ -66,7 +66,7 @@ def funding(
     return Funding(
         mode=mode,
         credential="platform" if mode is FundingMode.PLATFORM else "tenant-key-1",
-        plan=PlanRef(id="test", version=1),
+        unit_plan=UnitPlanRef(id="test", version=1),
         included_units=included,
         unit_price_micros=price,
         micros_per_unit=1_000,
@@ -115,13 +115,13 @@ def closing(hold: FundedHold, spent_units: int) -> tuple[Settlement, Charge]:
     return settlement, charge_of(hold, settlement, new_id(), now)
 
 
-class MoneyLedgerStorageContract:
+class SpendLedgerStorageContract:
     @pytest.fixture
-    def storage(self) -> MoneyLedgerStorageInterface:
+    def storage(self) -> SpendLedgerStorageInterface:
         raise NotImplementedError("the concrete test class provides the storage")
 
     async def test_a_hold_is_drawn_in_the_fixed_order_and_moves_its_counts(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         paid_by = funding(included=2, line=10_000)
@@ -145,7 +145,7 @@ class MoneyLedgerStorageContract:
         assert await storage.open_hold(org, hold) == stored, "a hold opened already is as stored"
 
     async def test_a_hold_turned_away_writes_nothing_and_says_every_reason(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         line = a_line(cost_micros=1_000)
@@ -162,7 +162,7 @@ class MoneyLedgerStorageContract:
         assert await storage.read_counts(org, list(line_keys(line))) == {}
 
     async def test_a_cost_no_price_gives_is_never_drawn(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         turned = await storage.open_hold(org, a_funded_hold(units=None))
@@ -170,7 +170,7 @@ class MoneyLedgerStorageContract:
         assert turned.shortfall.units is None and turned.shortfall.resets_at is None
 
     async def test_an_own_key_draws_no_bucket_and_is_billed_nothing(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         hold = a_funded_hold(units=7, paid_by=funding(mode=FundingMode.OWN_KEY))
@@ -181,7 +181,7 @@ class MoneyLedgerStorageContract:
         assert stored_charge.units == 7 and stored_charge.amount_micros == 0
 
     async def test_holds_over_one_bucket_never_all_pass_when_fewer_fit(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         await storage.post_credit(org, a_credit(3_000))
@@ -198,7 +198,7 @@ class MoneyLedgerStorageContract:
 
     @pytest.mark.parametrize("mode", list(FundingMode))
     async def test_two_holds_that_fit_a_line_only_alone_never_both_pass(
-        self, storage: MoneyLedgerStorageInterface, mode: FundingMode
+        self, storage: SpendLedgerStorageInterface, mode: FundingMode
     ) -> None:
         org = new_id()
         line = a_line(cost_micros=1_500)
@@ -215,7 +215,7 @@ class MoneyLedgerStorageContract:
         assert [counts[key].held for key in line_keys(line)] == [1_000, 100]
 
     async def test_a_hold_closes_once_with_its_charge_in_the_one_ledger(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         line = a_line(cost_micros=100_000)
@@ -239,7 +239,7 @@ class MoneyLedgerStorageContract:
         assert (cost.held, cost.spent) == (0, 3_000)
 
     async def test_read_open_answers_the_slices_unsettled_holds_oldest_first(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         """The sweep's read across tenants: every hold opened in the slice
         that no settlement closed, each with its tenant, oldest first, a batch
@@ -273,7 +273,7 @@ class MoneyLedgerStorageContract:
         assert [hold.id for _, hold, _ in await storage.read_open(floor, cut, 1)] == [older.id]
 
     async def test_read_open_reads_a_jobs_hold_by_its_deadline(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         """A job's hold falls due at its deadline, which it lives to: one whose
         deadline falls in the slice is read at that deadline, in its order
@@ -307,7 +307,7 @@ class MoneyLedgerStorageContract:
         assert stored is not None and stored.deadline == now + timedelta(hours=1)
 
     async def test_a_spend_past_its_hold_is_charged_in_full(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         stored = await storage.open_hold(org, a_funded_hold(units=2, paid_by=funding(included=2)))
@@ -317,7 +317,7 @@ class MoneyLedgerStorageContract:
         assert charge.amount_micros == 3_000
 
     async def test_a_hold_whose_usage_is_unknown_is_charged_whole(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         stored = await storage.open_hold(org, a_funded_hold(units=4, paid_by=funding(included=9)))
@@ -329,7 +329,7 @@ class MoneyLedgerStorageContract:
         )
         assert charge.units == 4
 
-    async def test_a_payment_credits_once(self, storage: MoneyLedgerStorageInterface) -> None:
+    async def test_a_payment_credits_once(self, storage: SpendLedgerStorageInterface) -> None:
         org = new_id()
         credit = a_credit(2_500, reference="pay_once")
         first = await storage.post_credit(org, credit)
@@ -339,7 +339,7 @@ class MoneyLedgerStorageContract:
         assert (await storage.read_counts(org, [key]))[key].added == 2_500
 
     async def test_a_raise_counts_in_its_window_alone(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         line = a_line(cost_micros=1_000)
@@ -359,7 +359,7 @@ class MoneyLedgerStorageContract:
         assert isinstance(turned, Turned) and turned.refusal is not None
 
     async def test_an_entry_is_written_once_and_read_newest_first(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
         session_id = new_id()
@@ -378,7 +378,7 @@ class MoneyLedgerStorageContract:
         assert await storage.read_entries(org, kind=EntryKind.APPROVAL, limit=10) == [approval]
 
     async def test_another_tenants_ledger_is_never_reached(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         await storage.post_credit(org, a_credit(5_000, reference="pay_x"))
@@ -424,7 +424,7 @@ class MoneyLedgerStorageContract:
             await storage.post_approval(other, approval)
 
     async def test_count_tenant_counts_the_tenants_entries_and_counts_up_to_its_limit(
-        self, storage: MoneyLedgerStorageInterface
+        self, storage: SpendLedgerStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
         assert await storage.count_tenant(org, 10) == 0

@@ -155,7 +155,7 @@ flowchart LR
         SR[Session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
         Rec[(Steps, records,<br/>artifacts)]
-        Money[Metering, limits,<br/>billing, model matrix]
+        Money[Metering, limits,<br/>agent billing, model matrix]
     end
     subgraph Wall [Inside a customer's wall]
         WH[Workspace host:<br/>runs tool calls]
@@ -180,7 +180,7 @@ flowchart LR
 | **Control** | The gateway, sessions, intake and routing, automations, policy, approvals, realtime; the control workers | The platform's cloud |
 | **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
-| **Records and money** | Steps, execution records, artifacts; metering, limits, billing, the model matrix | The platform's cloud |
+| **Records and money** | Steps, execution records, artifacts; metering, limits, agent_billing, the model matrix | The platform's cloud |
 
 Every connection that crosses a customer's wall is opened from inside
 it.
@@ -973,16 +973,17 @@ period, and a change of time zone never manufactures budget. A limit
 counts settled spend plus open holds, and a one-time raise applies to the
 current window only.
 
-### Units, Charges, and Billing
+### Spend Units, Charges, and Agent Billing
 
-Beside native usage and reference cost, the platform defines an
-**abstract unit**: a token unit weighted by cost, so a plan can include
+Beside native usage and reference cost, the platform defines a
+**spend unit**: a token unit weighted by cost, so a unit plan can include
 usage across models and providers without promising dollars or a token
 count. The weights are the platform's to publish. The **charge** is what
 a tenant is billed.
 
-**Billing** keeps accounts, versioned plans, and an append-only ledger. A
-hold draws on buckets in a fixed order: the plan's included units,
+**Agent billing** keeps spend accounts, versioned unit plans, and an
+append-only spend ledger. A hold draws on buckets in a fixed order: the
+unit plan's included units,
 granted units, prepaid credits, and an enterprise line of credit.
 Prepaid and postpaid differ in which bucket pays, never in the path a
 call takes. Credits count only after the payment provider's signed

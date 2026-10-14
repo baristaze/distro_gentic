@@ -96,4 +96,4 @@ class MemberLeftHandlerImpl(WorkHandlerInterface):
 
     async def handle(self, ctx: TenantContext, item: WorkItem) -> None:
         gone = await self._intake.forget_member(ctx, item.target_id)
-        log.info("org %s: %d account links of a departed member are gone", ctx.org_id, gone)
+        log.info("org %s: %d identity links of a departed member are gone", ctx.org_id, gone)

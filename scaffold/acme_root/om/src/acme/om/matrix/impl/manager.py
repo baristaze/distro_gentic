@@ -6,9 +6,9 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_billing.storage import SpendAccountStorageInterface
+from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.base import new_id, utcnow
-from acme.om.billing.storage import AccountStorageInterface
-from acme.om.billing.types.account import FundingMode
 from acme.om.context import OperatorContext, OperatorPermission, Permission, TenantContext
 from acme.om.exceptions import NotFound, PreconditionFailed, ValidationFailed
 from acme.om.matrix import rules
@@ -162,14 +162,14 @@ class MatrixManagerImpl(MatrixManagerInterface):
         self,
         matrix: MatrixStorageInterface,
         tenants: MatrixTenantStorageInterface,
-        accounts: AccountStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
         keys: TrustStorageInterface,
         options: MatrixOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._matrix = matrix
         self._tenants = tenants
-        self._accounts = accounts
+        self._spend_accounts = spend_accounts
         self._keys = keys
         self._options = options
         self._clock = clock
@@ -183,7 +183,7 @@ class MatrixManagerImpl(MatrixManagerInterface):
 
     async def get_options(self, ctx: TenantContext) -> tuple[FillOptions, ...]:
         ctx.require(Permission.READ)
-        account = await self._accounts.read_account(ctx.org_id)
+        account = await self._spend_accounts.read_spend_account(ctx.org_id)
         if account is None or account.funding is not FundingMode.OWN_KEY:
             return ()
         current = await self._matrix.read_latest(MatrixStatus.PUBLISHED)
@@ -201,7 +201,7 @@ class MatrixManagerImpl(MatrixManagerInterface):
 
     async def choose_fill(self, ctx: TenantContext, role: ModelRole, fill: Fill) -> FillOverride:
         ctx.require(Permission.MANAGE_MEMBERS)
-        account = await self._accounts.read_account(ctx.org_id)
+        account = await self._spend_accounts.read_spend_account(ctx.org_id)
         if account is None or account.funding is not FundingMode.OWN_KEY:
             raise ValidationFailed("only a tenant that pays its providers on its own keys chooses")
         if await self._keys.read_live_key(ctx.org_id, fill.provider) is None:

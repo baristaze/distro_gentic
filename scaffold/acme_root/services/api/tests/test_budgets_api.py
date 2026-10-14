@@ -13,10 +13,10 @@ from api_support import seed_request
 from tenant_support import person, refused, tenant
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.budgets.types.amount import AmountUnit, Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.hold import Billed, Hold, HoldRequest
@@ -36,11 +36,13 @@ async def funded(container: AppContainer, headers: Headers) -> TenantContext:
     """The owner's context, its tenant's account open, so the gate has
     someone to charge."""
     ctx = await context_of(container, headers)
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    request = AccountRequest(
-        funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
     )
-    await billing.open_account(ctx, request)
+    request = SpendAccountRequest(
+        funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
+    )
+    await agent_billing.open_spend_account(ctx, request)
     return ctx
 
 
@@ -134,7 +136,7 @@ async def test_a_budget_the_gate_would_not_hold_a_call_to_is_refused_whole(
 async def test_the_usage_page_reads_what_the_money_gate_holds_and_settles(
     client: httpx.AsyncClient, container: AppContainer
 ) -> None:
-    """A session's call, held and settled by billing's money gate, shows on
+    """A session's call, held and settled by agent billing's money gate, shows on
     the usage page as held and then as spent, in the budget's window as the
     tenant counts it. A tenant with no account has held nothing."""
     ajax = await tenant(client, container, "ajax")

@@ -135,7 +135,7 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   answers the ledger entry it posted. A signature that does not check out
   is `400`, and another tenant's confirmation `403`.
   (`/v1/agent-sessions/{session_id}/cost-approval`,
-  `/v1/budgets/{budget_id}/raises`, `/v1/billing/payments`, ADR 2060)
+  `/v1/budgets/{budget_id}/raises`, `/v1/agent-billing/payments`, ADR 2060)
 - **Projects.** An owner or an admin creates a project bound to its
   repository, under an Idempotency-Key, renames it, and removes it while
   no session belongs to it (`409 project_in_use` otherwise); any member
@@ -287,7 +287,7 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   An operator who may read reads the tenant's ledger, and one who may
   write grants it units for its life, under an Idempotency-Key, which
   wakes its sessions parked on its funds; an org that is gone is `404`
-  (`/v1/admin/orgs/{org_id}/ledger`, `.../grants`, ADR 2060).
+  (`/v1/admin/orgs/{org_id}/spend-ledger`, `.../grants`, ADR 2060).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
   than the probe's interval), metrics (`/metrics`), and the OpenAPI

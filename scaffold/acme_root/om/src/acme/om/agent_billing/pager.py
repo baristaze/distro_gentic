@@ -1,4 +1,4 @@
-"""How billing reaches the operator: a page about a call the anomaly guard
+"""How agent billing reaches the operator: a page about a call the anomaly guard
 parked. What carries it is the root's choice."""
 
 from abc import ABC, abstractmethod

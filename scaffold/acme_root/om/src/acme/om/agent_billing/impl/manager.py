@@ -4,10 +4,8 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.integrations.payments import PaymentProviderInterface
-from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.base import EMPTY_UUID, new_id, utcnow
-from acme.om.billing.manager import BillingManagerInterface
-from acme.om.billing.rules import (
+from acme.om.agent_billing.manager import AgentBillingManagerInterface
+from acme.om.agent_billing.rules import (
     FUNDS_UNLOCK,
     anomaly_park,
     bucket_key,
@@ -16,15 +14,15 @@ from acme.om.billing.rules import (
     tally_of,
     window_of,
 )
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.types.account import (
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.types.spend_account import (
     MAX_ZONES,
-    Account,
-    AccountRequest,
     FundingMode,
+    SpendAccount,
+    SpendAccountRequest,
     ZoneChange,
 )
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.types.spend_ledger import (
     BUCKET_ORDER,
     Approval,
     Count,
@@ -34,7 +32,9 @@ from acme.om.billing.types.ledger import (
     Grant,
     WindowRaise,
 )
-from acme.om.billing.types.plan import PlanCatalog, UnitScale
+from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
+from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.budgets.rules import window_bounds
 from acme.om.budgets.types.amount import Amount
@@ -55,47 +55,49 @@ from acme.om.tenancy.rules import check_time_zone
 
 log = logging.getLogger(__name__)
 
-OPENED = "billing.account.created"
-UPDATED = "billing.account.updated"
+OPENED = "agent_billing.spend_account.created"
+UPDATED = "agent_billing.spend_account.updated"
 
-SETS_BILLING = Permission.MANAGE_MEMBERS
-"""An account governs what the org's members may spend, so opening or
+SETS_AGENT_BILLING = Permission.MANAGE_MEMBERS
+"""A spend account governs what the org's members may spend, so opening or
 changing one takes the permission that governs members, as a budget does."""
 
 MAX_ENTRIES = 200
 """The entries one read of a tenant's ledger holds at most."""
 
 
-class BillingManagerImpl(BillingManagerInterface):
+class AgentBillingManagerImpl(AgentBillingManagerInterface):
     def __init__(
         self,
-        accounts: AccountStorageInterface,
-        ledger: MoneyLedgerStorageInterface,
+        spend_accounts: SpendAccountStorageInterface,
+        ledger: SpendLedgerStorageInterface,
         budgets: BudgetsManagerInterface,
         sessions: AgentSessionsManagerInterface,
         tenancy: TenancyManagerInterface,
         payments: PaymentProviderInterface,
         relay: OutboxRelayInterface,
-        plans: PlanCatalog,
-        units: UnitScale,
+        unit_plans: UnitPlanCatalog,
+        spend_units: SpendUnitScale,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self._accounts = accounts
+        self._spend_accounts = spend_accounts
         self._ledger = ledger
         self._budgets = budgets
         self._sessions = sessions
         self._tenancy = tenancy
         self._payments = payments
         self._relay = relay
-        self._plans = plans
-        self._units = units
+        self._unit_plans = unit_plans
+        self._spend_units = spend_units
         self._clock = clock
 
-    async def open_account(self, ctx: TenantContext, request: AccountRequest) -> Account:
-        ctx.require(SETS_BILLING)
-        plan = self._plans.latest(request.plan_id)
-        if plan is None:
-            raise ValidationFailed(f"there is no plan {request.plan_id}")
+    async def open_spend_account(
+        self, ctx: TenantContext, request: SpendAccountRequest
+    ) -> SpendAccount:
+        ctx.require(SETS_AGENT_BILLING)
+        unit_plan = self._unit_plans.latest(request.unit_plan_id)
+        if unit_plan is None:
+            raise ValidationFailed(f"there is no unit plan {request.unit_plan_id}")
         if (request.funding is FundingMode.OWN_KEY) != (request.key_ref is not None):
             raise ValidationFailed("an own key is named by its reference, and only an own key is")
         try:
@@ -103,7 +105,7 @@ class BillingManagerImpl(BillingManagerInterface):
         except ValueError as refused:
             raise ValidationFailed(str(refused)) from None
         now = self._clock()
-        account = Account(
+        spend_account = SpendAccount(
             id=ctx.org_id,
             created_at=now,
             updated_at=now,
@@ -111,24 +113,26 @@ class BillingManagerImpl(BillingManagerInterface):
             updated_by=ctx.user_id,
             funding=request.funding,
             key_ref=request.key_ref,
-            plan_id=plan.id,
-            plan_version=plan.version,
+            unit_plan_id=unit_plan.id,
+            unit_plan_version=unit_plan.version,
             period_anchor=now,
             zones=(ZoneChange(zone=request.zone, at=now),),
         )
-        rows = (versioned_row(ctx, OPENED, account.id, account.version),)
-        if not await self._accounts.create_account(ctx.org_id, account, rows):
-            # Opened already: the account as stored.
+        rows = (versioned_row(ctx, OPENED, spend_account.id, spend_account.version),)
+        if not await self._spend_accounts.create_spend_account(ctx.org_id, spend_account, rows):
+            # Opened already: the spend account as stored.
             return await self._read(ctx.org_id)
         await self._relay_all(ctx, rows)
-        return account
+        return spend_account
 
-    async def get_account(self, ctx: TenantContext) -> Account:
+    async def get_spend_account(self, ctx: TenantContext) -> SpendAccount:
         ctx.require(Permission.READ)
         return await self._read(ctx.org_id)
 
-    async def set_time_zone(self, ctx: TenantContext, zone: str, expected_version: int) -> Account:
-        ctx.require(SETS_BILLING)
+    async def set_time_zone(
+        self, ctx: TenantContext, zone: str, expected_version: int
+    ) -> SpendAccount:
+        ctx.require(SETS_AGENT_BILLING)
         try:
             check_time_zone(zone)
         except ValueError as refused:
@@ -147,7 +151,7 @@ class BillingManagerImpl(BillingManagerInterface):
             }
         )
         rows: tuple[OutboxRow, ...] = (versioned_row(ctx, UPDATED, changed.id, changed.version),)
-        await self._accounts.write_account(ctx.org_id, changed, expected_version, rows)
+        await self._spend_accounts.write_spend_account(ctx.org_id, changed, expected_version, rows)
         await self._relay_all(ctx, rows)
         return changed
 
@@ -235,11 +239,11 @@ class BillingManagerImpl(BillingManagerInterface):
         *,
         raise_id: UUID | None = None,
     ) -> WindowRaise:
-        ctx.require(SETS_BILLING)
+        ctx.require(SETS_AGENT_BILLING)
         budget = await self._budgets.get_budget(ctx, budget_id)
-        account = await self._read(ctx.org_id)
+        spend_account = await self._read(ctx.org_id)
         now = self._clock()
-        start, _ = window_of(budget.window, account, now)
+        start, _ = window_of(budget.window, spend_account, now)
         raised = await self._ledger.post_raise(
             ctx.org_id,
             WindowRaise(
@@ -263,7 +267,7 @@ class BillingManagerImpl(BillingManagerInterface):
         *,
         approval_id: UUID | None = None,
     ) -> Approval:
-        ctx.require(SETS_BILLING)
+        ctx.require(SETS_AGENT_BILLING)
         session = await self._sessions.get_session(ctx, session_id)
         approval = await self._ledger.post_approval(
             ctx.org_id,
@@ -281,15 +285,15 @@ class BillingManagerImpl(BillingManagerInterface):
     async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
         ctx.require(Permission.READ)
         budget = await self._budgets.get_budget(ctx, budget_id)
-        account = await self._accounts.read_account(ctx.org_id)
-        if account is None:
-            # No call is held before an account is opened: its windows are
+        spend_account = await self._spend_accounts.read_spend_account(ctx.org_id)
+        if spend_account is None:
+            # No call is held before a spend account is opened: its windows are
             # the engine's, in UTC, and they hold nothing.
             start, resets_at = window_bounds(budget.window, self._clock())
-        elif account.id != ctx.org_id:
-            raise TenantMismatch(f"account {account.id} is not {ctx.org_id}'s")
+        elif spend_account.id != ctx.org_id:
+            raise TenantMismatch(f"spend account {spend_account.id} is not {ctx.org_id}'s")
         else:
-            start, resets_at = window_of(budget.window, account, self._clock())
+            start, resets_at = window_of(budget.window, spend_account, self._clock())
         line = HoldLine(
             budget_id=budget.id,
             scope=budget.scope,
@@ -302,19 +306,19 @@ class BillingManagerImpl(BillingManagerInterface):
 
     async def get_balances(self, ctx: TenantContext) -> tuple[Count, ...]:
         ctx.require(Permission.READ)
-        account = await self._read(ctx.org_id)
-        funding = funding_of(account, self._plans, self._units, self._clock())
+        spend_account = await self._read(ctx.org_id)
+        funding = funding_of(spend_account, self._unit_plans, self._spend_units, self._clock())
         keys = [bucket_key(bucket, funding) for bucket in BUCKET_ORDER]
         counts = await self._ledger.read_counts(ctx.org_id, keys)
         return tuple(counts.get(key) or Count(counter=key[0], start=key[1]) for key in keys)
 
-    async def _read(self, org_id: UUID) -> Account:
-        account = await self._accounts.read_account(org_id)
-        if account is None:
-            raise NotFound(f"org {org_id} has no billing account")
-        if account.id != org_id:
-            raise TenantMismatch(f"account {account.id} is not {org_id}'s")
-        return account
+    async def _read(self, org_id: UUID) -> SpendAccount:
+        spend_account = await self._spend_accounts.read_spend_account(org_id)
+        if spend_account is None:
+            raise NotFound(f"org {org_id} has no spend account")
+        if spend_account.id != org_id:
+            raise TenantMismatch(f"spend account {spend_account.id} is not {org_id}'s")
+        return spend_account
 
     async def _relay_all(self, ctx: TenantContext, rows: tuple[OutboxRow, ...]) -> None:
         """The write has committed; a relay that fails is left to the sweep."""

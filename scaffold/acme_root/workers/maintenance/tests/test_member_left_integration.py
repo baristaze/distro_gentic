@@ -1,7 +1,7 @@
 """A member's removal unlinks their outside accounts over Postgres, as the
 worker runs it: the removal's commit queues the work, the relay enqueues
 it, the worker claims it and unlinks under the tenant's own login, and
-the account links again to the person added back."""
+the identity links again to the person added back."""
 
 from collections.abc import AsyncIterator
 from datetime import timedelta

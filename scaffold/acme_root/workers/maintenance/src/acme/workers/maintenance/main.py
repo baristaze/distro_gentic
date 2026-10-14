@@ -148,11 +148,11 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # What a call held and spent is not a purge of its tenant's: no
             # serving login deletes it, so it never holds the tenant's mark.
             "budgets": managers.budgets.purge_tenant,
-            "billing": container.billing.purge_tenant,
+            "agent_billing": container.agent_billing.purge_tenant,
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
-            # Its account links and work bindings, its automations and their
+            # Its identity links and work bindings, its automations and their
             # runs, its playbooks and their invocations, its knowledge, and
             # who was told what waited on them.
             "intake": container.intake.purge_tenant,

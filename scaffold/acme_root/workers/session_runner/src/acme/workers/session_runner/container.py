@@ -15,12 +15,12 @@ from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.automations import AutomationsManagerInterface
 from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import new_id
-from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import ConnectorsLayer
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -151,7 +151,7 @@ class RunnerContainer:
         model call. Each call, its checkout's included, travels as exec
         work to that host, its executor.
 
-        Every model call passes billing's money gate, which asks who pays
+        Every model call passes agent billing's money gate, which asks who pays
         before it holds, and its fills come from the model matrix, whose
         version and the tenant's plan tier its spend and tokens count
         under; a tenant on its own keys calls on them, through trust.

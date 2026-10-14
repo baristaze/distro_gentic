@@ -5,10 +5,10 @@
 ## Context
 
 The engine gives every park a person clears a route that clears it and
-wakes the session. The platform's parks on money had none. Billing
+wakes the session. The platform's parks on money had none. Agent billing
 approves a call far above its session's norm, raises a budget for one
 window, credits a payment the provider confirmed, and grants units, but
-only in `om/billing`. A session parked on one of them waited for a
+only in `om/agent_billing`. A session parked on one of them waited for a
 generic unlock or a cancel. A grant woke nothing.
 
 A park on a key the tenant holds none of waits with no clock, and saving
@@ -25,12 +25,12 @@ of the price table, and nothing tells a parked session that it came.
 
 ## Decision
 
-**A route for each billing park.** A person who approves calls past
+**A route for each agent billing park.** A person who approves calls past
 their norm posts the session's cost approval
 (`POST /v1/agent-sessions/{id}/cost-approval`). A person who sets budgets
 raises a budget for the window open now (`POST /v1/budgets/{id}/raises`).
 A person who may write posts a payment the provider confirmed
-(`POST /v1/billing/payments`). An operator who may write grants units
+(`POST /v1/agent-billing/payments`). An operator who may write grants units
 (`POST /v1/admin/orgs/{org_id}/grants`). Each takes the permission
 billing checks, wakes the sessions parked on it, and answers the ledger
 entry it posted.
@@ -40,7 +40,7 @@ an Idempotency-Key, and the entry's id is the key's, so a retry after a
 lost answer posts nothing more. A payment credits once by the provider's
 own reference.
 
-**A payment is posted by the tenant.** Billing refuses a confirmation of
+**A payment is posted by the tenant.** Agent billing refuses a confirmation of
 another tenant, so the caller is a tenant's person, never the provider
 on a route of its own. The body is the provider's confirmation, byte for
 byte, and `Payment-Signature` its signature, checked before anything is

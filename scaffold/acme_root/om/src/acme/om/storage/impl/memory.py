@@ -1,5 +1,10 @@
 """The in-memory storage root: the default for unit tests and the fast gate."""
 
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.storage.impl.memory import (
+    SpendAccountStorageMemoryImpl,
+    SpendLedgerStorageMemoryImpl,
+)
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -10,11 +15,6 @@ from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.storage.impl.memory import (
-    AccountStorageMemoryImpl,
-    MoneyLedgerStorageMemoryImpl,
-)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
@@ -105,8 +105,8 @@ class StorageMemoryImpl(StorageInterface):
         self._retention = RetentionStorageMemoryImpl(self._outbox)
         self._budgets = BudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
-        self._accounts = AccountStorageMemoryImpl(self._outbox)
-        self._money_ledger = MoneyLedgerStorageMemoryImpl()
+        self._spend_accounts = SpendAccountStorageMemoryImpl(self._outbox)
+        self._money_ledger = SpendLedgerStorageMemoryImpl()
         self._fill_sets = FillSetStorageMemoryImpl()
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
@@ -179,10 +179,10 @@ class StorageMemoryImpl(StorageInterface):
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
 
-    def get_account_storage(self) -> AccountStorageInterface:
-        return self._accounts
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface:
+        return self._spend_accounts
 
-    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface:
         return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:

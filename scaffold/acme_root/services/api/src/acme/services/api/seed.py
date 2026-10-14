@@ -14,10 +14,10 @@ from datetime import timedelta
 
 from acme.integrations.events import IntegrationInterface
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.context import OperatorContext, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import Conflict
 from acme.om.intake.types.link import Installation
@@ -32,7 +32,7 @@ from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import PLATFORM_EMAIL_DOMAIN
 
-PLAN = "starter"
+UNIT_PLAN = "starter"
 """The plan a seeded tenant's account opens on."""
 
 REPOSITORY_HOST = "example.test"
@@ -135,13 +135,15 @@ async def seed_platform(
     would. `kinds` are the product's, beside the ones the platform ships."""
     slug = (await managers.tenancy.org.get_org(owner)).slug
     project = None
-    if await storage.get_account_storage().read_account(owner.org_id) is None:
+    if await storage.get_spend_account_storage().read_spend_account(owner.org_id) is None:
         # The project before the account: a run cut short between them
         # leaves a second project on the rerun, never a tenant with none.
         project = await managers.projects.create_project(owner, first_project(owner, slug))
-        billing = build_billing(storage, managers, PaymentProviderTwinImpl())
-        request = AccountRequest(funding=FundingMode.PLATFORM, plan_id=PLAN, zone="UTC")
-        await billing.open_account(owner, request)
+        agent_billing = build_agent_billing(storage, managers, PaymentProviderTwinImpl())
+        request = SpendAccountRequest(
+            funding=FundingMode.PLATFORM, unit_plan_id=UNIT_PLAN, zone="UTC"
+        )
+        await agent_billing.open_spend_account(owner, request)
     policy = await managers.retention.get_policy(owner)
     if policy.version == 0:
         await managers.retention.write_policy(

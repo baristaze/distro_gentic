@@ -1,5 +1,5 @@
 """The one price source, by version. The engine's list table is the source;
-this is the face billing reads it through: the version in force, and the
+this is the face agent billing reads it through: the version in force, and the
 price of a model at any version still published, so a call held at one
 version is billed at it after the next is read. There is no second table
 and no default row."""

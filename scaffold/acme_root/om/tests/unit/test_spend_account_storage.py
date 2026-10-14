@@ -1,12 +1,12 @@
 import pytest
-from contracts.account_storage import AccountStorageContract
+from contracts.spend_account_storage import SpendAccountStorageContract
 
-from acme.om.billing.storage import AccountStorageInterface
-from acme.om.billing.storage.impl.memory import AccountStorageMemoryImpl
+from acme.om.agent_billing.storage import SpendAccountStorageInterface
+from acme.om.agent_billing.storage.impl.memory import SpendAccountStorageMemoryImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 
 
-class TestAccountStorageMemory(AccountStorageContract):
+class TestAccountStorageMemory(SpendAccountStorageContract):
     @pytest.fixture
-    def storage(self) -> AccountStorageInterface:
-        return AccountStorageMemoryImpl(OutboxStorageMemoryImpl())
+    def storage(self) -> SpendAccountStorageInterface:
+        return SpendAccountStorageMemoryImpl(OutboxStorageMemoryImpl())

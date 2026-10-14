@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from acme.om.billing import BillingManagerInterface
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing import AgentBillingManagerInterface
+from acme.om.agent_billing.types.spend_ledger import (
     Approval,
     Charge,
     Credit,
@@ -13,15 +13,19 @@ from acme.om.billing.types.ledger import (
 )
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import OperatorContext
-from acme.services.api.services.ledgers import LedgersServiceInterface
-from acme.services.api.types.ledgers import LedgerEntryView, LedgerPageView, UnitsGrantRequest
+from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
+from acme.services.api.types.spend_ledgers import (
+    SpendLedgerEntryView,
+    SpendLedgerPageView,
+    SpendUnitsGrantRequest,
+)
 
 
-def entry_view(entry: Entry) -> LedgerEntryView:
+def entry_view(entry: Entry) -> SpendLedgerEntryView:
     """One entry on the wire: its kind, its id and time, and its own fields."""
     match entry:
         case FundedHold():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.HOLD,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -30,7 +34,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 cost_micros=entry.hold.exposure.cost_micros,
             )
         case Settlement():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.SETTLEMENT,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -39,7 +43,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 tokens=entry.spent.tokens,
             )
         case Charge():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.CHARGE,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -48,7 +52,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 amount_micros=entry.amount_micros,
             )
         case Credit():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.CREDIT,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -56,7 +60,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 reference=entry.reference,
             )
         case Grant():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.GRANT,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -65,7 +69,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 by=entry.granted_by,
             )
         case WindowRaise():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.RAISE,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -75,7 +79,7 @@ def entry_view(entry: Entry) -> LedgerEntryView:
                 by=entry.raised_by,
             )
         case Approval():
-            return LedgerEntryView(
+            return SpendLedgerEntryView(
                 kind=EntryKind.APPROVAL,
                 id=entry.id,
                 created_at=entry.created_at,
@@ -85,9 +89,9 @@ def entry_view(entry: Entry) -> LedgerEntryView:
             )
 
 
-class LedgersServiceImpl(LedgersServiceInterface):
-    def __init__(self, billing: BillingManagerInterface) -> None:
-        self._billing = billing
+class SpendLedgersServiceImpl(SpendLedgersServiceInterface):
+    def __init__(self, agent_billing: AgentBillingManagerInterface) -> None:
+        self._agent_billing = agent_billing
 
     async def get_entries(
         self,
@@ -98,18 +102,18 @@ class LedgersServiceImpl(LedgersServiceInterface):
         hold_id: UUID | None,
         session_id: UUID | None,
         limit: int,
-    ) -> LedgerPageView:
-        page = await self._billing.get_entries(
+    ) -> SpendLedgerPageView:
+        page = await self._agent_billing.get_entries(
             admin, org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=limit
         )
-        return LedgerPageView(
+        return SpendLedgerPageView(
             items=[entry_view(entry) for entry in page.items], has_more=page.has_more
         )
 
     async def grant_units(
-        self, admin: OperatorContext, org_id: UUID, body: UnitsGrantRequest, grant_id: UUID
-    ) -> LedgerEntryView:
-        grant = await self._billing.grant_units(
+        self, admin: OperatorContext, org_id: UUID, body: SpendUnitsGrantRequest, grant_id: UUID
+    ) -> SpendLedgerEntryView:
+        grant = await self._agent_billing.grant_units(
             admin, org_id, body.units, body.reason, grant_id=grant_id
         )
         return entry_view(grant)

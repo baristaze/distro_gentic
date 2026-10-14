@@ -5,10 +5,10 @@ translates the request, calls one manager, and projects the result."""
 from abc import ABC, abstractmethod
 
 from acme.services.api.services.admin import AdminServiceInterface
+from acme.services.api.services.agent_billing import AgentBillingServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
-from acme.services.api.services.billing import BillingServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
@@ -19,7 +19,6 @@ from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.leases import LeasesServiceInterface
-from acme.services.api.services.ledgers import LedgersServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
@@ -29,6 +28,7 @@ from acme.services.api.services.provider_keys import ProviderKeysServiceInterfac
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
+from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
 from acme.services.api.services.validations import ValidationsServiceInterface
@@ -37,10 +37,10 @@ from acme.services.api.services.webhooks import WebhooksServiceInterface
 
 __all__ = [
     "AdminServiceInterface",
+    "AgentBillingServiceInterface",
     "AgentSessionsServiceInterface",
     "AutomationsServiceInterface",
     "BenchmarksServiceInterface",
-    "BillingServiceInterface",
     "BudgetsServiceInterface",
     "ConnectorsServiceInterface",
     "EventsServiceInterface",
@@ -51,7 +51,6 @@ __all__ = [
     "IntakeServiceInterface",
     "KnowledgeServiceInterface",
     "LeasesServiceInterface",
-    "LedgersServiceInterface",
     "MatrixServiceInterface",
     "MediaServiceInterface",
     "NotificationsServiceInterface",
@@ -62,6 +61,7 @@ __all__ = [
     "RelayServiceInterface",
     "RetentionServiceInterface",
     "ServicesInterface",
+    "SpendLedgersServiceInterface",
     "TenancyServiceInterface",
     "ToolsServiceInterface",
     "ValidationsServiceInterface",
@@ -114,7 +114,7 @@ class ServicesInterface(ABC):
     def get_budgets_service(self) -> BudgetsServiceInterface: ...
 
     @abstractmethod
-    def get_billing_service(self) -> BillingServiceInterface: ...
+    def get_agent_billing_service(self) -> AgentBillingServiceInterface: ...
 
     @abstractmethod
     def get_intake_service(self) -> IntakeServiceInterface: ...
@@ -135,7 +135,7 @@ class ServicesInterface(ABC):
     def get_benchmarks_service(self) -> BenchmarksServiceInterface: ...
 
     @abstractmethod
-    def get_ledgers_service(self) -> LedgersServiceInterface: ...
+    def get_spend_ledgers_service(self) -> SpendLedgersServiceInterface: ...
 
     @abstractmethod
     def get_evidence_service(self) -> EvidenceServiceInterface: ...

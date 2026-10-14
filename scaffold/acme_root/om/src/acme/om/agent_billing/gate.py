@@ -10,7 +10,7 @@ from abc import abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.billing.types.ledger import FundedHold, PricedAt
+from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
 from acme.om.budgets.gate import BudgetGateInterface
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.hold import HoldRequest
@@ -30,10 +30,10 @@ class MoneyGateInterface(BudgetGateInterface):
     ) -> FundedHold | Refusal:
         """`authorize`, for a call priced from the row `priced` names, going
         out on the key `credential` names (None when the caller cannot say).
-        Who pays is read first: an account that cannot say is
-        `SpenderUnknown`, and nothing is held or spent; so is an account on
+        Who pays is read first: a spend account that cannot say is
+        `SpenderUnknown`, and nothing is held or spent; so is a spend account on
         its own key for a call that does not carry one of the tenant's keys,
-        and an account the platform pays for a call that does. A call far
+        and a spend account the platform pays for a call that does. A call far
         above its session's norm
         pages the operator and is `GateParked` for a person; a call no
         bucket covers is `GateParked` on the budget. Either way nothing is

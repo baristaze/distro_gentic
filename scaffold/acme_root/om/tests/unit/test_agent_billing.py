@@ -24,16 +24,11 @@ from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
-from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.agents.loop_rules import SPENDER_UNLOCK
-from acme.om.agents.types.run import RunEnd
-from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import new_id
-from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateOptions
-from acme.om.billing.impl.prices import PriceBookTableImpl
-from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
-from acme.om.billing.prices import PriceBookInterface
-from acme.om.billing.rules import (
+from acme.om.agent_billing.impl.gate import MoneyCallGateImpl, MoneyGateOptions
+from acme.om.agent_billing.impl.prices import PriceBookTableImpl
+from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.agent_billing.prices import PriceBookInterface
+from acme.om.agent_billing.rules import (
     ANOMALY_UNLOCK,
     FUNDS_UNLOCK,
     HELD_UNLOCK,
@@ -46,10 +41,15 @@ from acme.om.billing.rules import (
     units_of,
     zoned_window,
 )
-from acme.om.billing.sweep import ProviderBillsUnknownImpl
-from acme.om.billing.types.account import Account, FundingMode, ZoneChange
-from acme.om.billing.types.ledger import Charge, EntryKind, FundedHold, PricedAt
-from acme.om.billing.types.plan import UNITS, Plan, PlanCatalog
+from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccount, ZoneChange
+from acme.om.agent_billing.types.spend_ledger import Charge, EntryKind, FundedHold, PricedAt
+from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UnitPlan, UnitPlanCatalog
+from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agents.loop_rules import SPENDER_UNLOCK
+from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.base import new_id
 from acme.om.budgets.impl.pricing import LIST_PRICES
 from acme.om.budgets.pricing import ModelPrice, PriceRow, PriceTable, Rates
 from acme.om.budgets.rules import call_exposure, usage_spend
@@ -79,10 +79,10 @@ from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 from acme.om.windows.rules import call_shape
 
-PREPAID = PlanCatalog(
-    plans=(Plan(id="prepaid", version=1, included_units=0, unit_price_micros=1_000),)
+PREPAID = UnitPlanCatalog(
+    unit_plans=(UnitPlan(id="prepaid", version=1, included_units=0, unit_price_micros=1_000),)
 )
-"""A plan that includes nothing: every unit is paid from a money bucket."""
+"""A unit plan that includes nothing: every unit is paid from a money bucket."""
 
 KIRITIMATI = "Pacific/Kiritimati"  # UTC+14, no daylight saving
 BAKER = "Etc/GMT+12"  # UTC-12, no daylight saving
@@ -158,7 +158,7 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
     cap was read from, even once the next reading is in force, in a gate
     that never saw the first."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     owner = money.loop.owner
     session_id = await money.loop.start()
     fills = await money.loop.managers.models.resolve_fill_set(
@@ -204,16 +204,18 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
     billed = usage_spend(usage, first)
     assert settlement.spent == billed, "the bill read the row the cap read"
     assert charge.price_version == LIST_PRICES.version
-    assert charge.units == units_of(billed.cost_micros, UNITS.micros_per_unit)
+    assert charge.units == units_of(billed.cost_micros, SPEND_UNITS.micros_per_unit)
     newer = usage_spend(usage, book.price_at(later.version, fill.provider.value, fill.model))
-    assert charge.units != units_of(newer.cost_micros, UNITS.micros_per_unit), "the rows differ"
+    assert charge.units != units_of(newer.cost_micros, SPEND_UNITS.micros_per_unit), (
+        "the rows differ"
+    )
 
 
 async def test_a_hold_a_settlement_and_a_charge_post_to_the_one_ledger(tmp_path: Path) -> None:
     """A loop's model call holds, settles, and is charged in the one ledger,
     and the engine's own ledger holds none of it."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     session_id = await money.loop.start()
     await money.loop.say(session_id, "What is the total?")
     money.loop.anthropic.add(reply(said("The total is 12.")))
@@ -228,7 +230,7 @@ async def test_a_hold_a_settlement_and_a_charge_post_to_the_one_ledger(tmp_path:
     assert sorted(found) == ["Charge", "FundedHold", "Settlement"]
     charge = found["Charge"]
     assert isinstance(charge, Charge) and charge.units > 0 and charge.amount_micros == 0, (
-        "the plan's included units paid for it"
+        "the unit plan's included units paid for it"
     )
     engine_ledger = money.loop.storage.get_ledger_storage()
     assert await engine_ledger.read_hold(org, hold.id) is None, "no second ledger"
@@ -242,7 +244,7 @@ async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_rea
     limit; another tenant named reads none of them, and an operator who holds
     no read reads nothing."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     session_id = await money.loop.start()
     await money.loop.say(session_id, "What is the total?")
     money.loop.anthropic.add(reply(said("The total is 12.")))
@@ -250,7 +252,7 @@ async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_rea
     org = money.loop.owner.org_id
     reader = operator(OperatorRole.READ)
 
-    page = await money.billing.get_entries(reader, org, limit=50)
+    page = await money.agent_billing.get_entries(reader, org, limit=50)
     assert not page.has_more
     assert sorted(type(entry).__name__ for entry in page.items) == [
         "Charge",
@@ -258,24 +260,26 @@ async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_rea
         "Settlement",
     ]
     (charge,) = (
-        await money.billing.get_entries(reader, org, kind=EntryKind.CHARGE, limit=50)
+        await money.agent_billing.get_entries(reader, org, kind=EntryKind.CHARGE, limit=50)
     ).items
     assert isinstance(charge, Charge)
-    (hold,) = (await money.billing.get_entries(reader, org, session_id=session_id, limit=50)).items
+    (hold,) = (
+        await money.agent_billing.get_entries(reader, org, session_id=session_id, limit=50)
+    ).items
     assert isinstance(hold, FundedHold)
-    of_hold = await money.billing.get_entries(reader, org, hold_id=hold.id, limit=50)
+    of_hold = await money.agent_billing.get_entries(reader, org, hold_id=hold.id, limit=50)
     assert sorted(type(entry).__name__ for entry in of_hold.items) == [
         "Charge",
         "FundedHold",
         "Settlement",
     ]
-    cut = await money.billing.get_entries(reader, org, limit=2)
+    cut = await money.agent_billing.get_entries(reader, org, limit=2)
     assert len(cut.items) == 2 and cut.has_more
-    elsewhere = await money.billing.get_entries(reader, new_id(), limit=50)
+    elsewhere = await money.agent_billing.get_entries(reader, new_id(), limit=50)
     assert elsewhere.items == () and not elsewhere.has_more
     minting = reader.model_copy(update={"permissions": frozenset({OperatorPermission.MINT})})
     with pytest.raises(NotAuthorized):
-        await money.billing.get_entries(minting, org, limit=50)
+        await money.agent_billing.get_entries(minting, org, limit=50)
 
 
 async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_only_in_which_pays(
@@ -283,11 +287,11 @@ async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_on
 ) -> None:
     """Included units first, then granted units, then credits; a call no
     bucket covers parks on the budget, naming the funds."""
-    plans = PlanCatalog(
-        plans=(Plan(id="small", version=1, included_units=3, unit_price_micros=1_000),)
+    unit_plans = UnitPlanCatalog(
+        unit_plans=(UnitPlan(id="small", version=1, included_units=3, unit_price_micros=1_000),)
     )
-    money = money_over(tmp_path, plans=plans)
-    await money.open(plan="small")
+    money = money_over(tmp_path, unit_plans=unit_plans)
+    await money.open(unit_plan="small")
     owner = money.loop.owner
     await money.top_up(2_000)
 
@@ -298,7 +302,7 @@ async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_on
         await money.gate.authorize(owner, tenant_request(owner, 1_000))
     assert parked.value.park.reason is ParkReason.BUDGET
     assert parked.value.park.unlock == FUNDS_UNLOCK
-    assert parked.value.park.retry_at is not None, "the next billing period refills the plan"
+    assert parked.value.park.retry_at is not None, "the next billing period refills the unit plan"
 
 
 async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
@@ -307,11 +311,11 @@ async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
     """Ten included units, eight held by a call still open: a call for five
     parks on the budget and tries again within seconds, not at the period's
     end, and fits once the open call settles."""
-    plans = PlanCatalog(
-        plans=(Plan(id="ten", version=1, included_units=10, unit_price_micros=1_000),)
+    unit_plans = UnitPlanCatalog(
+        unit_plans=(UnitPlan(id="ten", version=1, included_units=10, unit_price_micros=1_000),)
     )
-    money = money_over(tmp_path, plans=plans)
-    await money.open(plan="ten")
+    money = money_over(tmp_path, unit_plans=unit_plans)
+    await money.open(unit_plan="ten")
     owner = money.loop.owner
     first = await money.gate.authorize_priced(owner, tenant_request(owner, 8_000), None)
     assert isinstance(first, FundedHold) and first.draw.included == 8
@@ -343,7 +347,7 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
     project's line its one breach, while the tenant's budget has room. A
     session of no project is charged to none, and the same call is held."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     calls: CallGateInterface = money.calls
     if gate == "engine":
@@ -389,7 +393,7 @@ async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
     a session of no project is held, and a job refused before it began
     releases its hold whole."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     calls: CallGateInterface = money.calls
     if gate == "engine":
@@ -429,7 +433,7 @@ async def test_a_spending_job_is_held_settled_and_charged_in_the_one_ledger(
     deadline, and its completion settles and charges it at the cost it
     reported."""
     money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("builder")
     await loop.say(session_id, "Start it.")
@@ -467,11 +471,11 @@ async def test_a_spending_job_the_money_gate_parks_starts_nothing_and_holds_noth
     """A job no bucket covers parks on the budget, and one nobody can be
     named to pay for parks for a person, as a model call does: the job
     never starts, and the ledger holds nothing for it."""
-    plans = PlanCatalog(
-        plans=(Plan(id="small", version=1, included_units=5_000, unit_price_micros=1_000),)
+    unit_plans = UnitPlanCatalog(
+        unit_plans=(UnitPlan(id="small", version=1, included_units=5_000, unit_price_micros=1_000),)
     )
-    money = money_over(tmp_path, plans=plans, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="small")
+    money = money_over(tmp_path, unit_plans=unit_plans, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(unit_plan="small")
     loop, owner = money.loop, money.loop.owner
     if refusal == "payer":
 
@@ -519,7 +523,7 @@ async def test_a_jobs_hold_lives_to_its_deadline_and_settles_at_its_reported_cos
     falls due at the job's deadline, and the sweep leaves it until an hour
     past that. Its completion settles it at the cost it reported."""
     money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("builder")
     await loop.say(session_id, "Start it.")
@@ -565,7 +569,7 @@ async def test_a_job_no_run_settles_is_swept_whole_an_hour_past_its_deadline(
     """A job's hold that nothing settles is the sweep's once its deadline is
     an hour past, and counts whole, as a lost model call's does."""
     money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("builder")
     await loop.say(session_id, "Start it.")
@@ -600,7 +604,7 @@ async def test_a_run_that_recovers_a_jobs_call_starts_it_once_under_one_hold(
     anything, leaves the call open. The run that recovers the call holds and
     starts the job once, and parks on that job."""
     money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("builder")
     await loop.say(session_id, "Start it.")
@@ -647,7 +651,7 @@ async def test_a_recovered_job_parks_the_loop_once_every_other_lost_call_is_sett
         update={"name": "asker", "tools": ("compute", "poke"), "policy": asks}
     )
     money = money_over(tmp_path, kinds=(kind,), extra=(poke,))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("asker")
     await loop.say(session_id, "Compute it, and poke it.")
@@ -695,7 +699,7 @@ async def test_a_spending_job_after_a_sessions_model_calls_is_judged_by_its_budg
     call's: after five calls it still starts, unparked and with no page,
     since no model call's norm judges it."""
     money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     loop, owner = money.loop, money.loop.owner
     session_id = await loop.start("builder")
     await loop.say(session_id, "Look five things up, then start it.")
@@ -724,7 +728,7 @@ async def test_moving_the_time_zone_never_yields_a_second_days_budget_inside_one
     clock = money.loop.clock
     owner = money.loop.owner
     clock.now = at("2026-10-05T08:00:00")  # 22:00 on 5 October in UTC+14
-    await money.open(plan="team", zone=KIRITIMATI)
+    await money.open(unit_plan="team", zone=KIRITIMATI)
     budget = make_budget(BudgetScopeKind.TENANT, str(owner.org_id), cost_micros=1_000)
     await money.loop.managers.budgets.create_budget(owner, budget)
 
@@ -732,8 +736,8 @@ async def test_moving_the_time_zone_never_yields_a_second_days_budget_inside_one
     assert first.hold.lines[0].window_start == at("2026-10-04T10:00:00")
 
     clock.now = at("2026-10-05T08:30:00")
-    account = await money.billing.get_account(owner)
-    account = await money.billing.set_time_zone(owner, BAKER, account.version)
+    spend_account = await money.agent_billing.get_spend_account(owner)
+    spend_account = await money.agent_billing.set_time_zone(owner, BAKER, spend_account.version)
     for moment in ("2026-10-05T08:45:00", "2026-10-05T11:59:00"):
         clock.now = at(moment)
         refused = await money.gate.authorize(owner, tenant_request(owner, 1))
@@ -745,13 +749,13 @@ async def test_moving_the_time_zone_never_yields_a_second_days_budget_inside_one
     assert second.hold.lines[0].window_start == at("2026-10-05T12:00:00")
 
     clock.now = at("2026-10-06T00:00:00")
-    await money.billing.set_time_zone(owner, KIRITIMATI, account.version)
+    await money.agent_billing.set_time_zone(owner, KIRITIMATI, spend_account.version)
     clock.now = at("2026-10-06T23:00:00")  # a whole day of UTC+14 later, and still the window
     assert isinstance(await money.gate.authorize(owner, tenant_request(owner, 1)), Refusal)
     clock.now = at("2026-10-07T10:00:00")
     third = await spend(money, 1_000)
     assert third.hold.lines[0].window_start == at("2026-10-07T10:00:00")
-    spent = await money.billing.get_spend(owner, budget.id)
+    spent = await money.agent_billing.get_spend(owner, budget.id)
     assert spent.window_start == at("2026-10-07T10:00:00") and spent.spent_cost_micros == 1_000
 
 
@@ -790,8 +794,8 @@ async def test_a_credit_counts_only_once_its_signed_confirmation_checks_out(tmp_
     stale one posts nothing and the call still parks on its funds; the
     provider's own confirmation posts the credit once, however often it is
     delivered."""
-    money = money_over(tmp_path, plans=PREPAID)
-    await money.open(plan="prepaid")
+    money = money_over(tmp_path, unit_plans=PREPAID)
+    await money.open(unit_plan="prepaid")
     owner = money.loop.owner
     now = money.loop.clock()
     payload, signature = money.payments.confirm(owner.org_id, 10_000, now)
@@ -806,50 +810,50 @@ async def test_a_credit_counts_only_once_its_signed_confirmation_checks_out(tmp_
         (stale_payload, stale),
     ):
         with pytest.raises(DeliveryRefused):
-            await money.billing.confirm_payment(owner, body, header)
-    credits = (await money.billing.get_balances(owner))[2]
+            await money.agent_billing.confirm_payment(owner, body, header)
+    credits = (await money.agent_billing.get_balances(owner))[2]
     assert credits.added == 0, "nothing counts before a confirmation checks out"
     with pytest.raises(GateParked) as parked:
         await money.gate.authorize(owner, tenant_request(owner, 5_000))
     assert parked.value.park.unlock == FUNDS_UNLOCK and parked.value.park.retry_at is None
 
-    first = await money.billing.confirm_payment(owner, payload, signature)
-    again = await money.billing.confirm_payment(owner, payload, signature)
+    first = await money.agent_billing.confirm_payment(owner, payload, signature)
+    again = await money.agent_billing.confirm_payment(owner, payload, signature)
 
     assert again == first and first.amount_micros == 10_000
-    credits = (await money.billing.get_balances(owner))[2]
+    credits = (await money.agent_billing.get_balances(owner))[2]
     assert credits.added == 10_000, "one payment credits once"
     hold = await money.gate.authorize_priced(owner, tenant_request(owner, 5_000), None)
     assert isinstance(hold, FundedHold) and hold.draw.credits == 5_000
 
 
 async def test_a_confirmation_of_another_tenant_credits_nobody_here(tmp_path: Path) -> None:
-    money = money_over(tmp_path, plans=PREPAID)
-    await money.open(plan="prepaid")
+    money = money_over(tmp_path, unit_plans=PREPAID)
+    await money.open(unit_plan="prepaid")
     payload, signature = money.payments.confirm(new_id(), 10_000, money.loop.clock())
     with pytest.raises(Exception, match="another tenant"):
-        await money.billing.confirm_payment(money.loop.owner, payload, signature)
-    assert (await money.billing.get_balances(money.loop.owner))[2].added == 0
+        await money.agent_billing.confirm_payment(money.loop.owner, payload, signature)
+    assert (await money.agent_billing.get_balances(money.loop.owner))[2].added == 0
 
 
 async def test_a_top_up_leaves_every_limit_as_it_was(tmp_path: Path) -> None:
     """Credit is room in a bucket, never a limit: the budget's amount and
     version stay, its window's spend stays, and the next call is still
     refused by the limit."""
-    money = money_over(tmp_path, plans=PREPAID)
-    await money.open(plan="prepaid")
+    money = money_over(tmp_path, unit_plans=PREPAID)
+    await money.open(unit_plan="prepaid")
     owner = money.loop.owner
     await money.top_up(5_000)
     budget = make_budget(BudgetScopeKind.TENANT, str(owner.org_id), cost_micros=2_000)
     budget = await money.loop.managers.budgets.create_budget(owner, budget)
     await spend(money, 2_000)
-    before = await money.billing.get_spend(owner, budget.id)
+    before = await money.agent_billing.get_spend(owner, budget.id)
 
     await money.top_up(1_000_000)
 
     after = await money.loop.managers.budgets.get_budget(owner, budget.id)
     assert after.amount == budget.amount and after.version == budget.version
-    assert await money.billing.get_spend(owner, budget.id) == before
+    assert await money.agent_billing.get_spend(owner, budget.id) == before
     refused = await money.gate.authorize(owner, tenant_request(owner, 1_000))
     assert isinstance(refused, Refusal) and refused.breaches[0].budget_id == budget.id
 
@@ -860,8 +864,8 @@ async def test_a_top_up_leaves_every_limit_as_it_was(tmp_path: Path) -> None:
 async def test_a_tenant_nobody_can_name_to_pay_spends_nothing_and_takes_no_platform_key(
     tmp_path: Path,
 ) -> None:
-    """With no account, nothing is held, no provider is called, and the
-    session parks for a person; an own key with no reference, or a plan the
+    """With no spend account, nothing is held, no provider is called, and the
+    session parks for a person; an own key with no reference, or a unit plan the
     catalog does not hold, says nobody either."""
     money = money_over(tmp_path)
     session_id = await money.loop.start()
@@ -875,7 +879,7 @@ async def test_a_tenant_nobody_can_name_to_pay_spends_nothing_and_takes_no_platf
     assert money.loop.anthropic.calls == [] and money.loop.openai.calls == []
     assert await money.ledger.read_entries(money.loop.owner.org_id, limit=10) == []
 
-    own = Account(
+    own = SpendAccount(
         id=money.loop.owner.org_id,
         created_at=money.loop.clock(),
         updated_at=money.loop.clock(),
@@ -883,8 +887,8 @@ async def test_a_tenant_nobody_can_name_to_pay_spends_nothing_and_takes_no_platf
         updated_by=money.loop.owner.user_id,
         funding=FundingMode.OWN_KEY,
         key_ref=None,
-        plan_id="team",
-        plan_version=1,
+        unit_plan_id="team",
+        unit_plan_version=1,
         period_anchor=money.loop.clock(),
         zones=(ZoneChange(zone="UTC", at=money.loop.clock()),),
     )
@@ -893,8 +897,8 @@ async def test_a_tenant_nobody_can_name_to_pay_spends_nothing_and_takes_no_platf
     assert credential_of(own.model_copy(update={"key_ref": "tenant-key-1"})) == "tenant-key-1"
     with pytest.raises(SpenderUnknown):
         credential_of(None)
-    await money.accounts.create_account(
-        own.id, own.model_copy(update={"funding": FundingMode.PLATFORM, "plan_id": "gone"}), ()
+    await money.spend_accounts.create_spend_account(
+        own.id, own.model_copy(update={"funding": FundingMode.PLATFORM, "unit_plan_id": "gone"}), ()
     )
     with pytest.raises(SpenderUnknown):
         await money.gate.authorize(money.loop.owner, tenant_request(money.loop.owner, 1_000))
@@ -931,7 +935,7 @@ async def test_a_rate_limit_parks_on_the_provider_and_is_told_as_a_rate_limit(
     session parks on the provider, with a retry time, and is told the
     provider's pace, never a budget; a top-up leaves it parked."""
     money = money_over(tmp_path)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     session_id = await money.loop.start()
     await money.loop.say(session_id, "What is the total?")
     limited = ScriptedFailure(kind=ErrorKind.RATE_LIMITED, retry_after=2)
@@ -959,8 +963,8 @@ async def test_a_spend_limit_parks_on_its_budget_and_is_told_as_a_spend_limit(
     """Funds no bucket covers, or a budget the call breaches: the session
     parks on the budget before any call, and is told a spending limit,
     never the provider's pace."""
-    money = money_over(tmp_path, plans=PREPAID)
-    await money.open(plan="prepaid")
+    money = money_over(tmp_path, unit_plans=PREPAID)
+    await money.open(unit_plan="prepaid")
     owner = money.loop.owner
     if by == "limit":
         await money.top_up(10_000_000)
@@ -1017,7 +1021,7 @@ async def test_a_call_no_price_covers_parks_until_a_release_prices_its_model(
     first = LIST_PRICES.model_copy(update={"version": "2026-09-01"})
     book = Releases(first)
     money = money_over(tmp_path, prices=book)
-    await money.open(plan="team")
+    await money.open(unit_plan="team")
     owner = money.loop.owner
     session_id = await money.loop.start()
     fills = await money.loop.managers.models.resolve_fill_set(
@@ -1066,7 +1070,7 @@ async def test_a_call_far_above_its_sessions_norm_parks_for_a_person_and_pages_t
     and pages the operator. A person's approval lets that one call through."""
     guard = AnomalyGuard(factor=10, min_calls=3, floor_micros=0)
     money = money_over(tmp_path, options=MoneyGateOptions(guard=guard))
-    await money.open(plan="enterprise")
+    await money.open(unit_plan="enterprise")
     owner = money.loop.owner
     session_id = await money.loop.start()
     for _ in range(4):
@@ -1088,7 +1092,7 @@ async def test_a_call_far_above_its_sessions_norm_parks_for_a_person_and_pages_t
     assert page.session_id == session_id and page.norm_micros == 1_000
     assert page.expected_micros > 10 * page.norm_micros
 
-    approval = await money.billing.approve_call(owner, session_id, page.expected_micros)
+    approval = await money.agent_billing.approve_call(owner, session_id, page.expected_micros)
     resumed = await money.loop.loops.run(owner, session_id)
 
     assert resumed.end is RunEnd.ENDED, resumed

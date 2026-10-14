@@ -1,4 +1,4 @@
-"""The API's composition wires billing's money gate behind every model
+"""The API's composition wires agent billing's money gate behind every model
 call, and outside `local` it refuses every port that would ship a gate
 open, naming what is missing."""
 
@@ -9,7 +9,7 @@ import pytest
 from contracts.ports import open_ports
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.billing.gate import MoneyGateInterface
+from acme.om.agent_billing.gate import MoneyGateInterface
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.services.api.container import AppContainer

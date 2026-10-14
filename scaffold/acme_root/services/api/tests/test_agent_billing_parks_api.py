@@ -1,6 +1,6 @@
 """Every park on the tenant's money, cleared through the API by the person
 who may clear it, and the session runs again: a loop runs here in-process,
-over the memory storage, the scripted model, and billing's gate, and parks
+over the memory storage, the scripted model, and agent billing's gate, and parks
 the way it does in use. A call far above its session's norm is approved by
 a person who approves such calls, a budget a call passes is raised for its
 window by a person who sets budgets, and funds that cover no call are
@@ -41,17 +41,17 @@ from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.impl.gate import MoneyGateImpl, MoneyGateOptions
+from acme.om.agent_billing.impl.pager import OperatorPagerMemoryImpl
+from acme.om.agent_billing.root import build_agent_billing, build_money_gate
+from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, AnomalyGuard
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
+from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
+from acme.om.agent_billing.types.unit_plan import UNIT_PLANS, UnitPlan, UnitPlanCatalog
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
-from acme.om.billing.impl.gate import MoneyGateImpl, MoneyGateOptions
-from acme.om.billing.impl.pager import OperatorPagerMemoryImpl
-from acme.om.billing.root import build_billing, build_money_gate
-from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, AnomalyGuard
-from acme.om.billing.types.account import AccountRequest, FundingMode
-from acme.om.billing.types.ledger import EntryKind, FundedHold
-from acme.om.billing.types.plan import PLANS, Plan, PlanCatalog
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.budgets.types.hold import Billed, HoldRequest
@@ -72,8 +72,11 @@ STEWARD = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
 )
-PLANS_HERE = PlanCatalog(
-    plans=(*PLANS.plans, Plan(id="prepaid", version=1, included_units=0, unit_price_micros=1_000))
+UNIT_PLANS_HERE = UnitPlanCatalog(
+    unit_plans=(
+        *UNIT_PLANS.unit_plans,
+        UnitPlan(id="prepaid", version=1, included_units=0, unit_price_micros=1_000),
+    )
 )
 """The platform's plans, and one that includes nothing: every unit it
 draws is paid from a money bucket."""
@@ -88,7 +91,7 @@ def created(headers: dict[str, str]) -> dict[str, str]:
 
 
 class Case:
-    """A tenant whose loop calls the scripted model behind billing's gate,
+    """A tenant whose loop calls the scripted model behind agent billing's gate,
     with its owner, an admin, a member, and a viewer signed in, and another
     tenant's owner."""
 
@@ -127,13 +130,16 @@ class Case:
             email = f"{role.value}@ajax.test"
             await add_member(self.container, self.org_id, email, role)
             self.headers[role] = await sign_in_as(self.client, email, self.org_id)
-        billing = build_billing(
-            self.container.storage, self.container.managers, self.payments, plans=PLANS_HERE
+        agent_billing = build_agent_billing(
+            self.container.storage,
+            self.container.managers,
+            self.payments,
+            unit_plans=UNIT_PLANS_HERE,
         )
-        request = AccountRequest(
-            funding=FundingMode.PLATFORM, key_ref=None, plan_id=plan, zone="UTC"
+        request = SpendAccountRequest(
+            funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id=plan, zone="UTC"
         )
-        await billing.open_account(await self.ctx(owner), request)
+        await agent_billing.open_spend_account(await self.ctx(owner), request)
         _, other = await self.container.managers.tenancy.bootstrap(
             seed_request(), "Bravo", "bravo", "owner@bravo.test", "Owner"
         )
@@ -182,7 +188,7 @@ class Case:
         return len([i for i in items if i.kind == WorkKind.LOOP and str(i.target_id) == session_id])
 
     async def entries(self, kind: EntryKind) -> int:
-        ledger = self.container.storage.get_money_ledger_storage()
+        ledger = self.container.storage.get_spend_ledger_storage()
         return len(await ledger.read_entries(self.org_id, kind=kind, limit=50))
 
     async def runs_again(
@@ -221,7 +227,7 @@ def pager() -> OperatorPagerMemoryImpl:
 @pytest.fixture
 def gate(storage: StorageInterface, pager: OperatorPagerMemoryImpl) -> MoneyGateImpl:
     return build_money_gate(
-        storage, pager=pager, plans=PLANS_HERE, options=MoneyGateOptions(guard=GUARD)
+        storage, pager=pager, unit_plans=UNIT_PLANS_HERE, options=MoneyGateOptions(guard=GUARD)
     )
 
 
@@ -360,7 +366,7 @@ async def test_funds_that_cover_no_call_are_topped_up_by_a_payment_the_provider_
     await case.run(session_id)
     park = await case.parked_on(session_id)
     assert (park["unlock"], park["retry_at"]) == (FUNDS_UNLOCK, None)
-    path = "/v1/billing/payments"
+    path = "/v1/agent-billing/payments"
     payload, signature = case.payments.confirm(case.org_id, PLENTY, utcnow())
     signed = {"Payment-Signature": signature}
     runs = case.runs_of(session_id)
@@ -410,7 +416,7 @@ async def test_a_payment_wakes_the_sessions_on_the_funds_the_payer_does_not_see_
     runs = {session_id: case.runs_of(session_id) for session_id in (theirs, mine)}
 
     paid = await case.client.post(
-        "/v1/billing/payments",
+        "/v1/agent-billing/payments",
         headers={**created(case[Role.MEMBER]), "Payment-Signature": signature},
         content=payload,
     )

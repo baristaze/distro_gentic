@@ -7,13 +7,13 @@ from pydantic import Field
 
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface
+from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import Platform, utcnow
-from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotFound
@@ -180,7 +180,7 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             ]
         if park.reason is ParkReason.PERSON and park.unlock == ANOMALY_UNLOCK:
             # The requester cannot clear it: approving a call past its
-            # session's norm is billing's, and takes its permission.
+            # session's norm is agent billing's, and takes its permission.
             return [
                 Ask(
                     action="approve_call",

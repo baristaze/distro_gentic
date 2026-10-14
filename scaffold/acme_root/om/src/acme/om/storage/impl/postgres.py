@@ -10,6 +10,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.storage.impl.postgres import (
+    SpendAccountStoragePostgresImpl,
+    SpendLedgerStoragePostgresImpl,
+)
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -20,11 +25,6 @@ from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.storage.impl.postgres import BenchmarkStoragePostgresImpl
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.storage.impl.postgres import (
-    AccountStoragePostgresImpl,
-    MoneyLedgerStoragePostgresImpl,
-)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
@@ -236,8 +236,8 @@ class StoragePostgresImpl(StorageInterface):
         self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
-        self._accounts = AccountStoragePostgresImpl(sessions)
-        self._money_ledger = MoneyLedgerStoragePostgresImpl(sessions)
+        self._spend_accounts = SpendAccountStoragePostgresImpl(sessions)
+        self._money_ledger = SpendLedgerStoragePostgresImpl(sessions)
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
@@ -310,10 +310,10 @@ class StoragePostgresImpl(StorageInterface):
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
 
-    def get_account_storage(self) -> AccountStorageInterface:
-        return self._accounts
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface:
+        return self._spend_accounts
 
-    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface:
         return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:

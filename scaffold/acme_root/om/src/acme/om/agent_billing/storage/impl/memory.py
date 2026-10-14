@@ -1,4 +1,4 @@
-"""The in-memory account and ledger. Every write reads and writes under one
+"""The in-memory spend account and ledger. Every write reads and writes under one
 lock with no await in between, which is its whole answer to two holds at
 once."""
 
@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.billing.rules import (
+from acme.om.agent_billing.rules import (
     CountKey,
     closed,
     hold_keys,
@@ -16,9 +16,13 @@ from acme.om.billing.rules import (
     opened,
     raise_keys,
 )
-from acme.om.billing.storage import AccountStorageInterface, Entry, MoneyLedgerStorageInterface
-from acme.om.billing.types.account import Account
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.storage import (
+    Entry,
+    SpendAccountStorageInterface,
+    SpendLedgerStorageInterface,
+)
+from acme.om.agent_billing.types.spend_account import SpendAccount
+from acme.om.agent_billing.types.spend_ledger import (
     Approval,
     Bucket,
     Charge,
@@ -37,42 +41,42 @@ from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
-class AccountStorageMemoryImpl(MemoryStorageBase, AccountStorageInterface):
+class SpendAccountStorageMemoryImpl(MemoryStorageBase, SpendAccountStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface) -> None:
         super().__init__(outbox)
-        self._accounts: MemoryTable[Account] = {}
+        self._spend_accounts: MemoryTable[SpendAccount] = {}
 
-    async def create_account(
-        self, org_id: UUID, account: Account, outbox_rows: tuple[OutboxRow, ...]
+    async def create_spend_account(
+        self, org_id: UUID, spend_account: SpendAccount, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         async with self._lock:
-            if account.id != org_id:
-                raise TenantMismatch(f"account {account.id} is not {org_id}'s")
-            return self._insert(self._accounts, org_id, account, outbox_rows)
+            if spend_account.id != org_id:
+                raise TenantMismatch(f"spend account {spend_account.id} is not {org_id}'s")
+            return self._insert(self._spend_accounts, org_id, spend_account, outbox_rows)
 
-    async def read_account(self, org_id: UUID) -> Account | None:
-        return self._get(self._accounts, org_id, org_id)
+    async def read_spend_account(self, org_id: UUID) -> SpendAccount | None:
+        return self._get(self._spend_accounts, org_id, org_id)
 
-    async def write_account(
+    async def write_spend_account(
         self,
         org_id: UUID,
-        account: Account,
+        spend_account: SpendAccount,
         expected_version: int,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         async with self._lock:
-            found = self._get(self._accounts, org_id, account.id)
+            found = self._get(self._spend_accounts, org_id, spend_account.id)
             if found is None or found.version != expected_version:
                 raise PreconditionFailed(
-                    f"account {account.id} is no longer at version {expected_version}"
+                    f"spend account {spend_account.id} is no longer at version {expected_version}"
                 )
-            self._put(self._accounts, org_id, account, outbox_rows)
+            self._put(self._spend_accounts, org_id, spend_account, outbox_rows)
 
     async def purge_tenant(self, org_id: UUID) -> int:
         async with self._lock:
-            if self._get(self._accounts, org_id, org_id) is None:
+            if self._get(self._spend_accounts, org_id, org_id) is None:
                 return 0
-            del self._accounts[org_id]
+            del self._spend_accounts[org_id]
             return 1
 
 
@@ -97,7 +101,7 @@ class _Row:
         self.reference = reference
 
 
-class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterface):
+class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterface):
     def __init__(self) -> None:
         super().__init__()
         self._entries: list[_Row] = []  # in the order they were written

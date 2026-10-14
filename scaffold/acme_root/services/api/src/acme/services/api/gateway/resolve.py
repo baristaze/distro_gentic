@@ -10,10 +10,10 @@ from starlette.requests import HTTPConnection
 
 from acme.services.api.services import (
     AdminServiceInterface,
+    AgentBillingServiceInterface,
     AgentSessionsServiceInterface,
     AutomationsServiceInterface,
     BenchmarksServiceInterface,
-    BillingServiceInterface,
     BudgetsServiceInterface,
     ConnectorsServiceInterface,
     EventsServiceInterface,
@@ -24,7 +24,6 @@ from acme.services.api.services import (
     IntakeServiceInterface,
     KnowledgeServiceInterface,
     LeasesServiceInterface,
-    LedgersServiceInterface,
     MatrixServiceInterface,
     MediaServiceInterface,
     NotificationsServiceInterface,
@@ -35,6 +34,7 @@ from acme.services.api.services import (
     RelayServiceInterface,
     RetentionServiceInterface,
     ServicesInterface,
+    SpendLedgersServiceInterface,
     TenancyServiceInterface,
     ToolsServiceInterface,
     ValidationsServiceInterface,
@@ -118,8 +118,8 @@ def budgets_service(connection: HTTPConnection) -> BudgetsServiceInterface:
     return services_of(connection).get_budgets_service()
 
 
-def billing_service(connection: HTTPConnection) -> BillingServiceInterface:
-    return services_of(connection).get_billing_service()
+def agent_billing_service(connection: HTTPConnection) -> AgentBillingServiceInterface:
+    return services_of(connection).get_agent_billing_service()
 
 
 def intake_service(connection: HTTPConnection) -> IntakeServiceInterface:
@@ -142,8 +142,8 @@ def benchmarks_service(connection: HTTPConnection) -> BenchmarksServiceInterface
     return services_of(connection).get_benchmarks_service()
 
 
-def ledgers_service(connection: HTTPConnection) -> LedgersServiceInterface:
-    return services_of(connection).get_ledgers_service()
+def spend_ledgers_service(connection: HTTPConnection) -> SpendLedgersServiceInterface:
+    return services_of(connection).get_spend_ledgers_service()
 
 
 def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
@@ -190,13 +190,13 @@ RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
 AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
-BillingService = Annotated[BillingServiceInterface, Depends(billing_service)]
+AgentBillingService = Annotated[AgentBillingServiceInterface, Depends(agent_billing_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
 NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
 MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
 ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
-LedgersService = Annotated[LedgersServiceInterface, Depends(ledgers_service)]
+SpendLedgersService = Annotated[SpendLedgersServiceInterface, Depends(spend_ledgers_service)]
 ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
 KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
 ConnectorsService = Annotated[ConnectorsServiceInterface, Depends(connectors_service)]

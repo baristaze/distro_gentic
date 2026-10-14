@@ -449,7 +449,7 @@ def counted(name: str, **labels: str) -> float:
 
 
 async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_path: Path) -> None:
-    """The runner's root wires billing's money gate, the one every call
+    """The runner's root wires agent billing's money gate, the one every call
     settles through, and the matrix, and that settle counts the call: its
     tokens by kind and its spend, under the matrix version its session is
     pinned to and its tenant's plan tier, never under `none`."""

@@ -1,7 +1,7 @@
-"""Wire types of a tenant's billing writes that clear a park: a call
+"""Wire types of a tenant's agent billing writes that clear a park: a call
 approved past its session's norm, a budget raised once for its window,
 and, beside them in `ledgers`, units an operator grants. Each answers the
-ledger entry it posted (`LedgerEntryView`)."""
+ledger entry it posted (`SpendLedgerEntryView`)."""
 
 from typing import Self
 

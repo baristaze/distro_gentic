@@ -15,15 +15,19 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl, Integr
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.agent_billing.root import (
+    build_agent_billing_purge,
+    build_money_gate,
+    refuse_open_money,
+)
+from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.automations.impl.manager import AutomationsOptions
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
-from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
-from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_open_money
-from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
 from acme.om.connectors.impl.manager import ConnectorsOptions
@@ -146,7 +150,7 @@ def worker_managers(
 ) -> Managers:
     """The managers, each one the sweep purges through with its retention and
     its batch from the settings. The worker is the one process that purges,
-    so it is the one that sets them. Its budget gate is billing's money
+    so it is the one that sets them. Its budget gate is agent billing's money
     gate, the one whose holds its sweep settles; `ports` are the platform's
     ports the product sets, None each for the platform's own, and their
     `kinds` the product's, which `build` reads from `PRODUCT_KINDS`. Outside
@@ -296,14 +300,14 @@ class WorkerContainer:
             client=McpClientSdkImpl(),
             options=ConnectorsOptions(purge_batch=batch),
         )
-        # Billing's account, for its purge; its ledger stays.
-        self.billing = build_billing_purge(storage, managers)
+        # Agent agent billing's account, for its purge; its ledger stays.
+        self.agent_billing = build_agent_billing_purge(storage, managers)
         # The platform's duties the sweep carries across tenants: a hold
         # nobody settled settles through the money gate whose ledger holds
         # it, at the provider's bill, else whole; and a session pending with
         # no loop has its run asked for again.
         self.holds = HoldSweepImpl(
-            storage.get_money_ledger_storage(),
+            storage.get_spend_ledger_storage(),
             managers.budget_gate,
             managers.tenancy,
             ProviderBillsUnknownImpl(),

@@ -379,28 +379,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/orgs/{org_id}/ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Ledger
-         * @description The tenant's entries, the newest first, narrowed to one kind, one
-         *     hold (its hold, settlement, and charge), or one session (its holds and
-         *     approvals) when named. `has_more` says the read was cut at its limit.
-         */
-        get: operations["get_ledger_v1_admin_orgs__org_id__ledger_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/orgs/{org_id}/levers": {
         parameters: {
             query?: never;
@@ -573,6 +551,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orgs/{org_id}/spend-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ledger
+         * @description The tenant's entries, the newest first, narrowed to one kind, one
+         *     hold (its hold, settlement, and charge), or one session (its holds and
+         *     approvals) when named. `has_more` says the read was cut at its limit.
+         */
+        get: operations["get_ledger_v1_admin_orgs__org_id__spend_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orgs/{org_id}/work/lanes/{lane}/cap": {
         parameters: {
             query?: never;
@@ -644,6 +644,29 @@ export interface paths {
         get: operations["platform_size_v1_admin_size_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-billing/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Payment
+         * @description The credit of a payment the provider confirmed: the body is the
+         *     provider's confirmation, byte for byte, and `Payment-Signature` its
+         *     signature. `webhook_signature_invalid` when the signature does not
+         *     check out, and nothing is credited.
+         */
+        post: operations["confirm_payment_v1_agent_billing_payments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1597,29 +1620,6 @@ export interface paths {
          */
         put: operations["update_automation_v1_automations__automation_id__put"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/billing/payments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Confirm Payment
-         * @description The credit of a payment the provider confirmed: the body is the
-         *     provider's confirmation, byte for byte, and `Payment-Signature` its
-         *     signature. `webhook_signature_invalid` when the signature does not
-         *     check out, and nothing is credited.
-         */
-        post: operations["confirm_payment_v1_billing_payments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6515,66 +6515,6 @@ export interface components {
             term_seconds: number;
         };
         /**
-         * LedgerEntryView
-         * @description One entry, written once. A field a kind does not carry is null:
-         *
-         *     - `hold`: `session_id`, `units` (the worst case, null when no price
-         *       applies), and `cost_micros` (the exposure).
-         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
-         *       buckets paid).
-         *     - `credit`: `amount_micros` and `reference` (the payment's).
-         *     - `grant`: `units`, `reason`, and `by` (the operator).
-         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
-         *       `by`.
-         */
-        LedgerEntryView: {
-            /** Amount Micros */
-            amount_micros?: number | null;
-            /** Budget Id */
-            budget_id?: string | null;
-            /** By */
-            by?: string | null;
-            /** Cost Micros */
-            cost_micros?: number | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Hold Id */
-            hold_id?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            kind: components["schemas"]["EntryKind"];
-            /** Reason */
-            reason?: string | null;
-            /** Reference */
-            reference?: string | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Tokens */
-            tokens?: number | null;
-            /** Units */
-            units?: number | null;
-        };
-        /**
-         * LedgerPageView
-         * @description One read of a tenant's ledger, the newest first. `has_more` says the
-         *     read was cut at its limit and older entries match it too: narrow it by
-         *     kind, hold, or session to reach them.
-         */
-        LedgerPageView: {
-            /** Has More */
-            has_more: boolean;
-            /** Items */
-            items: components["schemas"]["LedgerEntryView"][];
-        };
-        /**
          * LeverCheck
          * @description What a check found in a lever's text.
          * @enum {string}
@@ -8454,6 +8394,76 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * SpendLedgerEntryView
+         * @description One entry, written once. A field a kind does not carry is null:
+         *
+         *     - `hold`: `session_id`, `units` (the worst case, null when no price
+         *       applies), and `cost_micros` (the exposure).
+         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+         *       buckets paid).
+         *     - `credit`: `amount_micros` and `reference` (the payment's).
+         *     - `grant`: `units`, `reason`, and `by` (the operator).
+         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+         *       `by`.
+         */
+        SpendLedgerEntryView: {
+            /** Amount Micros */
+            amount_micros?: number | null;
+            /** Budget Id */
+            budget_id?: string | null;
+            /** By */
+            by?: string | null;
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Hold Id */
+            hold_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["EntryKind"];
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Tokens */
+            tokens?: number | null;
+            /** Units */
+            units?: number | null;
+        };
+        /**
+         * SpendLedgerPageView
+         * @description One read of a tenant's ledger, the newest first. `has_more` says the
+         *     read was cut at its limit and older entries match it too: narrow it by
+         *     kind, hold, or session to reach them.
+         */
+        SpendLedgerPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["SpendLedgerEntryView"][];
+        };
+        /**
+         * SpendUnitsGrantRequest
+         * @description Units the platform grants the tenant for its life, and why.
+         */
+        SpendUnitsGrantRequest: {
+            /** Reason */
+            reason: string;
+            /** Units */
+            units: number;
+        };
+        /**
          * SsoLinkRequest
          * @description What the identity provider's admin portal opens on: the single sign-on
          *     connection (`sso`) or the org's domains (`domain_verification`), and the
@@ -8981,16 +8991,6 @@ export interface components {
             /** Integrations */
             integrations: string[];
             kind: components["schemas"]["TriggerKind"];
-        };
-        /**
-         * UnitsGrantRequest
-         * @description Units the platform grants the tenant for its life, and why.
-         */
-        UnitsGrantRequest: {
-            /** Reason */
-            reason: string;
-            /** Units */
-            units: number;
         };
         /**
          * UpdateIdentityRequest
@@ -10047,7 +10047,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UnitsGrantRequest"];
+                "application/json": components["schemas"]["SpendUnitsGrantRequest"];
             };
         };
         responses: {
@@ -10057,7 +10057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -10094,46 +10094,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostStandingView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_ledger_v1_admin_orgs__org_id__ledger_get: {
-        parameters: {
-            query?: {
-                kind?: components["schemas"]["EntryKind"] | null;
-                hold_id?: string | null;
-                session_id?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerPageView"];
                 };
             };
             /** @description Validation Error */
@@ -10455,6 +10415,46 @@ export interface operations {
             };
         };
     };
+    get_ledger_v1_admin_orgs__org_id__spend_ledger_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["EntryKind"] | null;
+                hold_id?: string | null;
+                session_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendLedgerPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_tenant_cap_v1_admin_orgs__org_id__work_lanes__lane__cap_get: {
         parameters: {
             query?: never;
@@ -10623,6 +10623,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformSizeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_payment_v1_agent_billing_payments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "Payment-Signature"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -11223,7 +11258,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -12668,41 +12703,6 @@ export interface operations {
             };
         };
     };
-    confirm_payment_v1_billing_payments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "Payment-Signature"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_budgets_v1_budgets_get: {
         parameters: {
             query?: {
@@ -12879,7 +12879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"];
+                    "application/json": components["schemas"]["SpendLedgerEntryView"];
                 };
             };
             /** @description Validation Error */

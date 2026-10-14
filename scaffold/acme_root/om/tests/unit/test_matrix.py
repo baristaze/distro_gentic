@@ -35,6 +35,9 @@ from acme.infra.base import SYSTEM_SCOPE
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
+from acme.om.agent_billing.rules import LimitKind, notice_of
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
+from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.request import Start
@@ -42,9 +45,6 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.rules import LimitKind, notice_of
-from acme.om.billing.types.account import AccountRequest, FundingMode
-from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import (
     NotFound,
@@ -395,8 +395,8 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
     assert models == {SOL.model, SONNET.model}, "no call reached a fill it forbade"
 
     other = context(Role.OWNER, make_org())
-    await fleet.money.billing.open_account(
-        other, AccountRequest(funding=FundingMode.PLATFORM, plan_id="starter", zone="UTC")
+    await fleet.money.agent_billing.open_spend_account(
+        other, SpendAccountRequest(funding=FundingMode.PLATFORM, unit_plan_id="starter", zone="UTC")
     )
     unkept = await fleet.loop.managers.agents.start_session(other, a_start())
     await fleet.loop.managers.models.resolve_fill_set(
@@ -851,8 +851,8 @@ async def test_billing_holds_an_own_key_call_only_when_it_carries_the_tenants_ke
 async def platform_tenant(fleet: Fleet) -> tuple[TenantContext, UUID]:
     """A second tenant, on the platform's key, with a session of its own."""
     other = context(Role.OWNER, make_org())
-    await fleet.money.billing.open_account(
-        other, AccountRequest(funding=FundingMode.PLATFORM, plan_id="starter", zone="UTC")
+    await fleet.money.agent_billing.open_spend_account(
+        other, SpendAccountRequest(funding=FundingMode.PLATFORM, unit_plan_id="starter", zone="UTC")
     )
     session = await fleet.loop.managers.agents.start_session(other, a_start())
     return other, session.id

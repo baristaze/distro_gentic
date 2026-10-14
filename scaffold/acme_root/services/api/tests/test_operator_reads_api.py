@@ -12,10 +12,10 @@ from api_support import enrol_operator
 from contracts.benchmark_storage import make_trials, operator
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.impl.manager import MAX_ENTRIES
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_ledger import Approval, Grant
 from acme.om.base import new_id
-from acme.om.billing.impl.manager import MAX_ENTRIES
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.ledger import Approval, Grant
 from acme.om.context import OperatorRole
 from acme.services.api.container import AppContainer
 
@@ -51,12 +51,14 @@ async def test_a_read_operator_reads_the_ledger_of_the_tenant_it_names(
     client: httpx.AsyncClient, container: AppContainer, owner: dict[str, str]
 ) -> None:
     org_id = UUID((await client.get("/v1/orgs/current", headers=owner)).json()["id"])
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
     granter = operator()
-    grant = await billing.grant_units(granter, org_id, 500, "a pilot")
+    grant = await agent_billing.grant_units(granter, org_id, 500, "a pilot")
     reader, _ = await enrol_operator(client, container, "sup@example.test", OperatorRole.READ)
 
-    ledger = await client.get(f"/v1/admin/orgs/{org_id}/ledger", headers=reader)
+    ledger = await client.get(f"/v1/admin/orgs/{org_id}/spend-ledger", headers=reader)
     assert ledger.status_code == 200, ledger.text
     assert ledger.json()["has_more"] is False
     (entry,) = ledger.json()["items"]
@@ -66,14 +68,14 @@ async def test_a_read_operator_reads_the_ledger_of_the_tenant_it_names(
         "a pilot",
         str(granter.identity_id),
     )
-    charges = await client.get(f"/v1/admin/orgs/{org_id}/ledger?kind=charge", headers=reader)
+    charges = await client.get(f"/v1/admin/orgs/{org_id}/spend-ledger?kind=charge", headers=reader)
     assert charges.status_code == 200 and charges.json()["items"] == []
-    other = await client.get(f"/v1/admin/orgs/{UUID(int=7)}/ledger", headers=reader)
+    other = await client.get(f"/v1/admin/orgs/{UUID(int=7)}/spend-ledger", headers=reader)
     assert other.status_code == 200 and other.json()["items"] == []
 
-    as_tenant = await client.get(f"/v1/admin/orgs/{org_id}/ledger", headers=owner)
+    as_tenant = await client.get(f"/v1/admin/orgs/{org_id}/spend-ledger", headers=owner)
     assert as_tenant.status_code == 401, as_tenant.text
-    unknown = await client.get(f"/v1/admin/orgs/{org_id}/ledger?kind=gift", headers=reader)
+    unknown = await client.get(f"/v1/admin/orgs/{org_id}/spend-ledger?kind=gift", headers=reader)
     assert unknown.status_code == 422, unknown.text
 
 
@@ -84,7 +86,7 @@ async def test_an_operator_reads_one_sessions_entries_among_more_than_a_read_hol
     newest read alone is cut at its limit and says so, and the operator
     reaches one session's entries by naming the session."""
     org_id = UUID((await client.get("/v1/orgs/current", headers=owner)).json()["id"])
-    ledger = container.storage.get_money_ledger_storage()
+    ledger = container.storage.get_spend_ledger_storage()
     by = operator().identity_id
     session_id = new_id()
     start = datetime(2026, 1, 5, tzinfo=UTC)
@@ -113,7 +115,7 @@ async def test_an_operator_reads_one_sessions_entries_among_more_than_a_read_hol
         )
         await ledger.post_grant(org_id, grant)
     reader, _ = await enrol_operator(client, container, "sup@example.test", OperatorRole.READ)
-    path = f"/v1/admin/orgs/{org_id}/ledger"
+    path = f"/v1/admin/orgs/{org_id}/spend-ledger"
 
     newest = await client.get(f"{path}?limit=1000", headers=reader)
     assert newest.status_code == 200, newest.text

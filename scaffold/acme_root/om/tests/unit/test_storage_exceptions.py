@@ -21,7 +21,6 @@ import inspect
 import pkgutil
 
 from contracts import (
-    account_storage,
     agent_session_storage,
     agent_storage,
     attribution_storage,
@@ -41,7 +40,6 @@ from contracts import (
     ledger_storage,
     matrix_storage,
     media_storage,
-    money_ledger_storage,
     notification_storage,
     orchestration_storage,
     outbox_storage,
@@ -52,6 +50,8 @@ from contracts import (
     project_storage,
     relay_storage,
     retention_storage,
+    spend_account_storage,
+    spend_ledger_storage,
     step_storage,
     tenancy_storage,
     tool_storage,
@@ -141,7 +141,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # service context the sweep then works it under.
         ("AgentSessionStorageInterface", "read_stalled"),
         ("LedgerStorageInterface", "read_open"),
-        ("MoneyLedgerStorageInterface", "read_open"),
+        ("SpendLedgerStorageInterface", "read_open"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
         ("LeasesStorageInterface", "purge_settled"),
@@ -205,7 +205,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
 )
 
 CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
-    "AccountStorageInterface": account_storage.CROSS_TENANT_CASES,
+    "SpendAccountStorageInterface": spend_account_storage.CROSS_TENANT_CASES,
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
@@ -223,7 +223,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "MatrixStorageInterface": matrix_storage.CROSS_TENANT_CASES,
     "MatrixTenantStorageInterface": matrix_storage.TENANT_CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
-    "MoneyLedgerStorageInterface": money_ledger_storage.CROSS_TENANT_CASES,
+    "SpendLedgerStorageInterface": spend_ledger_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,

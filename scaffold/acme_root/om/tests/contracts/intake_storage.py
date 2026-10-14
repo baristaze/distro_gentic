@@ -1,5 +1,5 @@
 """The intake storage contract: the installations a tenant connected, its
-account links, and its sessions' work bindings. The cases named in `CROSS_TENANT_CASES` are the tenant
+identity links, and its sessions' work bindings. The cases named in `CROSS_TENANT_CASES` are the tenant
 fence's evidence: each one presents another tenant's identifier and
 asserts that nothing is found and nothing changes."""
 
@@ -9,8 +9,8 @@ from uuid import UUID
 from acme.om.base import new_id, utcnow
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.types.link import (
-    AccountLink,
     HandleKind,
+    IdentityLink,
     Installation,
     PlatformAct,
     WorkBinding,
@@ -46,8 +46,8 @@ def make_installation(installation: str = "71001") -> Installation:
     )
 
 
-def make_link(external_id: str = "U024BE7LH", user_id: UUID | None = None) -> AccountLink:
-    return AccountLink(
+def make_link(external_id: str = "U024BE7LH", user_id: UUID | None = None) -> IdentityLink:
+    return IdentityLink(
         id=new_id(),
         created_at=utcnow(),
         integration="chat",

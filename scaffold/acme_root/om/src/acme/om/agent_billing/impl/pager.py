@@ -1,14 +1,14 @@
 import logging
 
 from acme.infra.observability import OUTCOMES
-from acme.om.billing.pager import AnomalyPage, OperatorPagerInterface
+from acme.om.agent_billing.pager import AnomalyPage, OperatorPagerInterface
 
 log = logging.getLogger(__name__)
 
 
 class OperatorPagerLogImpl(OperatorPagerInterface):
     """The page as an error the operators' alerting reads: one log line at
-    error, and the `billing` `paged` outcome counted, naming the tenant,
+    error, and the `agent_billing` `paged` outcome counted, naming the tenant,
     the session, and the figures, never the session's content."""
 
     async def page(self, page: AnomalyPage) -> None:

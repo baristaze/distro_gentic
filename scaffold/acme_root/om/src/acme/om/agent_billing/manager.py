@@ -1,7 +1,7 @@
-"""The billing swimlane: a tenant's account, its limits' windows, its
+"""The billing swimlane: a tenant's spend account, its limits' windows, its
 buckets, and the one ledger every hold, settlement, and charge posts to.
 
-Opening or changing an account governs what the org's members may spend,
+Opening or changing a spend account governs what the org's members may spend,
 so it takes the permission that governs members, as a budget does; reading
 takes READ. A credit is posted only from the payment provider's verified
 confirmation, and a top-up never raises a limit. The gate is
@@ -10,8 +10,8 @@ confirmation, and a top-up never raises a limit. The gate is
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.billing.types.account import Account, AccountRequest
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.types.spend_account import SpendAccount, SpendAccountRequest
+from acme.om.agent_billing.types.spend_ledger import (
     Approval,
     Count,
     Credit,
@@ -25,22 +25,26 @@ from acme.om.budgets.types.hold import Tally
 from acme.om.context import OperatorContext, TenantContext
 
 
-class BillingManagerInterface(ABC):
+class AgentBillingManagerInterface(ABC):
     @abstractmethod
-    async def open_account(self, ctx: TenantContext, request: AccountRequest) -> Account:
-        """The tenant's account, on the latest version of the plan it names,
+    async def open_spend_account(
+        self, ctx: TenantContext, request: SpendAccountRequest
+    ) -> SpendAccount:
+        """The tenant's spend account, on the latest version of the unit plan it names,
         its first billing period starting now, in the zone it names. One an
-        org holds already answers as stored. An unknown plan or zone, or an
+        org holds already answers as stored. An unknown unit plan or zone, or an
         own key with no reference, is `ValidationFailed`."""
         ...
 
     @abstractmethod
-    async def get_account(self, ctx: TenantContext) -> Account:
-        """The tenant's account; `NotFound` before it opens."""
+    async def get_spend_account(self, ctx: TenantContext) -> SpendAccount:
+        """The tenant's spend account; `NotFound` before it opens."""
         ...
 
     @abstractmethod
-    async def set_time_zone(self, ctx: TenantContext, zone: str, expected_version: int) -> Account:
+    async def set_time_zone(
+        self, ctx: TenantContext, zone: str, expected_version: int
+    ) -> SpendAccount:
         """The tenant's zone from now on, conditioned on the version the
         caller read (`PreconditionFailed` when it moved). The window open
         now keeps its start and ends at the new zone's first boundary at or
@@ -128,7 +132,7 @@ class BillingManagerInterface(ABC):
     async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
         """What the budget's current window, as the tenant counts it, spent
         and holds: the one aggregation every view reads, the cap's
-        included. A tenant with no account has held nothing, in windows
+        included. A tenant with no spend account has held nothing, in windows
         counted in UTC."""
         ...
 

@@ -14,24 +14,24 @@ another do.
 
 ## Decision
 
-**One ledger.** Billing keeps one table of entries in `activity`: every
+**One ledger.** Agent billing keeps one table of entries in `activity`: every
 hold, settlement, charge, confirmed credit, granted unit, one-time
 raise, and approval. Each is written once; the serving logins keep
 SELECT and INSERT on it and lose UPDATE and DELETE, as on the engine's
 ledger. Beside it, one count per counter and period: a budget's cost or
 tokens in a window, or a bucket in a billing period or for the
-account's life. An entry moves its counts under their locks, taken in
+spend account's life. An entry moves its counts under their locks, taken in
 one order, in the transaction that writes it. The counts can be rebuilt
 from the entries.
 
-**The hold carries the account.** The gate reads the account in `core`,
-and the hold carries what it read: the funding mode, the plan, the
-unit's scale, and the billing period. The ledger then draws the buckets
+**The hold carries the spend account.** The gate reads the spend account in `core`,
+and the hold carries what it read: the funding mode, the unit plan, the
+spend unit's scale, and the billing period. The ledger then draws the buckets
 on the hold alone, so nothing crosses a role. A settlement and its
 charge are written in one transaction, once per hold.
 
 **One price source, by version.** The engine's list table is the one
-source. Billing reads it through a price book that keeps every
+source. Agent billing reads it through a price book that keeps every
 published version. A model call's hold names the version, provider, and
 model its cap was read from, and its usage is billed from that row,
 after the next version is read and in another process too.
@@ -51,11 +51,11 @@ window is never shorter than its kind and no change opens a second one.
 
 ## Consequences
 
-- With billing's gate wired, the engine's own ledger tables stay empty,
-  and the engine's `get_spend` reads windows in UTC. Billing's
+- With agent billing's gate wired, the engine's own ledger tables stay empty,
+  and the engine's `get_spend` reads windows in UTC. Agent agent billing's
   `get_spend` reads the same counts the gate checks, and is the view.
 - A spend past its hold is charged in full to the last money bucket the
-  account has, never absorbed.
+  spend account has, never absorbed.
 - An entry's body is JSON, read by its kind; a kind this process does
   not know is a defect of the deploy, never read as another.
 - The ledger grows with every call. Its retention is a decision of its

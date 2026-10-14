@@ -1,11 +1,11 @@
 import pytest
-from contracts.money_ledger_storage import MoneyLedgerStorageContract
+from contracts.spend_ledger_storage import SpendLedgerStorageContract
 
-from acme.om.billing.storage import MoneyLedgerStorageInterface
-from acme.om.billing.storage.impl.memory import MoneyLedgerStorageMemoryImpl
+from acme.om.agent_billing.storage import SpendLedgerStorageInterface
+from acme.om.agent_billing.storage.impl.memory import SpendLedgerStorageMemoryImpl
 
 
-class TestMoneyLedgerStorageMemory(MoneyLedgerStorageContract):
+class TestSpendLedgerStorageMemory(SpendLedgerStorageContract):
     @pytest.fixture
-    def storage(self) -> MoneyLedgerStorageInterface:
-        return MoneyLedgerStorageMemoryImpl()
+    def storage(self) -> SpendLedgerStorageInterface:
+        return SpendLedgerStorageMemoryImpl()

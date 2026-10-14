@@ -66,12 +66,12 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
+from acme.om.agent_billing.root import build_agent_billing
+from acme.om.agent_billing.types.spend_account import FundingMode
+from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
 from acme.om.agents.loop_rules import ended_step
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.billing.root import build_billing
-from acme.om.billing.types.account import FundingMode
-from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import TenantContext
@@ -712,7 +712,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     found["claim"] = f"lane {item.lane}, {item.status.value} after {item.attempts} attempt(s)"
 
     # Each model call was held and settled through the money gate.
-    ledger = storage.get_money_ledger_storage()
+    ledger = storage.get_spend_ledger_storage()
     holds = await ledger.read_entries(org_id, session_id=sid, kind=EntryKind.HOLD, limit=10)
     assert len(holds) == 4, "one hold for each of the four model calls"
     bills: list[str] = []
@@ -722,7 +722,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
         (settlement,) = [entry for entry in entries if isinstance(entry, Settlement)]
         bills.append(settlement.bill.kind)
     assert bills == ["billed"] * 4
-    plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
+    plans = {held.funding.unit_plan.id for held in holds if isinstance(held, FundedHold)}
     found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
 
     # Its spend counts under the matrix version it ran on and its plan tier.
@@ -841,10 +841,12 @@ async def test_a_real_loop_runs_end_to_end_on_a_live_provider(
     session = await settled(stack, person, session_id)
 
     steps = await history(stack, person, session_id)
-    # The calls held and spent through billing's money gate, in its ledger.
+    # The calls held and spent through agent billing's money gate, in its ledger.
     container = stack.container
-    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
-    spend = await billing.get_spend(person.ctx, budget.id)
+    agent_billing = build_agent_billing(
+        container.storage, container.managers, PaymentProviderTwinImpl()
+    )
+    spend = await agent_billing.get_spend(person.ctx, budget.id)
     report |= {
         "steps": [step["type"] for step in steps],
         "answer": of_type(steps, "model_response")[-1]["text"],

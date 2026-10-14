@@ -1,4 +1,4 @@
-"""The money over Postgres: the account and ledger contracts, what only the
+"""The money over Postgres: the spend account and ledger contracts, what only the
 database holds (no serving login rewrites or removes a ledger entry, and a
 funding mode this process cannot read spends nothing), and a loop's call
 held, settled, and charged in the one ledger, end to end."""
@@ -8,12 +8,12 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.account_storage import AccountStorageContract, make_account
 from contracts.doubles import context
 from contracts.loops import reply, said
 from contracts.money import money_over
-from contracts.money_ledger_storage import (
-    MoneyLedgerStorageContract,
+from contracts.spend_account_storage import SpendAccountStorageContract, make_spend_account
+from contracts.spend_ledger_storage import (
+    SpendLedgerStorageContract,
     a_credit,
     a_funded_hold,
     closing,
@@ -23,17 +23,17 @@ from sqlalchemy.exc import DBAPIError
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
+from acme.om.agent_billing.impl.gate import MoneyGateImpl, MoneyGateOptions
+from acme.om.agent_billing.impl.pager import OperatorPagerMemoryImpl
+from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_billing.storage.impl.postgres import (
+    SpendAccountStoragePostgresImpl,
+    SpendLedgerStoragePostgresImpl,
+)
+from acme.om.agent_billing.types.spend_ledger import Charge, EntryKind, FundedHold
+from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UNIT_PLANS
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import EMPTY_UUID, new_id
-from acme.om.billing.impl.gate import MoneyGateImpl, MoneyGateOptions
-from acme.om.billing.impl.pager import OperatorPagerMemoryImpl
-from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
-from acme.om.billing.storage.impl.postgres import (
-    AccountStoragePostgresImpl,
-    MoneyLedgerStoragePostgresImpl,
-)
-from acme.om.billing.types.ledger import Charge, EntryKind, FundedHold
-from acme.om.billing.types.plan import PLANS, UNITS
 from acme.om.budgets.impl.pricing import LIST_PRICES
 from acme.om.budgets.storage.impl.postgres import BudgetStoragePostgresImpl
 from acme.om.budgets.types.amount import Spend
@@ -53,16 +53,16 @@ pytestmark = pytest.mark.integration
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 
-class TestAccountStoragePostgres(AccountStorageContract):
+class TestAccountStoragePostgres(SpendAccountStorageContract):
     @pytest.fixture
-    def storage(self, pg_sessions: LoginSessions) -> AccountStorageInterface:
-        return AccountStoragePostgresImpl(pg_sessions)
+    def storage(self, pg_sessions: LoginSessions) -> SpendAccountStorageInterface:
+        return SpendAccountStoragePostgresImpl(pg_sessions)
 
 
-class TestMoneyLedgerStoragePostgres(MoneyLedgerStorageContract):
+class TestSpendLedgerStoragePostgres(SpendLedgerStorageContract):
     @pytest.fixture
-    def storage(self, pg_sessions: LoginSessions) -> MoneyLedgerStorageInterface:
-        return MoneyLedgerStoragePostgresImpl(pg_sessions)
+    def storage(self, pg_sessions: LoginSessions) -> SpendLedgerStorageInterface:
+        return SpendLedgerStoragePostgresImpl(pg_sessions)
 
 
 async def refused(factory: SessionFactory, org_id: UUID, statement: TextClause) -> str:
@@ -84,7 +84,7 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
     to move."""
     settings = migration_settings
     await ensure_logins_everywhere(settings.master_databases(), settings.login_passwords())
-    ledger = MoneyLedgerStoragePostgresImpl(pg_sessions)
+    ledger = SpendLedgerStoragePostgresImpl(pg_sessions)
     org = new_id()
     await ledger.post_credit(org, a_credit(9_000))
     stored = await ledger.open_hold(org, a_funded_hold(units=2))
@@ -96,14 +96,14 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
         (pg_sessions.system[DatabaseRole.ACTIVITY], EMPTY_UUID),
     ):
         for statement in (
-            text("UPDATE activity.ledger_entries SET created_at = created_at"),
-            text("DELETE FROM activity.ledger_entries"),
+            text("UPDATE activity.spend_ledger_entries SET created_at = created_at"),
+            text("DELETE FROM activity.spend_ledger_entries"),
         ):
             error = await refused(factory, scope, statement)
-            assert "permission denied for table ledger_entries" in error, error
+            assert "permission denied for table spend_ledger_entries" in error, error
         async with factory() as db:
             await set_scope(db, scope, None, None)
-            moved = text("UPDATE activity.ledger_counts SET held = held RETURNING org_id")
+            moved = text("UPDATE activity.spend_ledger_counts SET held = held RETURNING org_id")
             assert set((await db.execute(moved)).scalars().all()) == {org}
             await db.rollback()
     kinds = {type(e).__name__ for e in await ledger.read_entries(org, limit=10)}
@@ -113,25 +113,25 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
 async def test_a_funding_mode_this_process_cannot_read_spends_nothing(
     pg_sessions: LoginSessions,
 ) -> None:
-    """An account whose funding mode is one this process does not know is no
+    """A spend account whose funding mode is one this process does not know is no
     answer to who pays: the gate refuses before anything is held, and never
     reads it as the platform's key."""
-    accounts = AccountStoragePostgresImpl(pg_sessions)
-    ledger = MoneyLedgerStoragePostgresImpl(pg_sessions)
+    spend_accounts = SpendAccountStoragePostgresImpl(pg_sessions)
+    ledger = SpendLedgerStoragePostgresImpl(pg_sessions)
     gate = MoneyGateImpl(
         BudgetStoragePostgresImpl(pg_sessions),
-        accounts,
+        spend_accounts,
         ledger,
         OperatorPagerMemoryImpl(),
-        PLANS,
-        UNITS,
+        UNIT_PLANS,
+        SPEND_UNITS,
         MoneyGateOptions(),
     )
     ctx = context(Role.OWNER)
-    assert await accounts.create_account(ctx.org_id, make_account(ctx.org_id), ())
+    assert await spend_accounts.create_spend_account(ctx.org_id, make_spend_account(ctx.org_id), ())
     async with pg_sessions[DatabaseRole.CORE]() as db:
         await set_scope(db, ctx.org_id, None, None)
-        await db.execute(text("UPDATE core.billing_accounts SET funding = 'barter'"))
+        await db.execute(text("UPDATE core.spend_accounts SET funding = 'barter'"))
         await db.commit()
     request = HoldRequest(
         spender_id=ctx.user_id,
@@ -184,7 +184,7 @@ async def test_a_loops_call_is_held_settled_and_charged_in_the_one_ledger_over_p
     read, every entry in the one ledger."""
     owner = await an_owner(storage, tmp_path)
     money = money_over(tmp_path, storage=storage, owner=owner)
-    await money.open(plan="starter")
+    await money.open(unit_plan="starter")
     await money.top_up(50_000)
     session_id = await money.loop.start()
     await money.loop.say(session_id, "What is the total?")
@@ -201,6 +201,6 @@ async def test_a_loops_call_is_held_settled_and_charged_in_the_one_ledger_over_p
     charge = found[0]
     assert isinstance(charge, Charge) and charge.price_version == LIST_PRICES.version
     assert charge.units > 0 and charge.draw.included == charge.units
-    balances = await money.billing.get_balances(owner)
+    balances = await money.agent_billing.get_balances(owner)
     assert balances[0].spent == charge.units and balances[0].held == 0
     assert balances[2].added == 50_000

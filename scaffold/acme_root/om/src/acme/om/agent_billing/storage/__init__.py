@@ -1,18 +1,18 @@
-"""Storage of the billing swimlane. Every operation takes org_id first.
+"""Storage of the agent billing swimlane. Every operation takes org_id first.
 
-Two interfaces, one per role. The account is the system of record, in
+Two interfaces, one per role. The spend account is the system of record, in
 `core`, written with its outbox rows. The ledger is in `activity`: one table
 of entries, each written once, and a count per counter and period, which an
 entry moves under its lock in the transaction that writes it. A hold
-carries the account as the gate read it, so the ledger never reads `core`."""
+carries the spend account as the gate read it, so the ledger never reads `core`."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.billing.types.account import Account
-from acme.om.billing.types.ledger import (
+from acme.om.agent_billing.types.spend_account import SpendAccount
+from acme.om.agent_billing.types.spend_ledger import (
     Approval,
     Charge,
     Count,
@@ -28,50 +28,50 @@ from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.outbox.types.row import OutboxRow
 
 
-class AccountStorageInterface(ABC):
+class SpendAccountStorageInterface(ABC):
     @abstractmethod
-    async def create_account(
-        self, org_id: UUID, account: Account, outbox_rows: tuple[OutboxRow, ...]
+    async def create_spend_account(
+        self, org_id: UUID, spend_account: SpendAccount, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         """The create, with the rows that announce it, in one commit; False,
-        with nothing landed, when the tenant's account is written already."""
+        with nothing landed, when the tenant's spend account is written already."""
         ...
 
     @abstractmethod
-    async def read_account(self, org_id: UUID) -> Account | None:
-        """The tenant's account. A stored one this process cannot read, such
+    async def read_spend_account(self, org_id: UUID) -> SpendAccount | None:
+        """The tenant's spend account. A stored one this process cannot read, such
         as a funding mode it does not know, is `ValidationFailed`: never
         read as another."""
         ...
 
     @abstractmethod
-    async def write_account(
+    async def write_spend_account(
         self,
         org_id: UUID,
-        account: Account,
+        spend_account: SpendAccount,
         expected_version: int,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
-        """The compare-and-set: lands the account and its outbox rows
+        """The compare-and-set: lands the spend account and its outbox rows
         together when the stored one is at `expected_version`, and raises
         `PreconditionFailed` otherwise, landing nothing."""
         ...
 
     @abstractmethod
     async def purge_tenant(self, org_id: UUID) -> int:
-        """The sweep, for a deleted tenant: deletes its account, and answers
+        """The sweep, for a deleted tenant: deletes its spend account, and answers
         how many rows went, 1 or 0."""
         ...
 
 
-class MoneyLedgerStorageInterface(ABC):
+class SpendLedgerStorageInterface(ABC):
     @abstractmethod
     async def open_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
         """The gate's one write, in one transaction: the counts of every
         counter the hold moves (its lines' windows, its buckets) are made
         where missing and locked in one order; the hold is checked against
         its lines with their window's raise and drawn on its buckets in the
-        fixed order (`billing.rules.open_answer`). When it fits, it is
+        fixed order (`agent_billing.rules.open_answer`). When it fits, it is
         written as drawn, its reserve joins every count, and it is answered.
         Otherwise nothing is written, and every reason is answered. A hold
         opened already answers as stored; an id another tenant holds is

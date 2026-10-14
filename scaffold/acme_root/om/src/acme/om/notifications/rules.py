@@ -42,9 +42,9 @@ import json
 from collections.abc import Iterable, Sequence
 from uuid import UUID
 
+from acme.om.agent_billing.rules import FUNDS_UNLOCK
 from acme.om.agents.loop_rules import fix_cause
 from acme.om.base import derived_id
-from acme.om.billing.rules import FUNDS_UNLOCK
 from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.context import Permission, Role
 from acme.om.steps.types.content import TextBlock
@@ -69,7 +69,7 @@ SETS_BUDGETS = Permission.MANAGE_MEMBERS
 """What raising a budget asks, as the budgets swimlane holds it."""
 
 APPROVES_CALLS = Permission.MANAGE_MEMBERS
-"""What approving a call past its session's norm asks, as billing holds it
+"""What approving a call past its session's norm asks, as agent billing holds it
 (`approve_call`)."""
 
 SAVES_KEYS = Permission.MANAGE_MEMBERS

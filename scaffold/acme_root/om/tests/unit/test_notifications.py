@@ -25,12 +25,12 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
+from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, price_park
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
-from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, price_park
 from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext

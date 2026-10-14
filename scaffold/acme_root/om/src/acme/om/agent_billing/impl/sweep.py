@@ -12,9 +12,9 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_billing.storage import SpendLedgerStorageInterface
+from acme.om.agent_billing.sweep import HoldSweepInterface, ProviderBillsInterface
 from acme.om.base import EMPTY_UUID, Platform, utcnow
-from acme.om.billing.storage import MoneyLedgerStorageInterface
-from acme.om.billing.sweep import HoldSweepInterface, ProviderBillsInterface
 from acme.om.budgets.gate import BudgetGateInterface
 from acme.om.budgets.storage import LedgerStorageInterface
 from acme.om.budgets.types.hold import Bill, BillUnknown, Hold
@@ -46,14 +46,14 @@ class HoldSweepOptions(Platform):
 class HoldSweepImpl(HoldSweepInterface):
     def __init__(
         self,
-        ledger: LedgerStorageInterface | MoneyLedgerStorageInterface,
+        ledger: LedgerStorageInterface | SpendLedgerStorageInterface,
         gate: BudgetGateInterface,
         tenancy: TenancyManagerInterface,
         bills: ProviderBillsInterface,
         options: HoldSweepOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        """`ledger` is the one `gate` writes its holds to: billing's, behind
+        """`ledger` is the one `gate` writes its holds to: agent billing's, behind
         the money gate a root wires, or the engine's, behind its own gate."""
         self._ledger = ledger
         self._gate = gate

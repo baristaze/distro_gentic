@@ -1,6 +1,6 @@
 """A person's place in a team org ends, by their removal or by their
 account's deletion, and the queue unlinks every outside account linked to
-them there: none of their ids stays linked, the account links again to the
+them there: none of their ids stays linked, the identity links again to the
 person added back, and a member who stays keeps theirs."""
 
 import asyncio
@@ -72,11 +72,11 @@ async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
     assert [link.external_id for link in await intake.get_links(ann, ann.user_id)] == ["U-ANN"]
     # A rerun finds nothing left.
     assert await intake.forget_member(ann, bob.id) == 0
-    # No account links to the user who left, so none of theirs comes back.
+    # No identity links to the user who left, so none of theirs comes back.
     with pytest.raises(NotFound):
         await intake.link_account(ann, "chat", "U-BOB", bob.id)
 
-    # Added back, Bob is a new user of the org, and his account links to him.
+    # Added back, Bob is a new user of the org, and his identity links to him.
     again = await add_bob(container)
     assert again.id != bob.id
     relinked = await intake.link_account(ann, "chat", "U-BOB", again.id)

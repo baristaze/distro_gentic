@@ -3,8 +3,8 @@ from uuid import UUID
 
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.types.link import (
-    AccountLink,
     HandleKind,
+    IdentityLink,
     Installation,
     PlatformAct,
     WorkBinding,
@@ -16,7 +16,7 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
     def __init__(self) -> None:
         super().__init__()
         self._installations: MemoryTable[Installation] = {}
-        self._links: MemoryTable[AccountLink] = {}
+        self._links: MemoryTable[IdentityLink] = {}
         self._bindings: MemoryTable[WorkBinding] = {}
         self._acts: MemoryTable[PlatformAct] = {}
 
@@ -41,7 +41,7 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
                 return org
         return None
 
-    async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
+    async def create_link(self, org_id: UUID, link: IdentityLink) -> IdentityLink:
         async with self._lock:
             # One link an account in a tenant: the unique index the table holds.
             held = self._link(org_id, link.integration, link.external_id)
@@ -52,10 +52,10 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
 
     async def read_link(
         self, org_id: UUID, integration: str, external_id: str
-    ) -> AccountLink | None:
+    ) -> IdentityLink | None:
         return self._link(org_id, integration, external_id)
 
-    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[IdentityLink]:
         rows = [link for link in self._rows(self._links, org_id) if link.user_id == user_id]
         return sorted(rows, key=lambda link: (link.integration, link.external_id))[:limit]
 
@@ -76,7 +76,7 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
                 del self._links[link.id]
             return len(gone)
 
-    def _link(self, org_id: UUID, integration: str, external_id: str) -> AccountLink | None:
+    def _link(self, org_id: UUID, integration: str, external_id: str) -> IdentityLink | None:
         found = [
             link
             for link in self._rows(self._links, org_id)
@@ -137,7 +137,7 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
             )
 
 
-def _drop[E: Installation | AccountLink | WorkBinding | PlatformAct](
+def _drop[E: Installation | IdentityLink | WorkBinding | PlatformAct](
     table: MemoryTable[E], org_id: UUID, limit: int
 ) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]

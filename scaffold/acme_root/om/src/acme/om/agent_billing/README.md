@@ -1,28 +1,28 @@
-# Billing
+# Agent billing
 
 Who pays for what an agent spends, and the one ledger that records it.
-The engine's gate holds a call before it starts; billing is what stands
+The engine's gate holds a call before it starts; agent billing is what stands
 behind that gate. This is one of the kinds of thing [Acme is made
 of](../../../../README.md).
 
 ## What it holds
 
-- **Account**: one per org. It says who pays the model provider (the
-  platform's key, or the tenant's own key), the plan and its version,
+- **Spend account**: one per org. It says who pays the model provider (the
+  platform's key, or the tenant's own key), the unit plan and its version,
   when the billing periods start, and the tenant's time zones in the
   order they were set.
-- **Plan**: a versioned row of a catalog the platform publishes: the
-  units each billing period includes, and the price of one unit. A plan
+- **Unit plan**: a versioned row of a catalog the platform publishes: the
+  units each billing period includes, and the price of one unit. A unit plan
   changes by a new version, never in place.
-- **Unit**: a token unit weighted by cost. One unit stands for a fixed
-  slice of reference cost, so a plan can include usage across models
+- **Spend unit**: a token unit weighted by cost. One unit stands for a fixed
+  slice of reference cost, so a unit plan can include usage across models
   without promising dollars or a token count. The platform publishes
   the scale.
 - **Bucket**: what pays for a call on the platform's key, drawn in a
-  fixed order: the plan's included units, granted units, prepaid
+  fixed order: the unit plan's included units, granted units, prepaid
   credits, and a line of credit. Prepaid and postpaid differ only in
   which bucket has room.
-- **Ledger**: one table of entries, each written once: every hold,
+- **Spend ledger**: one table of entries, each written once: every hold,
   settlement, and charge, every confirmed credit and granted unit,
   every one-time raise, and every approval a person gives. Beside it, a
   count per counter and period, which the entries move.
@@ -31,7 +31,7 @@ of](../../../../README.md).
 
 ## What can happen
 
-- **Open an account**, or change its time zone. Either takes the
+- **Open a spend account**, or change its time zone. Either takes the
   permission that governs the org's members.
 - **Hold a call.** The gate asks who pays, holds the worst case on every
   limit in its window, and draws it on the buckets, all in one
@@ -51,7 +51,7 @@ of](../../../../README.md).
   its opening, and a job's at its deadline, which it lives to. The sweep
   settles it through its gate, at the bill the provider gives, else
   whole, and releases it only on the provider's proof (`sweep.py`).
-- **Purge a deleted tenant.** Its account goes with its other rows. Its
+- **Purge a deleted tenant.** Its spend account goes with its other rows. Its
   ledger is never deleted, and never keeps the sweep from marking the
   tenant purged (`purge.py`, ADR 1017).
 
@@ -60,11 +60,11 @@ of](../../../../README.md).
 - **One ledger, one price source.** Every hold, settlement, and charge is
   an entry of the one ledger. A cap and a bill read the same row of the
   same versioned table.
-- **Nothing is spent when nobody can say who pays.** A missing account,
-  an own key with no reference, a plan the catalog lacks, or a stored
-  account this process cannot read refuses the call. Nothing falls back
-  to the platform's key. An account on its own key is held only for a
-  call that carries one of the tenant's keys, and an account the
+- **Nothing is spent when nobody can say who pays.** A missing spend account,
+  an own key with no reference, a unit plan the catalog lacks, or a stored
+  spend account this process cannot read refuses the call. Nothing falls back
+  to the platform's key. A spend account on its own key is held only for a
+  call that carries one of the tenant's keys, and a spend account the
   platform pays only for a call that does not.
 - **A change of time zone never makes budget.** Days and weeks follow
   the tenant's zone, months its billing period. A change keeps the open
