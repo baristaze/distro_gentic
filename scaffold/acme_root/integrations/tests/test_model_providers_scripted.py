@@ -19,6 +19,7 @@ from acme.integrations.model_providers.content import (
     TextBlock,
     ThinkingBlock,
     ThinkingSource,
+    ToolResultBlock,
     ToolUseBlock,
 )
 from acme.integrations.model_providers.failures import ModelCallFailed
@@ -66,6 +67,37 @@ async def test_a_reply_streams_in_parts_and_ends_whole_with_its_usage() -> None:
     inputs = [p.partial_input for p in parts if isinstance(p, ToolUseDelta)]
     assert "".join(inputs) == '{"path":"/var/log/import.log"}'
     assert twin.calls == [CALL] and twin.remaining == 0
+
+
+async def test_a_scripted_input_cites_a_field_of_the_last_tool_result() -> None:
+    answered = Message(
+        role="user",
+        blocks=(
+            ToolResultBlock(
+                tool_use_id="toolu_1", parts=(TextBlock(text='{"runs": ["r1", "r2"]}'),)
+            ),
+        ),
+    )
+    call = CALL.model_copy(update={"messages": (*CALL.messages, answered)})
+    citing = ToolUseBlock(
+        id="toolu_2",
+        name="submit_result",
+        input={"evidence": "$last_result.runs", "note": "$last_result.absent", "claim": "ok"},
+    )
+    twin = ModelProviderScriptedImpl(
+        ProviderName.ANTHROPIC, [REPLY.model_copy(update={"blocks": (citing,)})]
+    )
+
+    parts = [part async for part in twin.stream(call)]
+
+    assert isinstance(parts[-1], Finished)
+    (use,) = parts[-1].reply.blocks
+    assert isinstance(use, ToolUseBlock)
+    assert dict(use.input) == {
+        "evidence": ("r1", "r2"),
+        "note": "$last_result.absent",
+        "claim": "ok",
+    }
 
 
 async def test_the_same_script_runs_the_same_way_twice() -> None:
