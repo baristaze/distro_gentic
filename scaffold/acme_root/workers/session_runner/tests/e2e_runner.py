@@ -30,7 +30,8 @@ def main() -> int:
     install_trust_store()
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from contracts.evidence import ScriptedExecutor
-    from runner_support import E2E_KINDS, KINDS
+    from platform_runner_support import E2E_KINDS
+    from runner_support import KINDS
 
     from acme.infra.workspaces import WorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession

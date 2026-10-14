@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.attribution.types.authority import RequestAttribution
 from acme.om.base import new_id
 from acme.om.context import (
@@ -117,18 +116,3 @@ async def model_request(
     )
     (stored,) = await managers.steps.append_steps(ctx, session_id, epoch, [request])
     return stored
-
-
-class SessionAgentProjectsMemory(SessionAgentProjectsInterface):
-    """Each session's agent project as a suite names it: one it never named
-    belongs to `default`, and a tenant holds the agent projects named here."""
-
-    def __init__(self, default: UUID | None = None) -> None:
-        self.default = default
-        self.sessions: dict[UUID, UUID | None] = {}
-
-    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return self.sessions.get(session_id, self.default)
-
-    async def holds(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
-        return agent_project_id in {self.default, *self.sessions.values()}
