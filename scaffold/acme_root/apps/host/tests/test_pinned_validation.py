@@ -38,7 +38,7 @@ from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
-from acme.om import root as platform_root
+from acme.om import platform_root
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
@@ -52,7 +52,7 @@ from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.services.api.seed import seed_platform

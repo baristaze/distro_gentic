@@ -81,8 +81,8 @@ from acme.om.exceptions import StaleWriter
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.impl.sealed_steps import says_something
-from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.types.content import ContentState, TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.storage.migrate import VERSION_TABLE

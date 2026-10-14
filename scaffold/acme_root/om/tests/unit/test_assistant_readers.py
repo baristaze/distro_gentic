@@ -43,7 +43,12 @@ from acme.om.platform_agents.kinds import (
     SHIPPED,
 )
 from acme.om.platform_agents.tools import NativeToolImpl
-from acme.om.root import Managers, ProductKinds, build_managers
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.steps.types.header import LoopOutcome, Park, ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.tool import ToolInterface, ToolRuntime
@@ -89,8 +94,8 @@ def a_reader(name: str, authorization_class: str = ToolClass.READ) -> type[Nativ
 
 def tools_of(
     *tools: type[NativeToolImpl],
-) -> Callable[[Callable[[], Managers]], tuple[ToolInterface, ...]]:
-    def build(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
+) -> Callable[[Callable[[], PlatformManagers]], tuple[ToolInterface, ...]]:
+    def build(managers: Callable[[], PlatformManagers]) -> tuple[ToolInterface, ...]:
         return tuple(tool() for tool in tools)
 
     return build
@@ -154,11 +159,13 @@ def test_a_slot_that_names_a_tool_the_assistant_may_not_call_is_refused_at_start
     tmp_path: Path, product: ProductKinds, refused: str
 ) -> None:
     with pytest.raises(UnsafeConfiguration, match=refused):
-        build_managers(
+        build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            platform_agents=PlatformAgents(corpus=CORPUS),
-            product_kinds=product,
+            platform_root_options=PlatformRootOptions(
+                platform_agents=PlatformAgents(corpus=CORPUS),
+                product_kinds=product,
+            ),
         )
 
 

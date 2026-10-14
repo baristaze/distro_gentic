@@ -32,7 +32,7 @@ from acme.om.context import (
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.rules import tier_lane
 from acme.om.placement.types.share import TierShare
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl

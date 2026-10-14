@@ -46,7 +46,7 @@ from acme.om.connectors.types.connector import (
 )
 from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
 from acme.om.placement.types.work import ExecOperation
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason

@@ -122,7 +122,7 @@ sets outside `local`, and `actions`, the product's kinds
 (`ProductKinds.actions`, `actions.py`), which every process that writes
 or fires an agent automation hands it. The principal's live context is
 `root.agent_automation_principals`, the transition a root hands
-`build_managers` too, so its sessions' calls are answered by the grant.
+`build_platform_managers` too, so its sessions' calls are answered by the grant.
 A slot is `rules.slot`; ADR 2017 has the reasons, and ADR 2031 those of
 a product's action, and ADR 2032 those of its check of the writer
 (`AgentAutomationActionInterface.check_writer`). -->

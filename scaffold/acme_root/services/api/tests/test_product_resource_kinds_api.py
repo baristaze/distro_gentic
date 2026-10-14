@@ -22,7 +22,7 @@ from acme.om.leases.types.lease import Lease
 from acme.om.leases.types.request import LeaseRequest
 from acme.om.leases.types.resource import Resource
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.root import Managers, PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
 from acme.services.api.container import AppContainer
 
 DOCK = "dock"
@@ -38,7 +38,7 @@ class DockHooks(ResourceKindInterface):
     """The product's hooks, built over the managers as its tools are. They
     keep what each grant asked of them."""
 
-    def __init__(self, managers: Callable[[], Managers]) -> None:
+    def __init__(self, managers: Callable[[], PlatformManagers]) -> None:
         self.managers = managers
         self.asked: list[UUID] = []
         self.started: list[tuple[UUID, int]] = []
@@ -74,7 +74,7 @@ class Product:
         self.check = check
         self.hooks: DockHooks | None = None
 
-    def resources(self, managers: Callable[[], Managers]) -> tuple[ResourceKindSpec, ...]:
+    def resources(self, managers: Callable[[], PlatformManagers]) -> tuple[ResourceKindSpec, ...]:
         self.hooks = DockHooks(managers)
         return (ResourceKindSpec(DOCK, DockAsk, self.hooks, self.check),)
 

@@ -32,7 +32,8 @@ from uuid import UUID
 import aioboto3
 import pytest
 from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, Loop, loop_over
+from contracts.loops import ASSISTANT, Loop
+from contracts.platform_loops import platform_loop_over
 
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.s3 import BucketsS3Impl
@@ -53,6 +54,7 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.container import WorkspaceContainerImpl
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
+from acme.om.platform_root import PlatformRootOptions
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 IMAGE = "python:3.14-slim"
@@ -235,8 +237,11 @@ class OnDocker:
     def __init__(self, tmp_path: Path, buckets: BucketsS3Impl) -> None:
         self.infra = InfraOnDocker(tmp_path, buckets)
         self.agent_projects = AgentProjectsTwin(repository=None)
-        self.loop: Loop = loop_over(
-            tmp_path, kinds=(TAKES,), infra=self.infra, workspace_agent_projects=self.agent_projects
+        self.loop: Loop = platform_loop_over(
+            tmp_path,
+            kinds=(TAKES,),
+            infra=self.infra,
+            platform=PlatformRootOptions(workspace_agent_projects=self.agent_projects),
         )
         self.sessions: list[UUID] = []
 

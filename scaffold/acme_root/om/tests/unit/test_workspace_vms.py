@@ -38,7 +38,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.vm import WORKSPACE, WorkspaceVmImpl, machine_name
 from acme.om.base import new_id
 from acme.om.context import Role
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.header import SnapshotHeader, WorkspaceSnapshot
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -189,7 +189,9 @@ async def test_a_revoked_key_destroys_the_disks_kept_for_its_snapshots_and_no_ot
     workspace, a cache, stays, and so does a fork's copy, kept for the
     child under its own key: the child still starts from it."""
     infra = VmInfra(tmp_path)
-    managers = build_managers(StorageMemoryImpl(), infra, tool_catalog=stand_ins("read_log"))
+    managers = build_platform_managers(
+        StorageMemoryImpl(), infra, tool_catalog=stand_ins("read_log")
+    )
     ctx = context(Role.MEMBER)
     parent, child = [
         (await managers.agent_sessions.create_session(ctx, make_session())).id for _ in range(2)

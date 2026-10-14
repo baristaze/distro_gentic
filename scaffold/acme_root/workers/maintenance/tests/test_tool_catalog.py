@@ -29,7 +29,7 @@ from acme.om.intake.types.link import HandleKind
 from acme.om.intake.types.route import Effect
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.workers.maintenance.container import WorkerContainer

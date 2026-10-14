@@ -40,8 +40,15 @@ from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformPorts,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
+from acme.om.root import LOCAL
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
@@ -64,7 +71,7 @@ class RunnerContainer:
         storage: StorageInterface,
         infra: InfraInterface,
         integrations: IntegrationsInterface,
-        managers: Managers,
+        managers: PlatformManagers,
         stream: StreamServiceInterface,
         placement: PlacementOptions | None = None,
         kinds: ProductKinds | None = None,
@@ -198,7 +205,7 @@ class RunnerContainer:
             return await members_context(managers.tenancy)(rctx, org_id, principal)
 
         app = AppContext(type=AppType.WORKER, version=f"{settings.service_name}@{settings.version}")
-        built: list[Managers] = []
+        built: list[PlatformManagers] = []
         held: list[RunnerContainer] = []
         # The tools through which a session acts as the platform's account
         # record each act with intake, and the software engineer's pull request binds
@@ -240,41 +247,43 @@ class RunnerContainer:
         # reads it live; a stream's opening and its completion are recorded,
         # in the managers' event stream, and hinted.
         stream = build_stream(infra, lambda: built[0].events, product_kinds=ports.kinds)
-        managers = build_managers(
+        managers = build_platform_managers(
             storage,
             infra,
             integrations=integrations,
             environment=settings.environment,
             tool_catalog=acts,
             attachment_reader=attachment_reader,
-            platform_agents=platform_agents,
-            intake=lambda: held[0].intake,
-            agent_knowledge=agent_knowledge.manager,
-            agent_automations=lambda: agent_automations[0],
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
-            executor=ports.executor,
-            executor_options=ExecutorOptions(image=settings.workspace_image),
-            work_product=ports.work_product,
-            agent_session_projects=ports.agent_session_projects,
-            workspace_agent_projects=ports.workspace_agent_projects,
-            product_kinds=ports.kinds,
             models_layer=matrix.layer,
-            tools_layer=layers,
-            # A spawn and a hand-off make sessions here, each with its kind's
-            # kind manual.
-            agents_layer=agent_playbooks.agents,
-            transport_layer=placed,
-            placement_options=placing,
-            cloud_pool_options=cloud_pool_options(settings),
-            cloud_pool_stage=stage,
             # A call of a session the tenant's agent automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=agent_automation_principals(
                 storage.get_agent_automation_storage(), members
             ),
             stream_sink=stream,
-            attached_toolsets=connectors.attached,
+            platform_root_options=PlatformRootOptions(
+                platform_agents=platform_agents,
+                intake=lambda: held[0].intake,
+                agent_knowledge=agent_knowledge.manager,
+                agent_automations=lambda: agent_automations[0],
+                executor=ports.executor,
+                executor_options=ExecutorOptions(image=settings.workspace_image),
+                work_product=ports.work_product,
+                agent_session_projects=ports.agent_session_projects,
+                workspace_agent_projects=ports.workspace_agent_projects,
+                product_kinds=ports.kinds,
+                tools_layer=layers,
+                # A spawn and a hand-off make sessions here, each with its kind's
+                # kind manual.
+                agents_layer=agent_playbooks.agents,
+                transport_layer=placed,
+                placement_options=placing,
+                cloud_pool_options=cloud_pool_options(settings),
+                cloud_pool_stage=stage,
+                attached_toolsets=connectors.attached,
+            ),
         )
         built.append(managers)
         agent_automations.append(

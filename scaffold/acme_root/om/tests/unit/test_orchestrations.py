@@ -41,7 +41,7 @@ from acme.om.orchestrations.types.orchestration import (
     RowError,
 )
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import ROLE_PERMISSIONS
 from acme.om.work.impl.manager import not_before, relayed_key
@@ -151,7 +151,7 @@ def test_the_resumes_of_one_wake_are_staggered() -> None:
 class World:
     def __init__(self, tmp_path: Path, options: OrchestrationsOptions | None = None) -> None:
         self.storage = StorageMemoryImpl()
-        self.managers: Managers = build_managers(
+        self.managers: PlatformManagers = build_platform_managers(
             self.storage, InfraLocalImpl(tmp_path), orchestrations_options=options
         )
 

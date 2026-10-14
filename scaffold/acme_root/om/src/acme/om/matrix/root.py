@@ -3,7 +3,7 @@ engine's root, and the matrix managers built over the managers it returns.
 
     matrix = MatrixLayer(storage, options=MatrixOptions(environment=...),
                          clients=lambda: trust.managers.provider_clients)
-    managers = build_managers(storage, infra, ..., models_layer=matrix.layer)
+    managers = build_platform_managers(storage, infra, ..., models_layer=matrix.layer)
     built = matrix.build(managers)
 
 The layer gives the engine four things: the matrix as its resolver, a face
@@ -37,7 +37,7 @@ from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.prices import ModelPricesInterface
 from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.trust.keys import ProviderClientsInterface
@@ -162,7 +162,7 @@ class MatrixLayer:
             (lambda: None) if clients is None else clients,
         )
 
-    def build(self, managers: Managers) -> MatrixManagers:
+    def build(self, managers: PlatformManagers) -> MatrixManagers:
         """The matrix managers over the engine's, once; built again, the
         same. The operators' publish asks the prices the resolver asks, the
         one source the managers price every call by."""

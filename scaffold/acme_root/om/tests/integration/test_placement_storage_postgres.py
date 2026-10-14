@@ -24,7 +24,7 @@ from acme.om.placement.rules import tier_lane
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
 from acme.om.placement.types.share import FairShare
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
@@ -80,18 +80,18 @@ class TestPlacementStoragePostgres(PlacementStorageContract):
 @pytest.fixture
 async def managers(
     migration_settings: MigrationSettings, migrated: object, tmp_path: Path
-) -> AsyncIterator[Managers]:
+) -> AsyncIterator[PlatformManagers]:
     root = StoragePostgresImpl(
         migration_settings.role_urls(),
         migration_settings.role_pools(),
         system_urls=migration_settings.system_role_urls(),
     )
-    yield build_managers(root, InfraLocalImpl(tmp_path))
+    yield build_platform_managers(root, InfraLocalImpl(tmp_path))
     await root.close()
 
 
 async def test_the_sweeps_carry_makes_a_shares_concurrency_the_cap_the_claim_holds(
-    managers: Managers, migrated: dict[DatabaseRole, str]
+    managers: PlatformManagers, migrated: dict[DatabaseRole, str]
 ) -> None:
     """Ann's share, as the release before wrote it, ran one loop at once.
     The carry writes that as Ann's own cap on its tier's lane, once, and

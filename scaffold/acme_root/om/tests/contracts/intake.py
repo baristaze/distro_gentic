@@ -54,7 +54,14 @@ from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.park_alerts.manager import ParkAlertsManagerInterface
 from acme.om.park_alerts.root import build_park_alerts
-from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductActions,
+    build_platform_managers,
+    no_actions,
+)
+from acme.om.root import engine_tools
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -142,7 +149,7 @@ class Members:
 @dataclass
 class Wired:
     infra: InfraLocalImpl
-    managers: Managers
+    managers: PlatformManagers
     loops: LoopManagerImpl
     anthropic: ModelProviderScriptedImpl
     clock: Clock
@@ -309,15 +316,17 @@ def wired(
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
         return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
 
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         infra,
         integrations=integrations,
         agent_kinds=KINDS,
         principal_context=principals,
         tool_catalog=catalog,
-        tools_layer=layers,
-        agents_layer=agent_playbooks.agents,
+        platform_root_options=PlatformRootOptions(
+            tools_layer=layers,
+            agents_layer=agent_playbooks.agents,
+        ),
     )
     trust.build(managers)
 

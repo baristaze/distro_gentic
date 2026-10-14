@@ -50,7 +50,7 @@ from acme.om.evidence.types.acceptance import AcceptanceVerdict, HiddenSuite, Li
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.record import RunOutcome
 from acme.om.evidence.types.validation import WorkProduct
-from acme.om.root import build_managers
+from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
 AUTHOR = {
@@ -372,13 +372,15 @@ class Repositories:
             url = f"file://{bare}"
         else:
             url = served(self.work)
-        managers = build_managers(
+        managers = build_platform_managers(
             StorageMemoryImpl(),
             self._infra,
-            workspace_agent_projects=Bound(
-                {self.agent_project_id: url, self.suite_agent_project_id: self.suite_url}
+            platform_root_options=PlatformRootOptions(
+                workspace_agent_projects=Bound(
+                    {self.agent_project_id: url, self.suite_agent_project_id: self.suite_url}
+                ),
+                workspace_reader=RepositoryReaderGitImpl(on_disk=True),
             ),
-            workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
         executor = ExecutorAgentWorkspacesImpl(
             self._provider,

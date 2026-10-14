@@ -28,7 +28,7 @@ from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKin
 from acme.om.budgets.types.hold import Billed, Hold, HoldRequest
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import StaleWriter
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -56,7 +56,7 @@ class Engine:
 
     def __init__(self, tmp_path: Path) -> None:
         self.storage = StorageMemoryImpl()
-        self.managers: Managers = build_managers(
+        self.managers: PlatformManagers = build_platform_managers(
             self.storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS
         )
 

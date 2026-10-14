@@ -39,7 +39,7 @@ from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import PreconditionFailed
-from acme.om.root import PlatformPorts
+from acme.om.platform_root import PlatformPorts
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
 

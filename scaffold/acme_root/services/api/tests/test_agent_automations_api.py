@@ -21,7 +21,7 @@ from acme.om.agent_automations.types.agent_automation import AgentAutomationRun,
 from acme.om.base import Platform, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
-from acme.om.root import Managers, PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
@@ -194,7 +194,9 @@ class SweepAction(AgentAutomationActionInterface):
         return None
 
 
-def sweeping(managers: Callable[[], Managers]) -> tuple[AgentAutomationActionInterface, ...]:
+def sweeping(
+    managers: Callable[[], PlatformManagers],
+) -> tuple[AgentAutomationActionInterface, ...]:
     return (SweepAction(),)
 
 

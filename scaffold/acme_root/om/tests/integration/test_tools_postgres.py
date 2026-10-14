@@ -32,7 +32,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tools.impl.manager import SECRET_USED
@@ -59,8 +59,10 @@ async def storage(
     await root.close()
 
 
-async def an_org(storage: StoragePostgresImpl, tmp_path: Path) -> tuple[TenantContext, Managers]:
-    bootstrap = build_managers(storage, InfraConfiguredImpl(settings(tmp_path, {})))
+async def an_org(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> tuple[TenantContext, PlatformManagers]:
+    bootstrap = build_platform_managers(storage, InfraConfiguredImpl(settings(tmp_path, {})))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await bootstrap.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -70,13 +72,13 @@ async def an_org(storage: StoragePostgresImpl, tmp_path: Path) -> tuple[TenantCo
         "Ann",
     )
     overrides = {f"{owner.org_id.hex}_api_token".upper(): SECRET}
-    managers = build_managers(
+    managers = build_platform_managers(
         storage, InfraConfiguredImpl(settings(tmp_path, overrides)), principal_context=live
     )
     return owner, managers
 
 
-async def a_session(managers: Managers, owner: TenantContext) -> UUID:
+async def a_session(managers: PlatformManagers, owner: TenantContext) -> UUID:
     """A session the owner made, whose calls run under the owner: the gate
     asks attribution whose authority each call runs under."""
     session_id, now = new_id(), utcnow()

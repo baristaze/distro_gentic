@@ -17,13 +17,12 @@ from contracts.loops import (
     BUILDER,
     DELIVERY,
     Clock,
-    Loop,
     call,
-    loop_over,
     reply,
     said,
     use,
 )
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 from pydantic import ValidationError
 
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
@@ -42,7 +41,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.context import Role
 from acme.om.exceptions import NotAuthorized, NotFound
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -188,14 +187,19 @@ DEEP = ASSISTANT.model_copy(update={"tree": TreeLimits(height=3, count=4)})
 """An assistant whose tree holds a root, its sub-agents, and theirs."""
 
 
-def deep(tmp_path: Path) -> tuple[Loop, AgentPlaybooksManagerInterface]:
+def deep(tmp_path: Path) -> tuple[PlatformLoop, AgentPlaybooksManagerInterface]:
     storage = StorageMemoryImpl()
     layer = AgentPlaybooksLayer(storage)
-    loop = loop_over(tmp_path, storage=storage, kinds=(DEEP,), tools_layer=layer.tools)
-    return loop, layer.build(loop.managers)
+    loop = platform_loop_over(
+        tmp_path,
+        storage=storage,
+        kinds=(DEEP,),
+        platform=PlatformRootOptions(tools_layer=layer.tools),
+    )
+    return loop, layer.build(loop.platform)
 
 
-async def sub_agents(loop: Loop, root: UUID) -> tuple[UUID, UUID]:
+async def sub_agents(loop: PlatformLoop, root: UUID) -> tuple[UUID, UUID]:
     """A child of `root` and a grandchild under it, once the root's turn
     ended, so each pays as the root's person pays."""
     loop.anthropic.add(reply(said("Sub-agents will find it.")))
@@ -335,7 +339,7 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
     layer = AgentPlaybooksLayer(storage)
     gates: list[CallGateBudgetImpl] = []
 
-    def call_gate(managers: Managers, clock: Clock) -> CallGateInterface:
+    def call_gate(managers: PlatformManagers, clock: Clock) -> CallGateInterface:
         gates.append(
             CallGateBudgetImpl(
                 managers.budget_gate,
@@ -348,14 +352,14 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
         )
         return gates[0]
 
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         kinds=(ASSISTANT, DELIVERY, BUILDER),
         call_gate=call_gate,
-        tools_layer=layer.tools,
+        platform=PlatformRootOptions(tools_layer=layer.tools),
     )
-    agent_playbooks = layer.build(loop.managers)
+    agent_playbooks = layer.build(loop.platform)
     session_id = await loop.start("builder")
     line = await loop.managers.budgets.create_budget(
         loop.owner, make_budget(BudgetScopeKind.SESSION, str(session_id), cost_micros=50_000_000)

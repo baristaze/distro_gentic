@@ -45,7 +45,7 @@ from acme.om.exceptions import (
     UnknownAgentKind,
     ValidationFailed,
 )
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.steps.types.content import Content, TextBlock, ToolUseBlock
 from acme.om.steps.types.header import (
     ControlCommand,
@@ -208,13 +208,15 @@ class Refusing(ResultGateInterface):
 
 
 @pytest.fixture
-def managers(tmp_path: Path) -> Managers:
-    return build_managers(
+def managers(tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
         StorageMemoryImpl(), InfraLocalImpl(tmp_path), agent_kinds=KINDS, tool_catalog=TOOLS
     )
 
 
-async def start(managers: Managers, ctx: TenantContext, kind: str = "delivery") -> AgentSession:
+async def start(
+    managers: PlatformManagers, ctx: TenantContext, kind: str = "delivery"
+) -> AgentSession:
     return await managers.agents.start_session(
         ctx, Start(id=new_id(), kind=kind, title="the weekly report is missing a total")
     )
@@ -238,7 +240,7 @@ def spawn(kind: str = "helper") -> Spawn:
 
 
 async def test_a_session_starts_on_the_latest_version_with_its_tree(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     before = utcnow()
@@ -257,7 +259,7 @@ async def test_a_session_starts_on_the_latest_version_with_its_tree(
         await start(managers, ctx, "reviewer")
 
 
-async def test_a_child_holds_no_more_than_its_parent(managers: Managers) -> None:
+async def test_a_child_holds_no_more_than_its_parent(managers: PlatformManagers) -> None:
     org = make_org()
     owner, teammate = context(Role.MEMBER, org), context(Role.MEMBER, org)
     parent = await start(managers, owner)
@@ -283,7 +285,7 @@ async def test_a_child_holds_no_more_than_its_parent(managers: Managers) -> None
     assert asked.tools == ASSISTANT.tools
 
 
-async def test_a_child_made_by_hand_is_held_to_its_parent_too(managers: Managers) -> None:
+async def test_a_child_made_by_hand_is_held_to_its_parent_too(managers: PlatformManagers) -> None:
     """The create is the one path every session takes, so a child sent with
     a tool its parent lacks, the wrong depth, and no mark is stored with its
     parent's; its authority names no principal its maker chose, only its
@@ -309,7 +311,7 @@ async def test_a_child_made_by_hand_is_held_to_its_parent_too(managers: Managers
     assert authority.spender == person_of(ctx), "who spoke last pays"
 
 
-async def test_a_child_draws_on_its_trees_budget_and_deadline(managers: Managers) -> None:
+async def test_a_child_draws_on_its_trees_budget_and_deadline(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     agents = managers.agents
     root = await start(managers, ctx)
@@ -348,7 +350,9 @@ def hold(ctx: TenantContext, session: AgentSession, cost_micros: int) -> HoldReq
     return HoldRequest(spender_id=ctx.user_id, scopes=scopes, exposure=exposure, purpose="main")
 
 
-async def test_a_child_stops_at_its_share_while_its_tree_has_room(managers: Managers) -> None:
+async def test_a_child_stops_at_its_share_while_its_tree_has_room(
+    managers: PlatformManagers,
+) -> None:
     """A member's spawn writes the child's share as a budget on the child's
     own session, once however often it is asked. The child's calls stop at
     it, while the tree's budget, unchanged, still has room for its root."""
@@ -378,7 +382,7 @@ async def test_a_child_stops_at_its_share_while_its_tree_has_room(managers: Mana
     assert (await managers.budgets.get_budget(admin, tree.id)).amount == tree.amount
 
 
-async def test_a_share_never_adds_to_its_trees_budget(managers: Managers) -> None:
+async def test_a_share_never_adds_to_its_trees_budget(managers: PlatformManagers) -> None:
     """A share larger than what the tree has left binds nothing past it: the
     child's call that fits its share and not its tree is refused by the
     tree's budget."""
@@ -395,7 +399,7 @@ async def test_a_share_never_adds_to_its_trees_budget(managers: Managers) -> Non
     assert [breach.budget_id for breach in refused.breaches] == [tree.id]
 
 
-async def test_a_kind_that_names_no_share_is_never_spawned(managers: Managers) -> None:
+async def test_a_kind_that_names_no_share_is_never_spawned(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     root = await start(managers, ctx)
     with pytest.raises(ValidationFailed, match="names no share"):
@@ -404,7 +408,7 @@ async def test_a_kind_that_names_no_share_is_never_spawned(managers: Managers) -
 
 
 async def test_a_moved_deadline_unlocks_every_session_of_the_tree_it_parked(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """The extension is the deadline park's unlock: once a person moves the
     tree's deadline past now, the root and its child that waited on it are
@@ -429,7 +433,7 @@ async def test_a_moved_deadline_unlocks_every_session_of_the_tree_it_parked(
 
 
 async def test_a_moved_deadline_unlocks_the_tree_past_a_deleted_session(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A child that ended and was deleted waits on nothing: the unlock
     passes over it to the child after it."""
@@ -454,7 +458,7 @@ async def test_a_moved_deadline_unlocks_the_tree_past_a_deleted_session(
     assert (await sessions.get_session(ctx, child.id)).status is SessionStatus.PENDING
 
 
-async def test_a_tree_stops_at_its_height_and_its_count(managers: Managers) -> None:
+async def test_a_tree_stops_at_its_height_and_its_count(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     agents = managers.agents
     root = await start(managers, ctx, "assistant")
@@ -471,7 +475,9 @@ async def test_a_tree_stops_at_its_height_and_its_count(managers: Managers) -> N
     assert (await agents.tree_of(ctx, deep.id)).size == 2
 
 
-async def test_cancelling_a_parent_cancels_every_session_below_it(managers: Managers) -> None:
+async def test_cancelling_a_parent_cancels_every_session_below_it(
+    managers: PlatformManagers,
+) -> None:
     ctx = context(Role.MEMBER)
     agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
     root = await start(managers, ctx)
@@ -504,7 +510,7 @@ async def test_cancelling_a_parent_cancels_every_session_below_it(managers: Mana
 
 
 async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cancelled(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A deleted session answers no write, so the cascade passes it by:
     its sibling and what runs below it are still cancelled, and a moved
@@ -545,7 +551,7 @@ async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cance
 
 
 async def test_a_child_waiting_to_begin_its_next_loop_is_cancelled_too(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A child whose loop ended with a waking input undelivered is pending:
     the input begins its next loop. The cascade reaches it, on the loop that
@@ -566,7 +572,7 @@ async def test_a_child_waiting_to_begin_its_next_loop_is_cancelled_too(
 
 
 async def test_a_child_starts_from_its_objective_never_its_parents_history(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     parent = await start(managers, ctx)
@@ -584,7 +590,7 @@ async def test_a_child_starts_from_its_objective_never_its_parents_history(
 
 
 async def test_a_handoff_waits_for_its_principal_and_its_objective_is_data(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     org = make_org()
     owner, asker = context(Role.MEMBER, org), context(Role.MEMBER, org)
@@ -616,7 +622,7 @@ async def test_a_handoff_waits_for_its_principal_and_its_objective_is_data(
         await agents.hand_off(owner, handed.id, handoff)
 
 
-async def test_a_handoff_carries_its_mark(managers: Managers) -> None:
+async def test_a_handoff_carries_its_mark(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     source = await start(managers, ctx, "assistant")
     events = [make_message(source.id).model_copy(update={"type": StepType.EVENT})]
@@ -627,7 +633,7 @@ async def test_a_handoff_carries_its_mark(managers: Managers) -> None:
 
 
 async def test_a_child_of_a_session_holding_private_data_holds_it_too(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A kind that reads no private data holds it under a parent that does:
     the parent may write its records into the objective, so the rule of two
@@ -647,7 +653,7 @@ async def test_a_child_of_a_session_holding_private_data_holds_it_too(
 async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
     tmp_path: Path,
 ) -> None:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,
@@ -663,7 +669,7 @@ async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
     assert accepted == Verdict(accepted=True, verified=False, outcome=LoopOutcome.SUCCEEDED)
     failed = Result(claim=Claim.FAILED, evidence=(new_id(),))
     assert (await managers.agents.judge_result(ctx, sid, failed)).outcome is LoopOutcome.FAILED
-    gated = build_managers(
+    gated = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,
@@ -687,7 +693,7 @@ async def test_a_tool_the_catalog_cannot_class_starts_nothing(tmp_path: Path) ->
         authority=AuthorityMode.DELEGATED,
         tree=TreeLimits(height=1, count=0),
     )
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(unlisted,),
@@ -702,7 +708,7 @@ async def test_a_tool_the_catalog_cannot_class_starts_nothing(tmp_path: Path) ->
         await managers.agents.require_instructor(owner, stored.id)
 
 
-async def test_a_viewer_reads_a_tree_and_spawns_nothing(managers: Managers) -> None:
+async def test_a_viewer_reads_a_tree_and_spawns_nothing(managers: PlatformManagers) -> None:
     org = make_org()
     member, viewer = context(Role.MEMBER, org), context(Role.VIEWER, org)
     root = await start(managers, member)
@@ -720,7 +726,7 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     tree once no session of the tree is left: a root purged before its child
     leaves the tree to the child. A sibling tree's rows stay."""
     storage = StorageMemoryImpl()
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,

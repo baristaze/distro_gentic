@@ -22,7 +22,7 @@ from acme.om.context import (
     RequestContext,
     TenantContext,
 )
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -56,7 +56,7 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    managers = build_managers(storage, InfraConfiguredImpl(settings))
+    managers = build_platform_managers(storage, InfraConfiguredImpl(settings))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),

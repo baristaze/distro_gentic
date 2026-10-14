@@ -95,7 +95,7 @@ made of](../../../../README.md).
 
 <!-- agents-only
 The layer is `root.MatrixLayer`, a `models.layer.ModelsLayerInterface`
-that a root hands `build_managers(models_layer=...)`: `impl/resolver.py`
+that a root hands `build_platform_managers(models_layer=...)`: `impl/resolver.py`
 is the engine's resolver, `impl/models.py` the face over the engine's
 models manager (eligibility from the retention snapshot, renewal, and the
 purge of pins and choices), and `impl/credentials.py` the call credentials

@@ -40,7 +40,7 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
-from acme.om import root as platform_root
+from acme.om import platform_root
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agents.loop_rules import changed_step
@@ -51,7 +51,7 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
-from acme.om.root import Managers, PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 from acme.services.api.seed import seed_platform
@@ -118,7 +118,9 @@ async def pumped[T](host: HostAgent, call: Awaitable[T]) -> T:
     return await running
 
 
-async def claimed_loop(managers: Managers, owner: TenantContext, session_id: UUID) -> WorkItem:
+async def claimed_loop(
+    managers: PlatformManagers, owner: TenantContext, session_id: UUID
+) -> WorkItem:
     """The session's loop item, claimed by a runner, as a run holds it."""
     now = utcnow()
     queued = await managers.work.enqueue(
@@ -149,7 +151,7 @@ class Placed:
     workspace prepared on the pool's host with work in it uncommitted; the
     runner's sweep beside it on a clock the case moves."""
 
-    managers: Managers
+    managers: PlatformManagers
     owner: TenantContext
     host: HostAgent
     provider: WorkspaceHostImpl

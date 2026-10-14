@@ -57,8 +57,8 @@ from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.amount import Amount
 from acme.om.exceptions import NotFound
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.types.session_privacy import StorageMode, StoragePolicy
-from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import (
     ControlCommand,

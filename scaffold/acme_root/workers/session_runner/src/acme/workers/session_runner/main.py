@@ -29,7 +29,7 @@ from acme.infra.observability import (
 )
 from acme.infra.trust import install_trust_store
 from acme.om.placement.rules import LOOP_LANE_PREFIX, tier_label
-from acme.om.root import PlatformPorts
+from acme.om.platform_root import PlatformPorts
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer

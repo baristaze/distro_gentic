@@ -14,7 +14,7 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
 from acme.om.park_alerts import ParkAlertsManagerInterface
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
@@ -239,7 +239,7 @@ class ServicesImpl(ServicesInterface):
 
 
 def build_services(
-    managers: Managers,
+    managers: PlatformManagers,
     infra: InfraInterface,
     integrations: IntegrationsInterface,
     head_max_age: timedelta,

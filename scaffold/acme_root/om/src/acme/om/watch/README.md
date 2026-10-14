@@ -92,7 +92,7 @@ stream.
 The service is `impl/stream.StreamServiceImpl` over infra's
 `StreamsInterface` (Valkey when the cache is, memory otherwise), built
 by `root.build_stream`. It implements the loop's `StreamSinkInterface`:
-the session runner passes it to `build_managers` as `stream_sink`, and
+the session runner passes it to `build_platform_managers` as `stream_sink`, and
 the API to `build_watch`. A stream writes at most once a
 `StreamOptions.window` (100 ms): the first part after a quiet window
 goes at once, and the parts behind it are held, one run of a block's

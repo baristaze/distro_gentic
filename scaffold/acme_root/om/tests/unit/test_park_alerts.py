@@ -37,7 +37,7 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.models.credentials import CallClient, CallCredentialsInterface
 from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import StepType
@@ -256,7 +256,7 @@ async def test_a_purged_session_takes_its_park_alerts_and_leaves_the_others(
     tmp_path: Path,
 ) -> None:
     storage = StorageMemoryImpl()
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
         agent_kinds=(STEADY,),

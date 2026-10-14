@@ -49,7 +49,7 @@ from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exceptions import Unavailable
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 
@@ -260,13 +260,15 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     main, remote = a_delivery(private_git.root)
     agent_projects = AgentProjectsTwin(repository=private_git.url)
     infra = HostInfra(tmp_path / "host")
-    managers: Managers = build_managers(
+    managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
         agent_kinds=(WORKER,),
-        workspace_agent_projects=agent_projects,
-        workspace_git=GitTwin(),
-        workspace_reader=on_loopback(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=agent_projects,
+            workspace_git=GitTwin(),
+            workspace_reader=on_loopback(),
+        ),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -338,14 +340,16 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
         return connected[0] if connected else None
 
     infra = HostInfra(tmp_path / "host")
-    managers: Managers = build_managers(
+    managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
         agent_kinds=(SOFTWARE_ENGINEER,),
-        platform_agents=PlatformAgents(corpus=CORPUS),
-        workspace_agent_projects=agent_projects,
-        workspace_reader=on_loopback(),
-        source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
+        platform_root_options=PlatformRootOptions(
+            platform_agents=PlatformAgents(corpus=CORPUS),
+            workspace_agent_projects=agent_projects,
+            workspace_reader=on_loopback(),
+            source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
+        ),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),

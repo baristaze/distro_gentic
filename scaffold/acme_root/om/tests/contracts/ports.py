@@ -7,8 +7,8 @@ and expects the boot refused, naming what is missing."""
 from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsNullImpl
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateNullImpl, BudgetGateOptions
+from acme.om.platform_root import PlatformPorts
 from acme.om.retention.impl.agent_projects import SessionAgentProjectNullImpl
-from acme.om.root import PlatformPorts
 from acme.om.storage.root import StorageInterface
 
 

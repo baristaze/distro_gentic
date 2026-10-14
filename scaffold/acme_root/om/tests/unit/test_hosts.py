@@ -36,7 +36,7 @@ from acme.om.placement.kinds import HOST, HOST_PREFIX, platform_claimant_kinds
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import WorkspaceOperation
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
 from acme.om.trust.types.identities import Executor, ExecutorKind
@@ -75,8 +75,8 @@ def storage() -> StorageMemoryImpl:
 
 
 @pytest.fixture
-def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path))
+def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
+    return build_platform_managers(storage, InfraLocalImpl(tmp_path))
 
 
 @pytest.fixture
@@ -85,7 +85,7 @@ def clock() -> Clock:
 
 
 @pytest.fixture
-def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> HostsManagerImpl:
+def hosts(managers: PlatformManagers, storage: StorageMemoryImpl, clock: Clock) -> HostsManagerImpl:
     """The hosts manager the root builds, on a clock the case moves."""
     return HostsManagerImpl(
         storage.get_hosts_storage(),
@@ -100,14 +100,14 @@ def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> Hosts
     )
 
 
-async def an_owner(managers: Managers, slug: str = "ajax") -> TenantContext:
+async def an_owner(managers: PlatformManagers, slug: str = "ajax") -> TenantContext:
     owner, _ = await managers.tenancy.bootstrap(
         request(APP), slug.title(), slug, f"ann@{slug}.test", "Ann"
     )
     return owner
 
 
-async def a_member(managers: Managers, slug: str, role: Role) -> TenantContext:
+async def a_member(managers: PlatformManagers, slug: str, role: Role) -> TenantContext:
     owner, user, _ = await managers.tenancy.add_member(
         request(APP), slug, f"{role.value}@{slug}.test", role.value.title(), role
     )
@@ -162,7 +162,7 @@ async def enrolled(
 
 
 async def test_a_host_enrolls_into_its_tokens_pool_with_a_credential_of_its_own(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -190,7 +190,7 @@ async def test_a_host_enrolls_into_its_tokens_pool_with_a_credential_of_its_own(
 
 
 async def test_only_a_live_enrollment_token_enrolls_a_host(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -213,7 +213,7 @@ async def test_only_a_live_enrollment_token_enrolls_a_host(
 
 
 async def test_a_token_whose_issuer_left_or_was_lowered_enrolls_nothing(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -238,7 +238,7 @@ async def test_a_token_whose_issuer_left_or_was_lowered_enrolls_nothing(
 
 
 async def test_a_host_credential_is_no_platform_credential_and_no_other_is_a_hosts(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -257,7 +257,7 @@ async def test_a_host_credential_is_no_platform_credential_and_no_other_is_a_hos
 
 
 async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -281,7 +281,7 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
 
 
 async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -303,7 +303,7 @@ async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
 
 
 async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -327,7 +327,7 @@ async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
 
 
 async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -351,7 +351,7 @@ async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
 
 
 async def test_a_revoked_host_is_refused_and_handed_nothing(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -374,7 +374,7 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
 
 
 async def test_only_an_owner_or_an_admin_lets_hosts_in(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -398,7 +398,7 @@ async def test_only_an_owner_or_an_admin_lets_hosts_in(
 
 
 async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     ours, theirs = (
@@ -442,7 +442,7 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
 
 
 async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     session = await managers.agent_sessions.create_session(owner, make_session())
@@ -464,7 +464,7 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
 
 
 async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions_work(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     mine, other = (
@@ -513,7 +513,7 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
 
 
 async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ended(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     session = await managers.agent_sessions.create_session(owner, make_session())
@@ -543,7 +543,7 @@ async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ende
 
 
 async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
-    managers: Managers, hosts: HostsManagerImpl, monkeypatch: pytest.MonkeyPatch
+    managers: PlatformManagers, hosts: HostsManagerImpl, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -574,7 +574,7 @@ async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
 
 
 async def test_the_platform_keeps_what_a_host_advertised_and_adds_nothing(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -595,7 +595,7 @@ async def test_the_platform_keeps_what_a_host_advertised_and_adds_nothing(
 
 
 async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the_cloud(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -630,7 +630,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
 
 
 async def test_only_a_principal_with_write_moves_a_session(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -655,7 +655,7 @@ async def test_only_a_principal_with_write_moves_a_session(
 
 
 async def test_purge_tenant_waits_for_the_retention(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     await hosts.create_pool(owner, a_pool())
@@ -664,7 +664,7 @@ async def test_purge_tenant_waits_for_the_retention(
 
 
 async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its_calls_in_the_cloud(
-    managers: Managers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
@@ -687,7 +687,7 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
 
 
 async def test_a_sub_agent_runs_where_its_root_runs(
-    managers: Managers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())

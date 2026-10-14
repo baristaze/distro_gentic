@@ -38,7 +38,7 @@ def main() -> int:
     from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
     from acme.om.agent_workspaces.types.source import RepositoryBinding
     from acme.om.context import TenantContext
-    from acme.om.root import PlatformPorts, ProductKinds
+    from acme.om.platform_root import PlatformPorts, ProductKinds
     from acme.om.storage.impl.postgres import StoragePostgresImpl
     from acme.workers.session_runner.main import main as run
     from acme.workers.session_runner.settings import SessionRunnerSettings

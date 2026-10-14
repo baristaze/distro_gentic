@@ -17,13 +17,13 @@ from acme.om.attribution.impl.manager import members_context
 from acme.om.base import utcnow
 from acme.om.intake.impl.manager import IntakeManagerImpl, IntakeOptions
 from acme.om.intake.manager import IntakeManagerInterface
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
 
 
 def build_intake(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     *,
     principal_context: PrincipalContext | None = None,
     integrations: IntegrationsInterface | None = None,

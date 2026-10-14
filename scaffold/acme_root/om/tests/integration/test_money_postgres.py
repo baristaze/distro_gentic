@@ -41,7 +41,7 @@ from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.budgets.types.hold import HoldRequest
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import SpenderUnknown
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.storage.impl.pg_base import LoginSessions, SessionFactory, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.migrate import ensure_logins_everywhere
@@ -163,7 +163,7 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    managers = build_managers(storage, InfraConfiguredImpl(settings))
+    managers = build_platform_managers(storage, InfraConfiguredImpl(settings))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),

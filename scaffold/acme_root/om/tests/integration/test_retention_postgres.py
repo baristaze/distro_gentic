@@ -24,11 +24,11 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.retention.impl.agent_projects import SessionAgentProjectNullImpl
 from acme.om.retention.impl.keys import KeyServiceLocalImpl, TenantKeysImpl
 from acme.om.retention.impl.manager import KEY_DESTROYED, RetentionManagerImpl, RetentionOptions
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.pg_base import LoginSessions, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
@@ -66,17 +66,24 @@ def keys() -> KeyServiceLocalImpl:
 
 
 @pytest.fixture
-def managers(storage: StoragePostgresImpl, keys: KeyServiceLocalImpl, tmp_path: Path) -> Managers:
-    return build_managers(
+def managers(
+    storage: StoragePostgresImpl, keys: KeyServiceLocalImpl, tmp_path: Path
+) -> PlatformManagers:
+    return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
         tool_catalog=TOOLS,
-        tenant_keys=TenantKeysImpl(keys),
+        platform_root_options=PlatformRootOptions(
+            tenant_keys=TenantKeysImpl(keys),
+        ),
     )
 
 
 def sweeper(
-    storage: StoragePostgresImpl, managers: Managers, keys: KeyServiceLocalImpl, later: timedelta
+    storage: StoragePostgresImpl,
+    managers: PlatformManagers,
+    keys: KeyServiceLocalImpl,
+    later: timedelta,
 ) -> RetentionManagerImpl:
     moment = utcnow() + later
 
@@ -98,13 +105,16 @@ def sweeper(
 
 
 async def sweep(
-    storage: StoragePostgresImpl, managers: Managers, keys: KeyServiceLocalImpl, later: timedelta
+    storage: StoragePostgresImpl,
+    managers: PlatformManagers,
+    keys: KeyServiceLocalImpl,
+    later: timedelta,
 ) -> int:
     rctx = RequestContext(request_id=new_id(), app=APP)
     return await sweeper(storage, managers, keys, later).sweep(rctx)
 
 
-async def an_org(managers: Managers, policy: RetentionPolicy) -> TenantContext:
+async def an_org(managers: PlatformManagers, policy: RetentionPolicy) -> TenantContext:
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
@@ -113,12 +123,12 @@ async def an_org(managers: Managers, policy: RetentionPolicy) -> TenantContext:
     return owner
 
 
-async def declare(managers: Managers, ctx: TenantContext, policy: RetentionPolicy) -> None:
+async def declare(managers: PlatformManagers, ctx: TenantContext, policy: RetentionPolicy) -> None:
     current = await managers.retention.get_policy(ctx)
     await managers.retention.write_policy(ctx, current.model_copy(update={"policy": policy}))
 
 
-async def a_session_saying(managers: Managers, ctx: TenantContext) -> UUID:
+async def a_session_saying(managers: PlatformManagers, ctx: TenantContext) -> UUID:
     session = await managers.agent_sessions.create_session(ctx, make_session())
     await managers.steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
     return session.id
@@ -136,7 +146,7 @@ async def rows(
 
 async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     storage: StoragePostgresImpl,
-    managers: Managers,
+    managers: PlatformManagers,
     keys: KeyServiceLocalImpl,
     pg_sessions: LoginSessions,
 ) -> None:
@@ -197,7 +207,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
 
 async def test_a_tightening_reaches_the_snapshot_row_and_a_loosening_does_not(
     storage: StoragePostgresImpl,
-    managers: Managers,
+    managers: PlatformManagers,
     keys: KeyServiceLocalImpl,
     pg_sessions: LoginSessions,
 ) -> None:
@@ -222,7 +232,7 @@ async def test_a_tightening_reaches_the_snapshot_row_and_a_loosening_does_not(
 
 async def test_a_session_deleted_before_its_content_expires_has_its_key_rows_emptied(
     storage: StoragePostgresImpl,
-    managers: Managers,
+    managers: PlatformManagers,
     keys: KeyServiceLocalImpl,
     pg_sessions: LoginSessions,
 ) -> None:

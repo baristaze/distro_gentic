@@ -19,3 +19,14 @@ class SessionAgentProjectsBoundImpl(SessionAgentProjectsInterface):
 
     async def holds(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         return await self._storage.read_agent_project(ctx.org_id, agent_project_id) is not None
+
+
+class SessionAgentProjectsNoneImpl(SessionAgentProjectsInterface):
+    """A graph with no agent projects: every session belongs to none, and the
+    tenant holds none."""
+
+    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+        return None
+
+    async def holds(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
+        return False

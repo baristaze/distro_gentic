@@ -60,16 +60,17 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import (
-    LOCAL,
-    Managers,
+from acme.om.platform_root import (
+    PlatformManagers,
     PlatformPorts,
+    PlatformRootOptions,
     ProductKinds,
-    build_managers,
+    build_platform_managers,
     intake_absent,
 )
+from acme.om.product_kinds import PRODUCT_KINDS
+from acme.om.retention.impl.manager import RetentionOptions
+from acme.om.root import LOCAL
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -147,7 +148,7 @@ def worker_managers(
     *,
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] = intake_absent,
-) -> Managers:
+) -> PlatformManagers:
     """The managers, each one the sweep purges through with its retention and
     its batch from the settings. The worker is the one process that purges,
     so it is the one that sets them. Its budget gate is agent billing's money
@@ -179,7 +180,7 @@ def worker_managers(
         minted here at the worker's edge."""
         return RequestContext(request_id=new_id(), app=app)
 
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         infra,
         TenancyOptions(
@@ -191,7 +192,6 @@ def worker_managers(
         integrations=integrations,
         environment=settings.environment,
         tool_catalog=(CommentImpl(intake, integrations.get_integration),),
-        platform_agents=platform_agents,
         media_options=MediaOptions(
             retention=timedelta(days=settings.media_retention_days),
             pending_expiry=timedelta(hours=settings.media_pending_expiry_hours),
@@ -217,27 +217,32 @@ def worker_managers(
         budgets_options=BudgetsOptions(purge_batch=batch),
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
-        retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
-        placement_options=PlacementOptions(purge_batch=batch),
-        hosts_options=HostsOptions(purge_batch=batch),
-        platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
-        agent_projects_options=AgentProjectsOptions(purge_batch=batch),
-        relay_options=ExecRelayOptions(purge_batch=batch),
-        agent_workspaces_options=AgentWorkspacesOptions(purge_batch=batch),
-        cloud_pool_options=cloud_pool_options(settings),
-        cloud_pool_stage=stage,
         budget_gate=ports.budget_gate or build_money_gate(storage),
         result_gate=ports.result_gate,
-        executor=ports.executor,
-        executor_options=ExecutorOptions(image=settings.workspace_image),
-        work_product=ports.work_product,
-        agent_session_projects=ports.agent_session_projects,
-        workspace_agent_projects=ports.workspace_agent_projects,
-        product_kinds=ports.kinds,
         models_layer=matrix.layer,
-        # An agent automation's start and an intake event make sessions here, each
-        # with its kind manual.
-        agents_layer=AgentPlaybooksLayer(storage).agents,
+        platform_root_options=PlatformRootOptions(
+            platform_agents=platform_agents,
+            retention_options=RetentionOptions(
+                sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch
+            ),
+            placement_options=PlacementOptions(purge_batch=batch),
+            hosts_options=HostsOptions(purge_batch=batch),
+            platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
+            agent_projects_options=AgentProjectsOptions(purge_batch=batch),
+            relay_options=ExecRelayOptions(purge_batch=batch),
+            agent_workspaces_options=AgentWorkspacesOptions(purge_batch=batch),
+            cloud_pool_options=cloud_pool_options(settings),
+            cloud_pool_stage=stage,
+            executor=ports.executor,
+            executor_options=ExecutorOptions(image=settings.workspace_image),
+            work_product=ports.work_product,
+            agent_session_projects=ports.agent_session_projects,
+            workspace_agent_projects=ports.workspace_agent_projects,
+            product_kinds=ports.kinds,
+            # An agent automation's start and an intake event make sessions here, each
+            # with its kind manual.
+            agents_layer=AgentPlaybooksLayer(storage).agents,
+        ),
     )
     refuse_open_money(settings.environment, managers)
     return managers
@@ -249,7 +254,7 @@ class WorkerContainer:
         settings: MaintenanceSettings,
         storage: StorageInterface,
         infra: InfraInterface,
-        managers: Managers,
+        managers: PlatformManagers,
         integrations: IntegrationsInterface,
         kinds: ProductKinds | None = None,
     ) -> None:

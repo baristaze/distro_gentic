@@ -14,7 +14,8 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from contracts.loops import ASSISTANT, Clock, loop_over, reply, said, use
+from contracts.loops import ASSISTANT, Clock, Lookup, reply, said, use
+from contracts.platform_loops import platform_loop_over
 from contracts.tools import stand_ins
 from pydantic import SecretStr
 
@@ -28,7 +29,7 @@ from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, Isola
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id, utcnow
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import (
     AppContext,
     AppType,
@@ -57,14 +58,16 @@ from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.types.work import ExecPayload
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.retention.crossing import CrossingKind, declared
-from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import StepType
 from acme.om.steps.types.stream import StreamPart, TextPart
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.tool import ToolInput
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.impl.manager import SENT, TAKEN, WatchOptions
 from acme.om.watch.impl.stream import (
@@ -112,7 +115,7 @@ class Watched:
     """One tenant's session pinned to a host that holds its workspace, an
     agent's run holding it, a stream service, and the watch over them."""
 
-    managers: Managers
+    managers: PlatformManagers
     owner: TenantContext
     person: TenantContext
     host: HostIdentity
@@ -125,12 +128,14 @@ class Watched:
 
 @pytest.fixture
 async def watched(tmp_path: Path) -> Watched:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         tool_catalog=TOOLS,
-        hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
-        relay_options=ExecRelayOptions(lease=timedelta(seconds=30)),
+        platform_root_options=PlatformRootOptions(
+            hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
+            relay_options=ExecRelayOptions(lease=timedelta(seconds=30)),
+        ),
     )
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
     now = utcnow()
@@ -434,7 +439,7 @@ async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
     tmp_path: Path,
 ) -> None:
     told = Told()
-    loop = loop_over(tmp_path, sink=told)
+    loop = platform_loop_over(tmp_path, sink=told)
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     answer = "The total is twelve, as the records of the last quarter show it."
@@ -476,6 +481,20 @@ async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
     ]
 
 
+class Counting(Lookup):
+    """A lookup that runs `count` in the workspace first: what the command
+    prints streams."""
+
+    def __init__(self) -> None:
+        super().__init__("count")
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        await runtime.run(("count",))
+        return await super().run(ctx, call_input, runtime)
+
+
 async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_is_stored(
     tmp_path: Path,
 ) -> None:
@@ -483,12 +502,13 @@ async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_i
     worked = ASSISTANT.model_copy(
         update={
             "name": "worked",
+            "tools": (*ASSISTANT.tools, "count"),
             "isolation": IsolationSpec(
                 mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE)
             ),
         }
     )
-    loop = loop_over(tmp_path, sink=told, kinds=(worked,))
+    loop = platform_loop_over(tmp_path, sink=told, kinds=(worked,), extra=(Counting(),))
     told.then = stream = StreamServiceImpl(
         StreamsMemoryImpl(), loop.infra.get_topics(), lambda: loop.managers.events
     )
@@ -499,10 +519,9 @@ async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_i
         return TwinReply(stdout="counted twelve\n")
 
     transport.handler = printing
-    loop.tools["lookup"].argv = ("count",)
     session_id = await loop.start("worked")
     await loop.say(session_id, "How many are there?")
-    loop.anthropic.add(reply(use("lookup")))
+    loop.anthropic.add(reply(use("count")))
     loop.anthropic.add(reply(said("Twelve.")))
     await loop.loops.run(loop.owner, session_id)
     (answer,) = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]

@@ -66,7 +66,7 @@ from acme.om.context import (
 )
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts.impl.manager import HostsOptions
-from acme.om.root import ProductKinds
+from acme.om.platform_root import ProductKinds
 from acme.om.steps.types.header import HASH_SCHEME, ParkReason, WorkspaceSnapshot
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix

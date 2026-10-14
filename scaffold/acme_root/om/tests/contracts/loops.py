@@ -8,7 +8,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 from acme.infra.base import SYSTEM_SCOPE
@@ -25,8 +24,6 @@ from acme.integrations.model_providers.types import ErrorKind, ProviderName, Sto
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
-from acme.om.agents.gate import ResultGateInterface
-from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -38,7 +35,6 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.budgets.types.amount import Amount
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
-from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.models.layer import ModelsLayer
 from acme.om.root import Managers, build_managers, engine_tools
@@ -85,8 +81,7 @@ class Lookup(ToolInterface):
     """A read-only lookup that touches no workspace. It keeps who it ran as,
     and holds its first call until `release` is set when `holds` is. When
     `remote` is, it reads its target from the system it acts on, an await
-    that suspends; when `argv` is, it runs that command in the workspace
-    first, and what the command prints streams."""
+    that suspends."""
 
     def __init__(
         self,
@@ -108,7 +103,6 @@ class Lookup(ToolInterface):
         )
         self.holds = holds
         self.remote = False
-        self.argv: tuple[str, ...] = ()
         self.started = asyncio.Event()
         self.release = asyncio.Event()
         self.ran_as: list[UUID] = []
@@ -132,8 +126,6 @@ class Lookup(ToolInterface):
     ) -> Platform:
         assert isinstance(call_input, Asked)
         self.ran_as.append(ctx.user_id)
-        if self.argv:
-            await runtime.run(self.argv)
         if self.holds and len(self.ran_as) == 1:
             self.started.set()
             await self.release.wait()
@@ -368,9 +360,6 @@ def loop_over(
     owner: TenantContext | None = None,
     sink: StreamSinkMemoryImpl | None = None,
     jitter: Callable[[], float] = random.random,
-    result_gate: ResultGateInterface | None = None,
-    executor: ExecutorInterface | None = None,
-    work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
     models_layer: ModelsLayer | None = None,
     reader: AttachmentReaderInterface | None = None,
@@ -379,25 +368,22 @@ def loop_over(
     sessions: AgentSessionsOptions | None = None,
     infra: InfraLocalImpl | None = None,
     attached: AttachedToolsetsInterface | None = None,
-    **roots: Any,
+    build: Callable[..., Managers] = build_managers,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
     the loop draws its retry waits from. The loop's catalog holds the
     engine's tools before the suite's, over `reader`, None the null, and
     `extra` after them: a product's own tool, which a kind of `kinds`
-    names. `result_gate` None is the engine's null gate, which accepts a
-    result and marks it unverified, as the engine's suites read it;
-    `executor` and `work_product` go to the root as they are. `call_gate`
-    None is the budgets' gate behind the call gate; a suite of a gate of
-    its own builds it from the managers and the clock. `models_layer` goes
-    to the root as a platform's root hands it in, and the loop takes the
-    layer's call credentials. `ceilings` None keeps the platform's, and
-    `sessions` None is the sessions' own options. `infra` None is the local
-    root over `tmp_path`; a suite on real Docker hands in one whose
-    workspaces are containers. `attached` answers the toolsets a session
-    holds beyond its kind. `roots` is what else the managers are built
-    with."""
+    names. `call_gate` None is the budgets' gate behind the call gate; a
+    suite of a gate of its own builds it from the managers and the clock.
+    `models_layer` goes to the root as a layer's root hands it in, and the
+    loop takes the layer's call credentials. `ceilings` None keeps the
+    platform's, and `sessions` None is the sessions' own options. `infra`
+    None is the local root over `tmp_path`; a suite on real Docker hands in
+    one whose workspaces are containers. `attached` answers the toolsets a
+    session holds beyond its kind. `build` builds the managers, the
+    engine's root unless a layer's suite hands in its own."""
     infra = infra or InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -410,7 +396,7 @@ def loop_over(
     every = (*catalog.values(), *jobs.values(), *extra)
     storage = storage or StorageMemoryImpl()
     reader = reader or AttachmentReaderNullImpl()
-    managers = build_managers(
+    managers = build(
         storage,
         infra,
         integrations=integrations,
@@ -418,13 +404,9 @@ def loop_over(
         principal_context=live,
         tool_catalog=every,
         attachment_reader=reader,
-        result_gate=result_gate or ResultGateNullImpl(),
-        executor=executor,
-        work_product=work_product,
         models_layer=models_layer,
         tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
         agent_sessions_options=sessions,
-        **roots,
     )
     clock = Clock()
     # The sessions of one case share one signal, as a fleet's do on Valkey:

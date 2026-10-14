@@ -20,13 +20,13 @@ async def test_managers_are_built_once_for_any_number_of_requests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[int] = []
-    real_build = container_module.build_managers
+    real_build = container_module.build_platform_managers
 
     def counting_build(*args: object, **kwargs: object) -> object:
         calls.append(1)
         return real_build(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(container_module, "build_managers", counting_build)
+    monkeypatch.setattr(container_module, "build_platform_managers", counting_build)
     container = AppContainer.for_tests(StorageMemoryImpl(), InfraLocalImpl(tmp_path))
     assert len(calls) == 1
 

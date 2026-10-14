@@ -21,7 +21,7 @@ from acme.infra.root import InfraInterface
 from acme.om.base import utcnow
 from acme.om.events import EventsManagerInterface
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
-from acme.om.root import Managers, ProductKinds
+from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.watch.impl.kinds import KindStreamsImpl
 from acme.om.watch.impl.manager import WatchManagerImpl, WatchOptions
 from acme.om.watch.impl.stream import StreamOptions, StreamServiceImpl, step_kinds
@@ -58,7 +58,7 @@ def build_kind_streams(
 
 
 def build_watch(
-    managers: Managers,
+    managers: PlatformManagers,
     stream: StreamServiceInterface,
     options: WatchOptions | None = None,
     *,

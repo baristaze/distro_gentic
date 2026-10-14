@@ -59,7 +59,12 @@ from acme.om.placement.kinds import (
     platform_work_kinds,
 )
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
-from acme.om.root import Managers, ProductKinds, build_managers
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
@@ -114,11 +119,15 @@ def request(app: AppContext = GATEWAY) -> RequestContext:
 
 
 @pytest.fixture
-def managers(tmp_path: Path) -> Managers:
-    return build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), product_kinds=PRODUCT)
+def managers(tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        platform_root_options=PlatformRootOptions(product_kinds=PRODUCT),
+    )
 
 
-async def an_owner(managers: Managers, slug: str) -> TenantContext:
+async def an_owner(managers: PlatformManagers, slug: str) -> TenantContext:
     owner, _ = await managers.tenancy.bootstrap(
         request(APP), slug.title(), slug, f"ann@{slug}.test", "Ann"
     )
@@ -155,7 +164,7 @@ def node(pool_id: UUID, org_id: UUID | None, kind: str = BATCH) -> Claimant:
 
 
 async def test_a_products_kind_goes_to_its_lane_and_only_its_claimant_kind_takes_it(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ajax = await an_owner(managers, "ajax")
     pool = new_id()
@@ -172,7 +181,7 @@ async def test_a_products_kind_goes_to_its_lane_and_only_its_claimant_kind_takes
 
 
 async def test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ajax = await an_owner(managers, "ajax")
     pool = new_id()
@@ -185,7 +194,7 @@ async def test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane(
 
 
 async def test_a_claimant_in_a_tenants_wall_is_never_handed_another_tenants_render(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     pool = new_id()
@@ -202,7 +211,9 @@ async def test_a_claimant_in_a_tenants_wall_is_never_handed_another_tenants_rend
     assert shared is not None and (shared[0].org_id, shared[1].id) == (beta.org_id, served.id)
 
 
-async def test_a_claimant_reads_and_answers_only_the_items_it_holds(managers: Managers) -> None:
+async def test_a_claimant_reads_and_answers_only_the_items_it_holds(
+    managers: PlatformManagers,
+) -> None:
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     pool = new_id()
     await managers.work.enqueue(ajax, a_render(ajax, pool))
@@ -269,7 +280,7 @@ async def test_a_claimant_reads_and_answers_only_the_items_it_holds(managers: Ma
 
 
 async def test_a_first_runs_report_after_its_claim_lapsed_settles_nothing(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ajax = await an_owner(managers, "ajax")
     pool = new_id()
@@ -307,7 +318,7 @@ async def test_a_first_runs_report_after_its_claim_lapsed_settles_nothing(
 
 
 async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
-    managers: Managers, tmp_path: Path
+    managers: PlatformManagers, tmp_path: Path
 ) -> None:
     ajax = await an_owner(managers, "ajax")
     with pytest.raises(NotAuthorized, match="no permission asks for work of kind UNREGISTERED"):
@@ -334,13 +345,17 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
     )
     for product in takeovers:
         with pytest.raises(ValueError):
-            build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), product_kinds=product)
+            build_platform_managers(
+                StorageMemoryImpl(),
+                InfraLocalImpl(tmp_path),
+                platform_root_options=PlatformRootOptions(product_kinds=product),
+            )
     # No worker of the platform's runs a product's kind, so it names who claims it.
     with pytest.raises(ValueError, match="names no claimant kind"):
         ProductKinds(work=(WorkKindSpec("UNCLAIMED", RenderPayload, Permission.WRITE),))
 
 
-def test_the_platforms_kinds_go_through_the_same_registries(managers: Managers) -> None:
+def test_the_platforms_kinds_go_through_the_same_registries(managers: PlatformManagers) -> None:
     work = platform_work_kinds()
     assert {spec.name for spec in work} == set(WorkKind)
     assert work.claimed_by(HOST) == {WorkKind.EXEC, WorkKind.WORKSPACE}
@@ -365,7 +380,7 @@ EVERYTHING = PolicyLayer(rules=(PolicyRule(decision=Decision.ALLOW),))
 """A tenant's layer that allows every call."""
 
 
-def engine_ceilings(managers: Managers) -> PolicyLayer:
+def engine_ceilings(managers: PlatformManagers) -> PolicyLayer:
     """The ceilings the root hands the engine's tools manager, beneath the
     layers the root puts on it."""
     tools: object = managers.tools
@@ -383,11 +398,13 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
     )
     preview = render.model_copy(update={"authorization_class": PREVIEW_CLASS})
     for options in (None, ToolsOptions(purge_batch=5)):
-        managers = build_managers(
+        managers = build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
             tools_options=options,
-            product_kinds=product,
+            platform_root_options=PlatformRootOptions(
+                product_kinds=product,
+            ),
         )
         ceilings = engine_ceilings(managers)
         assert decide(render, PolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
@@ -429,11 +446,13 @@ def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
     )
     for product, options, reason in refused:
         with pytest.raises(ValueError, match=reason):
-            build_managers(
+            build_platform_managers(
                 StorageMemoryImpl(),
                 InfraLocalImpl(tmp_path),
                 tools_options=options,
-                product_kinds=product,
+                platform_root_options=PlatformRootOptions(
+                    product_kinds=product,
+                ),
             )
 
 
@@ -748,6 +767,10 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
         )
     )
     with pytest.raises(ValueError, match="resource kind noop is registered twice"):
-        build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), product_kinds=taken)
+        build_platform_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            platform_root_options=PlatformRootOptions(product_kinds=taken),
+        )
     with pytest.raises(ValueError, match="lower case"):
         ResourceKindSpec("Dock", NoopAsk, NoopResourceKindImpl())

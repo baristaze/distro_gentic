@@ -17,7 +17,7 @@ from unit.test_connectors import OPS_ANALYST, RECORDS, Served, serve
 from acme.integrations.mcp import McpListedTool
 from acme.om.connectors.impl.manager import connector_secret
 from acme.om.context import Role
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.tools.mcp import definition_of
 from acme.om.tools.rules import definition_hash
 from acme.services.api.container import AppContainer

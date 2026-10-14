@@ -126,7 +126,8 @@ from acme.om.platform_agents.tools import (
     SearchCodeImpl,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import ProductKinds, build_managers, engine_tools
+from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
+from acme.om.root import engine_tools
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import (
     LoopOutcome,
@@ -853,11 +854,13 @@ def test_an_assistant_with_a_workspace_or_steady_authority_is_refused_at_boot(
     # The root refuses it whole: a version an adopter declares meets the
     # check the platform's own does.
     with pytest.raises(UnsafeConfiguration):
-        build_managers(
+        build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
             agent_kinds=(with_workspace,),
-            platform_agents=PlatformAgents(corpus=CORPUS),
+            platform_root_options=PlatformRootOptions(
+                platform_agents=PlatformAgents(corpus=CORPUS),
+            ),
         )
 
 
@@ -2082,9 +2085,11 @@ async def test_every_tool_the_ops_analyst_holds_reads(tmp_path: Path) -> None:
         update={"version": 2, "tools": (*OPS_ANALYST_KIND.tools, kinds.HAND_OFF)}
     )
     with pytest.raises(UnsafeConfiguration, match="ops_analyst v2: hand_off_to_software_engineer"):
-        build_managers(
+        build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
             agent_kinds=(acting,),
-            platform_agents=PlatformAgents(corpus=CORPUS),
+            platform_root_options=PlatformRootOptions(
+                platform_agents=PlatformAgents(corpus=CORPUS),
+            ),
         )

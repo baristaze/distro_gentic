@@ -13,13 +13,13 @@ from acme.om.base import utcnow
 from acme.om.intake import IntakeManagerInterface
 from acme.om.park_alerts.impl.manager import ParkAlertsManagerImpl, ParkAlertsOptions
 from acme.om.park_alerts.manager import ParkAlertsManagerInterface
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
 
 
 def build_park_alerts(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     integrations: IntegrationsInterface,
     intake: IntakeManagerInterface,
     *,

@@ -11,7 +11,8 @@ import pytest
 from contracts.agent_project_storage import in_agent_project
 from contracts.evidence import ScriptedExecutor, checkout_policy, delivered
 from contracts.evidence_storage import make_record
-from contracts.loops import loop_over, reply, said
+from contracts.loops import reply, said
+from contracts.platform_loops import platform_loop_over
 from contracts.tools import result_text
 
 from acme.infra.impl.configured import InfraConfiguredImpl
@@ -23,7 +24,7 @@ from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.root import build_managers
+from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import AcceptedResult, LoopOutcome, ToolResponseHeader
 from acme.om.steps.types.step import StepType
@@ -52,7 +53,7 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    managers = build_managers(storage, InfraConfiguredImpl(settings))
+    managers = build_platform_managers(storage, InfraConfiguredImpl(settings))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -77,7 +78,7 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     work = WorkProductMemoryImpl()
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         owner=owner,
@@ -86,10 +87,9 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
             work,
             SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
-        executor=ScriptedExecutor(),
-        work_product=work,
+        platform=PlatformRootOptions(executor=ScriptedExecutor(), work_product=work),
     )
-    evidence = loop.managers.evidence
+    evidence = loop.platform.evidence
     session_id = await loop.start("delivery")
     agent_project = await in_agent_project(
         storage.get_agent_project_storage(), owner.org_id, session_id

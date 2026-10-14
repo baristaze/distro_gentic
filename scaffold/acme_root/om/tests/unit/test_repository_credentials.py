@@ -10,13 +10,13 @@ session's work product alone, and goes with its tenant."""
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import pytest
 from contracts.agent_workspaces import REPOSITORY, AgentProjectsTwin, GitTwin, ReaderTwin
-from contracts.loops import Loop, live, loop_over, reply, said
+from contracts.loops import live, reply, said
 from contracts.platform_agents import CORPUS, calls
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 from pydantic import SecretStr
 
 from acme.infra.transports import CommandSpec
@@ -61,6 +61,7 @@ from acme.om.intake.types.route import Effect
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
+from acme.om.platform_root import PlatformRootOptions
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
@@ -82,22 +83,26 @@ class Forged:
     the integration's twin, the workspace's HEAD is `HEAD`, and intake binds
     a session's work as the session runner wires it."""
 
-    def __init__(self, tmp_path: Path, **roots: Any) -> None:
+    def __init__(
+        self, tmp_path: Path, agent_workspaces_options: AgentWorkspacesOptions | None = None
+    ) -> None:
         self.forge = IntegrationTwinImpl("forge")
         self.agent_projects = AgentProjectsTwin()
         self.reader = ReaderTwin(head=HEAD)
-        self.loop: Loop = loop_over(
+        self.loop: PlatformLoop = platform_loop_over(
             tmp_path,
             kinds=(SOFTWARE_ENGINEER,),
-            platform_agents=PlatformAgents(corpus=CORPUS),
-            intake=lambda: self.intake,
-            workspace_agent_projects=self.agent_projects,
-            workspace_git=GitTwin(head=HEAD),
-            workspace_reader=self.reader,
-            source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
-            **roots,
+            platform=PlatformRootOptions(
+                platform_agents=PlatformAgents(corpus=CORPUS),
+                intake=lambda: self.intake,
+                workspace_agent_projects=self.agent_projects,
+                workspace_git=GitTwin(head=HEAD),
+                workspace_reader=self.reader,
+                source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
+                agent_workspaces_options=agent_workspaces_options,
+            ),
         )
-        self.intake = build_intake(self.loop.storage, self.loop.managers, principal_context=live)
+        self.intake = build_intake(self.loop.storage, self.loop.platform, principal_context=live)
         self.service = build_context(
             RequestContext(request_id=new_id(), app=WORKER),
             user_id=EMPTY_UUID,
@@ -127,7 +132,7 @@ class Forged:
         return await self.loop.start(kinds.SOFTWARE_ENGINEER)
 
     async def held(self, session_id: UUID) -> AgentSessionWorkspace:
-        return await self.loop.managers.agent_workspaces.get_workspace(self.loop.owner, session_id)
+        return await self.loop.platform.agent_workspaces.get_workspace(self.loop.owner, session_id)
 
     async def answer(self, session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
         for step in await self.loop.history(session_id):
@@ -357,7 +362,7 @@ async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_
     platform = Forged(tmp_path)
     agent_automations = build_agent_automations(
         platform.loop.storage,
-        platform.loop.managers,
+        platform.loop.platform,
         agent_project_required=False,
         principal_context=live,
     )
@@ -418,7 +423,7 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     platform = Forged(
         tmp_path, agent_workspaces_options=AgentWorkspacesOptions(push_token_lifetime=lifetime)
     )
-    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.platform.agent_workspaces, platform.loop.owner
     one, other = await platform.software_engineer(), await platform.software_engineer()
     before = utcnow()
     token = await workspaces.mint_push_token(owner, one)
@@ -481,7 +486,7 @@ async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refus
     tmp_path: Path, body: str
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.platform.agent_workspaces, platform.loop.owner
     one = await platform.software_engineer()
     await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
     token = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
@@ -503,7 +508,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.platform.agent_workspaces, platform.loop.owner
     agent_project_id = platform.agent_projects.agent_project_id
     secrets = platform.loop.infra.get_secrets()
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
@@ -544,7 +549,7 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    workspaces, owner = platform.loop.managers.agent_workspaces, platform.loop.owner
+    workspaces, owner = platform.loop.platform.agent_workspaces, platform.loop.owner
     agent_project_id = platform.agent_projects.agent_project_id
     credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
     await workspaces.put_fetch_credential(owner, agent_project_id, credential)

@@ -22,7 +22,7 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import CEILINGS, PROTECTED_CEILING
 from acme.om.platform_agents.tools import EditFileImpl, WriteFileImpl
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
@@ -208,7 +208,7 @@ async def test_the_root_keeps_the_protected_ceiling_whatever_options_it_is_given
     tmp_path: Path,
 ) -> None:
     for options in (None, ToolsOptions(purge_batch=5)):
-        managers = build_managers(
+        managers = build_platform_managers(
             StorageMemoryImpl(), InfraLocalImpl(tmp_path), tools_options=options
         )
         # The engine's tools manager, beneath the layers the root puts on it.

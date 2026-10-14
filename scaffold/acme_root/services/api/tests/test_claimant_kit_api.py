@@ -29,7 +29,7 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant as ClaimantRow
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.container import AppContainer

@@ -15,8 +15,9 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.doubles import Members
-from contracts.loops import loop_over, reply, said, use
+from contracts.loops import reply, said, use
 from contracts.placement_storage import make_share
+from contracts.platform_loops import platform_loop_over
 from contracts.tools import stand_ins
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -47,7 +48,7 @@ from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import TierShare
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -89,11 +90,11 @@ def storage() -> StorageMemoryImpl:
 
 
 @pytest.fixture
-def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
+    return build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
 
 
-async def an_owner(managers: Managers, slug: str = "ajax") -> TenantContext:
+async def an_owner(managers: PlatformManagers, slug: str = "ajax") -> TenantContext:
     owner, _ = await managers.tenancy.bootstrap(
         request(APP), slug.title(), slug, f"ann@{slug}.test", "Ann"
     )
@@ -154,7 +155,9 @@ def items_of(storage: StorageMemoryImpl) -> list[WorkItem]:
 # Each kind goes to the lane where its environment is.
 
 
-async def test_each_kind_goes_to_the_lane_where_its_environment_is(managers: Managers) -> None:
+async def test_each_kind_goes_to_the_lane_where_its_environment_is(
+    managers: PlatformManagers,
+) -> None:
     owner = await an_owner(managers)
     host, pool = new_id(), new_id()
     cases = {
@@ -176,7 +179,7 @@ async def test_each_kind_goes_to_the_lane_where_its_environment_is(managers: Man
         assert queued.lane == lane, kind.value
 
 
-async def test_a_tenants_loops_go_to_its_tiers_lane_or_its_own(managers: Managers) -> None:
+async def test_a_tenants_loops_go_to_its_tiers_lane_or_its_own(managers: PlatformManagers) -> None:
     owner = await an_owner(managers)
     admin = operator()
 
@@ -196,7 +199,7 @@ async def test_a_tenants_loops_go_to_its_tiers_lane_or_its_own(managers: Manager
 
 
 async def test_a_relayed_loop_lands_in_its_tenants_lane(
-    managers: Managers, storage: StorageMemoryImpl
+    managers: PlatformManagers, storage: StorageMemoryImpl
 ) -> None:
     """What wakes a session asks for its loop through the outbox, and the
     relayed item is placed like a direct one."""
@@ -216,7 +219,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
 
 
 async def test_each_kind_is_claimed_only_from_its_own_lane(
-    managers: Managers, storage: StorageMemoryImpl
+    managers: PlatformManagers, storage: StorageMemoryImpl
 ) -> None:
     owner = await an_owner(managers)
     mine, theirs = new_id(), new_id()
@@ -278,7 +281,7 @@ def test_a_claimants_lanes_and_kinds_are_read_off_its_identity_alone() -> None:
 
 
 async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A host inside one tenant's wall is never handed another tenant's work,
     even routed to its lane: the item fails for good, a dead letter, and is
@@ -304,7 +307,7 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
 
 
 async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """A machine the cloud pool started for one session claims that session's
     work and no other, even routed to its own lane: the stray item fails for
@@ -343,8 +346,11 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_
     tmp_path: Path, storage: StorageMemoryImpl
 ) -> None:
     options = PlacementOptions(tier_shares=(TierShare(tier="standard", share=1),))
-    managers = build_managers(
-        storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS, placement_options=options
+    managers = build_platform_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        tool_catalog=TOOLS,
+        platform_root_options=PlatformRootOptions(placement_options=options),
     )
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     lane = tier_lane("standard")
@@ -374,7 +380,7 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_
 
 
 async def test_a_tenant_moved_to_another_lane_keeps_its_own_cap_on_the_lane_it_left(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     owner = await an_owner(managers)
     admin = operator()
@@ -423,7 +429,7 @@ async def test_a_tenant_moved_to_another_lane_keeps_its_own_cap_on_the_lane_it_l
 
 
 async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loops_lane(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     owner = await an_owner(managers)
     admin = operator()
@@ -461,7 +467,7 @@ async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loo
 
 
 async def test_the_carry_writes_each_shares_concurrency_as_its_own_cap_once(
-    managers: Managers, storage: StorageMemoryImpl
+    managers: PlatformManagers, storage: StorageMemoryImpl
 ) -> None:
     shares = storage.get_placement_storage()
     assert isinstance(shares, PlacementStorageMemoryImpl)
@@ -493,7 +499,7 @@ async def test_the_carry_writes_each_shares_concurrency_as_its_own_cap_once(
 
 
 async def test_an_operator_sets_a_share_in_versions_and_the_stream_names_them(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     owner = await an_owner(managers)
     admin = operator()
@@ -523,7 +529,7 @@ async def test_an_operator_sets_a_share_in_versions_and_the_stream_names_them(
 
 
 async def test_a_share_is_refused_to_a_reader_an_unknown_org_and_bad_terms(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     owner = await an_owner(managers)
     terms = {"plan_tier": "pro", "own_lane": False, "concurrency": 2}
@@ -544,7 +550,7 @@ async def test_a_share_is_refused_to_a_reader_an_unknown_org_and_bad_terms(
 
 
 async def test_a_tenant_past_its_retention_loses_its_share_and_a_living_one_keeps_it(
-    managers: Managers, storage: StorageMemoryImpl
+    managers: PlatformManagers, storage: StorageMemoryImpl
 ) -> None:
     owner = await an_owner(managers)
     await managers.placement_operator.set_share(
@@ -580,12 +586,12 @@ async def test_a_lost_claim_writes_nothing_and_the_next_claim_recovers_the_sessi
     run takes the next epoch, so the stalled run appends nothing and
     settles nothing in the queue."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path / "boot"))
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path / "boot"))
     owner = await an_owner(managers)
     await managers.placement_operator.set_share(
         operator(), owner.org_id, plan_tier="standard", own_lane=False, concurrency=1
     )
-    loop = loop_over(tmp_path, storage=storage, owner=owner)
+    loop = platform_loop_over(tmp_path, storage=storage, owner=owner)
     session_id = await loop.start()
     message = message_step(new_id(), utcnow(), session_id, owner, "Note the fix.")
     await loop.managers.agent_sessions.receive(owner, session_id, [message])

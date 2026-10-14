@@ -44,8 +44,9 @@ from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer, TrustManagers
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from contracts.loops import ASSISTANT, DELIVERY, Loop
+from contracts.loops import ASSISTANT, DELIVERY
 from contracts.money import Money, money_over
+from contracts.platform_loops import PlatformLoop
 
 SONNET = Fill(
     provider=ProviderName.ANTHROPIC,
@@ -145,7 +146,7 @@ class AgentFleet:
         return self.keyed.setdefault(value, ModelProviderScriptedImpl(provider))
 
     @property
-    def loop(self) -> Loop:
+    def loop(self) -> PlatformLoop:
         return self.money.loop
 
     @property
@@ -225,8 +226,8 @@ async def agent_fleet_over(
         tools_layer=trust.tools,
         kinds=kinds,
     )
-    trusted = trust.build(money.loop.managers)
-    built = layer.build(money.loop.managers)
+    trusted = trust.build(money.loop.platform)
+    built = layer.build(money.loop.platform)
     await money.open(
         funding=funding, key_ref=None if funding is FundingMode.PLATFORM else "own-keys"
     )

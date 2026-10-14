@@ -37,15 +37,14 @@ from acme.om.matrix.root import MatrixLayer
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
-from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.root import (
-    LOCAL,
-    Managers,
+from acme.om.platform_root import (
+    PlatformManagers,
     PlatformPorts,
-    TenancyOperatorOptions,
-    TenancyOptions,
-    build_managers,
+    PlatformRootOptions,
+    build_platform_managers,
 )
+from acme.om.product_kinds import PRODUCT_KINDS
+from acme.om.root import LOCAL, TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -176,7 +175,7 @@ class AppContainer:
         storage: StorageInterface,
         infra: InfraInterface,
         integrations: IntegrationsInterface,
-        managers: Managers,
+        managers: PlatformManagers,
         services: ServicesInterface,
         rate_limits: RateLimitOptions,
         stream: StreamServiceInterface,
@@ -241,7 +240,7 @@ class AppContainer:
         platform_agents: PlatformAgents | None = None,
         payments: PaymentProviderInterface | None = None,
     ) -> AppContainer:
-        """Managers, then services, over whichever roots the caller chose.
+        """PlatformManagers, then services, over whichever roots the caller chose.
         `ports` are the platform's ports the product sets, None each for the
         platform's own: agent billing's money gate, and the evidence's result gate.
         `payments` checks a payment a tenant posts; None refuses every one.
@@ -261,7 +260,7 @@ class AppContainer:
         held: list[IntakeManagerInterface] = []
         # A start makes each session with its kind manual.
         agent_playbooks = AgentPlaybooksLayer(storage)
-        managers = build_managers(
+        managers = build_platform_managers(
             storage,
             infra,
             tenancy_options(settings),
@@ -269,16 +268,18 @@ class AppContainer:
             integrations,
             environment=settings.environment,
             tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
-            platform_agents=platform_agents,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
-            executor=ports.executor,
-            executor_options=ExecutorOptions(image=settings.workspace_image),
-            work_product=ports.work_product,
-            agent_session_projects=ports.agent_session_projects,
-            workspace_agent_projects=ports.workspace_agent_projects,
-            product_kinds=ports.kinds,
-            agents_layer=agent_playbooks.agents,
+            platform_root_options=PlatformRootOptions(
+                platform_agents=platform_agents,
+                executor=ports.executor,
+                executor_options=ExecutorOptions(image=settings.workspace_image),
+                work_product=ports.work_product,
+                agent_session_projects=ports.agent_session_projects,
+                workspace_agent_projects=ports.workspace_agent_projects,
+                product_kinds=ports.kinds,
+                agents_layer=agent_playbooks.agents,
+            ),
         )
         refuse_open_money(settings.environment, managers)
         # A tenant's own provider keys, saved and listed here and never read

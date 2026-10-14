@@ -24,7 +24,7 @@ from acme.om.events.types.event import Event
 from acme.om.outbox.impl.relay import DEAD_LETTER_KIND, OutboxOptions, OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.impl.creates import user_payload
 from acme.om.tenancy.impl.manager import TenancyOptions
@@ -60,7 +60,7 @@ async def test_the_row_carries_the_trace_context_its_stage_carries(
     stage. A span open when the row is written is not where it looks: the
     stage was minted with the trace context of its request, or with none when
     no tracer was configured, and the far side then starts its own trace."""
-    managers = build_managers(StorageMemoryImpl(), infra, TenancyOptions(dev_sign_in=True))
+    managers = build_platform_managers(StorageMemoryImpl(), infra, TenancyOptions(dev_sign_in=True))
     ctx = await sign_in(managers)
     user = a_user()
     tracer = TracerProvider().get_tracer("acme.om.tests")
@@ -170,7 +170,7 @@ async def test_purge_takes_done_and_failed_rows_past_the_retention(infra: InfraL
     assert await relay.purge_done(timedelta(seconds=-1), 1000) == 2
 
 
-async def sign_in(managers: Managers) -> TenantContext:
+async def sign_in(managers: PlatformManagers) -> TenantContext:
     """A tenant with a member, so a relayed work item has a principal to run
     under: the row names the actor and the claim rebuilds it."""
     tenancy = managers.tenancy
@@ -196,7 +196,7 @@ async def test_a_write_that_also_starts_work_rides_a_second_row_the_relay_enqueu
     from the row, and it presents the row's id as the item's idempotency key,
     which is the same on every run: a relay that runs twice leaves one item."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, infra, TenancyOptions(dev_sign_in=True))
+    managers = build_platform_managers(storage, infra, TenancyOptions(dev_sign_in=True))
     ctx = await sign_in(managers)
     woken: list[TopicPayload] = []
 
@@ -281,7 +281,7 @@ async def test_a_relayed_item_lands_on_its_kinds_lane(
     for kind, named in lanes.items():
         monkeypatch.setitem(WORK_LANES, kind, named)
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, infra, TenancyOptions(dev_sign_in=True))
+    managers = build_platform_managers(storage, infra, TenancyOptions(dev_sign_in=True))
     ctx = await sign_in(managers)
     woken: list[str] = []
 
@@ -442,7 +442,7 @@ async def test_a_work_row_is_done_once_enqueued_though_its_wake_up_is_dropped(
     wake-up costs latency and the row is done. The entity change beside it
     told no one, so it stays pending."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, infra, TenancyOptions(dev_sign_in=True))
+    managers = build_platform_managers(storage, infra, TenancyOptions(dev_sign_in=True))
     ctx = await sign_in(managers)
     user = a_user()
     change = outbox_row(ctx, "tenancy.user.created", user.id, user_payload(user))
@@ -474,7 +474,7 @@ async def test_the_push_names_the_version_a_versioned_row_carries_and_none_other
     infra.get_topics().subscribe(Topics.ENTITY_CHANGED, "test", record)
     outbox = OutboxStorageMemoryImpl()
     tenancy = TenancyStorageMemoryImpl(outbox)
-    managers = build_managers(StorageMemoryImpl(), infra, TenancyOptions(dev_sign_in=True))
+    managers = build_platform_managers(StorageMemoryImpl(), infra, TenancyOptions(dev_sign_in=True))
     ctx = await sign_in(managers)
     rows = []
     for payload in ({"version": 4}, {}, {"version": "4"}, {"version": True}):

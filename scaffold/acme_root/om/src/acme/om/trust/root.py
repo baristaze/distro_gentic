@@ -2,7 +2,8 @@
 its tools in, and the trust managers built over the managers it returns.
 
     layer = TrustLayer(storage, infra, placement=..., probe=..., clients=...)
-    managers = build_managers(storage, infra, ..., tools_layer=layer.tools)
+    options = PlatformRootOptions(tools_layer=layer.tools)
+    managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     trust = layer.build(managers)
 
 The layer is handed to the engine's root before the managers exist, and
@@ -19,8 +20,9 @@ from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.base import utcnow
+from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.privacy.impl.keys import SessionKeysImpl
-from acme.om.root import Managers, ProductKinds, private_history
+from acme.om.root import private_history
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -104,7 +106,7 @@ class TrustLayer:
         """The engine's tools manager, held to the wall and audited."""
         return ToolsManagerTrustedImpl(inner, lambda: self.managers.trust, self._clock)
 
-    def build(self, managers: Managers) -> TrustManagers:
+    def build(self, managers: PlatformManagers) -> TrustManagers:
         """The trust managers over the engine's, once; built again, the same."""
         if self._built is not None:
             return self._built

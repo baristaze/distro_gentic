@@ -30,7 +30,7 @@ from test_rate_limits_integration import an_address, settings_over_the_stack
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.om.base import new_id
-from acme.om.root import PlatformPorts
+from acme.om.platform_root import PlatformPorts
 from acme.om.watch.types.live import MAX_ENTRY
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
