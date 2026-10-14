@@ -72,7 +72,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "agent_automations": DatabaseRole.CORE,
     "agent_automation_runs": DatabaseRole.CORE,
     "agent_automation_principals": DatabaseRole.CORE,
-    "notifications": DatabaseRole.CORE,
+    "park_alerts": DatabaseRole.CORE,
     "agent_playbooks": DatabaseRole.CORE,
     "agent_playbook_invocations": DatabaseRole.CORE,
     "agent_playbook_pins": DatabaseRole.CORE,

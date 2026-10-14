@@ -753,7 +753,7 @@ otherwise.
 
 What a server answers is data, quoted as any tool's output.
 
-### Notifications
+### Park Alerts
 
 A park that needs a person notifies whoever can clear it (the requester,
 eligible approvers, a budget's owner) on their channels, with a link to

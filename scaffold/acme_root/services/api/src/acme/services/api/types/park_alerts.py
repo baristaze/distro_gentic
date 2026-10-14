@@ -1,4 +1,4 @@
-"""Wire types of a person's notifications: one park that waits on them, on
+"""Wire types of a person's park alerts: one park that waits on them, on
 one channel, with the link to the one action that clears it."""
 
 from datetime import datetime
@@ -9,7 +9,7 @@ from acme.om.steps.types.header import ParkReason
 from acme.services.api.types.common import View
 
 
-class NotificationView(View):
+class ParkAlertView(View):
     """What waits on the caller: the session, why it parked, the one action
     that clears it, and that action's route, empty when none serves it yet.
     `read_at` is when the caller marked it read."""

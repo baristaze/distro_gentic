@@ -236,7 +236,7 @@ such as an image in a comment or a mirror.
 **Source.** Workspaces and Isolation, Egress.
 
 **Look for.** Every surface that renders agent output (the portal, the
-comments the agent writes, mirrors, notifications), and how each renders
+comments the agent writes, mirrors, park alerts), and how each renders
 an image or a link.
 
 **Violation.** A Markdown image, a link preview, an unfurl, or a proxy

@@ -32,8 +32,8 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
-from acme.om.notifications.manager import NotificationsManagerInterface
-from acme.om.notifications.root import build_notifications
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
@@ -87,7 +87,7 @@ class RunnerContainer:
         self.intake: IntakeManagerInterface = build_intake(
             storage, managers, integrations=integrations
         )
-        self.notifications: NotificationsManagerInterface = build_notifications(
+        self.park_alerts: ParkAlertsManagerInterface = build_park_alerts(
             storage, managers, integrations, self.intake
         )
 

@@ -12,7 +12,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.tree import AgentTree
-from acme.om.notifications.rules import held_calls, needs_person, parked_step
+from acme.om.park_alerts.rules import held_calls, needs_person, parked_step
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,

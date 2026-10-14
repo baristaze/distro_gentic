@@ -374,7 +374,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agent knowledge](src/acme/om/agent_knowledge/README.md)
 - [Levers](src/acme/om/levers/README.md)
 - [Connectors](src/acme/om/connectors/README.md)
-- [Notifications](src/acme/om/notifications/README.md)
+- [Park alerts](src/acme/om/park_alerts/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)

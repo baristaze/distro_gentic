@@ -1,4 +1,4 @@
-"""Notifications, as the platform runs them: a park that needs a person
+"""Park alerts, as the platform runs them: a park that needs a person
 tells exactly the people who can clear it, on the platform's own list and
 on every account of theirs an integration holds, with the link to the one
 action that clears it, and only to a route the API's document holds. One
@@ -18,7 +18,7 @@ from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.intake import STEADY, Wired, wired
 from contracts.loops import Lookup, call, reply, said, use
-from contracts.notification_storage import make_notification
+from contracts.park_alert_storage import make_park_alert
 from contracts.tools import Command
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -36,7 +36,7 @@ from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.models.credentials import CallClient, CallCredentialsInterface
-from acme.om.notifications.types.notification import PORTAL, Notification
+from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
 from acme.om.root import build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import Park, ParkReason
@@ -67,20 +67,20 @@ async def run_after(
     return await platform.loops.run(ctx, session_id)
 
 
-def told(notifications: tuple[Notification, ...]) -> set[tuple[UUID, str]]:
-    return {(n.recipient, n.channel) for n in notifications}
+def told(park_alerts: tuple[ParkAlert, ...]) -> set[tuple[UUID, str]]:
+    return {(n.recipient, n.channel) for n in park_alerts}
 
 
 DOCUMENT = Path(__file__).resolve().parents[3] / "clients" / "typescript" / "openapi.json"
 """The API's committed document: every route it serves."""
 
 
-def routed(notifications: Iterable[Notification]) -> bool:
-    """Every link the notifications carry is a route the API serves, each
+def routed(park_alerts: Iterable[ParkAlert]) -> bool:
+    """Every link the park alerts carry is a route the API serves, each
     path parameter filled."""
     paths = json.loads(DOCUMENT.read_text())["paths"]
     routes = [re.compile(re.sub(r"\{[^/}]+\}", "[^/]+", path)) for path in paths]
-    return all(any(route.fullmatch(n.link) for route in routes) for n in notifications if n.link)
+    return all(any(route.fullmatch(n.link) for route in routes) for n in park_alerts if n.link)
 
 
 async def parked_on(platform: Wired, requester: TenantContext, park: Park) -> LoopRun:
@@ -106,7 +106,7 @@ async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: W
     platform.anthropic.add(reply(use("lookup")))
     run = await run_after(platform, requester, session_id)
     assert run.end is RunEnd.PARKED and run.park is not None
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
     (request,) = [s for s in await platform.history(session_id) if s.type is StepType.TOOL_REQUEST]
@@ -123,11 +123,11 @@ async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: W
     )
     assert link in posted.text and posted.provenance == "twin"
     # Told once a park, however often it is asked.
-    assert set(await platform.notifications.notify_park(platform.service, run)) == set(notified)
+    assert set(await platform.park_alerts.notify_park(platform.service, run)) == set(notified)
     assert len(platform.chat.posted) == 1
-    mine = await platform.notifications.get_notifications(found[Role.ADMIN], 10)
+    mine = await platform.park_alerts.get_park_alerts(found[Role.ADMIN], 10)
     assert {n.channel for n in mine} == {PORTAL, "chat"}
-    assert await platform.notifications.get_notifications(requester, 10) == ()
+    assert await platform.park_alerts.get_park_alerts(requester, 10) == ()
 
 
 async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
@@ -153,7 +153,7 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     platform.anthropic.add(reply(said("On it.")))
     run = await run_after(platform, requester, session_id)
     assert run.park == Park(reason=ParkReason.BUDGET, unlock=str(budget.id))
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
     # The link is the budget's amount, and the text names the budget.
@@ -179,7 +179,7 @@ async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> 
     run = await run_after(platform, requester, started.id)
     assert run.end is RunEnd.PARKED and run.park is not None
     assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "deadline")
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
     assert told(notified) == {(requester.user_id, PORTAL)}
     assert {(n.action, n.link) for n in notified} == {
         ("deadline", f"/v1/agent-sessions/{started.id}/controls")
@@ -216,7 +216,7 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     question = 'Which week\'s report is "wrong"?\n\nThe last one,' + " or the one before," * 200
     run = await asked(platform, requester, question)
 
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
 
     assert told(notified) == {(requester.user_id, PORTAL), (requester.user_id, "chat")}
     link = f"/v1/agent-sessions/{run.session_id}/messages"
@@ -231,13 +231,13 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     # content, and a row outlives the session's key.
     (text,) = {n.text for n in notified}
     assert text == SAYS_A_QUESTION_WAITS
-    for kept in await platform.notifications.get_notifications(requester, 10):
+    for kept in await platform.park_alerts.get_park_alerts(requester, 10):
         assert "week" not in kept.text.lower()
     # The answer is a message, and clears the park: nothing is told again.
     resumed = await run_after(platform, requester, run.session_id, "Week 12.")
     assert resumed.end is RunEnd.ENDED
-    assert await platform.notifications.notify_park(platform.service, resumed) == ()
-    mine = await platform.notifications.get_notifications(requester, 10)
+    assert await platform.park_alerts.notify_park(platform.service, resumed) == ()
+    mine = await platform.park_alerts.get_park_alerts(requester, 10)
     assert set(mine) == set(notified) and len(platform.chat.posted) == 1
 
 
@@ -247,12 +247,12 @@ async def test_a_question_that_holds_a_link_is_not_quoted(platform: Wired) -> No
         platform, found[Role.MEMBER], "Is ![the chart](https://example.test/c.png?d=1) right?"
     )
 
-    (notified,) = await platform.notifications.notify_park(platform.service, run)
+    (notified,) = await platform.park_alerts.notify_park(platform.service, run)
 
     assert notified.text == SAYS_A_QUESTION_WAITS
 
 
-async def test_a_purged_session_takes_its_notifications_and_leaves_the_others(
+async def test_a_purged_session_takes_its_park_alerts_and_leaves_the_others(
     tmp_path: Path,
 ) -> None:
     storage = StorageMemoryImpl()
@@ -272,15 +272,15 @@ async def test_a_purged_session_takes_its_notifications_and_leaves_the_others(
         ).id
         for _ in range(2)
     ]
-    notifications = storage.get_notification_storage()
+    park_alerts = storage.get_park_alert_storage()
     for session_id in (gone, gone, kept):
-        row = make_notification(member.user_id).model_copy(update={"session_id": session_id})
-        await notifications.create_notification(member.org_id, row)
+        row = make_park_alert(member.user_id).model_copy(update={"session_id": session_id})
+        await park_alerts.create_park_alert(member.org_id, row)
     await managers.agent_sessions.delete_session(member, gone)
 
     assert await managers.agent_sessions.purge_across_tenants() == 1
 
-    left = await notifications.read_notifications(member.org_id, member.user_id, 10)
+    left = await park_alerts.read_park_alerts(member.org_id, member.user_id, 10)
     assert {n.session_id for n in left} == {kept} and len(left) == 1
 
 
@@ -291,7 +291,7 @@ async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_request
     run = await parked_on(
         platform, found[Role.MEMBER], Park(reason=ParkReason.PERSON, unlock=ANOMALY_UNLOCK)
     )
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
     approval = f"/v1/agent-sessions/{run.session_id}/cost-approval"
@@ -300,7 +300,7 @@ async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_request
     assert posted.text == f"{next(n.text for n in notified if n.channel == 'chat')} {approval}"
 
 
-async def test_every_link_a_notification_carries_is_a_route_of_the_api(
+async def test_every_link_a_park_alert_carries_is_a_route_of_the_api(
     platform: Wired,
 ) -> None:
     """A park whose action the API serves links to that route; topping
@@ -312,11 +312,11 @@ async def test_every_link_a_notification_carries_is_a_route_of_the_api(
         ParkReason.BUDGET: (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK, str(new_id())),
         ParkReason.PROVIDER: ("anthropic:key",),
     }
-    notified: list[Notification] = []
+    notified: list[ParkAlert] = []
     for reason, each in unlocks.items():
         for unlock in each:
             run = await parked_on(platform, requester, Park(reason=reason, unlock=unlock))
-            notified.extend(await platform.notifications.notify_park(platform.service, run))
+            notified.extend(await platform.park_alerts.notify_park(platform.service, run))
     assert {n.action for n in notified} == {
         "deadline",
         "approve_call",
@@ -341,7 +341,7 @@ async def test_a_key_the_org_lacks_tells_who_saves_its_keys_why_it_waits(
     park = Park(reason=ParkReason.PROVIDER, unlock="anthropic:key", cause=cause)
     run = await parked_on(platform, found[Role.MEMBER], park)
 
-    notified = await platform.notifications.notify_park(platform.service, run)
+    notified = await platform.park_alerts.notify_park(platform.service, run)
 
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
@@ -383,10 +383,10 @@ async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries
     assert first.park is not None and first.park.retry_at is not None
     assert (first.park.unlock, first.park.cause) == ("anthropic:billing", cause)
 
-    told_first = await platform.notifications.notify_park(platform.service, first)
+    told_first = await platform.park_alerts.notify_park(platform.service, first)
     await platform.managers.agent_sessions.wake_session(platform.service, session_id, first.park)
     tried = await platform.loops.run(requester, session_id)
-    told_again = await platform.notifications.notify_park(platform.service, tried)
+    told_again = await platform.park_alerts.notify_park(platform.service, tried)
 
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(told_first) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
@@ -400,7 +400,7 @@ async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries
     platform.anthropic.add(reply(said("Settled.")), billing)
     assert (await platform.loops.run(requester, session_id)).end is RunEnd.ENDED
     later = await run_after(platform, requester, session_id, "And the next one?")
-    told_later = await platform.notifications.notify_park(platform.service, later)
+    told_later = await platform.park_alerts.notify_park(platform.service, later)
 
     assert told(told_later) == told(told_first)
     assert not {n.id for n in told_later} & {n.id for n in told_first}, "a new park is told"
@@ -412,7 +412,7 @@ async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> Non
     session_id = await platform.start()
     platform.anthropic.add(reply(said("Done.")))
     ended = await run_after(platform, platform.owner, session_id)
-    assert await platform.notifications.notify_park(platform.service, ended) == ()
+    assert await platform.park_alerts.notify_park(platform.service, ended) == ()
     retries = (
         Park(reason=ParkReason.BUDGET, unlock="held", retry_at=utcnow()),
         # A price, and a key the platform's operator fixes, wait for no one
@@ -422,4 +422,4 @@ async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> Non
     )
     for retry in retries:
         parked = LoopRun(session_id=session_id, epoch=1, end=RunEnd.PARKED, park=retry)
-        assert await platform.notifications.notify_park(platform.service, parked) == ()
+        assert await platform.park_alerts.notify_park(platform.service, parked) == ()

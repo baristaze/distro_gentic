@@ -3237,43 +3237,6 @@ export interface paths {
         patch: operations["update_membership_v1_memberships__user_id__patch"];
         trace?: never;
     };
-    "/v1/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["list_notifications_v1_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark Read
-         * @description The notification marked read; the first mark holds.
-         */
-        post: operations["mark_read_v1_notifications__notification_id__read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -3336,6 +3299,43 @@ export interface paths {
         put?: never;
         /** Sso Link */
         post: operations["sso_link_v1_orgs_current_sso_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/park-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Park Alerts */
+        get: operations["list_park_alerts_v1_park_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/park-alerts/{park_alert_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Read
+         * @description The park alert marked read; the first mark holds.
+         */
+        post: operations["mark_read_v1_park_alerts__park_alert_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7061,43 +7061,6 @@ export interface components {
          */
         ModelSize: "xs" | "s" | "m" | "l" | "xl";
         /**
-         * NotificationView
-         * @description What waits on the caller: the session, why it parked, the one action
-         *     that clears it, and that action's route, empty when none serves it yet.
-         *     `read_at` is when the caller marked it read.
-         */
-        NotificationView: {
-            /** Action */
-            action: string;
-            /** Channel */
-            channel: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Link */
-            link: string;
-            provenance: components["schemas"]["Provenance"] | null;
-            /** Read At */
-            read_at: string | null;
-            reason: components["schemas"]["ParkReason"];
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Text */
-            text: string;
-            /** Unlock */
-            unlock: string;
-        };
-        /**
          * OperatorEventView
          * @description The same record as an operator reads it, with the two provenance fields
          *     a tenant's own feed leaves out: the request that produced it and the app
@@ -7316,6 +7279,43 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+        };
+        /**
+         * ParkAlertView
+         * @description What waits on the caller: the session, why it parked, the one action
+         *     that clears it, and that action's route, empty when none serves it yet.
+         *     `read_at` is when the caller marked it read.
+         */
+        ParkAlertView: {
+            /** Action */
+            action: string;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string;
+            provenance: components["schemas"]["Provenance"] | null;
+            /** Read At */
+            read_at: string | null;
+            reason: components["schemas"]["ParkReason"];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Text */
+            text: string;
+            /** Unlock */
+            unlock: string;
         };
         /**
          * ParkReason
@@ -16238,76 +16238,6 @@ export interface operations {
             };
         };
     };
-    list_notifications_v1_notifications_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_read_v1_notifications__notification_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_org_v1_orgs_post: {
         parameters: {
             query?: never;
@@ -16458,6 +16388,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SsoLinkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_park_alerts_v1_park_alerts_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkAlertView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_v1_park_alerts__park_alert_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                park_alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkAlertView"];
                 };
             };
             /** @description Validation Error */

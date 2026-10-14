@@ -1,5 +1,5 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, agent automations, agent playbooks, agent knowledge, and notifications
+with the intake, agent automations, agent playbooks, agent knowledge, and park alerts
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
 the agent playbooks layer, and the agent knowledge layer, and each manager built over
@@ -51,8 +51,8 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.tools import COMMENT, CommentImpl
 from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
-from acme.om.notifications.manager import NotificationsManagerInterface
-from acme.om.notifications.root import build_notifications
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
 from acme.om.steps.types.step import Step
@@ -156,7 +156,7 @@ class Wired:
     agent_automations: AgentAutomationsManagerInterface
     agent_playbooks: AgentPlaybooksManagerInterface
     agent_knowledge: AgentKnowledgeManagerInterface
-    notifications: NotificationsManagerInterface
+    park_alerts: ParkAlertsManagerInterface
     chat: IntegrationTwinImpl
     forge: IntegrationTwinImpl
     storage: StorageInterface
@@ -381,7 +381,7 @@ def wired(
         ),
         agent_playbooks=agent_playbooks.build(managers),
         agent_knowledge=agent_knowledge.build(managers),
-        notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
+        park_alerts=build_park_alerts(storage, managers, integrations, intake, clock=clock),
         chat=chat,
         forge=forge,
         storage=storage,

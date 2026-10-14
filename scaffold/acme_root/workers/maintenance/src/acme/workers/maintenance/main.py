@@ -161,7 +161,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "agent_knowledge": container.agent_knowledge.purge_tenant,
             # Its connectors, each credential with them, and what sessions pinned.
             "connectors": container.connectors.purge_tenant,
-            "notifications": container.notifications.purge_tenant,
+            "park_alerts": container.park_alerts.purge_tenant,
         },
         # Once a pass, across every tenant: each namespace's rows past their
         # retention.

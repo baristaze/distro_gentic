@@ -1,6 +1,6 @@
-"""The notifications swimlane over the engine's managers, as a root builds it.
+"""The park alerts swimlane over the engine's managers, as a root builds it.
 
-    notifications = build_notifications(storage, managers, integrations, intake)
+    park_alerts = build_park_alerts(storage, managers, integrations, intake)
 
 The process whose runs park, the session runner, tells after each run;
 the maintenance worker holds it for its purge."""
@@ -11,29 +11,29 @@ from datetime import datetime
 from acme.integrations.root import IntegrationsInterface
 from acme.om.base import utcnow
 from acme.om.intake import IntakeManagerInterface
-from acme.om.notifications.impl.manager import NotificationsManagerImpl, NotificationsOptions
-from acme.om.notifications.manager import NotificationsManagerInterface
+from acme.om.park_alerts.impl.manager import ParkAlertsManagerImpl, ParkAlertsOptions
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 
 
-def build_notifications(
+def build_park_alerts(
     storage: StorageInterface,
     managers: Managers,
     integrations: IntegrationsInterface,
     intake: IntakeManagerInterface,
     *,
-    options: NotificationsOptions | None = None,
+    options: ParkAlertsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
-) -> NotificationsManagerInterface:
-    return NotificationsManagerImpl(
-        storage.get_notification_storage(),
+) -> ParkAlertsManagerInterface:
+    return ParkAlertsManagerImpl(
+        storage.get_park_alert_storage(),
         managers.agent_sessions,
         managers.steps,
         managers.tools,
         managers.tenancy,
         intake,
         integrations.get_integration,
-        options or NotificationsOptions(),
+        options or ParkAlertsOptions(),
         clock,
     )

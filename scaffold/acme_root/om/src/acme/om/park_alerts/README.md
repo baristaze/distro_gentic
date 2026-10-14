@@ -1,11 +1,11 @@
-# Notifications
+# Park alerts
 
 Who is told that a parked session waits on them. This is one of the kinds
 of thing [Acme is made of](../../../../README.md).
 
 ## What it holds
 
-- **Notification**: one person told, on one channel, that a session's
+- **Park alert**: one person told, on one channel, that a session's
   park waits on them, with the one action that clears it and its link.
   A post through an integration names what served it, so a twin's post
   is never taken for the real system's.
@@ -32,21 +32,21 @@ of thing [Acme is made of](../../../../README.md).
   retry time, tells nobody, and so does a price only the operator sets.
   A fix at a model provider is the one park with a retry time that
   tells: no try goes through until an admin of the org makes it.
-- **Read** your own notifications, newest first, and **mark one read**.
+- **Read** your own park alerts, newest first, and **mark one read**.
   Nobody reads or marks another person's.
 
 ## The rules
 
 - **Exactly the people who can clear it.** Nobody else hears of a park,
   and nobody who can clear it is left out.
-- **One action, one link.** A notification names the one action that
+- **One action, one link.** A park alert names the one action that
   clears its park and links to its route in the API: the call's
   decision, the session's messages, the session's controls, the
   budget's amount, a call's approval past its norm, or the provider's
   key. Topping up and a fix at a model provider are made outside the
-  API: their notifications name the park and carry no link.
+  API: their park alerts name the park and carry no link.
 - **A question is quoted, never a link in it.** A question's
-  notification quotes it on one line, cut short and escaped. One that
+  park alert quotes it on one line, cut short and escaped. One that
   holds a URL, an image, or an element that loads one is not quoted: the
   person reads it in the session.
 - **Once a park.** A park tells each person once on each channel, however
@@ -57,11 +57,11 @@ of thing [Acme is made of](../../../../README.md).
 - **Every row belongs to one org,** and goes with the org.
 
 <!-- agents-only
-The table of parks is `rules.py`. A notification's id is derived from the
+The table of parks is `rules.py`. A park alert's id is derived from the
 `parked` step that wrote the park (for a park with a retry time, the one
 that wrote its first try, `rules.first_try`), the action, the link, the
-recipient, and the channel (`rules.notification_id`). The session runner calls
-`notify_park` after each run that ends parked (`LoopHandlerImpl`).
+recipient, and the channel (`rules.park_alert_id`). The session runner
+calls `notify_park` after each run that ends parked (`LoopHandlerImpl`).
 -->
 
 ## How another namespace composes it

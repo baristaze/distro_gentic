@@ -27,7 +27,7 @@ from acme.services.api.services import (
     LeasesServiceInterface,
     MatrixServiceInterface,
     MediaServiceInterface,
-    NotificationsServiceInterface,
+    ParkAlertsServiceInterface,
     ProjectsServiceInterface,
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
@@ -126,8 +126,8 @@ def intake_service(connection: HTTPConnection) -> IntakeServiceInterface:
     return services_of(connection).get_intake_service()
 
 
-def notifications_service(connection: HTTPConnection) -> NotificationsServiceInterface:
-    return services_of(connection).get_notifications_service()
+def park_alerts_service(connection: HTTPConnection) -> ParkAlertsServiceInterface:
+    return services_of(connection).get_park_alerts_service()
 
 
 def matrix_service(connection: HTTPConnection) -> MatrixServiceInterface:
@@ -194,7 +194,7 @@ AgentAutomationsService = Annotated[
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
 AgentBillingService = Annotated[AgentBillingServiceInterface, Depends(agent_billing_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
-NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
+ParkAlertsService = Annotated[ParkAlertsServiceInterface, Depends(park_alerts_service)]
 MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
 ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]

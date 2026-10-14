@@ -13,7 +13,7 @@ from acme.om.connectors import ConnectorsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
-from acme.om.notifications import NotificationsManagerInterface
+from acme.om.park_alerts import ParkAlertsManagerInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
@@ -59,7 +59,7 @@ from acme.services.api.services.impl.intake import IntakeServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
 from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
-from acme.services.api.services.impl.notifications import NotificationsServiceImpl
+from acme.services.api.services.impl.park_alerts import ParkAlertsServiceImpl
 from acme.services.api.services.impl.projects import ProjectsServiceImpl
 from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
@@ -73,7 +73,7 @@ from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
-from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
@@ -101,7 +101,7 @@ class ServicesImpl(ServicesInterface):
         budgets: BudgetsServiceInterface,
         agent_billing: AgentBillingServiceInterface,
         agent_automations: AgentAutomationsServiceInterface,
-        notifications: NotificationsServiceInterface,
+        park_alerts: ParkAlertsServiceInterface,
         watch: WatchServiceInterface,
         matrix: MatrixServiceInterface,
         provider_keys: ProviderKeysServiceInterface,
@@ -132,7 +132,7 @@ class ServicesImpl(ServicesInterface):
         self._budgets = budgets
         self._agent_billing = agent_billing
         self._agent_automations = agent_automations
-        self._notifications = notifications
+        self._park_alerts = park_alerts
         self._watch = watch
         self._matrix = matrix
         self._provider_keys = provider_keys
@@ -195,8 +195,8 @@ class ServicesImpl(ServicesInterface):
     def get_agent_automations_service(self) -> AgentAutomationsServiceInterface:
         return self._agent_automations
 
-    def get_notifications_service(self) -> NotificationsServiceInterface:
-        return self._notifications
+    def get_park_alerts_service(self) -> ParkAlertsServiceInterface:
+        return self._park_alerts
 
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
@@ -249,7 +249,7 @@ def build_services(
     project_required: bool,
     intake: IntakeManagerInterface,
     agent_automations: AgentAutomationsManagerInterface,
-    notifications: NotificationsManagerInterface,
+    park_alerts: ParkAlertsManagerInterface,
     matrix: MatrixManagers,
     trust: TrustManagerInterface,
     agent_billing: AgentBillingManagerInterface,
@@ -296,7 +296,7 @@ def build_services(
         budgets=BudgetsServiceImpl(managers.budgets, agent_billing),
         agent_billing=AgentBillingServiceImpl(agent_billing),
         agent_automations=AgentAutomationsServiceImpl(agent_automations),
-        notifications=NotificationsServiceImpl(notifications),
+        park_alerts=ParkAlertsServiceImpl(park_alerts),
         watch=WatchServiceImpl(watch),
         matrix=MatrixServiceImpl(matrix.matrix, matrix.matrix_operator),
         provider_keys=ProviderKeysServiceImpl(trust),

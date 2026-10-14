@@ -33,7 +33,7 @@ from acme.om.intake.tools import CommentImpl
 from acme.om.levers.root import build_levers
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
-from acme.om.notifications.root import build_notifications
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.product_kinds import PRODUCT_KINDS
@@ -327,7 +327,7 @@ class AppContainer:
                 actions=ports.kinds.actions,
                 agent_playbooks=lambda: agent_playbooks.build(managers),
             ),
-            notifications=build_notifications(storage, managers, integrations, intake),
+            park_alerts=build_park_alerts(storage, managers, integrations, intake),
             matrix=matrix,
             trust=trust.trust,
             # The ledger the operators read and grant units on, and the

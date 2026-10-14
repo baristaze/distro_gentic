@@ -56,7 +56,7 @@ of](../../../../README.md).
 - **Link an account**, **unlink** one, **bind work** to a session, and
   **record an act** a session makes through the platform's account. A
   person's linked accounts are the channels
-  [notifications](../notifications/README.md) reach them on.
+  [park alerts](../park_alerts/README.md) reach them on.
 
 ## The rules
 

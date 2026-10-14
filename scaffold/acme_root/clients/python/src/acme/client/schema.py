@@ -3508,25 +3508,6 @@ class MintOperatorTokenRequest(BaseModel):
     permission: OperatorRole
 
 
-class NotificationView(BaseModel):
-    """
-    What waits on the caller: the session, why it parked, the one action
-    that clears it, and that action's route, empty when none serves it yet.
-    `read_at` is when the caller marked it read.
-    """
-    action: Annotated[str, Field(title='Action')]
-    channel: Annotated[str, Field(title='Channel')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    id: Annotated[UUID, Field(title='Id')]
-    link: Annotated[str, Field(title='Link')]
-    provenance: Provenance | None
-    read_at: Annotated[AwareDatetime | None, Field(title='Read At')]
-    reason: ParkReason
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    text: Annotated[str, Field(title='Text')]
-    unlock: Annotated[str, Field(title='Unlock')]
-
-
 class OperatorTokenPageView(BaseModel):
     """
     One page of the caller's live operator tokens, newest first;
@@ -3571,6 +3552,25 @@ class OrgPageView(BaseModel):
     """
     items: Annotated[list[OrgView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class ParkAlertView(BaseModel):
+    """
+    What waits on the caller: the session, why it parked, the one action
+    that clears it, and that action's route, empty when none serves it yet.
+    `read_at` is when the caller marked it read.
+    """
+    action: Annotated[str, Field(title='Action')]
+    channel: Annotated[str, Field(title='Channel')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    link: Annotated[str, Field(title='Link')]
+    provenance: Provenance | None
+    read_at: Annotated[AwareDatetime | None, Field(title='Read At')]
+    reason: ParkReason
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    text: Annotated[str, Field(title='Text')]
+    unlock: Annotated[str, Field(title='Unlock')]
 
 
 class PartRequest(BaseModel):

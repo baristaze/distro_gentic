@@ -1,4 +1,4 @@
-"""Each link a park's notification carries, followed over the live app: the
+"""Each link a park's park alert carries, followed over the live app: the
 route answers for whoever can clear the park, and refuses anyone else, a
 member whose role cannot clear it and another tenant's person alike. And
 the person's own list: they read what waits on them and mark it read, and
@@ -24,8 +24,8 @@ from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.intake.root import build_intake
-from acme.om.notifications.root import build_notifications
-from acme.om.notifications.types.notification import PORTAL, Notification
+from acme.om.park_alerts.root import build_park_alerts
+from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import Step
 from acme.services.api.container import AppContainer
@@ -124,23 +124,21 @@ async def parked(
     )
 
 
-async def told(container: AppContainer, tenant: Tenant, run: LoopRun) -> list[Notification]:
+async def told(container: AppContainer, tenant: Tenant, run: LoopRun) -> list[ParkAlert]:
     """What the park tells, on the platform's own list, as the runner tells
     it after the run."""
     intake = build_intake(container.storage, container.managers)
-    notifications = build_notifications(
+    park_alerts = build_park_alerts(
         container.storage, container.managers, container.integrations, intake
     )
     service = await container.managers.tenancy.service_context(
         seed_request(), tenant.org_id, EMPTY_UUID
     )
-    found = await notifications.notify_park(service, run)
+    found = await park_alerts.notify_park(service, run)
     return [n for n in found if n.channel == PORTAL]
 
 
-async def recipients(
-    container: AppContainer, tenant: Tenant, told_: list[Notification]
-) -> set[Role]:
+async def recipients(container: AppContainer, tenant: Tenant, told_: list[ParkAlert]) -> set[Role]:
     users = {
         (await context_of(container, headers)).user_id: role
         for role, headers in tenant.headers.items()
@@ -328,20 +326,20 @@ async def test_the_agent_automation_principals_grant_answers_who_manages_members
     assert elsewhere.status_code == 404, elsewhere.text
 
 
-async def test_a_person_reads_and_marks_their_own_notifications_alone(
+async def test_a_person_reads_and_marks_their_own_park_alerts_alone(
     client: httpx.AsyncClient, container: AppContainer, ajax: Tenant
 ) -> None:
     run = await parked(client, container, ajax, Park(reason=ParkReason.PERSON, unlock="deadline"))
     (mine,) = await told(container, ajax, run)
-    listed = await client.get("/v1/notifications", headers=ajax[Role.MEMBER])
+    listed = await client.get("/v1/park-alerts", headers=ajax[Role.MEMBER])
     assert [n["id"] for n in listed.json()] == [str(mine.id)]
     assert listed.json()[0]["read_at"] is None
     for other in (ajax[Role.OWNER], ajax.stranger):
-        assert (await client.get("/v1/notifications", headers=other)).json() == []
-        crossed = await client.post(f"/v1/notifications/{mine.id}/read", headers=other)
+        assert (await client.get("/v1/park-alerts", headers=other)).json() == []
+        crossed = await client.post(f"/v1/park-alerts/{mine.id}/read", headers=other)
         assert crossed.status_code == 404, crossed.text
-    marked = await client.post(f"/v1/notifications/{mine.id}/read", headers=ajax[Role.MEMBER])
+    marked = await client.post(f"/v1/park-alerts/{mine.id}/read", headers=ajax[Role.MEMBER])
     assert marked.status_code == 200, marked.text
-    again = await client.post(f"/v1/notifications/{mine.id}/read", headers=ajax[Role.MEMBER])
+    again = await client.post(f"/v1/park-alerts/{mine.id}/read", headers=ajax[Role.MEMBER])
     assert marked.json()["read_at"] is not None
     assert again.json()["read_at"] == marked.json()["read_at"]

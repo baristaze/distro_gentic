@@ -7,7 +7,7 @@ feedback returns to the same session.
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
 it, twins in the suites, agent automations, agent playbooks and agent
-knowledge, connectors, and notifications. It leaves the inbox and how
+knowledge, connectors, and park alerts. It leaves the inbox and how
 data renders to the engine; steering messages to `watch`; who may speak
 as a principal and how outside text is labelled to `wall`; and the
 provenance a twin feeds into evidence to `evidence`.
@@ -247,13 +247,13 @@ it; recalled agent knowledge rendered as an instruction.
 (the requester, eligible approvers, a budget's owner) on their channels,
 with a link to the one action that clears it.
 
-**Source.** Work In, Results Out, Notifications.
+**Source.** Work In, Results Out, Park Alerts.
 
 **Look for.** What a park that needs a person sends, to whom, and with
 which link.
 
 **Violation.** A park that needs a person and notifies no one, or only
-people who cannot clear it; a notification with no link to the action
+people who cannot clear it; a park alert with no link to the action
 that clears it.
 
 **Severity.** medium

@@ -1,4 +1,4 @@
-"""Pure rules of notifications: which parks need a person, the one action
+"""Pure rules of park alerts: which parks need a person, the one action
 that clears each, its link, and who may take it. Values in, values out.
 
 A park needs a person when nothing clears it by itself: it carries no
@@ -199,8 +199,8 @@ ANSWER_QUESTION = "answer_question"
 """The action a question asks: its person's answer, which a message is."""
 
 QUOTED = 250
-"""The most characters of a question a notification quotes; the session
-holds it whole. Escaped, it fits the notification's text beside the
+"""The most characters of a question a park alert quotes; the session
+holds it whole. Escaped, it fits the park alert's text beside the
 session's title."""
 
 LINKS = (FETCHED, AUTHORITY, SCHEMED, WWW)
@@ -242,11 +242,11 @@ def _question_of(answer: Step) -> str | None:
 
 
 def quoted(question: str) -> str | None:
-    """A question as a notification quotes it: on one line, its whitespace
+    """A question as a park alert quotes it: on one line, its whitespace
     collapsed, cut to `QUOTED` characters, and escaped as a JSON string is,
     so nothing in it closes its quote. None when it holds what a surface may
     fetch or link, read as written and with its character references
-    resolved: a notification carries no URL the agent wrote."""
+    resolved: a park alert carries no URL the agent wrote."""
     line = " ".join(question.split())
     if any(pattern.search(text) for text in (line, html.unescape(line)) for pattern in LINKS):
         return None
@@ -256,9 +256,9 @@ def quoted(question: str) -> str | None:
 
 
 def question_text(title: str, question: str | None) -> str:
-    """What a question's notification says: the question, quoted, when it
+    """What a question's park alert says: the question, quoted, when it
     can be and is given; else that one waits in the session. The row a
-    notification leaves is told none, so it quotes nothing sealed."""
+    park alert leaves is told none, so it quotes nothing sealed."""
     shown = None if question is None else quoted(question)
     if shown is None:
         return f"{title} asks you a question: read it in the session, and answer with a message."
@@ -299,7 +299,7 @@ def first_try(history: Sequence[Step], parked: Step) -> Step:
     return first
 
 
-def notification_id(parked: Step, action: str, link: str, recipient: UUID, channel: str) -> UUID:
+def park_alert_id(parked: Step, action: str, link: str, recipient: UUID, channel: str) -> UUID:
     """One park tells one recipient of one action once on each channel: the
     step that wrote the park is the park, and for a park that tries again
     by itself, the step that wrote its first try (`first_try`)."""

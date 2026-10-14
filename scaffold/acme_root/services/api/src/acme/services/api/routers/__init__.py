@@ -32,7 +32,7 @@ from acme.services.api.routers import (
     matrix,
     matrix_operator,
     media,
-    notifications,
+    park_alerts,
     projects,
     provider_keys,
     relay,
@@ -89,7 +89,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # session's content erased before then.
     "retention": (retention.router,),
     # What waits on a person, and their mark that they read it.
-    "notifications": (notifications.router,),
+    "park_alerts": (park_alerts.router,),
     # A live read of a session by a scoped handle, and take control, a
     # command by hand, and give back, each the person's.
     "watch": (watch.router,),

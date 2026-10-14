@@ -158,7 +158,7 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "agent_automations": TableScope(ScopeKind.ORG),
     "agent_automation_runs": TableScope(ScopeKind.ORG),
     "agent_automation_principals": TableScope(ScopeKind.ORG),
-    "notifications": TableScope(ScopeKind.ORG),
+    "park_alerts": TableScope(ScopeKind.ORG),
     "agent_playbooks": TableScope(ScopeKind.ORG),
     "agent_playbook_invocations": TableScope(ScopeKind.ORG),
     "agent_playbook_pins": TableScope(ScopeKind.ORG),

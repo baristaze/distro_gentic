@@ -144,8 +144,8 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    connected that one. A chat ignores it, and a chat whose credential
    reaches one workspace refuses a grant from another. `address` is
    their account on the system, the `external_id` of their
-   identity link, as the notifications manager passes it
-   (`om/src/<name>/om/notifications/impl/manager.py`), or a pull request
+   identity link, as the park alerts manager passes it
+   (`om/src/<name>/om/park_alerts/impl/manager.py`), or a pull request
    or a ticket, as the `comment` tool passes it
    (`om/src/<name>/om/intake/tools.py`). `mark`, when given, is the
    platform's name for the act: the client carries it on what it posts,

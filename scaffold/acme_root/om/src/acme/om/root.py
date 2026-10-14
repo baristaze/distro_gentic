@@ -89,12 +89,12 @@ from acme.om.models.impl.resolver import ModelResolverTableImpl, ResolverOptions
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.prices import ModelPricesInterface
-from acme.om.notifications.impl.manager import NotificationsOptions
-from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations import OrchestrationsManagerInterface
 from acme.om.orchestrations.impl.manager import OrchestrationsManagerImpl, OrchestrationsOptions
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.impl.relay import OutboxRelayImpl
+from acme.om.park_alerts.impl.manager import ParkAlertsOptions
+from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
 from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
 from acme.om.placement.impl.operator import (
@@ -496,17 +496,17 @@ def agent_knowledge_absent() -> AgentKnowledgeManagerInterface:
 
 async def purge_held(
     managers: Managers,
-    notifications: NotificationStorageInterface,
+    park_alerts: ParkAlertStorageInterface,
     org_id: UUID,
     session_id: UUID,
     tree_id: UUID | None,
 ) -> None:
     """What the windows, the tools, the relay, attribution, the evidence, the
-    projects, the notifications, and the agents hold of a session the sweep
+    projects, the park alerts, and the agents hold of a session the sweep
     purges: its artifacts, its workspace with its transport's records, and
     its relayed exec items with their output, which go with its history,
     its authority, its runs, its project's row, who was told it waits, and
-    its tree when it was the tree's last session. The notifications are
+    its tree when it was the tree's last session. The park alerts are
     built over these managers by the processes that tell, so their rows are
     reached through their storage."""
     await managers.windows.purge_artifacts(org_id, session_id)
@@ -515,8 +515,8 @@ async def purge_held(
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
     await managers.projects.purge_session(org_id, session_id)
-    batch = NotificationsOptions().purge_batch
-    while await notifications.purge_session(org_id, session_id, batch):
+    batch = ParkAlertsOptions().purge_batch
+    while await park_alerts.purge_session(org_id, session_id, batch):
         pass
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
@@ -1005,18 +1005,18 @@ def build_managers(
         held,
         workspace_bases=WORKSPACE_BASE_KINDS | product.workspace_bases,
     )
-    notification_storage = storage.get_notification_storage()
+    park_alert_storage = storage.get_park_alert_storage()
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         steps,
         tenancy,
         outbox,
         agent_sessions_options or AgentSessionsOptions(),
-        # What attribution, the agents, and the notifications hold of a
+        # What attribution, the agents, and the park alerts hold of a
         # purged session goes with it. The managers are built below on this
         # one, so the edge is bound at call time.
         purged=lambda org_id, session_id, tree_id: purge_held(
-            managers, notification_storage, org_id, session_id, tree_id
+            managers, park_alert_storage, org_id, session_id, tree_id
         ),
     )
     privacy = PrivacyManagerImpl(

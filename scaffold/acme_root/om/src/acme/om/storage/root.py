@@ -22,9 +22,9 @@ from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
-from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
@@ -126,7 +126,7 @@ class StorageInterface(ABC):
     def get_intake_storage(self) -> IntakeStorageInterface: ...
 
     @abstractmethod
-    def get_notification_storage(self) -> NotificationStorageInterface: ...
+    def get_park_alert_storage(self) -> ParkAlertStorageInterface: ...
 
     @abstractmethod
     def get_agent_automation_storage(self) -> AgentAutomationStorageInterface: ...

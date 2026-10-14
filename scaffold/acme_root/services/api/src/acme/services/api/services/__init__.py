@@ -22,7 +22,7 @@ from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.leases import LeasesServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
-from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.park_alerts import ParkAlertsServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
@@ -54,7 +54,7 @@ __all__ = [
     "LeasesServiceInterface",
     "MatrixServiceInterface",
     "MediaServiceInterface",
-    "NotificationsServiceInterface",
+    "ParkAlertsServiceInterface",
     "ProjectsServiceInterface",
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
@@ -120,7 +120,7 @@ class ServicesInterface(ABC):
     def get_intake_service(self) -> IntakeServiceInterface: ...
 
     @abstractmethod
-    def get_notifications_service(self) -> NotificationsServiceInterface: ...
+    def get_park_alerts_service(self) -> ParkAlertsServiceInterface: ...
 
     @abstractmethod
     def get_watch_service(self) -> WatchServiceInterface: ...

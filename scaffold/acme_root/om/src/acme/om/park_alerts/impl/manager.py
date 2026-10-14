@@ -18,8 +18,8 @@ from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotFound
 from acme.om.intake import IntakeManagerInterface
-from acme.om.notifications.manager import NotificationsManagerInterface
-from acme.om.notifications.rules import (
+from acme.om.park_alerts.manager import ParkAlertsManagerInterface
+from acme.om.park_alerts.rules import (
     ANSWER_QUESTION,
     APPROVES_CALLS,
     FIXES_AT_PROVIDER,
@@ -41,13 +41,13 @@ from acme.om.notifications.rules import (
     message_link,
     missing_key,
     needs_person,
-    notification_id,
+    park_alert_id,
     parked_step,
     question_text,
     requester_or_managers,
 )
-from acme.om.notifications.storage import NotificationStorageInterface
-from acme.om.notifications.types.notification import PORTAL, Ask, Notification
+from acme.om.park_alerts.storage import ParkAlertStorageInterface
+from acme.om.park_alerts.types.park_alert import PORTAL, Ask, ParkAlert
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import Park, ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import Step
@@ -59,23 +59,23 @@ from acme.om.tools.rules import approver_roles
 log = logging.getLogger(__name__)
 
 
-class NotificationsOptions(Platform):
+class ParkAlertsOptions(Platform):
     page: int = Field(default=200, gt=0)
     max_page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
 
 
-class NotificationsManagerImpl(NotificationsManagerInterface):
+class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
     def __init__(
         self,
-        storage: NotificationStorageInterface,
+        storage: ParkAlertStorageInterface,
         sessions: AgentSessionsManagerInterface,
         steps: StepsManagerInterface,
         tools: ToolsManagerInterface,
         tenancy: TenancyManagerInterface,
         intake: IntakeManagerInterface,
         integrations: Callable[[str], IntegrationInterface],
-        options: NotificationsOptions,
+        options: ParkAlertsOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -88,7 +88,7 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         self._options = options
         self._clock = clock
 
-    async def notify_park(self, ctx: TenantContext, run: LoopRun) -> tuple[Notification, ...]:
+    async def notify_park(self, ctx: TenantContext, run: LoopRun) -> tuple[ParkAlert, ...]:
         ctx.require(Permission.WRITE)
         park = run.park
         if run.end is not RunEnd.PARKED or park is None or not needs_person(park):
@@ -104,26 +104,26 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             # told once, at its first try.
             parked = first_try(history, parked)
         members = await self._members(ctx)
-        told: list[Notification] = []
+        told: list[ParkAlert] = []
         for ask in await self._asks(ctx, session, park, history, members):
             for recipient in ask.recipients:
                 told.extend(await self._tell(ctx, session, park, parked, ask, recipient))
         return tuple(told)
 
-    async def get_notifications(self, ctx: TenantContext, limit: int) -> tuple[Notification, ...]:
+    async def get_park_alerts(self, ctx: TenantContext, limit: int) -> tuple[ParkAlert, ...]:
         ctx.require(Permission.READ)
         bounded = max(1, min(limit, self._options.max_page))
-        return tuple(await self._storage.read_notifications(ctx.org_id, ctx.user_id, bounded))
+        return tuple(await self._storage.read_park_alerts(ctx.org_id, ctx.user_id, bounded))
 
-    async def mark_read(self, ctx: TenantContext, notification_id: UUID) -> Notification:
+    async def mark_read(self, ctx: TenantContext, park_alert_id: UUID) -> ParkAlert:
         # A person's own list: marking it read changes nothing of the
         # tenant's, so reading is all it asks.
         ctx.require(Permission.READ)
         marked = await self._storage.mark_read(
-            ctx.org_id, ctx.user_id, notification_id, self._clock()
+            ctx.org_id, ctx.user_id, park_alert_id, self._clock()
         )
         if marked is None:
-            raise NotFound(f"notification {notification_id} not found")
+            raise NotFound(f"park alert {park_alert_id} not found")
         return marked
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -250,7 +250,7 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         parked: Step,
         ask: Ask,
         recipient: UUID,
-    ) -> list[Notification]:
+    ) -> list[ParkAlert]:
         """One recipient on each of their channels: the platform's own list,
         and each account of theirs an integration holds. A post an
         integration cannot make now is left out, and the list still tells
@@ -258,10 +258,10 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         channels = [(PORTAL, "")]
         for link in await self._intake.get_links(ctx, recipient):
             channels.append((link.integration, link.external_id))
-        told: list[Notification] = []
+        told: list[ParkAlert] = []
         for channel, address in channels:
-            notification_id_ = notification_id(parked, ask.action, ask.link, recipient, channel)
-            held = await self._storage.read_notification(ctx.org_id, notification_id_)
+            park_alert_id_ = park_alert_id(parked, ask.action, ask.link, recipient, channel)
+            held = await self._storage.read_park_alert(ctx.org_id, park_alert_id_)
             if held is not None:
                 told.append(held)
                 continue
@@ -278,8 +278,8 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                     )
                     continue
                 provenance = Provenance(posted.provenance)
-            notification = Notification(
-                id=notification_id_,
+            park_alert = ParkAlert(
+                id=park_alert_id_,
                 created_at=self._clock(),
                 recipient=recipient,
                 session_id=session.id,
@@ -293,8 +293,8 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                 provenance=provenance,
                 text=ask.text,
             )
-            await self._storage.create_notification(ctx.org_id, notification)
-            told.append(notification)
+            await self._storage.create_park_alert(ctx.org_id, park_alert)
+            told.append(park_alert)
         return told
 
     async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:

@@ -1,4 +1,4 @@
-"""A notification: one person told, on one channel, that a parked session
+"""A park alert: one person told, on one channel, that a parked session
 waits on them, with the link to the one action that clears the park, when
 a route of the API serves it."""
 
@@ -22,7 +22,7 @@ MAX_TEXT = 2_000
 class Ask(Platform):
     """What a park asks of people: the one action that clears it, its link
     (empty while no route of the API serves the action), what the
-    notification says, and exactly who may take the action. `posted` is
+    park alert says, and exactly who may take the action. `posted` is
     what a post on an integration says instead, when it quotes the
     session's content, such as an agent's question: that content is sealed
     under the session's key and lives as long as its content may, so the
@@ -36,7 +36,7 @@ class Ask(Platform):
     recipients: tuple[UUID, ...]
 
 
-class Notification(Identifiable, Created):
+class ParkAlert(Identifiable, Created):
     """One recipient told on one channel. Its id is derived from the park (the
     step that wrote it, or its first try for a park that tries again by
     itself), the action, the recipient, and the channel, so a park tells

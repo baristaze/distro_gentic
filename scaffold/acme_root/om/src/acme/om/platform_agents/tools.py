@@ -67,7 +67,7 @@ from acme.om.hosts.types.host import HostStatus
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import FORGE, connected
 from acme.om.intake.types.link import HandleKind
-from acme.om.notifications.rules import held_calls
+from acme.om.park_alerts.rules import held_calls
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft

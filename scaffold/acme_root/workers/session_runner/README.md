@@ -81,7 +81,7 @@ agent automation principal started runs on that principal's grant alone
 
 A run that parks on what only a person clears tells whoever can clear it,
 on their channels, before its item completes
-([notifications](../../om/src/acme/om/notifications/README.md)).
+([park alerts](../../om/src/acme/om/park_alerts/README.md)).
 
 ## What a product gives it
 

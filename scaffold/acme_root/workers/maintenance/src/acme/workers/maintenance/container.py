@@ -49,9 +49,9 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
-from acme.om.notifications.impl.manager import NotificationsOptions
-from acme.om.notifications.root import build_notifications
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
+from acme.om.park_alerts.impl.manager import ParkAlertsOptions
+from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
@@ -274,7 +274,7 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # agent playbooks, agent knowledge, and notifications, for their purges.
+        # agent playbooks, agent knowledge, and park alerts, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
         # Outside a local stack, an agent automation's session starts in a project:
@@ -319,12 +319,12 @@ class WorkerContainer:
             managers.tenancy,
             StalledOptions(batch=STALLED_SWEEP_BATCH),
         )
-        self.notifications = build_notifications(
+        self.park_alerts = build_park_alerts(
             storage,
             managers,
             integrations,
             self.intake,
-            options=NotificationsOptions(purge_batch=batch),
+            options=ParkAlertsOptions(purge_batch=batch),
         )
 
     @property
