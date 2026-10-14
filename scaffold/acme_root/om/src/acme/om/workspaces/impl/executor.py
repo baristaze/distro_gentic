@@ -37,7 +37,17 @@ session inside its tenant's wall never runs on them: its instance is made
 by a host of its pool, to the isolation the session is pinned to, which
 its pool gives it, and reached through the relay
 (`PlacedInstancesInterface`). A root that wires no such way refuses its
-checks, loudly."""
+checks, loudly.
+
+A session pinned to a base, such as its project's environment, has its
+checks run on that base, so what its setup installed is there for them:
+the base's image and the snapshot its setup left, never the session's
+workspace or a snapshot of it. The instance's egress is none even so: the
+setup's egress is the build's alone. In the cloud, the base is the
+tenant's, read where it is kept or built once (`Bases`); inside the wall,
+the host that makes the instance builds it or reads it from its own
+store. A base with setup and no way to read it refuses the checks before
+anything runs, never runs them on the bare image."""
 
 import io
 import json
@@ -45,6 +55,7 @@ import logging
 import tarfile
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from typing import NamedTuple
 from uuid import UUID
 
 from pydantic import Field
@@ -117,13 +128,27 @@ carries, with that bound in its message."""
 SPOKEN = 10_000
 """The most of a command's own output kept: a check writes its results to
 `{out}`, never to its output."""
-Pinned = Callable[[TenantContext, UUID], Awaitable[IsolationSpec | None]]
-"""The isolation a session is pinned to when it runs inside its tenant's
-wall; None for a session of the cloud."""
+
+
+class Pin(NamedTuple):
+    """A session's pin, as its checks read it: the isolation it is pinned
+    to, its base included, and whether it runs inside its tenant's wall."""
+
+    spec: IsolationSpec
+    walled: bool
+
+
+Pinned = Callable[[TenantContext, UUID], Awaitable[Pin | None]]
+"""The pin of a session; None for a session of the cloud that pinned no
+isolation, whose checks run as the executor's own."""
+Bases = Callable[[TenantContext, IsolationSpec], Awaitable[bytes]]
+"""The snapshot of the base a spec names, as its provider starts a
+workspace from it: read where the tenant keeps it, or built once
+(`WorkspaceBases.archive`)."""
 PLACED = "pool"
 """What a record names as the host and the image of an instance a host of
 a pinned session's pool made: the pool's, which the executor does not
-choose."""
+choose. On a base, the image is the base's, which the executor asked for."""
 
 
 class ExecutorOptions(Platform):
@@ -140,7 +165,8 @@ class ExecutorOptions(Platform):
     # The most of a run's results streams read back, all trials together.
     max_results_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
     # What a record names of the cloud's instances, never what a runner's
-    # start line says: the host that makes them, and the image they run.
+    # start line says: the host that makes them, and the image they run
+    # when the session's pin names no base.
     host: str = Field(default="cloud", min_length=1, max_length=200)
     image: str = Field(default="python:3.14", pattern=VERSION)
 
@@ -164,6 +190,8 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         placed: PlacedInstancesInterface | None = None,
         options: ExecutorOptions | None = None,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        bases: Bases | None = None,
     ) -> None:
         self._provider = provider
         self._transport = transport
@@ -172,16 +200,26 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         self._placed = placed
         self._options = options or ExecutorOptions()
         self._clock = clock
+        self._bases = bases
 
     async def offer(self, ctx: TenantContext) -> Offer:
         return Offer(capabilities=self._options.capabilities, schemas=SCHEMAS)
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
-        pinned = await self._pinned(ctx, request.session_id)
-        if pinned is not None and self._placed is None:
+        pin = await self._pinned(ctx, request.session_id)
+        walled = pin is not None and pin.walled
+        if walled and self._placed is None:
             raise Unavailable(
                 f"session {request.session_id} runs inside its tenant's wall, and this "
                 "process reaches no host of its pool, so its checks never run here"
+            )
+        base = None if pin is None else pin.spec.base
+        # Inside the wall, the host that makes the instance reads its base.
+        built = not walled and base is not None and bool(base.setup)
+        if built and self._bases is None:
+            raise Unavailable(
+                f"session {request.session_id} is pinned to a base with setup, and this "
+                "process reads no base, so its checks never run on the bare image"
             )
         named = (request.project, request.source_project or request.project)
         try:
@@ -199,18 +237,25 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
             request.untouched,
         )
         instance = new_id()
-        if pinned is None:
+        if pin is None or not walled:
             spec = IsolationSpec(
                 mode=self._options.isolation,
                 egress=EgressPolicy(mode=EgressMode.NONE),
                 limits=self._options.limits,
+                base=base,
             )
+            # The tenant's base holds what its setup left, and nothing of the
+            # session's: its workspace and its snapshots stay apart.
+            archive = None
+            if built:
+                assert self._bases is not None  # refused above
+                archive = await self._bases(ctx, spec)
             try:
-                workspace = await self._provider.prepare(ctx.org_id, instance, spec)
+                workspace = await self._provider.prepare(ctx.org_id, instance, spec, base=archive)
                 prepared = Prepared(
                     host=self._options.host,
                     isolation=workspace.spec.mode.value,
-                    image=self._options.image,
+                    image=self._options.image if base is None else base.image,
                 )
                 results = await self._checks(self._transport, workspace, request, tree, prepared)
             finally:
@@ -218,18 +263,29 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                 await self._transport.purge_records(instance)
         else:
             assert self._placed is not None  # refused above
+            # On a base, the instance asks no egress, as the cloud's does, so
+            # neither the setup's nor the session's reaches the checks. With
+            # none, it is the session's isolation whole, which even a pool of
+            # bare directories gives.
+            spec = pin.spec
+            if base is not None:
+                spec = spec.model_copy(update={"egress": EgressPolicy(mode=EgressMode.NONE)})
             try:
                 workspace, transport = await self._placed.make(
                     ctx,
                     request.session_id,
                     instance,
-                    pinned,
+                    spec,
                     self._clock() + self._options.setup_time,
                 )
-                prepared = Prepared(host=PLACED, isolation=workspace.spec.mode.value, image=PLACED)
+                prepared = Prepared(
+                    host=PLACED,
+                    isolation=workspace.spec.mode.value,
+                    image=PLACED if base is None else base.image,
+                )
                 results = await self._checks(transport, workspace, request, tree, prepared)
             finally:
-                await self._placed.destroy(ctx, instance, pinned)
+                await self._placed.destroy(ctx, instance, spec)
         return ExecutorReport(
             executor=f"executor:{instance}",
             prepared=prepared,

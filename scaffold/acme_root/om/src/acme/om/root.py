@@ -10,7 +10,6 @@ from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
 from acme.infra.transports import SecretVia, TransportInterface
-from acme.infra.workspaces import IsolationSpec
 from acme.integrations.events import IntegrationAbsentImpl
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -206,7 +205,7 @@ from acme.om.work.kinds import WorkKindSpec
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces import rules as workspace_rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
-from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl
+from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl, Pin
 from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
@@ -1193,6 +1192,18 @@ def build_managers(
         injected_secrets(catalog),
         tool_options.purge_batch,
     )
+    # The tenant's workspace bases: a session's workspace starts from one, and
+    # so does the instance its checks run on.
+    bases = WorkspaceBases(
+        infra.get_buckets(),
+        infra.get_workspaces(),
+        infra.get_transport(),
+        infra.get_cache(CacheScope.WORKSPACE_BASE),
+        snapshots.scan,
+        tool_options.base_build_limit,
+        tool_options.purge_batch,
+        utcnow,
+    )
     engine_tools_manager = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -1207,16 +1218,7 @@ def build_managers(
         attribution=attribution,
         broker=infra.get_broker(),
         snapshots=snapshots,
-        bases=WorkspaceBases(
-            infra.get_buckets(),
-            infra.get_workspaces(),
-            infra.get_transport(),
-            infra.get_cache(CacheScope.WORKSPACE_BASE),
-            snapshots.scan,
-            tool_options.base_build_limit,
-            tool_options.purge_batch,
-            utcnow,
-        ),
+        bases=bases,
         # A fork of a workspace a host holds is taken by that host; the pins
         # are built below, so the edge is bound at call time.
         fork_points=lambda ctx, request, workspace, epoch: held_to_pins.fork_point(
@@ -1286,15 +1288,20 @@ def build_managers(
     # the cloud, it is the cloud's, on the provider and the transport infra
     # chose. For a session inside its tenant's wall, a host of its pool
     # makes it to the session's pinned isolation, and the relay reaches it;
-    # the relay is built below, so the edge is bound at call time.
+    # the relay is built below, so the edge is bound at call time. Either way,
+    # a session pinned to a base has its checks run on that base.
     if executor is None and environment != LOCAL:
         hosts_storage = storage.get_hosts_storage()
         sessions_storage = storage.get_agent_session_storage()
 
-        async def pinned(ctx: TenantContext, session_id: UUID) -> IsolationSpec | None:
-            if not await inside_wall(hosts_storage, sessions_storage, ctx.org_id, session_id):
+        async def pinned(ctx: TenantContext, session_id: UUID) -> Pin | None:
+            if await inside_wall(hosts_storage, sessions_storage, ctx.org_id, session_id):
+                return Pin((await workspaces.get_workspace(ctx, session_id)).spec(), walled=True)
+            try:
+                kept = await workspaces.get_workspace(ctx, session_id)
+            except NotFound:
                 return None
-            return (await workspaces.get_workspace(ctx, session_id)).spec()
+            return Pin(kept.spec(), walled=False)
 
         executor = ExecutorWorkspacesImpl(
             infra.get_workspaces(),
@@ -1306,6 +1313,7 @@ def build_managers(
                 lambda stage: TransportRelayImpl(lambda: managers.relay, stage),
             ),
             executor_options,
+            bases=bases.archive,
         )
     evidence = EvidenceManagerImpl(
         storage.get_evidence_storage(),

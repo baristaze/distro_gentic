@@ -8,7 +8,9 @@ validation session runs as the platform's own work on the same executor,
 a head that plants a runner of its own still runs the base's, a head's
 `.gitattributes` leaves nothing out of the tree the checks run on, a
 head whose code changes the base's fixture while it runs has no verdict,
-and a check may write a new file beside that fixture."""
+and a check may write a new file beside that fixture. A session pinned to
+its project's environment has its checks run on that base, with no
+network, so what its setup installed is there for them."""
 
 import subprocess
 from collections.abc import AsyncIterator
@@ -29,11 +31,11 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.workspaces import Workspace
-from acme.infra.workspaces.container import container_name
+from acme.infra.workspaces import EgressMode, IsolationMode, Workspace, WorkspaceBase
+from acme.infra.workspaces.container import DEFAULT_IMAGE, container_name
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
-from acme.om.base import new_id
+from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.collector import digest
@@ -48,6 +50,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
 from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
 def docker_runs() -> bool:
@@ -95,6 +98,18 @@ TOTAL = 4
 """
 """A cart whose code removes the base's fixture from its folder, which
 stays writable, while the check runs, and writes its own total there."""
+ENVIRONMENT = WorkspaceBase(
+    image=DEFAULT_IMAGE,
+    setup=(
+        "python3 -c 'import site; "
+        'open(site.getsitepackages()[0] + "/cartenv.py", "w").write("TOTAL = 3")\'',
+    ),
+)
+"""A project's environment whose setup installs a module, reaching
+nothing."""
+NEEDS_ENVIRONMENT = "from cartenv import TOTAL\n"
+"""A cart that totals right with what its environment installed, and
+fails to import anywhere else."""
 
 
 class ReadBack(TransportContainerImpl):
@@ -114,7 +129,8 @@ class ReadBack(TransportContainerImpl):
 
 class OnDocker(InfraConfiguredImpl):
     """The configured infra over the local Docker: a container for each
-    workspace, reached by a transport that keeps what it read back."""
+    workspace, reached by a transport that keeps what it read back, and
+    buckets on disk, where a workspace base is kept."""
 
     def __init__(self, root: Path) -> None:
         workspaces = root / "workspaces"
@@ -122,6 +138,7 @@ class OnDocker(InfraConfiguredImpl):
             InfraSettings.model_validate(
                 {
                     "environment": "local",
+                    "buckets_backend": "local",
                     "buckets_root": root / "buckets",
                     "workspaces_root": workspaces,
                     "workspace_backend": "container",
@@ -376,3 +393,67 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
         "container",
     ), "the base's runner ran on the head's cart, in a container"
     assert gone(UUID(record.executor.removeprefix("executor:")))
+
+
+async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
+    """The session's workspace pinned to `ENVIRONMENT`, in a container with
+    no egress, as its kind would pin it to its project's environment."""
+    rows = storage.get_workspace_storage()
+    kept = await rows.read_workspace(ctx.org_id, session_id)
+    if kept is not None:
+        moved = kept.model_copy(update={"base": ENVIRONMENT, "version": kept.version + 1})
+        await rows.write_workspace(ctx.org_id, moved, kept.version)
+        return
+    now = utcnow()
+    pinned = SessionWorkspace(
+        id=session_id,
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        level=IsolationMode.CONTAINER,
+        egress=EgressMode.NONE,
+        egress_source="its kind's",
+        base=ENVIRONMENT,
+        branch=f"sessions/{session_id}",
+    )
+    assert await rows.create_workspace(ctx.org_id, pinned)
+
+
+# A session pinned to its project's environment: its checks run in a fresh
+# container on that base, where what the setup installed is, and the gate
+# confirms them. The same head with no environment cannot import it.
+
+
+async def test_a_sessions_checks_run_on_the_environment_it_pinned(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    for name in ("bare", "pinned"):
+        (tmp_path / name).mkdir()
+    unpinned = Delivered(storage, tmp_path / "bare")
+    bare, bare_session, _ = await unpinned.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.BASELINE)
+    await unpinned.managers.evidence.validate(bare, bare_session, RunPurpose.VALIDATION)
+    (record,) = await validated(unpinned.managers.evidence, bare, bare_session)
+    assert record.outcome is RunOutcome.ERRORED, "the executor's own image lacks the module"
+
+    delivered = Delivered(storage, tmp_path / "pinned")
+    evidence = delivered.managers.evidence
+    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_ENVIRONMENT})
+    await pin(storage, owner, session_id)
+    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
+    (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+
+    (record,) = await validated(evidence, owner, session_id)
+    assert (record.version, record.outcome, record.isolation) == (
+        head,
+        RunOutcome.PASSED,
+        "container",
+    ), "the check imports what the environment's setup installed"
+    assert record.environment.image == ENVIRONMENT.image
+    instance = UUID(validation.executor.removeprefix("executor:"))
+    assert gone(instance), "the instance goes after its run"
+    verdict = await delivered.managers.agents.judge_result(
+        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+    )
+    assert (verdict.accepted, verdict.verified) == (True, True), verdict.reason
