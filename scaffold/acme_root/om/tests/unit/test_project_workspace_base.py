@@ -35,7 +35,7 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.platform_agents.kinds import ENGINEER, WORKSPACE_BASE_KINDS
-from acme.om.projects.types.project import ProjectWorkspaceBase
+from acme.om.projects.types.project import AgentWorkspaceBase
 from acme.om.root import ProductKinds
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
@@ -55,7 +55,7 @@ READER = ASSISTANT.model_copy(update={"name": "reader", "isolation": SEALED})
 """A product's kind its slot does not name."""
 PRODUCT = ProductKinds(agents=(BUILDER, READER), workspace_bases=frozenset({("builder", 2)}))
 
-WORKSPACE_BASE = ProjectWorkspaceBase(
+WORKSPACE_BASE = AgentWorkspaceBase(
     image="python:3.14-slim",
     setup=("pip install acme-tools", "echo built >> /opt/count"),
     registries=("pypi.org", "files.pythonhosted.org"),
@@ -187,12 +187,12 @@ def test_a_workspace_base_names_a_setup_whose_egress_follows_its_registries() ->
     sealed = WORKSPACE_BASE.model_copy(update={"registries": ()})
     assert sealed.base().egress.mode is EgressMode.NONE
     with pytest.raises(ValueError, match="registries only for a setup"):
-        ProjectWorkspaceBase(image="python:3.14-slim", registries=("pypi.org",))
+        AgentWorkspaceBase(image="python:3.14-slim", registries=("pypi.org",))
     with pytest.raises(ValueError, match="each registry once"):
-        ProjectWorkspaceBase(image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io"))
+        AgentWorkspaceBase(image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io"))
     for image in ("--privileged", "-v/:/host", "python 3", ""):
         with pytest.raises(ValueError):
-            ProjectWorkspaceBase(image=image)
+            AgentWorkspaceBase(image=image)
 
 
 async def test_a_kind_that_takes_its_projects_workspace_base_pins_its_base(

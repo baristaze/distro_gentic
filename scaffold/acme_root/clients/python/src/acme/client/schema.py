@@ -88,6 +88,36 @@ class AgentRefView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
 
 
+class Registry(RootModel[str]):
+    root: Annotated[str, Field(max_length=253, pattern='^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$')]
+
+
+class SetupItem(RootModel[str]):
+    root: Annotated[str, Field(max_length=4000, min_length=1)]
+
+
+class AgentWorkspaceBaseBody(BaseModel):
+    """
+    The workspace base a project's sessions' workspaces start from: the
+    image, the commands that set it up, run once in order, and the package
+    registries the setup reaches. A setup that names a registry runs with
+    open egress; one that names none reaches nothing. Registries serve a
+    setup, so they come with one.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    image: Annotated[str, Field(max_length=255, min_length=1, pattern='^[A-Za-z0-9][A-Za-z0-9._/:@-]*$', title='Image')]
+    registries: Annotated[list[Registry] | None, Field(max_length=20, title='Registries')] = None
+    setup: Annotated[list[SetupItem] | None, Field(max_length=50, title='Setup')] = None
+
+
+class AgentWorkspaceBaseView(BaseModel):
+    image: Annotated[str, Field(title='Image')]
+    registries: Annotated[list[str], Field(title='Registries')]
+    setup: Annotated[list[str], Field(title='Setup')]
+
+
 class Among(StrEnum):
     """
     Which root sessions a person's list holds: sub-agents are read
@@ -2605,36 +2635,6 @@ class WorkStatus(StrEnum):
     failed = 'failed'
 
 
-class Registry(RootModel[str]):
-    root: Annotated[str, Field(max_length=253, pattern='^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$')]
-
-
-class SetupItem(RootModel[str]):
-    root: Annotated[str, Field(max_length=4000, min_length=1)]
-
-
-class WorkspaceBaseBody(BaseModel):
-    """
-    The workspace base a project's sessions' workspaces start from: the
-    image, the commands that set it up, run once in order, and the package
-    registries the setup reaches. A setup that names a registry runs with
-    open egress; one that names none reaches nothing. Registries serve a
-    setup, so they come with one.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    image: Annotated[str, Field(max_length=255, min_length=1, pattern='^[A-Za-z0-9][A-Za-z0-9._/:@-]*$', title='Image')]
-    registries: Annotated[list[Registry] | None, Field(max_length=20, title='Registries')] = None
-    setup: Annotated[list[SetupItem] | None, Field(max_length=50, title='Setup')] = None
-
-
-class WorkspaceBaseView(BaseModel):
-    image: Annotated[str, Field(title='Image')]
-    registries: Annotated[list[str], Field(title='Registries')]
-    setup: Annotated[list[str], Field(title='Setup')]
-
-
 class ActionBody(BaseModel):
     """
     `start_session`: start a session of `agent_kind` titled `title` in the
@@ -2989,7 +2989,7 @@ class CreateProjectRequest(BaseModel):
     )
     name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
     repository: RepositoryBody
-    workspace_base: WorkspaceBaseBody | None = None
+    workspace_base: AgentWorkspaceBaseBody | None = None
     workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
 
 
@@ -3606,7 +3606,7 @@ class ProjectView(BaseModel):
     repository: RepositoryView
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
-    workspace_base: WorkspaceBaseView | None
+    workspace_base: AgentWorkspaceBaseView | None
     workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
 
 

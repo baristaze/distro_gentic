@@ -13,12 +13,12 @@ from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.resolve import ProjectsService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.projects import (
+    AgentWorkspaceBaseBody,
     CreateProjectRequest,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
     RenameProjectRequest,
-    WorkspaceBaseBody,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -56,7 +56,7 @@ async def rename_project(
 
 @router.put("/{project_id}/workspace-base", response_model=ProjectView)
 async def set_workspace_base(
-    ctx: Ctx, projects: ProjectsService, project_id: UUID, body: WorkspaceBaseBody
+    ctx: Ctx, projects: ProjectsService, project_id: UUID, body: AgentWorkspaceBaseBody
 ) -> ProjectView:
     """The workspace base the project's sessions' workspaces start from; a later
     one replaces it. Each session keeps the one it started on, and a changed

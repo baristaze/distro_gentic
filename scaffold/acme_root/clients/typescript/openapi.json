@@ -902,6 +902,73 @@
         "title": "AgentSessionView",
         "type": "object"
       },
+      "AgentWorkspaceBaseBody": {
+        "additionalProperties": false,
+        "description": "The workspace base a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
+        "properties": {
+          "image": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "maxLength": 253,
+              "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "AgentWorkspaceBaseBody",
+        "type": "object"
+      },
+      "AgentWorkspaceBaseView": {
+        "properties": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image",
+          "setup",
+          "registries"
+        ],
+        "title": "AgentWorkspaceBaseView",
+        "type": "object"
+      },
       "Among": {
         "description": "Which root sessions a person's list holds: sub-agents are read\nthrough their tree.",
         "enum": [
@@ -2875,7 +2942,7 @@
           "workspace_base": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkspaceBaseBody"
+                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
               },
               {
                 "type": "null"
@@ -8223,7 +8290,7 @@
           "workspace_base": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkspaceBaseView"
+                "$ref": "#/components/schemas/AgentWorkspaceBaseView"
               },
               {
                 "type": "null"
@@ -11923,73 +11990,6 @@
         ],
         "title": "WorkStatus",
         "type": "string"
-      },
-      "WorkspaceBaseBody": {
-        "additionalProperties": false,
-        "description": "The workspace base a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
-        "properties": {
-          "image": {
-            "maxLength": 255,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
-            "title": "Image",
-            "type": "string"
-          },
-          "registries": {
-            "items": {
-              "maxLength": 253,
-              "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Registries",
-            "type": "array"
-          },
-          "setup": {
-            "items": {
-              "maxLength": 4000,
-              "minLength": 1,
-              "type": "string"
-            },
-            "maxItems": 50,
-            "title": "Setup",
-            "type": "array"
-          }
-        },
-        "required": [
-          "image"
-        ],
-        "title": "WorkspaceBaseBody",
-        "type": "object"
-      },
-      "WorkspaceBaseView": {
-        "properties": {
-          "image": {
-            "title": "Image",
-            "type": "string"
-          },
-          "registries": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Registries",
-            "type": "array"
-          },
-          "setup": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Setup",
-            "type": "array"
-          }
-        },
-        "required": [
-          "image",
-          "setup",
-          "registries"
-        ],
-        "title": "WorkspaceBaseView",
-        "type": "object"
       }
     }
   },
@@ -32114,7 +32114,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkspaceBaseBody"
+                "$ref": "#/components/schemas/AgentWorkspaceBaseBody"
               }
             }
           },

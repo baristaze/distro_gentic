@@ -39,7 +39,7 @@ class RepositoryView(View):
     path: str
 
 
-class WorkspaceBaseBody(RequestBody):
+class AgentWorkspaceBaseBody(RequestBody):
     """The workspace base a project's sessions' workspaces start from: the
     image, the commands that set it up, run once in order, and the package
     registries the setup reaches. A setup that names a registry runs with
@@ -51,7 +51,7 @@ class WorkspaceBaseBody(RequestBody):
     registries: list[Destination] = Field(default_factory=lambda: [], max_length=MAX_REGISTRIES)
 
 
-class WorkspaceBaseView(View):
+class AgentWorkspaceBaseView(View):
     image: str
     setup: list[str]
     registries: list[str]
@@ -66,7 +66,7 @@ class CreateProjectRequest(RequestBody):
     name: str = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: RepositoryBody
     workspace_snapshots: bool = True
-    workspace_base: WorkspaceBaseBody | None = None
+    workspace_base: AgentWorkspaceBaseBody | None = None
 
 
 class RenameProjectRequest(RequestBody):
@@ -78,7 +78,7 @@ class ProjectView(View):
     name: str
     repository: RepositoryView
     workspace_snapshots: bool
-    workspace_base: WorkspaceBaseView | None
+    workspace_base: AgentWorkspaceBaseView | None
     created_at: datetime
     created_by: UUID
     updated_at: datetime

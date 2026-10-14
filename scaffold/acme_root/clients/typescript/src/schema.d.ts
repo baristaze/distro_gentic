@@ -4143,6 +4143,31 @@ export interface components {
             visibility: components["schemas"]["Visibility"];
         };
         /**
+         * AgentWorkspaceBaseBody
+         * @description The workspace base a project's sessions' workspaces start from: the
+         *     image, the commands that set it up, run once in order, and the package
+         *     registries the setup reaches. A setup that names a registry runs with
+         *     open egress; one that names none reaches nothing. Registries serve a
+         *     setup, so they come with one.
+         */
+        AgentWorkspaceBaseBody: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries?: string[];
+            /** Setup */
+            setup?: string[];
+        };
+        /** AgentWorkspaceBaseView */
+        AgentWorkspaceBaseView: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries: string[];
+            /** Setup */
+            setup: string[];
+        };
+        /**
          * Among
          * @description Which root sessions a person's list holds: sub-agents are read
          *     through their tree.
@@ -5057,7 +5082,7 @@ export interface components {
             /** Name */
             name: string;
             repository: components["schemas"]["RepositoryBody"];
-            workspace_base?: components["schemas"]["WorkspaceBaseBody"] | null;
+            workspace_base?: components["schemas"]["AgentWorkspaceBaseBody"] | null;
             /**
              * Workspace Snapshots
              * @default true
@@ -7646,7 +7671,7 @@ export interface components {
              * Format: uuid
              */
             updated_by: string;
-            workspace_base: components["schemas"]["WorkspaceBaseView"] | null;
+            workspace_base: components["schemas"]["AgentWorkspaceBaseView"] | null;
             /** Workspace Snapshots */
             workspace_snapshots: boolean;
         };
@@ -9316,31 +9341,6 @@ export interface components {
          * @enum {string}
          */
         WorkStatus: "queued" | "claimed" | "done" | "failed";
-        /**
-         * WorkspaceBaseBody
-         * @description The workspace base a project's sessions' workspaces start from: the
-         *     image, the commands that set it up, run once in order, and the package
-         *     registries the setup reaches. A setup that names a registry runs with
-         *     open egress; one that names none reaches nothing. Registries serve a
-         *     setup, so they come with one.
-         */
-        WorkspaceBaseBody: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries?: string[];
-            /** Setup */
-            setup?: string[];
-        };
-        /** WorkspaceBaseView */
-        WorkspaceBaseView: {
-            /** Image */
-            image: string;
-            /** Registries */
-            registries: string[];
-            /** Setup */
-            setup: string[];
-        };
     };
     responses: never;
     parameters: never;
@@ -16708,7 +16708,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkspaceBaseBody"];
+                "application/json": components["schemas"]["AgentWorkspaceBaseBody"];
             };
         };
         responses: {

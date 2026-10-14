@@ -8,12 +8,12 @@ from uuid import UUID
 
 from acme.om.context import TenantContext
 from acme.services.api.types.projects import (
+    AgentWorkspaceBaseBody,
     CreateProjectRequest,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
     RenameProjectRequest,
-    WorkspaceBaseBody,
 )
 
 
@@ -38,7 +38,7 @@ class ProjectsServiceInterface(ABC):
 
     @abstractmethod
     async def set_workspace_base(
-        self, ctx: TenantContext, project_id: UUID, body: WorkspaceBaseBody | None
+        self, ctx: TenantContext, project_id: UUID, body: AgentWorkspaceBaseBody | None
     ) -> ProjectView:
         """The project with the workspace base its sessions' workspaces start
         from, or with none. It reaches the sessions created after it."""

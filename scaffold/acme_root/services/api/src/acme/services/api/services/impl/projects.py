@@ -5,18 +5,18 @@ from uuid import UUID
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.projects import ProjectsManagerInterface
-from acme.om.projects.types.project import Project, ProjectWorkspaceBase
+from acme.om.projects.types.project import AgentWorkspaceBase, Project
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces.types.credential import FetchCredential
 from acme.services.api.services.impl.built import built
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.types.projects import (
+    AgentWorkspaceBaseBody,
     CreateProjectRequest,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
     RenameProjectRequest,
-    WorkspaceBaseBody,
 )
 
 
@@ -69,9 +69,9 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
         return ProjectView.model_validate(renamed)
 
     async def set_workspace_base(
-        self, ctx: TenantContext, project_id: UUID, body: WorkspaceBaseBody | None
+        self, ctx: TenantContext, project_id: UUID, body: AgentWorkspaceBaseBody | None
     ) -> ProjectView:
-        workspace_base = None if body is None else built(ProjectWorkspaceBase, body.model_dump())
+        workspace_base = None if body is None else built(AgentWorkspaceBase, body.model_dump())
         updated = await self._projects.set_workspace_base(ctx, project_id, workspace_base)
         return ProjectView.model_validate(updated)
 

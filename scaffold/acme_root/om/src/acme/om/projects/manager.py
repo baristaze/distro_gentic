@@ -15,7 +15,7 @@ from uuid import UUID
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
 from acme.om.context import TenantContext
-from acme.om.projects.types.project import Project, ProjectWorkspaceBase, Repository
+from acme.om.projects.types.project import AgentWorkspaceBase, Project, Repository
 
 
 class ProjectsManagerInterface(ABC):
@@ -50,7 +50,7 @@ class ProjectsManagerInterface(ABC):
 
     @abstractmethod
     async def set_workspace_base(
-        self, ctx: TenantContext, project_id: UUID, workspace_base: ProjectWorkspaceBase | None
+        self, ctx: TenantContext, project_id: UUID, workspace_base: AgentWorkspaceBase | None
     ) -> Project:
         """The project with the workspace base its sessions' workspaces start
         from, or with none, as one who writes the tenant's configuration may
