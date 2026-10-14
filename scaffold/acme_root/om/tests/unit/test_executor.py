@@ -64,7 +64,7 @@ TAR = a_tree()
 PINNED = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 """A directory on a host of the session's pool, as its session is pinned."""
 ENVIRONMENT = WorkspaceBase(
-    image="registry.example/robotics:3",
+    image="registry.example/toolchain:3",
     setup=("pip install --target /opt/deps numpy",),
     egress=EgressPolicy(mode=EgressMode.OPEN),
 )

@@ -112,7 +112,7 @@ async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",
-        base=WorkspaceBase(image="registry.example/robotics:3", setup=("make deps",)),
+        base=WorkspaceBase(image="registry.example/toolchain:3", setup=("make deps",)),
         branch="sessions/one",
     )
     await storage.get_workspace_storage().create_workspace(ctx.org_id, pinned)
