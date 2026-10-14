@@ -308,16 +308,14 @@ replaces; an instance no snapshot holds let go.
 
 **Principle.** A project names its environment: an image, the commands
 that set it up, and the package registries the setup reaches. A kind
-that takes it pins it when its session is created, and the session
-keeps it: a changed environment is built again for the sessions after
-it. It is built once where its workspaces run, by the runner's provider
-into the platform's object store, or by the customer's host into its
-own store, inside the wall. Its setup runs the project's commands alone,
-with no model, no secret, no platform credential, and nothing of the
-tenant's records; a workspace on it keeps its kind's egress. A
-validation of a session's work runs on a new instance of the
-environment the session pinned, with no egress. A setup that fails
-keeps nothing and says which command failed and how.
+that takes it pins it with its session, which keeps it: a changed
+environment is built anew for later sessions. It is built once where
+its workspaces run: by the runner's provider into the platform's store,
+or by the host into its own, inside the wall. Its setup runs the
+project's commands alone, with no model, no secret, no platform
+credential, and nothing of the tenant's records. A workspace on it
+keeps its kind's egress; a validation runs on a new instance of it with
+none. A failed setup keeps nothing and names its command and exit code.
 
 **Source.** Workspaces and Isolation, A Project's Environment.
 
