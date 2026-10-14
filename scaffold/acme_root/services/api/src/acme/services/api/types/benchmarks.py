@@ -5,7 +5,7 @@ every trial."""
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.benchmarks.types.benchmark import Arm
+from acme.om.benchmarks.types.benchmark import Contender
 from acme.services.api.types.common import View
 from acme.services.api.types.matrix import FillView
 
@@ -16,8 +16,8 @@ class RoleFillView(View):
     fallbacks: list[FillView]
 
 
-class ContenderView(View):
-    """What an arm's sessions ran: the agent kind, its version, and each model
+class ContenderPinView(View):
+    """What a contender's sessions ran: the agent kind, its version, and each model
     role's fill."""
 
     kind: str
@@ -25,8 +25,8 @@ class ContenderView(View):
     fills: list[RoleFillView]
 
 
-class ArmResultView(View):
-    """One arm's result: its trials, how many passed, the mean of their
+class ContenderResultView(View):
+    """One contender's result: its trials, how many passed, the mean of their
     scores, and the sum of their costs."""
 
     trials: int
@@ -36,10 +36,10 @@ class ArmResultView(View):
 
 
 class TrialView(View):
-    """One trial: its arm, its session, where and when it ran, its cost, and
+    """One trial: its contender, its session, where and when it ran, its cost, and
     what its acceptance verdict found."""
 
-    arm: Arm
+    contender: Contender
     session_id: UUID
     executor: str
     started_at: datetime
@@ -57,15 +57,15 @@ class BenchmarkSummaryView(View):
     id: UUID
     scenario: str
     created_at: datetime
-    candidate: ContenderView
-    baseline: ContenderView
-    candidate_result: ArmResultView
-    baseline_result: ArmResultView
+    candidate: ContenderPinView
+    baseline: ContenderPinView
+    candidate_result: ContenderResultView
+    baseline_result: ContenderResultView
     regressed: bool
     recorded_by: UUID
 
 
 class BenchmarkView(BenchmarkSummaryView):
-    """One run of a scenario, with every trial of both arms."""
+    """One run of a scenario, with every trial of both contenders."""
 
     trials: list[TrialView]

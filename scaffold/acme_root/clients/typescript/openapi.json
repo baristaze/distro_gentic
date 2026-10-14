@@ -1211,43 +1211,6 @@
         "title": "ApproverRuleView",
         "type": "object"
       },
-      "Arm": {
-        "enum": [
-          "candidate",
-          "baseline"
-        ],
-        "title": "Arm",
-        "type": "string"
-      },
-      "ArmResultView": {
-        "description": "One arm's result: its trials, how many passed, the mean of their\nscores, and the sum of their costs.",
-        "properties": {
-          "cost_micros": {
-            "title": "Cost Micros",
-            "type": "integer"
-          },
-          "passed": {
-            "title": "Passed",
-            "type": "integer"
-          },
-          "score": {
-            "title": "Score",
-            "type": "number"
-          },
-          "trials": {
-            "title": "Trials",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "trials",
-          "passed",
-          "score",
-          "cost_micros"
-        ],
-        "title": "ArmResultView",
-        "type": "object"
-      },
       "ArtifactPageView": {
         "description": "A page of what a session keeps whole outside its window, such as a\nlong tool result: its characters from `start`, the whole artifact's\nlength, and whether more follow.",
         "properties": {
@@ -1531,16 +1494,16 @@
         "description": "One run of a scenario, without its trials: a point of the scenario's\ntrend.",
         "properties": {
           "baseline": {
-            "$ref": "#/components/schemas/ContenderView"
+            "$ref": "#/components/schemas/ContenderPinView"
           },
           "baseline_result": {
-            "$ref": "#/components/schemas/ArmResultView"
+            "$ref": "#/components/schemas/ContenderResultView"
           },
           "candidate": {
-            "$ref": "#/components/schemas/ContenderView"
+            "$ref": "#/components/schemas/ContenderPinView"
           },
           "candidate_result": {
-            "$ref": "#/components/schemas/ArmResultView"
+            "$ref": "#/components/schemas/ContenderResultView"
           },
           "created_at": {
             "format": "date-time",
@@ -1581,19 +1544,19 @@
         "type": "object"
       },
       "BenchmarkView": {
-        "description": "One run of a scenario, with every trial of both arms.",
+        "description": "One run of a scenario, with every trial of both contenders.",
         "properties": {
           "baseline": {
-            "$ref": "#/components/schemas/ContenderView"
+            "$ref": "#/components/schemas/ContenderPinView"
           },
           "baseline_result": {
-            "$ref": "#/components/schemas/ArmResultView"
+            "$ref": "#/components/schemas/ContenderResultView"
           },
           "candidate": {
-            "$ref": "#/components/schemas/ContenderView"
+            "$ref": "#/components/schemas/ContenderPinView"
           },
           "candidate_result": {
-            "$ref": "#/components/schemas/ArmResultView"
+            "$ref": "#/components/schemas/ContenderResultView"
           },
           "created_at": {
             "format": "date-time",
@@ -2612,8 +2575,16 @@
         "title": "ConnectorView",
         "type": "object"
       },
-      "ContenderView": {
-        "description": "What an arm's sessions ran: the agent kind, its version, and each model\nrole's fill.",
+      "Contender": {
+        "enum": [
+          "candidate",
+          "baseline"
+        ],
+        "title": "Contender",
+        "type": "string"
+      },
+      "ContenderPinView": {
+        "description": "What a contender's sessions ran: the agent kind, its version, and each model\nrole's fill.",
         "properties": {
           "fills": {
             "items": {
@@ -2636,7 +2607,36 @@
           "kind_version",
           "fills"
         ],
-        "title": "ContenderView",
+        "title": "ContenderPinView",
+        "type": "object"
+      },
+      "ContenderResultView": {
+        "description": "One contender's result: its trials, how many passed, the mean of their\nscores, and the sum of their costs.",
+        "properties": {
+          "cost_micros": {
+            "title": "Cost Micros",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "trials": {
+            "title": "Trials",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trials",
+          "passed",
+          "score",
+          "cost_micros"
+        ],
+        "title": "ContenderResultView",
         "type": "object"
       },
       "ContentState": {
@@ -11137,17 +11137,17 @@
         "type": "object"
       },
       "TrialView": {
-        "description": "One trial: its arm, its session, where and when it ran, its cost, and\nwhat its acceptance verdict found.",
+        "description": "One trial: its contender, its session, where and when it ran, its cost, and\nwhat its acceptance verdict found.",
         "properties": {
-          "arm": {
-            "$ref": "#/components/schemas/Arm"
-          },
           "broken": {
             "items": {
               "type": "string"
             },
             "title": "Broken",
             "type": "array"
+          },
+          "contender": {
+            "$ref": "#/components/schemas/Contender"
           },
           "cost_micros": {
             "title": "Cost Micros",
@@ -11182,7 +11182,7 @@
           }
         },
         "required": [
-          "arm",
+          "contender",
           "session_id",
           "executor",
           "started_at",
@@ -12001,7 +12001,7 @@
   "paths": {
     "/v1/admin/benchmarks": {
       "get": {
-        "description": "The scenario's runs, the newest first: each arm's score and cost, and\nwhether the candidate regressed.",
+        "description": "The scenario's runs, the newest first: each contender's score and cost, and\nwhether the candidate regressed.",
         "operationId": "get_trend_v1_admin_benchmarks_get",
         "parameters": [
           {

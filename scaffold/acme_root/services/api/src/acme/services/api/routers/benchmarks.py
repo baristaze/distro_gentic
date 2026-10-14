@@ -24,7 +24,7 @@ async def get_trend(
     scenario: Annotated[str, Query(pattern=NAME)],
     limit: int = LIMIT_DEFAULT,
 ) -> list[BenchmarkSummaryView]:
-    """The scenario's runs, the newest first: each arm's score and cost, and
+    """The scenario's runs, the newest first: each contender's score and cost, and
     whether the candidate regressed."""
     return await service.get_trend(admin, scenario, limit)
 

@@ -44,7 +44,7 @@ fetches it only to run it, and a scenario that keeps it at its base is
 refused. A trial's score is the share of the links held.
 
 **A benchmark runs its own baseline, interleaved.** Each run of a
-scenario holds trials of both arms, scheduled candidate, baseline,
+scenario holds trials of both contenders, scheduled candidate, baseline,
 baseline, candidate, on one executor. So the baseline's score is measured
 under the conditions the candidate's was, and a drift over the run falls
 on both. Any lower candidate score is flagged. A benchmark is a global
@@ -52,9 +52,9 @@ row an operator records, written once, and no purge reaches it. What
 it shows of a model goes to the model matrix: for each model role whose
 fill the candidate changed, the model passed the scenario when the
 candidate did not regress, and that result is what qualifies it there.
-Only a run whose arms ran one agent kind at one version says anything of
-a model; when the kind or its version changed too, the score is either's,
-and the run qualifies nothing.
+Only a run whose contenders ran one agent kind at one version says
+anything of a model; when the kind or its version changed too, the score
+is either's, and the run qualifies nothing.
 
 **The benchmark job is dispatched, never gating.** It runs `make
 benchmark` over its own stack. That stack goes with the runner, so the
@@ -72,8 +72,8 @@ scenarios, its agents on real providers.
   36th trial, where the exact bound would hold at the 29th.
 - An agent kind that cannot state a hypothesis passes that link with
   none open; the link bites once the kind records them.
-- A benchmark costs both arms' trials every run, and a regression is a
-  flag for a person, never a block.
+- A benchmark costs both contenders' trials every run, and a regression
+  is a flag for a person, never a block.
 - The export outlives the runner, not the repository's artifact
   retention, at most 400 days: a result meant to outlast it is copied
   out of the artifact by a person.

@@ -13,8 +13,8 @@ from acme.om.context import OperatorContext
 class BenchmarksManagerInterface(ABC):
     @abstractmethod
     async def record(self, admin: OperatorContext, run: BenchmarkTrials) -> Benchmark:
-        """Keeps a run of a scenario, written once: its arms, every trial, each
-        arm's score and cost, and whether the candidate regressed, all
+        """Keeps a run of a scenario, written once: its contenders, every trial, each
+        contender's score and cost, and whether the candidate regressed, all
         computed here from the trials. Refused (`ValidationFailed`) unless the
         candidate's and the baseline's trials interleave on one executor.
         Needs the operators' write."""

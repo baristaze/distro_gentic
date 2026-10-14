@@ -228,16 +228,16 @@ async def whole(run: ScriptedRun, *changed: str) -> Result:
 
 
 async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) -> tuple[Trial, ...]:
-    """Trials of both arms on one executor, in the schedule's order: each a
+    """Trials of both contenders on one executor, in the schedule's order: each a
     scripted session whose chain is whole, judged by the harness. Scripted
     sessions spend nothing, so each trial costs nothing."""
     trials: list[Trial] = []
-    for arm in schedule(pairs):
+    for contender in schedule(pairs):
         run = ScriptedRun(parts, ctx)
         verdict = await run.judge(await whole(run))
         trials.append(
             Trial(
-                arm=arm,
+                contender=contender,
                 session_id=run.session,
                 executor=parts.executor.name,
                 started_at=verdict.created_at,

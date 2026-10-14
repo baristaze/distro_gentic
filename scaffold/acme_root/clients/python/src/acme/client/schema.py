@@ -162,22 +162,6 @@ class ApprovalView(BaseModel):
     tool: Annotated[str, Field(title='Tool')]
 
 
-class Arm(StrEnum):
-    candidate = 'candidate'
-    baseline = 'baseline'
-
-
-class ArmResultView(BaseModel):
-    """
-    One arm's result: its trials, how many passed, the mean of their
-    scores, and the sum of their costs.
-    """
-    cost_micros: Annotated[int, Field(title='Cost Micros')]
-    passed: Annotated[int, Field(title='Passed')]
-    score: Annotated[float, Field(title='Score')]
-    trials: Annotated[int, Field(title='Trials')]
-
-
 class ArtifactPageView(BaseModel):
     """
     A page of what a session keeps whole outside its window, such as a
@@ -390,6 +374,22 @@ class ConnectorPlace(StrEnum):
     """
     cloud = 'cloud'
     host = 'host'
+
+
+class Contender(StrEnum):
+    candidate = 'candidate'
+    baseline = 'baseline'
+
+
+class ContenderResultView(BaseModel):
+    """
+    One contender's result: its trials, how many passed, the mean of their
+    scores, and the sum of their costs.
+    """
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    passed: Annotated[int, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    trials: Annotated[int, Field(title='Trials')]
 
 
 class ContentState(StrEnum):
@@ -2420,11 +2420,11 @@ class TreeBoundsView(BaseModel):
 
 class TrialView(BaseModel):
     """
-    One trial: its arm, its session, where and when it ran, its cost, and
+    One trial: its contender, its session, where and when it ran, its cost, and
     what its acceptance verdict found.
     """
-    arm: Arm
     broken: Annotated[list[str], Field(title='Broken')]
+    contender: Contender
     cost_micros: Annotated[int, Field(title='Cost Micros')]
     executor: Annotated[str, Field(title='Executor')]
     passed: Annotated[bool, Field(title='Passed')]
@@ -4075,9 +4075,9 @@ class ConnectorView(BaseModel):
     version: Annotated[int, Field(title='Version')]
 
 
-class ContenderView(BaseModel):
+class ContenderPinView(BaseModel):
     """
-    What an arm's sessions ran: the agent kind, its version, and each model
+    What a contender's sessions ran: the agent kind, its version, and each model
     role's fill.
     """
     fills: Annotated[list[RoleFillView], Field(title='Fills')]
@@ -4283,10 +4283,10 @@ class BenchmarkSummaryView(BaseModel):
     One run of a scenario, without its trials: a point of the scenario's
     trend.
     """
-    baseline: ContenderView
-    baseline_result: ArmResultView
-    candidate: ContenderView
-    candidate_result: ArmResultView
+    baseline: ContenderPinView
+    baseline_result: ContenderResultView
+    candidate: ContenderPinView
+    candidate_result: ContenderResultView
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     id: Annotated[UUID, Field(title='Id')]
     recorded_by: Annotated[UUID, Field(title='Recorded By')]
@@ -4296,12 +4296,12 @@ class BenchmarkSummaryView(BaseModel):
 
 class BenchmarkView(BaseModel):
     """
-    One run of a scenario, with every trial of both arms.
+    One run of a scenario, with every trial of both contenders.
     """
-    baseline: ContenderView
-    baseline_result: ArmResultView
-    candidate: ContenderView
-    candidate_result: ArmResultView
+    baseline: ContenderPinView
+    baseline_result: ContenderResultView
+    candidate: ContenderPinView
+    candidate_result: ContenderResultView
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     id: Annotated[UUID, Field(title='Id')]
     recorded_by: Annotated[UUID, Field(title='Recorded By')]

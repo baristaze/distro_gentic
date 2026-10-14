@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get Trend
-         * @description The scenario's runs, the newest first: each arm's score and cost, and
+         * @description The scenario's runs, the newest first: each contender's score and cost, and
          *     whether the candidate regressed.
          */
         get: operations["get_trend_v1_admin_benchmarks_get"];
@@ -4284,26 +4284,6 @@ export interface components {
             roles: components["schemas"]["Role"][];
         };
         /**
-         * Arm
-         * @enum {string}
-         */
-        Arm: "candidate" | "baseline";
-        /**
-         * ArmResultView
-         * @description One arm's result: its trials, how many passed, the mean of their
-         *     scores, and the sum of their costs.
-         */
-        ArmResultView: {
-            /** Cost Micros */
-            cost_micros: number;
-            /** Passed */
-            passed: number;
-            /** Score */
-            score: number;
-            /** Trials */
-            trials: number;
-        };
-        /**
          * ArtifactPageView
          * @description A page of what a session keeps whole outside its window, such as a
          *     long tool result: its characters from `start`, the whole artifact's
@@ -4442,10 +4422,10 @@ export interface components {
          *     trend.
          */
         BenchmarkSummaryView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
+            baseline: components["schemas"]["ContenderPinView"];
+            baseline_result: components["schemas"]["ContenderResultView"];
+            candidate: components["schemas"]["ContenderPinView"];
+            candidate_result: components["schemas"]["ContenderResultView"];
             /**
              * Created At
              * Format: date-time
@@ -4468,13 +4448,13 @@ export interface components {
         };
         /**
          * BenchmarkView
-         * @description One run of a scenario, with every trial of both arms.
+         * @description One run of a scenario, with every trial of both contenders.
          */
         BenchmarkView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
+            baseline: components["schemas"]["ContenderPinView"];
+            baseline_result: components["schemas"]["ContenderResultView"];
+            candidate: components["schemas"]["ContenderPinView"];
+            candidate_result: components["schemas"]["ContenderResultView"];
             /**
              * Created At
              * Format: date-time
@@ -4948,17 +4928,37 @@ export interface components {
             version: number;
         };
         /**
-         * ContenderView
-         * @description What an arm's sessions ran: the agent kind, its version, and each model
+         * Contender
+         * @enum {string}
+         */
+        Contender: "candidate" | "baseline";
+        /**
+         * ContenderPinView
+         * @description What a contender's sessions ran: the agent kind, its version, and each model
          *     role's fill.
          */
-        ContenderView: {
+        ContenderPinView: {
             /** Fills */
             fills: components["schemas"]["RoleFillView"][];
             /** Kind */
             kind: string;
             /** Kind Version */
             kind_version: number;
+        };
+        /**
+         * ContenderResultView
+         * @description One contender's result: its trials, how many passed, the mean of their
+         *     scores, and the sum of their costs.
+         */
+        ContenderResultView: {
+            /** Cost Micros */
+            cost_micros: number;
+            /** Passed */
+            passed: number;
+            /** Score */
+            score: number;
+            /** Trials */
+            trials: number;
         };
         /**
          * ContentState
@@ -8935,13 +8935,13 @@ export interface components {
         };
         /**
          * TrialView
-         * @description One trial: its arm, its session, where and when it ran, its cost, and
+         * @description One trial: its contender, its session, where and when it ran, its cost, and
          *     what its acceptance verdict found.
          */
         TrialView: {
-            arm: components["schemas"]["Arm"];
             /** Broken */
             broken: string[];
+            contender: components["schemas"]["Contender"];
             /** Cost Micros */
             cost_micros: number;
             /** Executor */

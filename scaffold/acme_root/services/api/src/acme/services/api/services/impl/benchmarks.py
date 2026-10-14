@@ -9,7 +9,7 @@ from acme.services.api.types.benchmarks import BenchmarkSummaryView, BenchmarkVi
 
 def trial_view(trial: Trial) -> TrialView:
     return TrialView(
-        arm=trial.arm,
+        contender=trial.contender,
         session_id=trial.session_id,
         executor=trial.executor,
         started_at=trial.started_at,

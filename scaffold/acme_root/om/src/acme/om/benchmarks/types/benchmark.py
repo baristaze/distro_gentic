@@ -1,5 +1,5 @@
 """A benchmark: what one scenario showed of a candidate against a
-baseline, each arm pinned to the agent kind, its version, and the fill
+baseline, each contender pinned to the agent kind, its version, and the fill
 set that produced it. Its trials are preserved, each with its acceptance
 verdict, its judged score, and its cost, and a candidate that scores
 under its baseline is flagged. Written once, and never changed."""
@@ -17,13 +17,13 @@ from acme.om.evidence.types.record import NAME
 from acme.om.models.types.fill import RoleFill
 
 
-class Arm(StrEnum):
+class Contender(StrEnum):
     CANDIDATE = "candidate"  # what is being measured: a new kind version, or a new fill set
     BASELINE = "baseline"  # what it is measured against: what runs today
 
 
-class Contender(Platform):
-    """What an arm's sessions run: the agent kind, its version, and the fill
+class ContenderPin(Platform):
+    """What a contender's sessions run: the agent kind, its version, and the fill
     set, each model role's fill."""
 
     kind: str = Field(pattern=NAME)
@@ -32,13 +32,13 @@ class Contender(Platform):
 
 
 class Trial(Platform):
-    """One preserved run of the scenario: the arm it ran for, its session,
+    """One preserved run of the scenario: the contender it ran for, its session,
     the executor it ran on and when it started, the acceptance verdict that
     judged it, kept whole with the hidden suite's runs, and its cost in
     millionths of a dollar. Its score and whether it passed are the
     verdict's, never a caller's."""
 
-    arm: Arm
+    contender: Contender
     session_id: UUID
     executor: str = Field(min_length=1, max_length=200)
     started_at: datetime
@@ -61,17 +61,17 @@ class Trial(Platform):
 
 
 class BenchmarkTrials(Platform):
-    """What a benchmark run hands in: the scenario, both arms, and every
+    """What a benchmark run hands in: the scenario, both contenders, and every
     trial of both, in any order."""
 
     scenario: str = Field(pattern=NAME)
-    candidate: Contender
-    baseline: Contender
+    candidate: ContenderPin
+    baseline: ContenderPin
     trials: tuple[Trial, ...] = Field(min_length=2, max_length=10_000)
 
 
-class ArmResult(Platform):
-    """What one arm's trials showed: their mean score, how many passed, and
+class ContenderResult(Platform):
+    """What one contender's trials showed: their mean score, how many passed, and
     what they cost together."""
 
     trials: int = Field(ge=1)
@@ -81,11 +81,11 @@ class ArmResult(Platform):
 
 
 class Benchmark(BenchmarkTrials, Identifiable, Created):
-    """A recorded benchmark. The arms' results and the flag are the
+    """A recorded benchmark. The contenders' results and the flag are the
     manager's, computed from the trials: `regressed` is set when the
     candidate scored under its baseline."""
 
-    candidate_result: ArmResult
-    baseline_result: ArmResult
+    candidate_result: ContenderResult
+    baseline_result: ContenderResult
     regressed: bool
     recorded_by: UUID  # the operator's identity
