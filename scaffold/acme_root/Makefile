@@ -59,7 +59,7 @@ ARCH_CHECK ?= uvx --python "$(shell cat .python-version)" --from "git+https://gi
 # until npm installs it; a pnpm already on PATH runs the version named.
 PNPM_SPEC := $(or $(shell sed -n 's/^ *"packageManager": *"\(pnpm@[^"+]*\).*/\1/p' package.json 2>/dev/null),pnpm)
 
-.PHONY: help setup pnpm up down stop start reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check release-before benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry host-check machine-image test-live benchmark traffic openapi
+.PHONY: help setup pnpm up down stop start reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check release-before benchmark-boot check lint format-check typecheck arch-check agentic-check test-unit test-integration test-telemetry test-live traffic openapi
 
 # This Makefile alone, never $(MAKEFILE_LIST): the includes above put
 # .env.example and .env in that list, and grep prefixes every match with the
@@ -258,11 +258,6 @@ arch-check: ## The guideline's static checks, configured in pyproject.toml
 agentic-check: ## The engine's static checks, configured in pyproject.toml
 	uv run --package acme-checkers agentic-check
 
-# The platform's checker sits beside the engine's in the same member, so it
-# runs in-tree too, at the platform release of this project's base.
-distro-check: ## The platform's static checks, configured in pyproject.toml
-	uv run --package acme-checkers distro-check
-
 test-unit: ## Unit tests over the memory impls
 	uv run pytest -q -m "not integration and not e2e and not telemetry and not live and not benchmark"
 
@@ -277,14 +272,6 @@ test-integration: ## Integration tests over the compose stack
 test-live: ## One loop end to end on a live model provider; spends, so run by hand
 	uv run pytest -q -s -m live
 
-# The acceptance scenarios' trials, judged and recorded as benchmarks over
-# a migrated stack. A model's answers vary from run to run, so no gate a
-# code change needs runs this: the benchmark workflow does, when a person
-# dispatches it. The scaffold's own case is a rehearsal that spends
-# nothing; a product's scenarios run its agents on real providers.
-benchmark: ## Judge the acceptance scenarios and record each run as a benchmark; never a gate
-	uv run pytest -q -s -m benchmark
-
 # The round trip: a real API process on a free port, the devx collector aimed
 # at that port while it runs, the exporter and the DSN set, one session of
 # traffic, then every signal read back by request id through the devx stores.
@@ -293,14 +280,6 @@ benchmark: ## Judge the acceptance scenarios and record each run as a benchmark;
 # failure, which is how CI runs it.
 test-telemetry: ## The telemetry round trip over the devx profile
 	uv run pytest -q -m telemetry
-
-# The workspace host's installer on a Linux machine with systemd, a container:
-# the host starts under its unit as its own user, and the unit's exposure holds.
-host-check: ## Install and start the workspace host under its unit in a container
-	deployment/host/check/check.sh
-
-machine-image: ## Build the cloud pool's image on Lima, NAME=<name>, from this checkout
-	uv run python deployment/machines/lima_image.py $(NAME)
 
 # The gate's sanity run: the light profile for thirty seconds over the seeded
 # org, against the API on ACME_PORT. Proves the wiring, says nothing about capacity.
@@ -319,3 +298,28 @@ openapi: pnpm ## Emit the API document and regenerate the TypeScript and the Pyt
 		--use-standard-collections --use-union-operator --use-annotated \
 		--enum-field-as-literal none --use-schema-description --disable-timestamp \
 		--formatters ruff-format --formatters ruff-check
+
+# The platform's targets, after the engine's: its static checker, its
+# benchmarks, the workspace host's installer, and the cloud pool's image.
+.PHONY: distro-check benchmark host-check machine-image
+
+# The platform's checker sits beside the engine's in the same member, so it
+# runs in-tree too, at the platform release of this project's base.
+distro-check: ## The platform's static checks, configured in pyproject.toml
+	uv run --package acme-checkers distro-check
+
+# The acceptance scenarios' trials, judged and recorded as benchmarks over
+# a migrated stack. A model's answers vary from run to run, so no gate a
+# code change needs runs this: the benchmark workflow does, when a person
+# dispatches it. The scaffold's own case is a rehearsal that spends
+# nothing; a product's scenarios run its agents on real providers.
+benchmark: ## Judge the acceptance scenarios and record each run as a benchmark; never a gate
+	uv run pytest -q -s -m benchmark
+
+# The workspace host's installer on a Linux machine with systemd, a container:
+# the host starts under its unit as its own user, and the unit's exposure holds.
+host-check: ## Install and start the workspace host under its unit in a container
+	deployment/host/check/check.sh
+
+machine-image: ## Build the cloud pool's image on Lima, NAME=<name>, from this checkout
+	uv run python deployment/machines/lima_image.py $(NAME)
