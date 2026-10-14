@@ -24,7 +24,7 @@ class ResultGateEvidenceImpl(ResultGateInterface):
     cites, the session's work product from the system that keeps it, the
     policy of the project `projects` answers for the session, never one the
     work product names, every validation at the delivered head with every
-    run it lists, and the session's validations at the delivery's base,
+    run it lists, and the session's validations at the work product's base,
     where its baselines are, and judges them (`rules.judge`). Of those at
     the base it reads the oldest, as many as `max_validations`: when any
     baseline came first, the earliest did. What it cannot read in full it
@@ -62,29 +62,31 @@ class ResultGateEvidenceImpl(ResultGateInterface):
 
     async def _read(self, ctx: TenantContext, session_id: UUID, reading: Reading) -> Reading:
         try:
-            delivery = await self._work_product.delivered(ctx, session_id)
+            work_product = await self._work_product.delivered(ctx, session_id)
         except (PlatformException, InfraException) as error:
             return Reading(cited=reading.cited, unread=error.message)
-        if delivery is None or not delivery.changes_work_product:
-            return Reading(cited=reading.cited, delivery=delivery)
+        if work_product is None or not work_product.changes_work_product:
+            return Reading(cited=reading.cited, work_product=work_product)
         project_id = await self._projects.project_of(ctx, session_id)
         key = None if project_id is None else policy_key(project_id)
         policy = None if key is None else await self._storage.read_policy(ctx.org_id, key)
         bound = self._options.max_validations
         found = await self._storage.read_validations(
-            ctx.org_id, session_id, delivery.head, bound + 1
+            ctx.org_id, session_id, work_product.head, bound + 1
         )
         if len(found) > bound:
             return Reading(
                 cited=reading.cited,
-                unread=f"more than {bound} validations ran at {delivery.head}",
+                unread=f"more than {bound} validations ran at {work_product.head}",
             )
         validations = tuple(
             validation
             for validation in found
             if validation.purpose is RunPurpose.VALIDATION and validation.project == key
         )
-        based = await self._storage.read_validations(ctx.org_id, session_id, delivery.base, bound)
+        based = await self._storage.read_validations(
+            ctx.org_id, session_id, work_product.base, bound
+        )
         at_base = tuple(validation for validation in based if validation.project == key)
         records = await self._storage.read_validation_records(
             ctx.org_id,
@@ -99,7 +101,7 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             )
         return Reading(
             cited=reading.cited,
-            delivery=delivery,
+            work_product=work_product,
             policy=policy,
             validations=validations,
             records=tuple(records),

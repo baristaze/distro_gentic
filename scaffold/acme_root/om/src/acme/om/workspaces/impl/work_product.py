@@ -8,7 +8,7 @@ so, so no success counts on a guess."""
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.evidence.work_product import WorkProductInterface
 from acme.om.exceptions import Unavailable
 from acme.om.workspaces.impl.tools import HeldWorkspaces
@@ -20,8 +20,8 @@ class WorkProductWorkspacesImpl(WorkProductInterface):
         self._workspaces = workspaces
         self._held = held
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> Delivery | None:
+    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
         workspace = self._held.get(session_id)
         if workspace is None:
             raise Unavailable(f"the workspace of session {session_id} is not held here")
-        return await self._workspaces.delivery(ctx, workspace)
+        return await self._workspaces.work_product(ctx, workspace)

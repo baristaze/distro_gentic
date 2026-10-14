@@ -215,7 +215,7 @@ function StepTab() {
 function ChangesTab() {
   const vm = useSessionPage();
   const files = changedFiles(vm.slotSession?.calls ?? []);
-  const delivery = vm.delivery;
+  const workProduct = vm.workProduct;
   return (
     <>
       <Card title="Files" id="files">
@@ -235,27 +235,27 @@ function ChangesTab() {
           ))}
         </ul>
       </Card>
-      <Card title="Delivery" id="delivery">
-        {delivery === null ? (
+      <Card title="Work product" id="work-product">
+        {workProduct === null ? (
           <Muted>Loading</Muted>
         ) : (
           <dl className="acme-facts">
             <dt>Branch</dt>
-            <dd>{delivery.branch ? <code>{delivery.branch}</code> : <Muted>none yet</Muted>}</dd>
+            <dd>{workProduct.branch ? <code>{workProduct.branch}</code> : <Muted>none yet</Muted>}</dd>
             <dt>Pull requests</dt>
-            <dd>{delivery.pullRequests.length > 0 ? delivery.pullRequests.map((handle) => <code key={handle}>{handle} </code>) : <Muted>none yet</Muted>}</dd>
-            {delivery.branches.length > 0 ? (
+            <dd>{workProduct.pullRequests.length > 0 ? workProduct.pullRequests.map((handle) => <code key={handle}>{handle} </code>) : <Muted>none yet</Muted>}</dd>
+            {workProduct.branches.length > 0 ? (
               <>
                 <dt>Bound branches</dt>
                 <dd>
-                  {delivery.branches.map((handle) => (
+                  {workProduct.branches.map((handle) => (
                     <code key={handle}>{handle} </code>
                   ))}
                 </dd>
               </>
             ) : null}
             <dt>Report</dt>
-            <dd>{delivery.report ?? <Muted>no accepted result yet</Muted>}</dd>
+            <dd>{workProduct.report ?? <Muted>no accepted result yet</Muted>}</dd>
           </dl>
         )}
       </Card>

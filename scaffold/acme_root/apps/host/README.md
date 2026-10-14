@@ -110,8 +110,8 @@ macOS.
   so only the tenant fence applies: it lets go only of what this host
   made for that session and tenant.
 - **Destroys an instance when asked.** A run that validates a pinned
-  session's delivery has a host of the pool make an instance of its own,
-  and asks the host that made it to purge it when the run ends. The
+  session's work product has a host of the pool make an instance of its
+  own, and asks the host that made it to purge it when the run ends. The
   host removes the instance, its files, and its transport's records of
   it, so nothing of that run is left for another.
 - **Runs a tool call once, and stops it at once.** An `exec` item it

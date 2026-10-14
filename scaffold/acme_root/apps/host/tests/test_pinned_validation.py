@@ -1,4 +1,4 @@
-"""A delivery of a session pinned to a host pool, validated as the platform
+"""A work product of a session pinned to a host pool, validated as the platform
 validates any: the runner's root, as it boots, and hosts of the tenant's
 pools, each the host's own agent against the API in process. The checks
 run on a host of the session's pool, in an instance made for the run alone
@@ -48,7 +48,7 @@ from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.root import PlatformPorts, ProductKinds
@@ -230,7 +230,7 @@ async def delivered(
     run.work.deliver(
         owner.org_id,
         session.id,
-        Delivery(
+        WorkProduct(
             project=policy.project,
             base=repository.base,
             head=head,
@@ -261,7 +261,7 @@ def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-# Check 1: a pinned project's delivery is validated on a host of its pool,
+# Check 1: a pinned project's work product is validated on a host of its pool,
 # in an instance nobody used, the record hashes to its results, and the
 # gate confirms it.
 

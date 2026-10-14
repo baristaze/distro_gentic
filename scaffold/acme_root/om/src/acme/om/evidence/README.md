@@ -74,7 +74,7 @@ of](../../../../README.md).
   failure explained by runs is a result. A success that validated
   nothing is inconclusive.
 - **One baseline rule.** A baseline comes first when it ran at the
-  delivery's base, lists its runs, and was taken before the head was
+  work product's base, lists its runs, and was taken before the head was
   validated (`rules.baseline`). The gate and acceptance both call it. A
   session whose base moves takes one at the new base, then validates its
   head again.
@@ -97,10 +97,10 @@ of](../../../../README.md).
   tree holds is read-only to the head's code while the suite runs, and a
   trial that changes, replaces, or removes one anyway is errored. So no
   file that scores the suite scores it as the head rewrote it, in its
-  delivery or while it runs. A folder stays writable: a check, or the
-  head's code, may add a new file in a protected folder, and no trial
-  errors for that. A scan of every surface the agent reads finds any
-  mention of it.
+  work product or while it runs. A folder stays writable: a check, or
+  the head's code, may add a new file in a protected folder, and no
+  trial errors for that. A scan of every surface the agent reads finds
+  any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
   gate accepts, a result that cites it, and the hidden suite passing at

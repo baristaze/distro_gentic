@@ -835,10 +835,10 @@ the uncertainties, and the runs each claim cites. It refuses a success
 that changed the work product unless a baseline came first and the
 validation policy passed at the committed head, with a clean tree, on
 results its executor wrote. A baseline comes first when it ran at the
-delivery's base before its head was validated; acceptance holds the same
-rule, and a session whose base moves takes one again. A run counts only
-at the version of its check the policy declares now, so a policy that
-changes a check asks for the head to be validated again. A run that
+work product's base before its head was validated; acceptance holds the
+same rule, and a session whose base moves takes one again. A run counts
+only at the version of its check the policy declares now, so a policy
+that changes a check asks for the head to be validated again. A run that
 validated nothing gets no exemption; it is inconclusive.
 
 ### The Results Contract
@@ -1079,7 +1079,7 @@ tenant adds toolsets of its own to a kind: its connectors
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
   existing session should continue or a new one should start.
-- A **validation session** runs a delivery's checks with no agent at
+- A **validation session** runs a work product's checks with no agent at
   all, on a fresh executor (a workspace nobody used, never the agent's),
   on the same queue, and writes the same execution record. A second
   start runs another beside it, and a start sent again under its key

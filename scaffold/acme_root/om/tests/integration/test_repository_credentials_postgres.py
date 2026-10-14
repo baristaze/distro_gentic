@@ -308,7 +308,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
     here = Path(workspace.location)
     (here / "notes.txt").write_text("the agent's own work\n")
-    delivered = await managers.workspaces.delivery(owner, workspace)
+    delivered = await managers.workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed) == (main, pushed, ("total.py",))
     assert private_git.authorized > 0, "read with the fetch credential"
 
@@ -389,8 +389,8 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     held = git(Path(remote), "for-each-ref", "--format=%(refname) %(objectname)")
     assert held.splitlines() == [f"refs/heads/main {main}", f"refs/heads/{branch} {head}"]
 
-    # Its delivery reads with its commits, with the fetch credential.
-    delivered = await managers.workspaces.delivery(owner, workspace)
+    # Its work product reads with its commits, with the fetch credential.
+    delivered = await managers.workspaces.work_product(owner, workspace)
     assert (delivered.base, delivered.head, delivered.changed, delivered.dirty) == (
         main,
         head,

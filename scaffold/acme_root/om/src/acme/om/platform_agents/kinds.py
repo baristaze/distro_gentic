@@ -140,8 +140,8 @@ AGENT_KNOWLEDGE_TOOLSET = Toolset(
     summary="Search and read what your team already knows.",
     tools=(SEARCH_AGENT_KNOWLEDGE, READ_AGENT_KNOWLEDGE),
 )
-DELIVERY_TOOLSET = Toolset(
-    name="delivery",
+WORK_PRODUCT_TOOLSET = Toolset(
+    name="work_product",
     version=1,
     summary="Validate your change, open its pull request, and submit your result.",
     tools=(VALIDATE, OPEN_PULL_REQUEST, SUBMIT_RESULT),
@@ -191,7 +191,7 @@ TOOLSETS: tuple[Toolset, ...] = (
     FILES_TOOLSET,
     CODE_TOOLSET,
     AGENT_KNOWLEDGE_TOOLSET,
-    DELIVERY_TOOLSET,
+    WORK_PRODUCT_TOOLSET,
     SUB_AGENTS_TOOLSET,
     RECORDS_TOOLSET,
     HANDOFF_TOOLSET,
@@ -257,7 +257,7 @@ SOFTWARE_ENGINEER_V1 = AgentKind(
     name=SOFTWARE_ENGINEER,
     version=1,
     tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND),
-    toolsets=(DELIVERY_TOOLSET,),
+    toolsets=(WORK_PRODUCT_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
@@ -283,7 +283,7 @@ SOFTWARE_ENGINEER_V2 = AgentKind(
     name=SOFTWARE_ENGINEER,
     version=2,
     tools=(SUGGEST_AGENT_KNOWLEDGE,),
-    toolsets=(FILES_TOOLSET, CODE_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, DELIVERY_TOOLSET),
+    toolsets=(FILES_TOOLSET, CODE_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, WORK_PRODUCT_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,

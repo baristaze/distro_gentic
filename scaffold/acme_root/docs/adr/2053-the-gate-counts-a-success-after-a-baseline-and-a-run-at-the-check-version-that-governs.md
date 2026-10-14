@@ -17,8 +17,8 @@ The baseline's rule lived in acceptance alone
 ## Decision
 
 - **One baseline rule.** `rules.baseline` holds it: a baseline counts
-  when it ran at the delivery's base, lists the runs it wrote, and was
-  taken before the latest validation at the head. The gate and
+  when it ran at the work product's base, lists the runs it wrote, and
+  was taken before the latest validation at the head. The gate and
   acceptance both call it, so a chain acceptance breaks for its baseline
   the gate refuses too, in the same words.
 - **Before the validation it is compared with.** A baseline measures the

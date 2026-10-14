@@ -1216,27 +1216,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/agent-sessions/{session_id}/delivery": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Delivery
-         * @description Its branch, the pull requests and branches bound to it, and the result
-         *     it submitted that the gate accepted.
-         */
-        get: operations["get_delivery_v1_agent_sessions__session_id__delivery_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/agent-sessions/{session_id}/executions": {
         parameters: {
             query?: never;
@@ -1571,6 +1550,27 @@ export interface paths {
          *     for anyone else.
          */
         put: operations["switch_visibility_v1_agent_sessions__session_id__visibility_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/work-product": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Work Product
+         * @description Its branch, the pull requests and branches bound to it, and the result
+         *     it submitted that the gate accepted.
+         */
+        get: operations["get_work_product_v1_agent_sessions__session_id__work_product_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -5220,24 +5220,6 @@ export interface components {
             challenge?: string | null;
             /** Received */
             received: boolean;
-        };
-        /**
-         * DeliveryView
-         * @description What a session delivered: its project, its branch and whether the
-         *     remote has held it, the pull requests and branches bound to it, and its
-         *     latest accepted result. A session that never had a workspace has no
-         *     branch.
-         */
-        DeliveryView: {
-            /** Branch */
-            branch: string | null;
-            /** Branch Seen */
-            branch_seen: boolean;
-            /** Project Id */
-            project_id: string | null;
-            report: components["schemas"]["ReportView"] | null;
-            /** Work */
-            work: components["schemas"]["WorkHandleView"][];
         };
         /**
          * DevSignInRequest
@@ -9337,6 +9319,24 @@ export interface components {
             kind: components["schemas"]["HandleKind"];
         };
         /**
+         * WorkProductView
+         * @description What a session delivered: its project, its branch and whether the
+         *     remote has held it, the pull requests and branches bound to it, and its
+         *     latest accepted result. A session that never had a workspace has no
+         *     branch.
+         */
+        WorkProductView: {
+            /** Branch */
+            branch: string | null;
+            /** Branch Seen */
+            branch_seen: boolean;
+            /** Project Id */
+            project_id: string | null;
+            report: components["schemas"]["ReportView"] | null;
+            /** Work */
+            work: components["schemas"]["WorkHandleView"][];
+        };
+        /**
          * WorkStatus
          * @enum {string}
          */
@@ -11938,41 +11938,6 @@ export interface operations {
             };
         };
     };
-    get_delivery_v1_agent_sessions__session_id__delivery_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeliveryView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_executions_v1_agent_sessions__session_id__executions_get: {
         parameters: {
             query?: {
@@ -12631,6 +12596,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_work_product_v1_agent_sessions__session_id__work_product_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkProductView"];
                 };
             };
             /** @description Validation Error */

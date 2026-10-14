@@ -2628,6 +2628,20 @@ class WorkHandleView(BaseModel):
     kind: HandleKind
 
 
+class WorkProductView(BaseModel):
+    """
+    What a session delivered: its project, its branch and whether the
+    remote has held it, the pull requests and branches bound to it, and its
+    latest accepted result. A session that never had a workspace has no
+    branch.
+    """
+    branch: Annotated[str | None, Field(title='Branch')]
+    branch_seen: Annotated[bool, Field(title='Branch Seen')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    report: ReportView | None
+    work: Annotated[list[WorkHandleView], Field(title='Work')]
+
+
 class WorkStatus(StrEnum):
     queued = 'queued'
     claimed = 'claimed'
@@ -3004,20 +3018,6 @@ class CrossingBody(BaseModel):
     kind: CrossingKind
     sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$', title='Sha256')]
     size: Annotated[int, Field(ge=0, title='Size')]
-
-
-class DeliveryView(BaseModel):
-    """
-    What a session delivered: its project, its branch and whether the
-    remote has held it, the pull requests and branches bound to it, and its
-    latest accepted result. A session that never had a workspace has no
-    branch.
-    """
-    branch: Annotated[str | None, Field(title='Branch')]
-    branch_seen: Annotated[bool, Field(title='Branch Seen')]
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
-    report: ReportView | None
-    work: Annotated[list[WorkHandleView], Field(title='Work')]
 
 
 class EnrollRequest(BaseModel):

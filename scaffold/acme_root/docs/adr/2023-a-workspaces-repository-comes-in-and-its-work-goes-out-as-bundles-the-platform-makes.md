@@ -21,13 +21,14 @@ outside it.
 the default branch, the session's branch where the repository holds it,
 and its last snapshot where the repository never held the branch, with
 the tags in their history, on its own host, with the project's
-fetch credential, as the read of a delivery does. It reads only where a
-workspace may reach: it resolves the repository's host first, refuses it
-when any address is in the networks no workspace reaches, holds git to
-those addresses, and follows no redirect. It hands the workspace a git
-bundle of them through the transport's files. The checkout fetches from that bundle and from
-nothing else. A cut starts from that snapshot when it came, and from the
-default branch as the bundle brought it otherwise.
+fetch credential, as the read of a work product does. It reads only
+where a workspace may reach: it resolves the repository's host first,
+refuses it when any address is in the networks no workspace reaches,
+holds git to those addresses, and follows no redirect. It hands the
+workspace a git bundle of them through the transport's files. The
+checkout fetches from that bundle and from nothing else. A cut starts
+from that snapshot when it came, and from the default branch as the
+bundle brought it otherwise.
 
 **Out: a bundle the platform makes.** When the software engineer opens
 its pull request, the platform checks the push token, then makes a

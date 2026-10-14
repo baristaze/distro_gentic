@@ -1,4 +1,4 @@
-"""A delivery agent's loop over Postgres, ended through the evidence gate:
+"""A work product agent's loop over Postgres, ended through the evidence gate:
 a success with no validation at its head goes back to the model refused,
 and once the executor has validated that head, the same claim ends the
 loop succeeded and verified."""

@@ -33,9 +33,9 @@ powers its profile does not set.
 
 **Check.** review
 
-## FLT-02 A validation session runs a delivery's checks with no agent
+## FLT-02 A validation session runs a work product's checks with no agent
 
-**Principle.** A validation session runs a delivery's checks with no
+**Principle.** A validation session runs a work product's checks with no
 agent at all, on a fresh executor (a workspace nobody used, never the
 agent's), on the same queue, and writes the same execution record. A
 second start runs another beside it, and a start sent again under its

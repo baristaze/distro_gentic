@@ -25,10 +25,10 @@ from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.validation import (
-    Delivery,
     ExecutionRequest,
     ExecutorReport,
     Prepared,
+    WorkProduct,
 )
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
@@ -223,5 +223,5 @@ def delivered(
     changed: tuple[str, ...] = ("src/cart.py",),
     dirty: bool = False,
     base: str = "base0",
-) -> Delivery:
-    return Delivery(project="checkout", base=base, head=head, dirty=dirty, changed=changed)
+) -> WorkProduct:
+    return WorkProduct(project="checkout", base=base, head=head, dirty=dirty, changed=changed)

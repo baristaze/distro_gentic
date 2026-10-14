@@ -1,4 +1,4 @@
-"""A delivery's validation over Postgres and the local Docker, through the
+"""A work product's validation over Postgres and the local Docker, through the
 root a deployed process builds: its checks run in a container made for
 the run alone, on the delivered commit the platform read from the
 project's repository, with the checks and their fixture from the base,
@@ -43,7 +43,7 @@ from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -165,7 +165,7 @@ async def storage(
 
 
 class Delivered:
-    """A deployed root over Postgres and the local Docker, a delivery
+    """A deployed root over Postgres and the local Docker, a work product
     session in a project whose policy runs `unit` from the base, and what
     the session delivered."""
 
@@ -189,7 +189,7 @@ class Delivered:
         )
 
     async def session(self, files: dict[str, str]) -> tuple[TenantContext, UUID, str]:
-        """A tenant, its delivery session in a project, and the head the
+        """A tenant, its work product session in a project, and the head the
         session delivered, whose files are `files` over the base."""
         slug = f"ajax-{new_id().hex[-8:]}"
         owner, _ = await self.managers.tenancy.bootstrap(
@@ -212,7 +212,7 @@ class Delivered:
         self.work.deliver(
             owner.org_id,
             session.id,
-            Delivery(
+            WorkProduct(
                 project=policy.project,
                 base=self.repository.base,
                 head=head,
@@ -246,7 +246,7 @@ def gone(instance: UUID) -> bool:
     return True
 
 
-# Check 1: a delivery's checks run in a fresh container from the delivered
+# Check 1: a work product's checks run in a fresh container from the delivered
 # commit, the validation hashes to the results, and the gate confirms it.
 
 

@@ -38,7 +38,7 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import FORGE
@@ -261,8 +261,8 @@ async def a_software_engineer(
     session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
     binding = make_binding(session_id, project_id)
     await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
-    delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
-    work.deliver(platform.owner.org_id, session_id, delivery)
+    work_product = WorkProduct(project="reports", base="b1", head="c2", changed=("src/report.py",))
+    work.deliver(platform.owner.org_id, session_id, work_product)
     await platform.say(session_id, "The weekly report misses its total. Fix it.")
     return session_id
 

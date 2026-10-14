@@ -4,7 +4,7 @@
 // No React, no fetch.
 import type {
   AgentSessionView,
-  DeliveryView,
+  WorkProductView,
   ExecutionView,
   ParkView,
   Role,
@@ -125,19 +125,19 @@ export function runRow(run: ExecutionView): RunRow {
   };
 }
 
-export interface DeliveryLines {
+export interface WorkProductLines {
   branch: string | null;
   pullRequests: string[];
   branches: string[];
   report: string | null;
 }
 
-export function deliveryLines(delivery: DeliveryView): DeliveryLines {
-  const report = delivery.report;
+export function workProductLines(workProduct: WorkProductView): WorkProductLines {
+  const report = workProduct.report;
   return {
-    branch: delivery.branch,
-    pullRequests: delivery.work.filter((work) => work.kind === "pull_request").map((work) => work.handle),
-    branches: delivery.work.filter((work) => work.kind === "branch").map((work) => work.handle),
+    branch: workProduct.branch,
+    pullRequests: workProduct.work.filter((work) => work.kind === "pull_request").map((work) => work.handle),
+    branches: workProduct.work.filter((work) => work.kind === "branch").map((work) => work.handle),
     report: report ? `${report.outcome}, ${report.verified ? "verified" : "not verified"}` : null,
   };
 }
@@ -277,8 +277,8 @@ export interface PullRequestBadge {
 }
 
 /** The pull request the session opened, for its header; null before one. */
-export function pullRequestBadge(delivery: Pick<DeliveryView, "work">): PullRequestBadge | null {
-  const opened = delivery.work.filter((work) => work.kind === "pull_request").map((work) => work.handle);
+export function pullRequestBadge(workProduct: Pick<WorkProductView, "work">): PullRequestBadge | null {
+  const opened = workProduct.work.filter((work) => work.kind === "pull_request").map((work) => work.handle);
   const last = opened[opened.length - 1];
   if (last === undefined) return null;
   const number = /(\d+)\s*$/.exec(last)?.[1];

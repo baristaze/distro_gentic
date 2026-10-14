@@ -85,7 +85,7 @@ GITLINK = "160000"
 class ReaderOptions(Platform):
     # How long one git command of a read may take, a fetch included.
     timeout: timedelta = timedelta(minutes=2)
-    # The most paths a delivery lists.
+    # The most paths a work product lists.
     max_paths: int = Field(default=10_000, gt=0)
     # The most bytes a bundle brought into a workspace holds.
     max_bundle: int = Field(default=512 * 2**20, gt=0)
@@ -331,12 +331,12 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         listed = await self._run(env, repo, "ls-tree", "-r", "-l", "-z", "--full-tree", tree)
         entries = [_listed(record) for record in listed.split(b"\0") if record]
         if sum(size for _, _, size, _ in entries) > limit:
-            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
+            raise Unavailable(f"the tree of a work product is past the {limit} bytes it is read to")
         blobs = sorted({sha for mode, sha, _, _ in entries if mode != GITLINK})
         stored = await self._run(env, repo, "cat-file", "--batch", stdin=_lines(blobs))
         tar = _tar(entries, _blobs(stored))
         if len(tar) > limit:
-            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
+            raise Unavailable(f"the tree of a work product is past the {limit} bytes it is read to")
         return tar
 
     async def _holds(self, env: Mapping[str, str], repo: Path, commit: str, tip: str) -> bool:
@@ -381,13 +381,15 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         except TimeoutError:
             process.kill()
             await process.wait()
-            raise Unavailable(f"git {args[0]} of a delivery ran past its time") from None
+            raise Unavailable(f"git {args[0]} of a work product ran past its time") from None
         if out is None:
             process.kill()
             await process.wait()
-            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
+            raise Unavailable(f"the tree of a work product is past the {limit} bytes it is read to")
         if process.returncode != 0:
-            raise Unavailable(f"git {args[0]} of a delivery ended with exit {process.returncode}")
+            raise Unavailable(
+                f"git {args[0]} of a work product ended with exit {process.returncode}"
+            )
         return out
 
 

@@ -520,7 +520,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
 
     session_id = await platform.software_engineer()
     workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
-    await workspaces.delivery(owner, workspace)
+    await workspaces.work_product(owner, workspace)
     assert platform.reader.credentials == [rotated], "handed to the read of the work product"
     held = await platform.held(session_id)
     assert "rotated" not in held.model_dump_json(), "never on the session's workspace"

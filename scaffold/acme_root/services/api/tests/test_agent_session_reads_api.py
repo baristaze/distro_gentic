@@ -547,11 +547,11 @@ async def test_a_sessions_delivery_is_its_branch_its_bound_work_and_its_accepted
     await intake.create_binding(ctx.org_id, make_binding("acme/checkout#12", sid))
     untouched = await start(client, owner, "nothing yet")
 
-    delivery = await client.get(f"{path}/delivery", headers=owner)
-    nothing = await client.get(f"/v1/agent-sessions/{untouched['id']}/delivery", headers=owner)
+    work_product = await client.get(f"{path}/work-product", headers=owner)
+    nothing = await client.get(f"/v1/agent-sessions/{untouched['id']}/work-product", headers=owner)
 
-    assert delivery.status_code == 200, delivery.text
-    body = delivery.json()
+    assert work_product.status_code == 200, work_product.text
+    body = work_product.json()
     assert (body["branch"], body["branch_seen"]) == (workspace.branch, False)
     assert [(w["kind"], w["handle"]) for w in body["work"]] == [
         (HandleKind.PULL_REQUEST.value, "acme/checkout#12")
@@ -650,7 +650,7 @@ async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_
         "/usage",
         "/executions",
         "/validations",
-        "/delivery",
+        "/work-product",
     ]
     writes = [("POST", "/archive"), ("POST", "/restore"), ("DELETE", "")]
 

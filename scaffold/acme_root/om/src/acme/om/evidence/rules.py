@@ -19,7 +19,7 @@ from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Grade, Requirement, ValidationPolicy
 from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import Delivery, ExecutionRequest, Validation
+from acme.om.evidence.types.validation import ExecutionRequest, Validation, WorkProduct
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.rules import DEFAULT_CEILINGS
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
@@ -152,7 +152,7 @@ def stopping_rules(requirements: Sequence[Requirement]) -> dict[str, RateRule]:
 def execution_request(
     session_id: UUID,
     policy: ValidationPolicy,
-    delivery: Delivery,
+    work_product: WorkProduct,
     purpose: RunPurpose,
 ) -> ExecutionRequest | str:
     """What a fresh executor is asked to run, or why nothing is run. A
@@ -162,19 +162,19 @@ def execution_request(
     never changed. A validation is refused on a dirty tree, and on a change
     that touches a protected path, since that change voids it."""
     if purpose is RunPurpose.VALIDATION:
-        if delivery.dirty:
+        if work_product.dirty:
             return (
                 "the tree holds work your branch does not: commit it, open your pull request "
                 "so the head is on your branch, then ask again"
             )
-        touched = protected_paths(policy.protected, delivery.changed)
+        touched = protected_paths(policy.protected, work_product.changed)
         if touched:
             return f"the change touches protected paths, which voids validation: {list(touched)}"
-        needed = required(policy, delivery.changed) if delivery.changes_work_product else ()
-        version = delivery.head
+        needed = required(policy, work_product.changed) if work_product.changes_work_product else ()
+        version = work_product.head
     else:
         needed = policy.requirements
-        version = delivery.base
+        version = work_product.base
     if not needed:
         return "the policy asks for no check of this change: there is nothing to validate"
     counts = trials_of(needed)
@@ -185,7 +185,7 @@ def execution_request(
         project=policy.project,
         purpose=purpose,
         version=version,
-        source=delivery.base,
+        source=work_product.base,
         checks=checks,
         trials=tuple(counts[check.name] for check in checks),
         rates=tuple(rules.get(check.name) for check in checks),
@@ -262,11 +262,11 @@ class Reading:
     work product as its system reports it (or what could not be read),
     the project's policy, every validation of the session at the
     delivered head with every run each one lists, and the session's
-    validations at the delivery's base, where its baselines are."""
+    validations at the work product's base, where its baselines are."""
 
     cited: tuple[ExecutionRecord, ...] = ()
     unresolved: tuple[UUID, ...] = ()
-    delivery: Delivery | None = None
+    work_product: WorkProduct | None = None
     unread: str | None = None
     policy: ValidationPolicy | None = None
     validations: tuple[Validation, ...] = ()
@@ -302,10 +302,10 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
         return refused(
             f"the gate cannot read what it judges, so no success counts: {reading.unread}"
         )
-    delivery = reading.delivery
-    if delivery is None or not delivery.changes_work_product:
+    work_product = reading.work_product
+    if work_product is None or not work_product.changes_work_product:
         return accepted(LoopOutcome.INCONCLUSIVE)
-    if delivery.dirty:
+    if work_product.dirty:
         return refused(
             "the tree holds uncommitted changes: a success is judged at a committed head, "
             "on a clean tree"
@@ -313,19 +313,19 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
     policy = reading.policy
     if policy is None:
         return refused("the session's project declares no validation policy")
-    touched = protected_paths(policy.protected, delivery.changed)
+    touched = protected_paths(policy.protected, work_product.changed)
     if touched:
         return refused(
             f"the change touches protected paths, which voids validation: {list(touched)}. "
             "Take those changes back"
         )
-    needed = required(policy, delivery.changed)
+    needed = required(policy, work_product.changed)
     if not needed:
         return accepted(LoopOutcome.INCONCLUSIVE)
-    first = baseline((*reading.at_base, *reading.validations), delivery.base, delivery.head)
+    first = baseline((*reading.at_base, *reading.validations), work_product.base, work_product.head)
     if isinstance(first, str):
         # With no head validation named, any baseline at the base came first.
-        taken = not isinstance(baseline(reading.at_base, delivery.base, None), str)
+        taken = not isinstance(baseline(reading.at_base, work_product.base, None), str)
         step = (
             "Validate the head again"
             if taken
@@ -337,23 +337,23 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
         )
     if not reading.validations:
         return refused(
-            f"no validation ran at the head {delivery.head}: ask for one, then submit again"
+            f"no validation ran at the head {work_product.head}: ask for one, then submit again"
         )
-    unwritten = provenance_refusal(reading.validations, reading.records, delivery.head)
+    unwritten = provenance_refusal(reading.validations, reading.records, work_product.head)
     if unwritten is not None:
         return refused(unwritten)
     current = governing(policy, reading.records)
     stale = stale_checks(policy, needed, reading.records, current)
     if stale:
         return refused(
-            f"the checks changed since the head {delivery.head} was validated: "
+            f"the checks changed since the head {work_product.head} was validated: "
             + "; ".join(stale)
             + ". Validate the head again"
         )
     order = {run: at for found in reading.validations for at, run in enumerate(found.records)}
-    unmet = unmet_requirements(needed, current, delivery.head, order)
+    unmet = unmet_requirements(needed, current, work_product.head, order)
     if unmet:
-        return refused(f"the validation at {delivery.head} did not pass: " + "; ".join(unmet))
+        return refused(f"the validation at {work_product.head} did not pass: " + "; ".join(unmet))
     return accepted(LoopOutcome.SUCCEEDED)
 
 

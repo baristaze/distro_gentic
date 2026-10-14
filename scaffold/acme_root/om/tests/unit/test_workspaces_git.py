@@ -588,7 +588,7 @@ async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Ch
     git(here, "push", "-q", "origin", branch)
     (here / "README.md").write_text("the project, changed\n")
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     # The repository's name, as a project's evidence is keyed.
     assert delivered.project == str(checkout.remote).lower().lstrip("/").removesuffix(".git")
@@ -597,7 +597,7 @@ async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Ch
     assert delivered.dirty, "the checkout holds work it has not delivered"
 
     commit(here, "not pushed")
-    ahead = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    ahead = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
     assert ahead.head == pushed and ahead.dirty, "a commit not pushed is not delivered"
 
 
@@ -612,7 +612,7 @@ async def test_an_undelivered_branchs_base_is_where_it_was_cut_not_the_default_b
     moved = checkout.push_as_a_person(tmp_path, "main", "moved")
     git(here, "fetch", "-q", "origin", "main:refs/remotes/origin/main")  # it knows the move
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     assert moved != checkout.main
     assert (delivered.base, delivered.head) == (checkout.main, checkout.main), (
@@ -623,7 +623,7 @@ async def test_an_undelivered_branchs_base_is_where_it_was_cut_not_the_default_b
     # A base the checkout makes up is held to the default branch's history.
     (here / "more.txt").write_text("more\n")
     git(here, "update-ref", "refs/remotes/origin/HEAD", commit(here, "made up"))
-    made_up = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    made_up = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
     assert made_up.base == moved, "a commit the default never held is not a base"
 
 
@@ -639,7 +639,7 @@ async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protect
     # The checkout's own idea of the default branch, moved past the edit.
     git(here, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     assert delivered.base == checkout.main, "the base is the repository's, not the checkout's"
     assert "checks/test_guard.py" in delivered.changed
@@ -655,7 +655,7 @@ async def test_a_moved_protected_check_is_delivered_by_the_path_it_left(
     commit(here, "mv")
     git(here, "push", "-q", "origin", session_branch(session_id))
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     assert {"checks/test_guard.py", "checks/test_other.py"} <= set(delivered.changed)
 
@@ -676,7 +676,7 @@ async def test_a_checkout_that_redirects_its_repository_still_delivers_the_prote
     git(here, "push", "-q", str(decoy), f"{edited}:refs/heads/main", "--force")
     git(here, "config", f"url.{decoy}.insteadOf", str(checkout.remote))
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     assert (delivered.base, delivered.head) == (checkout.main, edited)
     assert "checks/test_guard.py" in delivered.changed
@@ -696,7 +696,7 @@ async def test_a_replacement_the_agent_made_still_delivers_the_protected_edit(
     git(here, "replace", edited, checkout.main)
     git(here, "push", "-q", "origin", "refs/replace/*:refs/replace/*")
 
-    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    delivered = await checkout.managers.workspaces.work_product(checkout.ctx, workspace)
 
     assert delivered.head == edited and "checks/test_guard.py" in delivered.changed
 

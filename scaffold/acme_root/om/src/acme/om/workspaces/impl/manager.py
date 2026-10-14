@@ -20,7 +20,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.exceptions import (
     NotAuthorized,
     NotFound,
@@ -329,7 +329,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             adds=rules.told_of_snapshot(snapshot.ref, snapshot.commit, at),
         )
 
-    async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
+    async def work_product(self, ctx: TenantContext, workspace: Workspace) -> WorkProduct:
         ctx.require(Permission.READ)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         binding = None if held is None else await self._binding(ctx, held)
@@ -346,7 +346,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             cut=local.base,
         )
         try:
-            return Delivery(
+            return WorkProduct(
                 project=rules.project_key(binding),
                 base=delivered.base,
                 head=delivered.head,

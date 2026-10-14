@@ -517,7 +517,7 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     other = await unbound.start("twinned")
     loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
     with pytest.raises(Unavailable):
-        await unbound.managers.workspaces.delivery(unbound.owner, loose)
+        await unbound.managers.workspaces.work_product(unbound.owner, loose)
 
 
 @dataclass

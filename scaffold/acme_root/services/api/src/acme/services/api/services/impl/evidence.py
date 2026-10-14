@@ -17,12 +17,12 @@ from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.common import LIMIT_MAX, clamp_limit
 from acme.services.api.types.evidence import (
     CasesView,
-    DeliveryView,
     ExecutionPageView,
     ExecutionView,
     ReportView,
     ValidationView,
     WorkHandleView,
+    WorkProductView,
 )
 
 EXECUTIONS = "executions"
@@ -116,7 +116,7 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
         found = await self._evidence.get_validations(ctx, session_id, clamp_limit(limit))
         return [validation_view(validation) for validation in found]
 
-    async def get_delivery(self, ctx: TenantContext, session_id: UUID) -> DeliveryView:
+    async def get_work_product(self, ctx: TenantContext, session_id: UUID) -> WorkProductView:
         await self._sessions.get_session(ctx, session_id)
         try:
             workspace = await self._workspaces.get_workspace(ctx, session_id)
@@ -124,7 +124,7 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
             # A session that was never pinned to a workspace has no branch.
             workspace = None
         work = await self._intake.get_work(ctx, session_id)
-        return DeliveryView(
+        return WorkProductView(
             project_id=None if workspace is None else workspace.project_id,
             branch=None if workspace is None else workspace.branch,
             branch_seen=workspace is not None and workspace.branch_seen,

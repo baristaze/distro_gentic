@@ -16,8 +16,8 @@ calls, and holds its workspace warm for a while after a loop.
 - **Toolsets**: the platform's tools in ten groups a kind takes whole.
   `files` lists, reads, and searches a workspace; `code` changes its
   files and runs commands; `agent_knowledge` searches and reads what the
-  team knows; `delivery` validates, opens the pull request, and submits
-  the result; `sub_agents` starts sub-agents and waits for them;
+  team knows; `work_product` validates, opens the pull request, and
+  submits the result; `sub_agents` starts sub-agents and waits for them;
   `records` is the assistant's readers; `handoff` hands work to an
   software engineer; `artifacts` reads back a result kept outside the
   window; `review` reads a pull request and its files at its head, notes

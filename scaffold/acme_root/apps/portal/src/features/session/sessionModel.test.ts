@@ -3,7 +3,7 @@ import type { AgentSessionView, ExecutionView } from "@acme/client";
 import {
   allowed,
   composerOf,
-  deliveryLines,
+  workProductLines,
   heldBy,
   parkLine,
   pullRequestBadge,
@@ -49,7 +49,7 @@ describe("status and parks", () => {
 
 });
 
-describe("runs, delivery, and usage", () => {
+describe("runs, work product, and usage", () => {
   it("says a run's check, outcome, cases, and a twin's provenance beside it", () => {
     const run: ExecutionView = {
       id: "r1",
@@ -85,7 +85,7 @@ describe("runs, delivery, and usage", () => {
 
   it("splits delivered work into pull requests and branches, and says the report", () => {
     expect(
-      deliveryLines({
+      workProductLines({
         branch: "agent/tidy",
         branch_seen: true,
         project_id: null,

@@ -22,7 +22,12 @@ from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.inference import Inference, InferenceKind, Stance
 from acme.om.evidence.types.provenance import ArtifactRef, Provenance
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
-from acme.om.evidence.types.validation import Delivery, ExecutionRequest, ExecutorReport, Validation
+from acme.om.evidence.types.validation import (
+    ExecutionRequest,
+    ExecutorReport,
+    Validation,
+    WorkProduct,
+)
 from contracts.evidence import Evidence, ScriptedExecutor
 from contracts.evidence_storage import HASH, make_record
 
@@ -155,8 +160,8 @@ class ScriptedRun:
         )
 
     def deliver(self, head: str = BASE, changed: tuple[str, ...] = ()) -> None:
-        delivery = Delivery(project="checkout", base=BASE, head=head, changed=changed)
-        self.evidence.work.deliver(self.ctx.org_id, self.session, delivery)
+        work_product = WorkProduct(project="checkout", base=BASE, head=head, changed=changed)
+        self.evidence.work.deliver(self.ctx.org_id, self.session, work_product)
 
     async def baseline(self) -> Validation:
         (validation,) = await self.evidence.manager.validate(

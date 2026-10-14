@@ -38,7 +38,7 @@ from acme.om.evidence.impl.harness import AcceptanceHarnessImpl
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, HiddenSuite, Link, Scenario
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.record import RunOutcome
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.workspaces.impl.executor import (
@@ -382,7 +382,7 @@ class Repositories:
         evidence.work.deliver(
             self.ctx.org_id,
             session,
-            Delivery(
+            WorkProduct(
                 project=str(self.project_id),
                 base=self.base,
                 head=head,
@@ -482,7 +482,7 @@ async def test_a_head_whose_code_rewrites_what_scores_the_suite_while_it_runs_fa
     )
 
     # Its code finds the scorer read-only and goes on: the base's copy
-    # scores the suite, and the hidden case fails. Its delivery touched no
+    # scores the suite, and the hidden case fails. Its work product touched no
     # forbidden path, so the hidden link alone is what breaks.
     refused = await repositories.judge({"src/totals.py": WRITES_OVER})
     assert [(run.check, run.version, run.outcome) for run in refused.hidden] == [

@@ -3219,64 +3219,6 @@
         "title": "DeliveryReceivedView",
         "type": "object"
       },
-      "DeliveryView": {
-        "description": "What a session delivered: its project, its branch and whether the\nremote has held it, the pull requests and branches bound to it, and its\nlatest accepted result. A session that never had a workspace has no\nbranch.",
-        "properties": {
-          "branch": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Branch"
-          },
-          "branch_seen": {
-            "title": "Branch Seen",
-            "type": "boolean"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "report": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReportView"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "work": {
-            "items": {
-              "$ref": "#/components/schemas/WorkHandleView"
-            },
-            "title": "Work",
-            "type": "array"
-          }
-        },
-        "required": [
-          "project_id",
-          "branch",
-          "branch_seen",
-          "work",
-          "report"
-        ],
-        "title": "DeliveryView",
-        "type": "object"
-      },
       "DevSignInRequest": {
         "additionalProperties": false,
         "description": "Local and test only: a sign-in by address alone, with no browser round\ntrip, for the seed, the traffic generator, and the tests. A\nperson nobody knew is made, with their personal org. A deployed\nenvironment never serves it: the route answers 404 there, and the\nprocess refuses to start with it on.",
@@ -11981,6 +11923,64 @@
         "title": "WorkHandleView",
         "type": "object"
       },
+      "WorkProductView": {
+        "description": "What a session delivered: its project, its branch and whether the\nremote has held it, the pull requests and branches bound to it, and its\nlatest accepted result. A session that never had a workspace has no\nbranch.",
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "branch_seen": {
+            "title": "Branch Seen",
+            "type": "boolean"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work": {
+            "items": {
+              "$ref": "#/components/schemas/WorkHandleView"
+            },
+            "title": "Work",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "branch",
+          "branch_seen",
+          "work",
+          "report"
+        ],
+        "title": "WorkProductView",
+        "type": "object"
+      },
       "WorkStatus": {
         "enum": [
           "queued",
@@ -19328,98 +19328,6 @@
         ]
       }
     },
-    "/v1/agent-sessions/{session_id}/delivery": {
-      "get": {
-        "description": "Its branch, the pull requests and branches bound to it, and the result\nit submitted that the gate accepted.",
-        "operationId": "get_delivery_v1_agent_sessions__session_id__delivery_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Session Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeliveryView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Delivery",
-        "tags": [
-          "evidence"
-        ]
-      }
-    },
     "/v1/agent-sessions/{session_id}/executions": {
       "get": {
         "description": "The runs of checks the session recorded or the executor ran for it,\noldest first, a page at a time.",
@@ -21305,6 +21213,98 @@
         "summary": "Switch Visibility",
         "tags": [
           "agent_sessions"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/work-product": {
+      "get": {
+        "description": "Its branch, the pull requests and branches bound to it, and the result\nit submitted that the gate accepted.",
+        "operationId": "get_work_product_v1_agent_sessions__session_id__work_product_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkProductView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Product",
+        "tags": [
+          "evidence"
         ]
       }
     },

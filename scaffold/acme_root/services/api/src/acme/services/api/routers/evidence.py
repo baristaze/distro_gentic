@@ -1,4 +1,4 @@
-"""A session's evidence and its delivery: the runs of its checks, its
+"""A session's evidence and its work product: the runs of its checks, its
 validations, and what it delivered. Each function is one call into the
 evidence service; another tenant's session answers as one that never
 existed."""
@@ -10,7 +10,7 @@ from fastapi import APIRouter
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.resolve import EvidenceService
 from acme.services.api.types.common import LIMIT_DEFAULT
-from acme.services.api.types.evidence import DeliveryView, ExecutionPageView, ValidationView
+from acme.services.api.types.evidence import ExecutionPageView, ValidationView, WorkProductView
 
 router = APIRouter(prefix="/agent-sessions", tags=["evidence"])
 
@@ -35,8 +35,10 @@ async def list_validations(
     return await evidence.get_validations(ctx, session_id, limit)
 
 
-@router.get("/{session_id}/delivery", response_model=DeliveryView)
-async def get_delivery(ctx: Ctx, evidence: EvidenceService, session_id: UUID) -> DeliveryView:
+@router.get("/{session_id}/work-product", response_model=WorkProductView)
+async def get_work_product(
+    ctx: Ctx, evidence: EvidenceService, session_id: UUID
+) -> WorkProductView:
     """Its branch, the pull requests and branches bound to it, and the result
     it submitted that the gate accepted."""
-    return await evidence.get_delivery(ctx, session_id)
+    return await evidence.get_work_product(ctx, session_id)

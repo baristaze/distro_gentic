@@ -8,14 +8,14 @@ import { useShellSessions } from "../../app/shell/shellContext";
 import { waitingBeneath } from "../../app/shell/shellModel";
 import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
-import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
+import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useWorkProduct, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
 import { useMe, useMemberships, useUser, useUsers } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
 import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
 import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
-import { allowed, composerOf, deliveryLines, heldBy, parkLine, pullRequestBadge, sharingOf, splitCommand, statusLine, type Member } from "./sessionModel";
+import { allowed, composerOf, workProductLines, heldBy, parkLine, pullRequestBadge, sharingOf, splitCommand, statusLine, type Member } from "./sessionModel";
 import { answers, callsOf, handedTo, outline, timeline, type Call, type ChildState } from "./timelineModel";
 
 const NONE: readonly AgentSessionView[] = [];
@@ -71,7 +71,7 @@ export function useSessionVm(id: string) {
   const active = status === "running" || status === "pending" || status === "parked";
   const steps = useSteps(id, active, found);
   const approvals = useApprovals(id, found && status === "parked");
-  const delivery = useDelivery(id, found);
+  const workProduct = useWorkProduct(id, found);
   // A session reads as pending until a step after its input is projected,
   // which can be its run's park: its first run streams while it is pending.
   const runs = status === "running" || status === "pending";
@@ -381,8 +381,8 @@ export function useSessionVm(id: string) {
     slotSession,
     tools,
     composer: composerOf(asking, slot.examples.reply),
-    pullRequest: delivery.data ? pullRequestBadge(delivery.data) : null,
-    delivery: delivery.data ? deliveryLines(delivery.data) : null,
+    pullRequest: workProduct.data ? pullRequestBadge(workProduct.data) : null,
+    workProduct: workProduct.data ? workProductLines(workProduct.data) : null,
     live,
     command: command.data ?? null,
     commandKey,

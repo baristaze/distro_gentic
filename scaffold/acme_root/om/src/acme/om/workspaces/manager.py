@@ -18,7 +18,7 @@ from uuid import UUID
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import TenantContext
-from acme.om.evidence.types.validation import Delivery
+from acme.om.evidence.types.validation import WorkProduct
 from acme.om.workspaces.types.credential import FetchCredential, PushToken, RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
 from acme.om.workspaces.types.snapshot import KeptSnapshot
@@ -97,7 +97,7 @@ class WorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
+    async def work_product(self, ctx: TenantContext, workspace: Workspace) -> WorkProduct:
         """The session's work product: its branch as the bound repository
         holds it, read outside the workspace (`RepositoryReaderInterface`),
         with the repository's name as its project, the base its branch
@@ -183,7 +183,7 @@ class WorkspacesManagerInterface(ABC):
         tenant's project binds, as one who manages the tenant's members may;
         a later one replaces it. Its value goes to the tenant's store under
         the project, and the record kept here says only who gave it and when.
-        The platform reads a session's work product with it (`delivery`),
+        The platform reads a session's work product with it (`work_product`),
         and uses it nowhere else. `NotFound` for a project that binds no
         repository of the tenant's."""
         ...

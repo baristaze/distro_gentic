@@ -5,7 +5,7 @@
 ## Context
 
 The spec's Evidence and Agents a Platform Ships have a validation
-session run a delivery's checks on a fresh executor, never in the
+session run a work product's checks on a fresh executor, never in the
 agent's workspace, with no agent at all, and write the execution record
 every run is.
 

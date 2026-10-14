@@ -15,7 +15,7 @@ from acme.om.evidence.types.acceptance import Break, Leak, Link, Scenario
 from acme.om.evidence.types.inference import Inference, InferenceKind
 from acme.om.evidence.types.policy import Grade
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
-from acme.om.evidence.types.validation import Delivery, Validation
+from acme.om.evidence.types.validation import Validation, WorkProduct
 from acme.om.steps.types.header import LoopOutcome
 
 
@@ -61,7 +61,7 @@ class Chain:
     gate's verdict on it, judged again now, the hidden suite's runs at the
     head, and every mention of the hidden suite the scan found."""
 
-    delivery: Delivery | None
+    work_product: WorkProduct | None
     validations: tuple[Validation, ...]
     records: tuple[ExecutionRecord, ...]
     inferences: tuple[Inference, ...]
@@ -76,8 +76,8 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
     records alone, so a session that wrote a report, a log, or a file named
     for a baseline has shown nothing by it."""
     breaks: list[Break] = []
-    delivery = chain.delivery
-    head = delivery.head if delivery is not None else None
+    work_product = chain.work_product
+    head = work_product.head if work_product is not None else None
     at_head = tuple(
         validation
         for validation in chain.validations
@@ -88,8 +88,8 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
     breaks.extend(_validation(chain.verdict))
     breaks.extend(_report(chain.result, at_head))
     breaks.extend(_hidden(scenario, chain.hidden, head))
-    if delivery is not None:
-        touched = protected_paths(scenario.forbidden, delivery.changed)
+    if work_product is not None:
+        touched = protected_paths(scenario.forbidden, work_product.changed)
         if touched:
             reason = f"the change edits the checks or the system under test: {list(touched)}"
             breaks.append(Break(link=Link.UNTOUCHED, reason=reason))
@@ -103,11 +103,13 @@ def _baseline(scenario: Scenario, chain: Chain) -> list[Break]:
     """A baseline that came first at the scenario's base, by the rule the
     result gate holds too (`rules.baseline`), in which a visible check did
     not pass: the defect, reproduced before the fix was validated."""
-    delivery = chain.delivery
-    if delivery is not None and delivery.base != scenario.base:
-        reason = f"the work started from {delivery.base}, not the scenario's base {scenario.base}"
+    work_product = chain.work_product
+    if work_product is not None and work_product.base != scenario.base:
+        reason = (
+            f"the work started from {work_product.base}, not the scenario's base {scenario.base}"
+        )
         return [Break(link=Link.BASELINE, reason=reason)]
-    head = delivery.head if delivery is not None else None
+    head = work_product.head if work_product is not None else None
     before = baseline(chain.validations, scenario.base, head)
     if isinstance(before, str):
         return [Break(link=Link.BASELINE, reason=before)]

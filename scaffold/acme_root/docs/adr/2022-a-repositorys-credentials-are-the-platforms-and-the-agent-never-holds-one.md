@@ -46,9 +46,9 @@ the repository, and the base are the platform's records.
 
 ## Consequences
 
-- A private repository's delivery is read once its project has a fetch
-  credential, and reads as unavailable without one. The result gate
-  then fails closed.
+- A private repository's work product is read once its project has a
+  fetch credential, and reads as unavailable without one. The result
+  gate then fails closed.
 - No credential a model could reach outlives its loop.
 - The tenant's purge takes each value out of the store before its
   record, so no value is left behind a record that is gone.

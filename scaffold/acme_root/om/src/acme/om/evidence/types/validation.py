@@ -16,7 +16,7 @@ from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.record import PROJECT, VERSION, RunPurpose
 
 
-class Delivery(Platform):
+class WorkProduct(Platform):
     """What a session's work product holds now, as the system that keeps it
     reports it, never as the agent describes it: the name its project goes
     by there, the version the work started from, the committed head,

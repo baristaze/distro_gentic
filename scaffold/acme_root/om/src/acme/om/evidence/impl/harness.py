@@ -14,7 +14,7 @@ from acme.om.evidence.rules import compatibility_refusal, scan
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, Break, Link, Scenario, Surface
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
-from acme.om.evidence.types.validation import Delivery, ExecutionRequest
+from acme.om.evidence.types.validation import ExecutionRequest, WorkProduct
 from acme.om.evidence.work_product import WorkProductInterface
 from acme.om.exceptions import ValidationFailed
 
@@ -71,7 +71,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             )
         verdict_id, now = new_id(), self._clock()
         verdict = await self._gate.check(ctx, session_id, result)
-        delivery = await self._work_product.delivered(ctx, session_id)
+        work_product = await self._work_product.delivered(ctx, session_id)
         bound = self._options.max_validations
         validations = tuple(
             await self._storage.read_validations(ctx.org_id, session_id, None, bound + 1)
@@ -91,13 +91,15 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             unread.append(Break(link=Link.BASELINE, reason="more runs than the harness reads"))
         if len(inferences) > self._options.max_inferences:
             unread.append(Break(link=Link.HYPOTHESES, reason="more inferences than it reads"))
-        hidden, hidden_break = await self._hidden(ctx, scenario, session_id, delivery, verdict_id)
+        hidden, hidden_break = await self._hidden(
+            ctx, scenario, session_id, work_product, verdict_id
+        )
         read = {surface: dict(items) for surface, items in surfaces.items()}
         read[Surface.PROMPT]["objective"] = scenario.objective
         evidence = read.setdefault(Surface.EVIDENCE, {})
         evidence |= evidence_text(validations, records, inferences)
         chain = Chain(
-            delivery=delivery,
+            work_product=work_product,
             validations=validations,
             records=records,
             inferences=inferences,
@@ -112,7 +114,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             created_at=now,
             scenario=scenario.name,
             session_id=session_id,
-            head=delivery.head if delivery is not None else None,
+            head=work_product.head if work_product is not None else None,
             breaks=breaks,
             hidden=hidden,
         )
@@ -122,7 +124,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         ctx: TenantContext,
         scenario: Scenario,
         session_id: UUID,
-        delivery: Delivery | None,
+        work_product: WorkProduct | None,
         verdict_id: UUID,
     ) -> tuple[tuple[ExecutionRecord, ...], tuple[Break, ...]]:
         """The hidden suite at the head, on a fresh executor, from its own
@@ -132,10 +134,10 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         Every other path the scenario forbids comes from its base, and the
         executor holds each file of them the tree holds read-only while the
         suite runs, so no file that scores a run scores it as the head
-        rewrote it, in its delivery or while it runs. Its
+        rewrote it, in its work product or while it runs. Its
         runs belong to the verdict: none is stored where the session's
         evidence is."""
-        if delivery is None:
+        if work_product is None:
             return (), ()
         offer = await self._executor.offer(ctx)
         for check in scenario.hidden.checks:
@@ -146,7 +148,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             session_id=session_id,
             project=scenario.project,
             purpose=RunPurpose.VALIDATION,
-            version=delivery.head,
+            version=work_product.head,
             source=scenario.hidden.source,
             source_project=scenario.hidden.project,
             protected=scenario.hidden.paths,

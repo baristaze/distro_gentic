@@ -130,7 +130,7 @@ function answer(path: string): unknown {
         step(3, { type: "loop_ended", outcome: "succeeded" }),
       ],
     };
-  if (part === "delivery")
+  if (part === "work-product")
     return { branch: "fix-dates", branch_seen: true, project_id: null, report: null, work: [{ kind: "pull_request", handle: "forge/acme/first#7", bound_at: at }] };
   if (part === "approvals") return net.held;
   if (part === "tool-calls") return { has_more: false, items: [] };
