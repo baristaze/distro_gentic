@@ -14,6 +14,7 @@ from acme.services.api.routers import (
     admin,
     agent_automations,
     agent_billing,
+    agent_knowledge,
     agent_sessions,
     approvals,
     benchmarks,
@@ -26,7 +27,6 @@ from acme.services.api.routers import (
     fleet,
     hosts,
     intake,
-    knowledge,
     leases,
     matrix,
     matrix_operator,
@@ -79,7 +79,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "projects": (projects.router,),
     # What sessions recall, and the procedures they follow, each invoked
     # into a session or pinned to a kind as its manual.
-    "knowledge": (knowledge.router,),
+    "agent_knowledge": (agent_knowledge.router,),
     "playbooks": (playbooks.router, playbooks.pins),
     # A tenant's own MCP servers, reviewed and attached to its kinds.
     "connectors": (connectors.router,),

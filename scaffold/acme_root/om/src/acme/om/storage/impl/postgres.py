@@ -17,6 +17,8 @@ from acme.om.agent_billing.storage.impl.postgres import (
     SpendAccountStoragePostgresImpl,
     SpendLedgerStoragePostgresImpl,
 )
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
+from acme.om.agent_knowledge.storage.impl.postgres import AgentKnowledgeStoragePostgresImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -44,8 +46,6 @@ from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
-from acme.om.knowledge.storage import KnowledgeStorageInterface
-from acme.om.knowledge.storage.impl.postgres import KnowledgeStoragePostgresImpl
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.leases.storage.impl.postgres import LeasesStoragePostgresImpl
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
@@ -249,7 +249,7 @@ class StoragePostgresImpl(StorageInterface):
         self._intake = IntakeStoragePostgresImpl(sessions)
         self._automation = AgentAutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
-        self._knowledge = KnowledgeStoragePostgresImpl(sessions)
+        self._knowledge = AgentKnowledgeStoragePostgresImpl(sessions)
         self._connector = ConnectorStoragePostgresImpl(sessions)
         self._notification = NotificationStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
@@ -349,7 +349,7 @@ class StoragePostgresImpl(StorageInterface):
     def get_playbook_storage(self) -> PlaybookStorageInterface:
         return self._playbook
 
-    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+    def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface:
         return self._knowledge
 
     def get_connector_storage(self) -> ConnectorStorageInterface:

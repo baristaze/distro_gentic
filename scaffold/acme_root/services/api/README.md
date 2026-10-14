@@ -159,18 +159,19 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   project with no policy in the tenant is `404`, as another tenant's is,
   and a check the policy does not declare is `422`. (`/v1/validation-sessions`,
   `/v1/validation-sessions/{session_id}`)
-- **Knowledge and playbooks.** The entries in a state, the suggestions
-  waiting on a review among them, and one entry; a person writes one in
-  person, under an Idempotency-Key, edits it on the version `If-Match`
-  names, and keeps or rejects a suggestion. A person publishes a
-  playbook's next version with its gates, under an Idempotency-Key, and
-  the latest version of a name is read. A person invokes the latest
-  version into a session they may instruct, once a version. A person who
-  manages the tenant pins one to a kind as its manual, for the tenant or
-  one project, lists the pins, and takes one away; each session of the
-  kind started after holds it as its standing text. (`/v1/knowledge`,
-  `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
-  `/v1/playbooks/{name}`, `.../invocations`, `/v1/playbook-pins`)
+- **Agent knowledge and playbooks.** The entries in a state, the
+  suggestions waiting on a review among them, and one entry; a person
+  writes one in person, under an Idempotency-Key, edits it on the
+  version `If-Match` names, and keeps or rejects a suggestion. A person
+  publishes a playbook's next version with its gates, under an
+  Idempotency-Key, and the latest version of a name is read. A person
+  invokes the latest version into a session they may instruct, once a
+  version. A person who manages the tenant pins one to a kind as its
+  manual, for the tenant or one project, lists the pins, and takes one
+  away; each session of the kind started after holds it as its standing
+  text. (`/v1/agent-knowledge`, `/v1/agent-knowledge/{entry_id}`,
+  `.../review`, `/v1/playbooks`, `/v1/playbooks/{name}`,
+  `.../invocations`, `/v1/playbook-pins`)
 - **AgentAutomations.** A person makes one in person, under an
   Idempotency-Key, in a project of the tenant; any member lists and
   reads them; its creator edits one that runs as its creator, and a

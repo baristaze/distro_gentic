@@ -110,7 +110,7 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
 
     session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
     assert session.kind_version == PLATFORM_ASSISTANT_KIND.version == 2
-    readers = {*ASSISTANT_READERS, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE}
+    readers = {*ASSISTANT_READERS, kinds.SEARCH_AGENT_KNOWLEDGE, kinds.READ_AGENT_KNOWLEDGE}
     assert readers <= set(session.tools)
     assert "read_tally" in session.tools
     # The product's tool joins the current version alone: a session still on

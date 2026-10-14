@@ -391,7 +391,7 @@ async def test_an_operator_reads_the_levers_of_a_tenants_sessions_over_a_window(
 def test_a_lever_is_answered_by_its_kind_id_and_version_never_its_name() -> None:
     """What the route answers of a reading: each lever's shape, never the
     tenant's words, its name or its slug."""
-    lever = LeverRef(kind=LeverKind.KNOWLEDGE, id=new_id(), version=3)
+    lever = LeverRef(kind=LeverKind.AGENT_KNOWLEDGE, id=new_id(), version=3)
     standing = LeverStanding(
         lever=lever, sessions=2, spun=2, sessions_without=3, spun_without=1, spun_sessions=()
     )
@@ -405,4 +405,4 @@ def test_a_lever_is_answered_by_its_kind_id_and_version_never_its_name() -> None
         standings=(standing,),
     )
     (answered,) = LeverReadingView.model_validate(reading).model_dump(mode="json")["standings"]
-    assert answered["lever"] == {"kind": "knowledge", "id": str(lever.id), "version": 3}
+    assert answered["lever"] == {"kind": "agent_knowledge", "id": str(lever.id), "version": 3}

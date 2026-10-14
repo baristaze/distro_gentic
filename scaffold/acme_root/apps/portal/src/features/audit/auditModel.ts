@@ -12,8 +12,8 @@ export interface AuditRow {
   at: string;
 }
 
-/** A kind in words: `knowledge.entry.created` is "entry created", in
- * "knowledge". */
+/** A kind in words: `agentKnowledge.entry.created` is "entry created", in
+ * "agent_knowledge". */
 export function kindLine(kind: string): { what: string; area: string } {
   const [area = "", ...rest] = kind.split(".");
   if (rest.length === 0) return { what: kind.replace(/_/g, " "), area: "" };

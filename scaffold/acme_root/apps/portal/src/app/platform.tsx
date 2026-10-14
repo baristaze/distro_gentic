@@ -6,8 +6,8 @@ import { AuditPage } from "../features/audit/AuditPage";
 import { AgentAutomationPage } from "../features/agent_automations/AgentAutomationPage";
 import { AgentAutomationsPage } from "../features/agent_automations/AgentAutomationsPage";
 import { HomePage } from "../features/home/HomePage";
-import { EntryPage } from "../features/knowledge/EntryPage";
-import { KnowledgePage } from "../features/knowledge/KnowledgePage";
+import { EntryPage } from "../features/agent_knowledge/EntryPage";
+import { AgentKnowledgePage } from "../features/agent_knowledge/AgentKnowledgePage";
 import { ModelsPage } from "../features/models/ModelsPage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
 import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
@@ -30,7 +30,7 @@ import {
   BotIcon,
   DocumentIcon,
   KeyIcon,
-  KnowledgeIcon,
+  AgentKnowledgeIcon,
   OrgIcon,
   ProjectIcon,
   SignOnIcon,
@@ -38,14 +38,14 @@ import {
   UserIcon,
   UsersIcon,
 } from "../design/kit";
-import { useKnowledge } from "../queries/knowledge";
+import { useAgentKnowledge } from "../queries/agentKnowledge";
 import { Moved } from "./Moved";
 import type { PortalProduct } from "./product";
 import { paramNames } from "./routeCatalog";
 
 /** How many suggested entries wait on a review; null until read. */
 function useSuggestedCount(): number | null {
-  return useKnowledge("suggested").data?.length ?? null;
+  return useAgentKnowledge("suggested").data?.length ?? null;
 }
 
 /** The addresses the portal moved, and where each lands now: what is set up
@@ -83,8 +83,8 @@ export const PLATFORM: PortalProduct = {
       element: <AgentAutomationPage />,
       handle: { about: "One agent automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { agentAutomationId: "the agent automation's id" } },
     },
-    { path: "/knowledge", element: <KnowledgePage />, handle: { about: "Knowledge: what every session should know, and the suggestions waiting on a review" } },
-    { path: "/knowledge/:entryId", element: <EntryPage />, handle: { about: "One knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
+    { path: "/agent-knowledge", element: <AgentKnowledgePage />, handle: { about: "Agent knowledge: what every session should know, and the suggestions waiting on a review" } },
+    { path: "/agent-knowledge/:entryId", element: <EntryPage />, handle: { about: "One agent knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
     { path: "/settings", element: <SettingsPage />, handle: { about: "Settings: every section, by group" } },
     { path: "/orgs/new", element: <NewOrgPage />, handle: { about: "A new org of the signed-in person's own" } },
     ...MOVED.map(({ from, to }) => ({
@@ -102,10 +102,10 @@ export const PLATFORM: PortalProduct = {
       tip: "What starts or messages a session on an event or a schedule",
     },
     {
-      id: "knowledge",
-      label: "Knowledge",
-      icon: <KnowledgeIcon />,
-      to: "/knowledge",
+      id: "agent_knowledge",
+      label: "Agent knowledge",
+      icon: <AgentKnowledgeIcon />,
+      to: "/agent-knowledge",
       tip: "What every session should know; the count is suggestions to review",
       count: useSuggestedCount,
     },

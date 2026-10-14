@@ -131,8 +131,8 @@ export const SearchIcon = kitIcon(Search);
 export const NewSessionIcon = kitIcon(SquarePen);
 /** A bolt: an agent automation. */
 export const AgentAutomationIcon = kitIcon(Zap);
-/** An open book: the knowledge base. */
-export const KnowledgeIcon = kitIcon(BookOpen);
+/** An open book: the agent knowledge base. */
+export const AgentKnowledgeIcon = kitIcon(BookOpen);
 /** A list of rows: every session. */
 export const ListIcon = kitIcon(LayoutList);
 /** Lines that narrow: a filter. */

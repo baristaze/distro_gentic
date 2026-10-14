@@ -11,6 +11,7 @@ from pathlib import Path
 
 from acme.integrations.events import IntegrationInterface
 from acme.om.agent_automations import AgentAutomationsManagerInterface
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
@@ -21,7 +22,6 @@ from acme.om.exceptions import UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools import (
     DraftToolPolicyImpl,
@@ -35,8 +35,8 @@ from acme.om.platform_agents.tools import (
     NoteFindingImpl,
     OpenPullRequestImpl,
     ReadAgentAutomationImpl,
+    ReadAgentKnowledgeImpl,
     ReadFileImpl,
-    ReadKnowledgeImpl,
     ReadProjectImpl,
     ReadPullRequestFileImpl,
     ReadPullRequestImpl,
@@ -44,12 +44,12 @@ from acme.om.platform_agents.tools import (
     ReadSpendImpl,
     ReadWaitImpl,
     RunCommandImpl,
+    SearchAgentKnowledgeImpl,
     SearchCodeImpl,
     SearchCorpusImpl,
-    SearchKnowledgeImpl,
     SubmitResultImpl,
     SubmitReviewImpl,
-    SuggestKnowledgeImpl,
+    SuggestAgentKnowledgeImpl,
     ValidateImpl,
     WriteFileImpl,
 )
@@ -106,13 +106,13 @@ def with_shipped(
     evidence: Callable[[], EvidenceManagerInterface],
     workspaces: Callable[[], WorkspacesManagerInterface],
     intake: Callable[[], IntakeManagerInterface],
-    knowledge: Callable[[], KnowledgeManagerInterface],
+    agent_knowledge: Callable[[], AgentKnowledgeManagerInterface],
     integrations: Callable[[str], IntegrationInterface],
     budgets: Callable[[], BudgetsManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
     callables the root answers once it has built them; `intake`,
-    `knowledge`, and `agent_automations` are built over the managers, so the
+    `agent_knowledge`, and `agent_automations` are built over the managers, so the
     process that builds them answers them. `integrations` answers the
     integration of a name, the forge's among them, which the reviewer's
     reads reach, and the forge's comment when the process wires none of its
@@ -124,9 +124,9 @@ def with_shipped(
         EditFileImpl.SPEC,
         WriteFileImpl.SPEC,
         RunCommandImpl.SPEC,
-        SearchKnowledgeImpl.SPEC,
-        ReadKnowledgeImpl.SPEC,
-        SuggestKnowledgeImpl.SPEC,
+        SearchAgentKnowledgeImpl.SPEC,
+        ReadAgentKnowledgeImpl.SPEC,
+        SuggestAgentKnowledgeImpl.SPEC,
         ValidateImpl.SPEC,
         OpenPullRequestImpl.SPEC,
         SubmitResultImpl.SPEC,
@@ -157,9 +157,9 @@ def with_shipped(
         EditFileImpl(evidence),
         WriteFileImpl(evidence),
         RunCommandImpl(),
-        SearchKnowledgeImpl(shipped.corpus, knowledge),
-        ReadKnowledgeImpl(shipped.corpus, knowledge),
-        SuggestKnowledgeImpl(knowledge),
+        SearchAgentKnowledgeImpl(shipped.corpus, agent_knowledge),
+        ReadAgentKnowledgeImpl(shipped.corpus, agent_knowledge),
+        SuggestAgentKnowledgeImpl(agent_knowledge),
         ValidateImpl(evidence),
         OpenPullRequestImpl(workspaces, intake),
         SubmitResultImpl(),

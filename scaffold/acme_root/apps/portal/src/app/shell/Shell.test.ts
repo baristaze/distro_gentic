@@ -110,7 +110,7 @@ const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   nav: [
     { id: "agent_automations", label: "Agent automations", icon: null, to: "/agent-automations", tip: "Agent automations" },
-    { id: "knowledge", label: "Knowledge", icon: null, to: "/knowledge", tip: "Knowledge", count: () => 2 },
+    { id: "agent_knowledge", label: "Agent knowledge", icon: null, to: "/agent-knowledge", tip: "Agent knowledge", count: () => 2 },
   ],
   settings: [
     { group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/settings/projects" }] },
@@ -150,7 +150,7 @@ async function mount(path = "/") {
           { path: "/sessions/:id", Component: page("one session") },
           { path: "/settings/*", Component: page("a section") },
           { path: "/agent-automations", Component: page("agent_automations") },
-          { path: "/knowledge", Component: page("knowledge") },
+          { path: "/agent-knowledge", Component: page("agent_knowledge") },
         ],
       },
     ],
@@ -188,7 +188,7 @@ it("holds the org chip, the search, New session, the slot's entries with their c
   await mount();
   const nav = q("nav[aria-label='Main']")!;
   const links = [...nav.querySelectorAll("a")].map((a) => a.textContent?.trim());
-  expect(links).toEqual(["New session", "Agent automations", "Knowledge2"]);
+  expect(links).toEqual(["New session", "Agent automations", "Agent knowledge2"]);
   expect(q("aside")!.textContent).toContain("Search");
   expect(trigger().textContent).toContain("Owner");
   expect(trigger().textContent).toContain("Ajax");
@@ -513,7 +513,7 @@ describe("the support dock", () => {
     await act(async () => ask().click());
     expect(dock()!.dataset.mode).toBe("sheet");
     await typeIn("Where are the API keys?");
-    await act(async () => router.navigate("/knowledge"));
+    await act(async () => router.navigate("/agent-knowledge"));
     expect(dock()).toBeNull();
     await act(async () => ask().click());
     expect(field().value).toBe("Where are the API keys?");

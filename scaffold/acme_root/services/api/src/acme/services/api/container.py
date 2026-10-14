@@ -22,13 +22,13 @@ from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
+from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.root import build_knowledge
 from acme.om.levers.root import build_levers
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
@@ -339,7 +339,7 @@ class AppContainer:
             # A person writes and reviews what sessions recall; the runner
             # recalls them. A person publishes the playbooks sessions follow,
             # invokes one into a session, and pins one to a kind.
-            knowledge=build_knowledge(storage, managers),
+            agent_knowledge=build_agent_knowledge(storage, managers),
             playbooks=playbooks.build(managers),
             # An operator reads which of them the sessions that stalled reached.
             levers=build_levers(storage),

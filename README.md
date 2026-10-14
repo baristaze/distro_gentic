@@ -17,8 +17,8 @@ on machines it does not always own.
   snapshot, on the platform's own machines or on a customer's host
   inside its wall.
 
-A tenant shapes its agents with levers: playbooks, knowledge, and MCP
-connectors. Each is read for what would mislead an agent before a
+A tenant shapes its agents with levers: playbooks, agent_knowledge, and
+MCP connectors. Each is read for what would mislead an agent before a
 person publishes it, and read back from the sessions that stalled.
 
 The platform stands on two foundations and repeats neither. The

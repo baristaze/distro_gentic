@@ -7,6 +7,8 @@ from acme.om.agent_billing.storage.impl.memory import (
     SpendAccountStorageMemoryImpl,
     SpendLedgerStorageMemoryImpl,
 )
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
+from acme.om.agent_knowledge.storage.impl.memory import AgentKnowledgeStorageMemoryImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -31,8 +33,6 @@ from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
-from acme.om.knowledge.storage import KnowledgeStorageInterface
-from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.leases.storage.impl.memory import LeasesStorageMemoryImpl
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
@@ -118,7 +118,7 @@ class StorageMemoryImpl(StorageInterface):
         self._intake = IntakeStorageMemoryImpl()
         self._automation = AgentAutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
-        self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
+        self._knowledge = AgentKnowledgeStorageMemoryImpl(self._outbox)
         self._connector = ConnectorStorageMemoryImpl(self._outbox)
         self._notification = NotificationStorageMemoryImpl()
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
@@ -218,7 +218,7 @@ class StorageMemoryImpl(StorageInterface):
     def get_playbook_storage(self) -> PlaybookStorageInterface:
         return self._playbook
 
-    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+    def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface:
         return self._knowledge
 
     def get_connector_storage(self) -> ConnectorStorageInterface:

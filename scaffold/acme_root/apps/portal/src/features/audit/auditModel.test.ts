@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { auditRows, kindLine } from "./auditModel";
 
 it("says a kind in words, with its area", () => {
-  expect(kindLine("knowledge.entry.created")).toEqual({ what: "entry created", area: "knowledge" });
+  expect(kindLine("agent_knowledge.entry.created")).toEqual({ what: "entry created", area: "agent_knowledge" });
   expect(kindLine("tenancy.api_key.revoked")).toEqual({ what: "api key revoked", area: "tenancy" });
   expect(kindLine("heartbeat")).toEqual({ what: "heartbeat", area: "" });
 });

@@ -12,8 +12,8 @@ does not always own.
   each of its roles asks, the bounds it runs in, and a manual a tenant
   may pin to it. The kinds it ships are templates a product copies. A
   tenant shapes them with [playbooks and
-  knowledge](#playbooks-and-knowledge) and [connectors](#connectors),
-  each read for what would mislead an agent before a person publishes
+  agent knowledge](#playbooks-and-agent-knowledge) and
+  [connectors](#connectors), each read for what would mislead an agent before a person publishes
   it.
 - It **runs** each agent as a [session on the work
   queue](#sessions-are-work), and it **closes the loop**: work arrives
@@ -673,7 +673,7 @@ while a run is open starts another beside it, as the agent automation's
 limits allow: it starts, queues, or is refused. An event delivered
 again, or a schedule's slot met again, answers the run it made.
 
-### Playbooks and Knowledge
+### Playbooks and Agent Knowledge
 
 **Playbooks** are a team's procedures as versioned, executable briefs:
 what is needed, the steps, the safety requirements, the approval gates,
@@ -700,10 +700,11 @@ and a session keeps the manual it was made with: a later pin reaches
 only the sessions made after it. A brief longer than the standing text
 holds is refused when it is pinned.
 
-**Knowledge** is recalled into a session when its trigger matches, so a
-new session does not rediscover its environment. It renders as data. An
-agent may suggest knowledge, and a person reviews it before any session
-recalls it, so one session cannot plant instructions for the next.
+**Agent knowledge** is recalled into a session when its trigger matches,
+so a new session does not rediscover its environment. It renders as
+data. An agent may suggest agent knowledge, and a person reviews it
+before any session recalls it, so one session cannot plant instructions
+for the next.
 
 A playbook and a reviewed entry are a tenant's **levers**: texts written
 for people that an agent then follows. A lever is read as a person
@@ -759,7 +760,7 @@ eligible approvers, a budget's owner) on their channels, with a link to
 the one action that clears it.
 
 > **Principle:** Only some feedback wakes the agent, and only a principal
-> instructs it. A playbook narrows policy; knowledge a person has not
+> instructs it. A playbook narrows policy; agent knowledge a person has not
 > reviewed is never recalled.
 
 ## Evidence
@@ -853,9 +854,9 @@ collector serves every place a check can run.
 its root cause. A hidden suite must pass beside the visible one, and the
 result is judged by behavior, so any valid fix passes. Editing the
 checks or the system under test is forbidden and checked. No surface the
-agent reads (prompts, knowledge, tool sources, evidence, pull requests)
-mentions the hidden suite, and a scanner checks every one. The harness
-judges the chain of evidence (a failing baseline, the runs, the
+agent reads (prompts, agent_knowledge, tool sources, evidence, pull
+requests) mentions the hidden suite, and a scanner checks every one. The
+harness judges the chain of evidence (a failing baseline, the runs, the
 hypotheses resolved, a clean validation, a cited report), never the
 presence of files.
 
@@ -1187,7 +1188,7 @@ provider calls and credentials:
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
-| `audit-agent-levers` | supporter | Which playbooks and knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
+| `audit-agent-levers` | supporter | Which playbooks and agent knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
 | `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
 
 The gates hold the layers consistent with each other. They cannot say

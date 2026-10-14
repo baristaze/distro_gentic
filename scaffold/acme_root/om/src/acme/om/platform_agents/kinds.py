@@ -8,9 +8,9 @@ engine runs every one of them the same way.
   opens its pull request on its own branch, so its committed head is on
   the repository, validates that head on a fresh executor, and ends
   through the result gate, citing those runs. It searches and reads the
-  knowledge base, and suggests an entry for a person to review.
+  agent knowledge base, and suggests an entry for a person to review.
 - Analysis reads what a run produced in a workspace, searches it and the
-  knowledge base, changes nothing, and answers with findings.
+  agent knowledge base, changes nothing, and answers with findings.
 - The engineer and analysis split independent work, such as hypotheses
   or checks, into sub-agents, each in a clean context of its own, and wait
   for their reports. Every kind takes the engine's tree, three levels deep
@@ -19,7 +19,7 @@ engine runs every one of them the same way.
 - The planner turns findings into tasks: it reads where sessions stand,
   hands new engineering work to an engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
-  platform, on their own permissions: it reads the corpus, the knowledge
+  platform, on their own permissions: it reads the corpus, the agent knowledge
   base, and the tenant's live records (its sessions and what they wait
   on, its projects, its agent automations), drafts configuration a person
   applies, and hands engineering work to an engineer. It has no
@@ -89,9 +89,9 @@ SEARCH_CORPUS = "search_corpus"
 READ_SESSION = "read_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
 HAND_OFF = "hand_off_to_engineer"
-SEARCH_KNOWLEDGE = "search_knowledge"
-READ_KNOWLEDGE = "read_knowledge"
-SUGGEST_KNOWLEDGE = "suggest_knowledge"
+SEARCH_AGENT_KNOWLEDGE = "search_agent_knowledge"
+READ_AGENT_KNOWLEDGE = "read_agent_knowledge"
+SUGGEST_AGENT_KNOWLEDGE = "suggest_agent_knowledge"
 LIST_SESSIONS = "list_sessions"
 READ_WAIT = "read_wait"
 LIST_PROJECTS = "list_projects"
@@ -134,11 +134,11 @@ CODE_TOOLSET = Toolset(
     summary="Change the files in your workspace, one place at a time or whole, and run commands.",
     tools=(EDIT_FILE, WRITE_FILE, RUN_COMMAND),
 )
-KNOWLEDGE_TOOLSET = Toolset(
-    name="knowledge",
+AGENT_KNOWLEDGE_TOOLSET = Toolset(
+    name="agent_knowledge",
     version=1,
     summary="Search and read what your team already knows.",
-    tools=(SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
+    tools=(SEARCH_AGENT_KNOWLEDGE, READ_AGENT_KNOWLEDGE),
 )
 DELIVERY_TOOLSET = Toolset(
     name="delivery",
@@ -190,7 +190,7 @@ OPERATIONS_TOOLSET = Toolset(
 TOOLSETS: tuple[Toolset, ...] = (
     FILES_TOOLSET,
     CODE_TOOLSET,
-    KNOWLEDGE_TOOLSET,
+    AGENT_KNOWLEDGE_TOOLSET,
     DELIVERY_TOOLSET,
     SUB_AGENTS_TOOLSET,
     RECORDS_TOOLSET,
@@ -274,13 +274,13 @@ ENGINEER_V1 = AgentKind(
     isolation=WORKSPACE,
 )
 """The engineer before it edited by one place, searched the code, and used
-the knowledge base: kept while a session may still run it."""
+the agent knowledge base: kept while a session may still run it."""
 
 ENGINEER_V2 = AgentKind(
     name=ENGINEER,
     version=2,
-    tools=(SUGGEST_KNOWLEDGE,),
-    toolsets=(FILES_TOOLSET, CODE_TOOLSET, KNOWLEDGE_TOOLSET, DELIVERY_TOOLSET),
+    tools=(SUGGEST_AGENT_KNOWLEDGE,),
+    toolsets=(FILES_TOOLSET, CODE_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, DELIVERY_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
@@ -288,7 +288,7 @@ ENGINEER_V2 = AgentKind(
     prompts=(
         "You are an engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
-        "Look up what your team already knows with search_knowledge, and find code with "
+        "Look up what your team already knows with search_agent_knowledge, and find code with "
         "search_code. Change what the objective needs and nothing else: change a file "
         "with edit_file, one place a call, and write a file whole only when it is new. "
         "Commit it. Open its pull request with open_pull_request, so your head is on your "
@@ -297,7 +297,7 @@ ENGINEER_V2 = AgentKind(
         "the result with submit_result, citing the runs validate answered: a success "
         "counts only when the validation at your head passed. A failure you explain with "
         "those runs is a result too. When you learned something a later session should "
-        "not have to find out again, suggest it with suggest_knowledge.",
+        "not have to find out again, suggest it with suggest_agent_knowledge.",
     ),
     # Its pull request is its own work product, so it opens without asking.
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
@@ -442,7 +442,7 @@ ANALYSIS_V1 = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
 )
-"""Analysis before it searched its workspace and the knowledge base: kept
+"""Analysis before it searched its workspace and the agent knowledge base: kept
 while a session may still run it."""
 
 ANALYSIS_V2 = AgentKind(
@@ -450,14 +450,14 @@ ANALYSIS_V2 = AgentKind(
     version=2,
     # It runs commands and changes no file, so it names its shell alone.
     tools=(RUN_COMMAND,),
-    toolsets=(FILES_TOOLSET, KNOWLEDGE_TOOLSET),
+    toolsets=(FILES_TOOLSET, AGENT_KNOWLEDGE_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     prompts=(
         "You read what a run produced (its logs, its telemetry, its recordings) in your "
         "workspace, and turn it into findings. Search it with search_code, and look up "
-        "what your team already knows with search_knowledge. Change nothing. Answer with "
+        "what your team already knows with search_agent_knowledge. Change nothing. Answer with "
         "the findings, each citing the files and the commands that show it.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
@@ -542,20 +542,20 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     isolation=NO_WORKSPACE,
 )
 """The platform assistant before it read the tenant's sessions, projects,
-and agent_automations, and its knowledge: kept while a session may still run
+and agent_automations, and its agent knowledge: kept while a session may still run
 it."""
 
 PLATFORM_ASSISTANT_KIND = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=2,
     tools=(SEARCH_CORPUS, DRAFT_TOOL_POLICY),
-    toolsets=(KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, HANDOFF_TOOLSET),
+    toolsets=(AGENT_KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, HANDOFF_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
-        "product only from what search_corpus and search_knowledge find, and cite the "
+        "product only from what search_corpus and search_agent_knowledge find, and cite the "
         "document of every passage you use: docs/object-model.md says what each thing is, "
         "what owns it, and what moves it between its states. docs/portal-routes.md lists "
         "the portal's pages: when you name a page, link it by its address as that "
@@ -581,7 +581,7 @@ REVIEWER_PROMPT = (
     "You review one pull request, named in what you were asked as owner/repo#12. Read it with "
     "read_pull_request: its head, the files it changes with their patches, and its checks. "
     "When a patch shows too little, read the whole file at the head with "
-    "read_pull_request_file, and look up what your team already knows with search_knowledge. "
+    "read_pull_request_file, and look up what your team already knows with search_agent_knowledge. "
     "Note each defect you find with note_finding: the file, its line at the head, a grade, "
     "and what is wrong and what it does in real use. Grade it high for harm that cannot be "
     "undone or a wrong result on the path the change exists for, medium for a wrong result "
@@ -622,7 +622,7 @@ REVIEWER_KIND = AgentKind(
     # person approves each comment: the platform's ceiling holds every
     # outward call, and its own layer runs no integration unattended.
     tools=(COMMENT,),
-    toolsets=(REVIEW_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
     asks=REVIEWER_ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_REVIEW,
@@ -645,7 +645,7 @@ OPERATOR_PROMPT = (
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
     "with read_spend, and its projects and agent automations with their readers. Explain only from "
-    "what search_knowledge finds, and cite the document of every passage you use. Diagnose "
+    "what search_agent_knowledge finds, and cite the document of every passage you use. Diagnose "
     "by reading first, never by guessing: say what something waits on as you read it, what "
     "clears it, who may clear it, and where they do. When the fix is engineering, write it "
     "as an objective that stands on its own, for a person to hand to an engineer: you start "
@@ -656,7 +656,7 @@ OPERATOR_PROMPT = (
 OPERATOR_KIND = AgentKind(
     name=OPERATOR,
     version=1,
-    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,

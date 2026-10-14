@@ -8,12 +8,13 @@ chip and switch, settings, and one realtime channel.
 ## The shell and the product's slot
 
 A signed-in page sits beside the left bar. From the top: the org chip,
-Search (⌘K), New session, Agent automations, Knowledge with its count of
-suggestions to review, the product's entries, and the person's own
-sessions, the ones they made or take part in, grouped by what they ask:
-Needs you, Running, and Recent, each sub-agent under its parent. The user
-chip at the foot holds Settings, Profile, the theme, the keyboard
-shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+Search (⌘K), New session, Agent automations, Agent knowledge with its
+count of suggestions to review, the product's entries, and the person's
+own sessions, the ones they made or take part in, grouped by what they
+ask: Needs you, Running, and Recent, each sub-agent under its parent.
+The user chip at the foot holds Settings, Profile, the theme, the
+keyboard shortcuts, and Sign out. ⌘B folds the bar; its edge drags to
+resize.
 
 Sessions (`/sessions`) shows the person's own first, and the org's
 org-wide ones in a second view (`?view=org`), where a member joins one. A
@@ -85,8 +86,8 @@ conversation only when it is their own
   from its header. The org's records and settings each have
   their own: `projects/`, `models/` (the org's own provider keys and its
   model for each role), `agent_automations/`, `playbooks/`,
-  `knowledge/`, `audit/`, `usage/`, and `settings/` (the overview, the
-  profile, the org's general facts, members, API keys, and single
+  `agent_knowledge/`, `audit/`, `usage/`, and `settings/` (the overview,
+  the profile, the org's general facts, members, API keys, and single
   sign-on). `providers/` is the banner a page shows while the org's
   sessions wait on a model provider. A secret field is write-only: the
   form sends it once, and the page shows only who set it and when. A new

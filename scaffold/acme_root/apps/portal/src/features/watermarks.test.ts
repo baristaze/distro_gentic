@@ -13,7 +13,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type AgentAutomationView, type KnowledgeView, type MeView, type ProjectView } from "@acme/client";
+import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type ProjectView } from "@acme/client";
 import { useSessionStore } from "../store/session";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
@@ -51,7 +51,7 @@ const AGENT_AUTOMATION: AgentAutomationView = {
   updated_at: at,
   updated_by: user.id,
 } as AgentAutomationView;
-const ENTRY: KnowledgeView = {
+const ENTRY: AgentKnowledgeView = {
   id: "k1",
   title: "How we name migrations",
   trigger: ["migration"],
@@ -63,7 +63,7 @@ const ENTRY: KnowledgeView = {
   version: 1,
   created_at: at,
   updated_at: at,
-} as KnowledgeView;
+} as AgentKnowledgeView;
 const SESSION = {
   id: "s1",
   root_id: "s1",
@@ -95,8 +95,8 @@ function answer(path: string): unknown {
   if (bare === "/v1/invitations" || bare === "/v1/api-keys" || bare === "/v1/usage" || bare === "/v1/approvals") return page([]);
   if (bare === "/v1/media/usage") return { bytes: 0, files: 0 };
   if (bare === "/v1/agent-sessions") return query.includes("status=parked") ? page([]) : page([SESSION]);
-  if (bare === "/v1/knowledge") return query.includes("status=reviewed") ? [ENTRY] : [];
-  if (bare === "/v1/knowledge/k1") return ENTRY;
+  if (bare === "/v1/agent-knowledge") return query.includes("status=reviewed") ? [ENTRY] : [];
+  if (bare === "/v1/agent-knowledge/k1") return ENTRY;
   if (bare === "/v1/projects") return [PROJECT];
   if (bare === "/v1/projects/p1") return PROJECT;
   if (bare === "/v1/agent-automations") return [AGENT_AUTOMATION];
@@ -208,8 +208,8 @@ it("mounts every platform screen, and finds no text field on any without a water
   expect(seen.get("/settings/general")).toContain(`Type the organization's name, ${org.name}, to confirm`);
   expect(seen.get("/agent-automations")).toEqual(expect.arrayContaining(["Name", "Session title", "Brief", "Cost cap a run"]));
   expect(seen.get("/agent-automations/a1")).toContain("Brief");
-  expect(seen.get("/knowledge")).toEqual(expect.arrayContaining(["Title", "Recalled by"]));
-  expect(seen.get("/knowledge/k1")).toContain("Recalled by");
+  expect(seen.get("/agent-knowledge")).toEqual(expect.arrayContaining(["Title", "Recalled by"]));
+  expect(seen.get("/agent-knowledge/k1")).toContain("Recalled by");
   expect(seen.get("/")).toContain("Prompt");
   expect(seen.get("/sessions")).toContain("Filter by title");
   expect(seen.get("/sessions/s1")).toContain("Message");

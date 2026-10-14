@@ -185,7 +185,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         evidence=unbound,  # pyright: ignore[reportArgumentType]
         workspaces=unbound,  # pyright: ignore[reportArgumentType]
         intake=unbound,  # pyright: ignore[reportArgumentType]
-        knowledge=unbound,  # pyright: ignore[reportArgumentType]
+        agent_knowledge=unbound,  # pyright: ignore[reportArgumentType]
         integrations=unbound,  # pyright: ignore[reportArgumentType]
         budgets=unbound,  # pyright: ignore[reportArgumentType]
     )
@@ -265,15 +265,15 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
     assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
     # The engineer edits by one place, searches the code, and uses the
-    # knowledge base; analysis searches and reads, and changes nothing.
+    # agent knowledge base; analysis searches and reads, and changes nothing.
     assert {
         kinds.EDIT_FILE,
         kinds.SEARCH_CODE,
-        kinds.SEARCH_KNOWLEDGE,
-        kinds.READ_KNOWLEDGE,
-        kinds.SUGGEST_KNOWLEDGE,
+        kinds.SEARCH_AGENT_KNOWLEDGE,
+        kinds.READ_AGENT_KNOWLEDGE,
+        kinds.SUGGEST_AGENT_KNOWLEDGE,
     } <= set(ENGINEER_KIND.tools)
-    assert {kinds.SEARCH_CODE, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE} <= set(
+    assert {kinds.SEARCH_CODE, kinds.SEARCH_AGENT_KNOWLEDGE, kinds.READ_AGENT_KNOWLEDGE} <= set(
         ANALYSIS_KIND.tools
     )
     assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute", "spawn"}
@@ -532,15 +532,15 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
 
 
 RENDERED = {
-    (kinds.ENGINEER, 8): "e770e86cab582f5b35e92a2d43c08f99a64f9bbf70dd6c550244ba89ddf1c41c",
-    (kinds.ANALYSIS, 4): "c9a61f57d9a0a3b83956ac4ea13d9479812107a42b3531840121ee944c8f0ceb",
+    (kinds.ENGINEER, 8): "358fcfc6c517cddf29916e858bf60038de42a67ad5cd190bad348a35078d18af",
+    (kinds.ANALYSIS, 4): "c94610c01308fb29e151e946431dd622706a314ed7901ae2b8fcbc4f95c27a1c",
     (kinds.PLANNER, 1): "6dee9c1af1944f29fc8cd2eae1ecdc105b8d76cd46ebc3c11cdba87cc5c06b85",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "d61d8e70bbb2f2997df93be3be42b4d67957371a9d19aff52e282f85b54c5bce",
-    (kinds.REVIEWER, 1): "c1a92e4a377c940c269ee3e8c5e81572ba581f4473f664324d11bd3fe9593396",
-    (kinds.OPERATOR, 1): "70c04e0432d9846bdcbe3379c06063aa80ca5eb373ab7b42305304dd56f8ea51",
+    ): "63e48b8296da80483b645dd11a68c47fa3f6edbcb452c5e5959eb580b8a4718c",
+    (kinds.REVIEWER, 1): "72365994c5f47eb73b8f0c65cc9483d80e5f12d4cd637b707911c8424aea4e08",
+    (kinds.OPERATOR, 1): "83da872c4a578480f42abc1a6e7268dbecd18660680a2e029cc66e94398c2078",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -603,9 +603,9 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "edit_file",
             "write_file",
             "run_command",
-            "search_knowledge",
-            "read_knowledge",
-            "suggest_knowledge",
+            "search_agent_knowledge",
+            "read_agent_knowledge",
+            "suggest_agent_knowledge",
             "validate",
             "open_pull_request",
             "submit_result",
@@ -620,9 +620,9 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "edit_file",
             "write_file",
             "run_command",
-            "search_knowledge",
-            "read_knowledge",
-            "suggest_knowledge",
+            "search_agent_knowledge",
+            "read_agent_knowledge",
+            "suggest_agent_knowledge",
             "spawn_sub_agent",
             "wait_for_sub_agents",
             "validate",
@@ -639,8 +639,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "read_file",
             "search_code",
             "run_command",
-            "search_knowledge",
-            "read_knowledge",
+            "search_agent_knowledge",
+            "read_agent_knowledge",
             *(("spawn_sub_agent", "wait_for_sub_agents") if version >= 3 else ()),
             *(("read_artifact",) if version >= 4 else ()),
         )
@@ -655,8 +655,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
     ),
     (kinds.PLATFORM_ASSISTANT, 2): (
         "search_corpus",
-        "search_knowledge",
-        "read_knowledge",
+        "search_agent_knowledge",
+        "read_agent_knowledge",
         "read_session",
         "list_sessions",
         "read_wait",
@@ -673,8 +673,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "note_finding",
         "submit_review",
         "comment",
-        "search_knowledge",
-        "read_knowledge",
+        "search_agent_knowledge",
+        "read_agent_knowledge",
         "read_artifact",
     ),
     (kinds.OPERATOR, 1): (
@@ -687,8 +687,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_agent_automation",
         "list_hosts",
         "read_spend",
-        "search_knowledge",
-        "read_knowledge",
+        "search_agent_knowledge",
+        "read_agent_knowledge",
         "read_artifact",
     ),
 }
@@ -1512,13 +1512,13 @@ def test_the_reviewer_and_the_operator_are_built_from_toolsets_and_ask_sizes() -
     assert catalog.latest(kinds.OPERATOR) == OPERATOR_KIND
     assert REVIEWER_KIND.toolsets == (
         kinds.REVIEW_TOOLSET,
-        kinds.KNOWLEDGE_TOOLSET,
+        kinds.AGENT_KNOWLEDGE_TOOLSET,
         kinds.ARTIFACTS_TOOLSET,
     )
     assert OPERATOR_KIND.toolsets == (
         kinds.RECORDS_TOOLSET,
         kinds.OPERATIONS_TOOLSET,
-        kinds.KNOWLEDGE_TOOLSET,
+        kinds.AGENT_KNOWLEDGE_TOOLSET,
         kinds.ARTIFACTS_TOOLSET,
     )
     for kind in (REVIEWER_KIND, OPERATOR_KIND):

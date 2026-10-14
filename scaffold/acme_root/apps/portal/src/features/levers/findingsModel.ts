@@ -1,4 +1,4 @@
-// Pure: what the lever checks found in a playbook version or a knowledge
+// Pure: what the lever checks found in a playbook version or an agent knowledge
 // entry, as its page shows it. A finding advises: the version stands as it
 // was published. No React, no fetch.
 import type { FindingView, LeverCheck } from "@acme/client";

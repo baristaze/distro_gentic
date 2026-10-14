@@ -29,7 +29,7 @@ anyway, so a workspace held past that life is paid for and saves little.
 **The platform's tools form eight toolsets.** Each groups tools a kind
 takes whole, by what they let it do. `files` lists, reads, and searches
 a workspace. `code` edits and writes its files and runs commands.
-`knowledge` searches and reads what the team knows. `delivery`
+`agent_knowledge` searches and reads what the team knows. `delivery`
 validates, opens the pull request, and submits the result. `sub_agents`
 starts sub-agents and waits for them. `records` holds the assistant's
 readers, `handoff` the hand-off to an engineer, and `artifacts` the read
@@ -38,7 +38,7 @@ of a result kept outside the window.
 **Every shipped kind is rebuilt from them, at every version.** A kind
 names alone a tool whose toolset would give it more than it may call.
 Analysis runs commands and edits nothing, so it names `run_command`
-alone. The engineer names `suggest_knowledge` alone, the planner
+alone. The engineer names `suggest_agent_knowledge` alone, the planner
 `read_session`, and the assistant its corpus search and its policy
 draft. Each version's tools are the same set as before, and the registry
 renders by name, so each renders the same tool definitions, byte for

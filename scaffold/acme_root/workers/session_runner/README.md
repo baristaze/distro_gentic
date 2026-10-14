@@ -73,10 +73,10 @@ a call whose secret would cross its session's wall is refused. Then the
 gates of the session's [playbooks](../../om/src/acme/om/playbooks/README.md)
 hold it, the manual its kind's pin gave it among them, and only narrow
 what policy let through. A session's first loop
-recalls the [knowledge](../../om/src/acme/om/knowledge/README.md) its
-subject triggers before its first model call. A call of a session the
-tenant's agent automation principal started runs on that principal's
-grant alone
+recalls the [agent
+knowledge](../../om/src/acme/om/agent_knowledge/README.md) its subject
+triggers before its first model call. A call of a session the tenant's
+agent automation principal started runs on that principal's grant alone
 ([agent_automations](../../om/src/acme/om/agent_automations/README.md)).
 
 A run that parks on what only a person clears tells whoever can clear it,

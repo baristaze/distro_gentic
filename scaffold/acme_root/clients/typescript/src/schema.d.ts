@@ -388,7 +388,7 @@ export interface paths {
         };
         /**
          * Read Levers
-         * @description The playbooks and knowledge the org's sessions created in `[since,
+         * @description The playbooks and agent knowledge the org's sessions created in `[since,
          *     until)` reached, ranked by how much more often the sessions that
          *     reached them stalled, with the sessions behind each figure. A stall is
          *     read from the steps' headers, never from what a step says, and a lever
@@ -735,6 +735,71 @@ export interface paths {
          *     check out, and nothing is credited.
          */
         post: operations["confirm_payment_v1_agent_billing_payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Entries
+         * @description The entries in a state by id, after the id `after` names.
+         */
+        get: operations["list_entries_v1_agent_knowledge_get"];
+        put?: never;
+        /**
+         * Write Entry
+         * @description An entry a person writes, reviewed as it is written.
+         */
+        post: operations["write_entry_v1_agent_knowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Entry */
+        get: operations["get_entry_v1_agent_knowledge__entry_id__get"];
+        /**
+         * Edit Entry
+         * @description The entry as edited, on the version `If-Match` names.
+         */
+        put: operations["edit_entry_v1_agent_knowledge__entry_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-knowledge/{entry_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Entry
+         * @description A suggestion kept, so sessions recall it, or rejected.
+         */
+        post: operations["review_entry_v1_agent_knowledge__entry_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2555,71 +2620,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/knowledge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Entries
-         * @description The entries in a state by id, after the id `after` names.
-         */
-        get: operations["list_entries_v1_knowledge_get"];
-        put?: never;
-        /**
-         * Write Entry
-         * @description An entry a person writes, reviewed as it is written.
-         */
-        post: operations["write_entry_v1_knowledge_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Entry */
-        get: operations["get_entry_v1_knowledge__entry_id__get"];
-        /**
-         * Edit Entry
-         * @description The entry as edited, on the version `If-Match` names.
-         */
-        put: operations["edit_entry_v1_knowledge__entry_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Review Entry
-         * @description A suggestion kept, so sessions recall it, or rejected.
-         */
-        post: operations["review_entry_v1_knowledge__entry_id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/leases": {
         parameters: {
             query?: never;
@@ -3964,6 +3964,65 @@ export interface components {
              * Format: uuid
              */
             updated_by: string;
+        };
+        /**
+         * AgentKnowledgeRequest
+         * @description An entry: its title, the words that trigger it, all of which must
+         *     appear in what a session is about, and what it says. A trigger word
+         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+         *     in it, so it would match every session.
+         */
+        AgentKnowledgeRequest: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+        };
+        /**
+         * AgentKnowledgeStatus
+         * @enum {string}
+         */
+        AgentKnowledgeStatus: "suggested" | "reviewed" | "rejected";
+        /**
+         * AgentKnowledgeView
+         * @description An entry, its state, who suggested and who reviewed it, the version
+         *     an edit names in `If-Match`, and what the lever checks found in its
+         *     words at that version: advice, never a refusal; null on a version they
+         *     never read, an empty list on one they read and found nothing in.
+         */
+        AgentKnowledgeView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            status: components["schemas"]["AgentKnowledgeStatus"];
+            /** Suggested By */
+            suggested_by: string | null;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /**
          * AgentRefView
@@ -6322,65 +6381,6 @@ export interface components {
          * @enum {string}
          */
         KeyStatus: "live" | "rotated" | "refused";
-        /**
-         * KnowledgeRequest
-         * @description An entry: its title, the words that trigger it, all of which must
-         *     appear in what a session is about, and what it says. A trigger word
-         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
-         *     in it, so it would match every session.
-         */
-        KnowledgeRequest: {
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-        };
-        /**
-         * KnowledgeStatus
-         * @enum {string}
-         */
-        KnowledgeStatus: "suggested" | "reviewed" | "rejected";
-        /**
-         * KnowledgeView
-         * @description An entry, its state, who suggested and who reviewed it, the version
-         *     an edit names in `If-Match`, and what the lever checks found in its
-         *     words at that version: advice, never a refusal; null on a version they
-         *     never read, an empty list on one they read and found nothing in.
-         */
-        KnowledgeView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Findings */
-            findings: components["schemas"]["FindingView"][] | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Reviewed By */
-            reviewed_by: string | null;
-            status: components["schemas"]["KnowledgeStatus"];
-            /** Suggested By */
-            suggested_by: string | null;
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Version */
-            version: number;
-        };
         /** LaneLoadView */
         LaneLoadView: {
             /** Kind */
@@ -6524,7 +6524,7 @@ export interface components {
          * LeverKind
          * @enum {string}
          */
-        LeverKind: "playbook" | "knowledge";
+        LeverKind: "playbook" | "agent_knowledge";
         /**
          * LeverReadingView
          * @description The levers of one tenant's sessions created in `[since, until)`, best
@@ -10889,6 +10889,196 @@ export interface operations {
             };
         };
     };
+    list_entries_v1_agent_knowledge_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AgentKnowledgeStatus"];
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_entry_v1_agent_knowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_entry_v1_agent_knowledge__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_entry_v1_agent_knowledge__entry_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_entry_v1_agent_knowledge__entry_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_sessions_v1_agent_sessions_get: {
         parameters: {
             query?: {
@@ -14535,196 +14725,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_entries_v1_knowledge_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["KnowledgeStatus"];
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_entry_v1_knowledge_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_entry_v1_knowledge__entry_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edit_entry_v1_knowledge__entry_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    review_entry_v1_knowledge__entry_id__review_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
                 };
             };
             /** @description Validation Error */

@@ -1,6 +1,6 @@
 ---
 name: audit-agent-levers
-description: "Audit which levers an org's agents stalled after, in one environment: the playbooks its sessions invoked and the knowledge they recalled, ranked by how much more often the sessions that reached them stalled (a call made again and again, a call failing again and again, a request sent again unchanged, a nudge, a guard, a loop a bound ended), read through the operator plane with a read-only operator token by `acme-ops levers`; then a report with verdicts and proposed tickets. Never changes anything."
+description: "Audit which levers an org's agents stalled after, in one environment: the playbooks its sessions invoked and the agent knowledge they recalled, ranked by how much more often the sessions that reached them stalled (a call made again and again, a call failing again and again, a request sent again unchanged, a nudge, a guard, a loop a bound ended), read through the operator plane with a read-only operator token by `acme-ops levers`; then a report with verdicts and proposed tickets. Never changes anything."
 allowed-tools: Read, Write, Bash(curl:*), Bash(jq:*), Bash(uv run acme-ops size:*), Bash(uv run acme-ops levers:*)
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Bash(curl:*), Bash(jq:*), Bash(uv run acme-ops size:
 
 Which of a tenant's levers came before its agents stalled. A lever is a
 text the tenant customizes its agents with: a playbook a principal
-invokes into a session, or a reviewed knowledge entry a session
+invokes into a session, or a reviewed agent knowledge entry a session
 recalls (ADR 2054). A lever written for people can make an agent spin:
 a phrase said until it looks load-bearing, a must and a must-not on one
 subject, a tool no kind holds, a "keep trying until it works". The
@@ -135,7 +135,7 @@ token has expired: stop, and name the refresh the preamble gives.
 
 | Kind | Id | Version | Stalled with | Stalled without | Lift | Verdict |
 |---|---|---|---|---|---|---|
-| <playbook / knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / weak / too few |
+| <playbook / agent_knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / weak / too few |
 
 ## Findings, by impact
 

@@ -15,14 +15,14 @@ calls, and holds its workspace warm for a while after a loop.
 
 - **Toolsets**: the platform's tools in ten groups a kind takes whole.
   `files` lists, reads, and searches a workspace; `code` changes its
-  files and runs commands; `knowledge` searches and reads what the team
-  knows; `delivery` validates, opens the pull request, and submits the
-  result; `sub_agents` starts sub-agents and waits for them; `records`
-  is the assistant's readers; `handoff` hands work to an engineer;
-  `artifacts` reads back a result kept outside the window; `review`
-  reads a pull request and its files at its head, notes findings, and
-  submits a review; and `operations` reads the tenant's hosts and its
-  budgets' spend. Every shipped
+  files and runs commands; `agent_knowledge` searches and reads what the
+  team knows; `delivery` validates, opens the pull request, and submits
+  the result; `sub_agents` starts sub-agents and waits for them;
+  `records` is the assistant's readers; `handoff` hands work to an
+  engineer; `artifacts` reads back a result kept outside the window;
+  `review` reads a pull request and its files at its head, notes
+  findings, and submits a review; and `operations` reads the tenant's
+  hosts and its budgets' spend. Every shipped
   kind is built from them, and names alone a tool whose toolset would
   give it more than it may call: analysis runs commands and edits
   nothing. A kind built from toolsets renders the same tool definitions
@@ -45,7 +45,7 @@ calls, and holds its workspace warm for a while after a loop.
   It works in a container of its own, from which nothing leaves: it reads
   files, searches the code, changes a file one place at a time or writes
   it whole, and runs commands. It searches and reads the
-  [knowledge](../knowledge/README.md) its session reaches, and suggests
+  [agent knowledge](../agent_knowledge/README.md) its session reaches, and suggests
   an entry for a person to review. It opens its pull request on its
   own branch, which puts its committed head on the repository, asks for a
   validation of that head on a fresh executor, and submits its result
@@ -53,8 +53,9 @@ calls, and holds its workspace warm for a while after a loop.
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
 - **Analysis** reads what a run produced (its logs, telemetry, and
-  recordings) in a workspace of its own, searches it and the knowledge
-  its session reaches, changes nothing, and answers with its findings.
+  recordings) in a workspace of its own, searches it and the agent
+  knowledge its session reaches, changes nothing, and answers with its
+  findings.
 - **Sub-agents**: the engineer and analysis split independent work,
   such as hypotheses to test or checks to run, into sub-agents, each in
   a clean context of its own, and wait for their reports
@@ -75,9 +76,9 @@ calls, and holds its workspace warm for a while after a loop.
   plan: each task and the session it goes to.
 - **The platform assistant** helps the people who set up and run their
   part of the platform, on their own permissions. It explains the
-  product from its corpus and the knowledge base, and cites them. It
-  diagnoses by reading the tenant's live records: its sessions, what a
-  session's park and its loop wait on, its projects, and its agent
+  product from its corpus and the agent knowledge base, and cites them.
+  It diagnoses by reading the tenant's live records: its sessions, what
+  a session's park and its loop wait on, its projects, and its agent
   automations with their recent runs. It drafts the tenant's tool policy
   and shows the difference from what is live, and hands engineering work
   to an engineer. It has no workspace, repository, or shell. A session
@@ -161,11 +162,12 @@ calls, and holds its workspace warm for a while after a loop.
   platform's process. Its answer is bounded in matches, in each match's
   width, and in the output it reads, and says whether more were left
   out. Its path is one inside the workspace.
-- **Search and read knowledge.** `search_knowledge` answers the reviewed
-  entries the session reaches and the passages of the corpus that share
-  the most of a query's words; `read_knowledge` reads one whole by its
-  slug, a corpus document by its path. `suggest_knowledge` suggests an
-  entry for the session's project, which waits for a person's review.
+- **Search and read agent knowledge.** `search_agent_knowledge` answers
+  the reviewed entries the session reaches and the passages of the
+  corpus that share the most of a query's words; `read_agent_knowledge`
+  reads one whole by its slug, a corpus document by its path.
+  `suggest_agent_knowledge` suggests an entry for the session's project,
+  which waits for a person's review.
 - **Open a pull request.** The engineer's `open_pull_request` takes a
   title and a body, and nothing else. The workspace's committed head goes
   to the session's own branch on its project's repository, with a push

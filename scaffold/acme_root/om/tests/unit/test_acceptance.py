@@ -222,8 +222,8 @@ async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refu
     with pytest.raises(ValidationFailed, match="names what it hides"):
         await run.harness.judge(run.ctx, told, run.session, result, surfaces())
     read = surfaces()
-    del read[Surface.KNOWLEDGE]
-    with pytest.raises(ValidationFailed, match="missing: \\['knowledge'\\]"):
+    del read[Surface.AGENT_KNOWLEDGE]
+    with pytest.raises(ValidationFailed, match="missing: \\['agent_knowledge'\\]"):
         await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
 
 

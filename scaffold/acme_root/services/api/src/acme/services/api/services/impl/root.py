@@ -7,9 +7,9 @@ from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_billing import AgentBillingManagerInterface
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.connectors import ConnectorsManagerInterface
 from acme.om.intake import IntakeManagerInterface
-from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
 from acme.om.notifications import NotificationsManagerInterface
@@ -36,12 +36,14 @@ from acme.services.api.services import (
 )
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_automations import AgentAutomationsServiceImpl
 from acme.services.api.services.impl.agent_billing import AgentBillingServiceImpl
+from acme.services.api.services.impl.agent_knowledge import AgentKnowledgeServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
@@ -52,7 +54,6 @@ from acme.services.api.services.impl.flags import FlagsServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
-from acme.services.api.services.impl.knowledge import KnowledgeServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
 from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
@@ -70,7 +71,6 @@ from acme.services.api.services.impl.validations import ValidationsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
-from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
 from acme.services.api.services.playbooks import PlaybooksServiceInterface
@@ -109,7 +109,7 @@ class ServicesImpl(ServicesInterface):
         spend_ledgers: SpendLedgersServiceInterface,
         evidence: EvidenceServiceInterface,
         projects: ProjectsServiceInterface,
-        knowledge: KnowledgeServiceInterface,
+        agent_knowledge: AgentKnowledgeServiceInterface,
         playbooks: PlaybooksServiceInterface,
         connectors: ConnectorsServiceInterface,
         tools: ToolsServiceInterface,
@@ -140,7 +140,7 @@ class ServicesImpl(ServicesInterface):
         self._spend_ledgers = spend_ledgers
         self._evidence = evidence
         self._projects = projects
-        self._knowledge = knowledge
+        self._knowledge = agent_knowledge
         self._playbooks = playbooks
         self._connectors = connectors
         self._tools = tools
@@ -219,7 +219,7 @@ class ServicesImpl(ServicesInterface):
     def get_projects_service(self) -> ProjectsServiceInterface:
         return self._projects
 
-    def get_knowledge_service(self) -> KnowledgeServiceInterface:
+    def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface:
         return self._knowledge
 
     def get_connectors_service(self) -> ConnectorsServiceInterface:
@@ -253,7 +253,7 @@ def build_services(
     matrix: MatrixManagers,
     trust: TrustManagerInterface,
     agent_billing: AgentBillingManagerInterface,
-    knowledge: KnowledgeManagerInterface,
+    agent_knowledge: AgentKnowledgeManagerInterface,
     playbooks: PlaybooksManagerInterface,
     levers: LeversManagerInterface,
     connectors: ConnectorsManagerInterface,
@@ -310,7 +310,7 @@ def build_services(
             intake,
         ),
         projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
-        knowledge=KnowledgeServiceImpl(knowledge),
+        agent_knowledge=AgentKnowledgeServiceImpl(agent_knowledge),
         playbooks=PlaybooksServiceImpl(playbooks),
         connectors=ConnectorsServiceImpl(connectors),
         tools=ToolsServiceImpl(managers.tools),

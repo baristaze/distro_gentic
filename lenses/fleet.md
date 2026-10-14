@@ -102,9 +102,9 @@ engineer for a message.
 
 ## FLT-05 The assistant's corpus is the knowledge map's list for users
 
-**Principle.** The assistant's corpus is what the guideline's knowledge
-map lists for the tenant's users, so internal text never leaks by
-default, and the words a customer reads and the words the team works
+**Principle.** The assistant's corpus is what the guideline's agent
+knowledge map lists for the tenant's users, so internal text never leaks
+by default, and the words a customer reads and the words the team works
 from are the same text.
 
 **Source.** The Agents a Platform Ships.

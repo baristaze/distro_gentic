@@ -1,5 +1,5 @@
 """A lever: a text a tenant customizes its agents with, a playbook or a
-reviewed knowledge entry, read for what misleads or stalls an agent before
+reviewed agent knowledge entry, read for what misleads or stalls an agent before
 a person publishes it, and read back from the sessions that spun after it.
 
 A finding advises: it is recorded with the version it read and shown to
@@ -23,7 +23,7 @@ text, so what is kept of it beside the version stays small."""
 
 class LeverKind(StrEnum):
     PLAYBOOK = "playbook"  # a version a principal invokes into a session
-    KNOWLEDGE = "knowledge"  # a reviewed entry a session recalls
+    AGENT_KNOWLEDGE = "agent_knowledge"  # a reviewed entry a session recalls
 
 
 class LeverCheck(StrEnum):
@@ -49,7 +49,7 @@ class LeverFinding(Platform):
 
 class LeverReach(Platform):
     """What the kinds a lever reaches hold: their tools and their names. A
-    playbook or a knowledge entry reaches every kind of its tenant."""
+    playbook or an agent knowledge entry reaches every kind of its tenant."""
 
     tools: frozenset[str] = frozenset()
     kinds: frozenset[str] = frozenset()
@@ -57,7 +57,7 @@ class LeverReach(Platform):
 
 class LeverRef(Platform):
     """One version of a lever, as a session reached it: a playbook
-    version's id, or a knowledge entry's id, and its version. Never its
+    version's id, or an agent knowledge entry's id, and its version. Never its
     name or its slug, which are the tenant's words: an operator who reads
     sees the shape of what a session reached, never what it says."""
 

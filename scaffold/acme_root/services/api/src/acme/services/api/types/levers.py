@@ -1,5 +1,5 @@
 """Wire types of the levers: what the checks found in a playbook version
-or a knowledge entry, answered beside its publish or its review, and an
+or an agent knowledge entry, answered beside its publish or its review, and an
 operator's reading of the levers a tenant's sessions reached before they
 stalled."""
 

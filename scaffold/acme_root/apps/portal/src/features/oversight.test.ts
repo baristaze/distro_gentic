@@ -16,7 +16,7 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const at = "2026-10-03T10:00:00Z";
 const EVENTS: Record<"a" | "b", EventView[]> = {
   a: [{ seq: 1, kind: "projects.project.created", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id }],
-  b: [{ seq: 1, kind: "knowledge.entry.created", target_id: "kb", produced_at: at, actor_id: PEOPLE.b.id }],
+  b: [{ seq: 1, kind: "agent_knowledge.entry.created", target_id: "kb", produced_at: at, actor_id: PEOPLE.b.id }],
 };
 const usage = (org: "a" | "b", spent: number): BudgetUsageView => ({
   budget: { id: `b${org}`, scope_kind: "person", scope_key: PEOPLE[org].id, window_kind: "day", window_seconds: null, cost_micros: 10_000_000, tokens: null, version: 1 },

@@ -5,7 +5,7 @@
 ## Context
 
 A tenant customizes its agents with texts its people write: a playbook,
-which a principal invokes into a session, and a reviewed knowledge
+which a principal invokes into a session, and a reviewed agent knowledge
 entry, which a session recalls. These are its levers. A lever is
 written for people, and an agent reads it differently. A phrase said
 again and again reads as the one that matters. A must and a must-not on
@@ -34,12 +34,12 @@ variable or a configuration key, is never taken for a tool, and an
 instruction not to stop something is never taken for one not to stop. A lever
 reaches the latest version of every kind its tenant's sessions start
 on, which the root's managers now carry as `kinds`. A playbook is
-checked as it is published, and a knowledge entry as a person writes,
-edits, or keeps it. The publish lands whatever the checks find.
+checked as it is published, and an agent knowledge entry as a person
+writes, edits, or keeps it. The publish lands whatever the checks find.
 
 **A finding is kept with the version it read.** A playbook version and
-a knowledge entry each carry their findings in their own row, and the
-API answers them beside the publish or the review. The portal shows
+an agent knowledge entry each carry their findings in their own row, and
+the API answers them beside the publish or the review. The portal shows
 them on the playbook and the entry. A version the checks never read,
 one published before they ran, carries none: the API answers `null`
 and the portal says it was not checked, never that the checks found
@@ -52,8 +52,8 @@ from what a step says, as the engine's limits read it: a call made a
 third time running, a call failing a third time running, a request sent
 again unchanged after its answer, a nudge, a guard, and a loop a bound
 ended without a conclusion. Its levers are the playbook versions it
-invoked and the knowledge versions it recalled or an agent read by its
-slug; a recall and a read are now recorded, as an invocation already
+invoked and the agent knowledge versions it recalled or an agent read by
+its slug; a recall and a read are now recorded, as an invocation already
 was. Each lever ranks by how much more often the sessions that reached
 it stalled than those that did not, and names the sessions behind its
 figure. The reading answers a lever by its kind, id, and version alone:
@@ -71,9 +71,9 @@ does.
 ## Consequences
 
 - One migration: a `findings` column on `core.playbooks` and
-  `core.knowledge_entries`, null for every row written before, which
-  reads as not checked, and the table `core.knowledge_recalls`, one row
-  an entry in a session.
+  `core.agent_knowledge_entries`, null for every row written before,
+  which reads as not checked, and the table
+  `core.agent_knowledge_recalls`, one row an entry in a session.
 - A check is a heuristic. It is a net for what a person would want to
   read again, and it misses what it does not look for.
 - A reading is bounded by the sessions and the steps it reads, and says

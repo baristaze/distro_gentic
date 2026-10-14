@@ -12,6 +12,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentAutomationsServiceInterface,
     AgentBillingServiceInterface,
+    AgentKnowledgeServiceInterface,
     AgentSessionsServiceInterface,
     BenchmarksServiceInterface,
     BudgetsServiceInterface,
@@ -22,7 +23,6 @@ from acme.services.api.services import (
     FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
-    KnowledgeServiceInterface,
     LeasesServiceInterface,
     MatrixServiceInterface,
     MediaServiceInterface,
@@ -150,8 +150,8 @@ def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
     return services_of(connection).get_projects_service()
 
 
-def knowledge_service(connection: HTTPConnection) -> KnowledgeServiceInterface:
-    return services_of(connection).get_knowledge_service()
+def agent_knowledge_service(connection: HTTPConnection) -> AgentKnowledgeServiceInterface:
+    return services_of(connection).get_agent_knowledge_service()
 
 
 def connectors_service(connection: HTTPConnection) -> ConnectorsServiceInterface:
@@ -200,7 +200,7 @@ ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_k
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
 SpendLedgersService = Annotated[SpendLedgersServiceInterface, Depends(spend_ledgers_service)]
 ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
-KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
+AgentKnowledgeService = Annotated[AgentKnowledgeServiceInterface, Depends(agent_knowledge_service)]
 ConnectorsService = Annotated[ConnectorsServiceInterface, Depends(connectors_service)]
 PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
 ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]

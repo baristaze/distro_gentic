@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from acme.om.agent_automations.storage import AgentAutomationStorageInterface
 from acme.om.agent_billing.storage import SpendAccountStorageInterface, SpendLedgerStorageInterface
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
@@ -16,7 +17,6 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
@@ -135,7 +135,7 @@ class StorageInterface(ABC):
     def get_playbook_storage(self) -> PlaybookStorageInterface: ...
 
     @abstractmethod
-    def get_knowledge_storage(self) -> KnowledgeStorageInterface: ...
+    def get_agent_knowledge_storage(self) -> AgentKnowledgeStorageInterface: ...
 
     @abstractmethod
     def get_connector_storage(self) -> ConnectorStorageInterface: ...

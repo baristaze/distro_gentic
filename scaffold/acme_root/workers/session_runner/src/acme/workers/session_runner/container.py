@@ -18,6 +18,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
+from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import new_id
@@ -28,7 +29,6 @@ from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.manager import NotificationsManagerInterface
@@ -185,12 +185,12 @@ class RunnerContainer:
             kinds=ports.kinds.agents,
         )
         playbooks = PlaybooksLayer(storage)
-        knowledge = KnowledgeLayer(storage)
+        agent_knowledge = AgentKnowledgeLayer(storage)
 
         def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
             # The wall and the audit first, then the session's playbook gates,
-            # then the knowledge a session recalls as its first loop starts.
-            return knowledge.tools(playbooks.tools(trust.tools(inner)))
+            # then the agent knowledge a session recalls as its first loop starts.
+            return agent_knowledge.tools(playbooks.tools(trust.tools(inner)))
 
         async def members(
             rctx: RequestContext, org_id: UUID, principal: Principal
@@ -249,7 +249,7 @@ class RunnerContainer:
             attachment_reader=attachment_reader,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
-            knowledge=knowledge.manager,
+            agent_knowledge=agent_knowledge.manager,
             agent_automations=lambda: agent_automations[0],
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
@@ -290,7 +290,7 @@ class RunnerContainer:
         trust.build(managers)
         matrix.build(managers)
         playbooks.build(managers)
-        knowledge.build(managers)
+        agent_knowledge.build(managers)
         connectors.build(managers)
         container = cls(
             settings, storage, infra, integrations, managers, stream, placing, ports.kinds

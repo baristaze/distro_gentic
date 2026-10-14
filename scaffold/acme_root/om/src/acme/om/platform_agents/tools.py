@@ -14,7 +14,7 @@ sees the token. The branch and the pull request are bound to the session,
 and the push recorded as its act, so the events on them find it. The
 assistant's read the corpus and the tenant's live records through the
 asking person's own permissions, never a session's content, and draft;
-the one that hands work on starts a session that waits for its person. The knowledge tools
+the one that hands work on starts a session that waits for its person. The agent knowledge tools
 reach the reviewed entries of the session's project and of its whole
 tenant, and the platform's own documentation, its corpus; a suggestion
 waits for a person's review. The reviewer's read a pull request, its
@@ -40,6 +40,8 @@ from acme.integrations.exceptions import ProviderRefused
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.types.agent_automation import AgentAutomation
 from acme.om.agent_automations.types.agent_automation import Limits as AgentAutomationLimits
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
+from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents import AgentsManagerInterface
@@ -65,8 +67,6 @@ from acme.om.hosts.types.host import HostStatus
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import FORGE, connected
 from acme.om.intake.types.link import HandleKind
-from acme.om.knowledge import KnowledgeManagerInterface
-from acme.om.knowledge.types.knowledge import MAX_TEXT, Knowledge
 from acme.om.notifications.rules import held_calls
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
@@ -629,37 +629,37 @@ class OpenPullRequestImpl(NativeToolImpl):
         return PullRequestOpened(id=opened.id, url=opened.url, branch=token.branch, head=head)
 
 
-# Knowledge.
+# Agent knowledge.
 
 EXCERPT = 500  # characters of an entry or a passage a search answers
 
 PROJECT, TENANT, PLATFORM = "project", "tenant", "platform"
-"""Where a piece of knowledge comes from: an entry of the session's project,
+"""Where a piece of agent knowledge comes from: an entry of the session's project,
 one of its whole tenant, or the platform's own documentation."""
 
 
-def scope_of(entry: Knowledge) -> str:
+def scope_of(entry: AgentKnowledge) -> str:
     return TENANT if entry.project_id is None else PROJECT
 
 
-class KnowledgeQuery(ToolInput):
+class AgentKnowledgeQuery(ToolInput):
     query: str = Field(min_length=1, max_length=500)
     limit: int = Field(default=5, ge=1, le=10)
 
 
-class KnowledgeHit(Platform):
+class AgentKnowledgeHit(Platform):
     scope: str
-    slug: str | None  # what read_knowledge takes
+    slug: str | None  # what read_agent_knowledge takes
     title: str
     heading: str | None = None  # the section of a platform document
     excerpt: str
 
 
-class KnowledgeHits(Platform):
-    hits: tuple[KnowledgeHit, ...]
+class AgentKnowledgeHits(Platform):
+    hits: tuple[AgentKnowledgeHit, ...]
 
 
-class SearchKnowledgeImpl(NativeToolImpl):
+class SearchAgentKnowledgeImpl(NativeToolImpl):
     """Searches what the session may know: the reviewed entries of its
     project and of its whole tenant, never another project's or another
     tenant's, and the platform's own documentation. An entry waiting for its
@@ -667,15 +667,15 @@ class SearchKnowledgeImpl(NativeToolImpl):
     never the input's."""
 
     SPEC = ToolSpec(
-        name=kinds.SEARCH_KNOWLEDGE,
+        name=kinds.SEARCH_AGENT_KNOWLEDGE,
         description=(
-            "Searches the knowledge base: the entries people of your team kept for your "
+            "Searches the agent knowledge base: the entries people of your team kept for your "
             "project and for the whole team, and the platform's documentation. Answers at "
             "most limit of each, best first, each with its scope, its slug, its title, and "
-            "its opening. Read one whole with read_knowledge and its slug."
+            "its opening. Read one whole with read_agent_knowledge and its slug."
         ),
-        input_model=KnowledgeQuery,
-        output_model=KnowledgeHits,
+        input_model=AgentKnowledgeQuery,
+        output_model=AgentKnowledgeHits,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -683,20 +683,22 @@ class SearchKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+    def __init__(
+        self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
+    ) -> None:
         self._corpus = corpus
-        self._knowledge = knowledge
+        self._knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, KnowledgeQuery)
+        assert isinstance(call_input, AgentKnowledgeQuery)
         entries = await self._knowledge().search(
             ctx, runtime.session_id, call_input.query, call_input.limit
         )
         passages = rules.search(self._corpus, call_input.query, call_input.limit)
         hits = [
-            KnowledgeHit(
+            AgentKnowledgeHit(
                 scope=scope_of(entry),
                 slug=entry.slug,
                 title=entry.title,
@@ -705,7 +707,7 @@ class SearchKnowledgeImpl(NativeToolImpl):
             for entry in entries
         ]
         hits += [
-            KnowledgeHit(
+            AgentKnowledgeHit(
                 scope=PLATFORM,
                 slug=passage.path,
                 title=passage.title,
@@ -714,33 +716,33 @@ class SearchKnowledgeImpl(NativeToolImpl):
             )
             for passage in passages
         ]
-        return KnowledgeHits(hits=tuple(hits))
+        return AgentKnowledgeHits(hits=tuple(hits))
 
 
-class KnowledgeSlug(ToolInput):
+class AgentKnowledgeSlug(ToolInput):
     slug: str = Field(min_length=1, max_length=MAX_PATH)
 
 
-class KnowledgeRead(Platform):
+class AgentKnowledgeRead(Platform):
     scope: str
     slug: str
     title: str
     text: str
 
 
-class ReadKnowledgeImpl(NativeToolImpl):
-    """Reads one piece of knowledge whole, by the slug a search answered: a
+class ReadAgentKnowledgeImpl(NativeToolImpl):
+    """Reads one piece of agent knowledge whole, by the slug a search answered: a
     document of the platform's corpus by its path, or a reviewed entry the
     session reaches. Any other entry is not found, as one that never existed
     is not."""
 
     SPEC = ToolSpec(
-        name=kinds.READ_KNOWLEDGE,
+        name=kinds.READ_AGENT_KNOWLEDGE,
         description=(
-            "Reads one piece of the knowledge base whole, by the slug search_knowledge answered."
+            "Reads one piece of the agent knowledge base whole, by the slug search_agent_knowledge answered."
         ),
-        input_model=KnowledgeSlug,
-        output_model=KnowledgeRead,
+        input_model=AgentKnowledgeSlug,
+        output_model=AgentKnowledgeRead,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -748,22 +750,26 @@ class ReadKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+    def __init__(
+        self, corpus: Corpus, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]
+    ) -> None:
         self._corpus = corpus
-        self._knowledge = knowledge
+        self._knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
-        assert isinstance(call_input, KnowledgeSlug)
+        assert isinstance(call_input, AgentKnowledgeSlug)
         slug = call_input.slug
         for document in self._corpus.documents:
             if document.path == slug:
-                return KnowledgeRead(
+                return AgentKnowledgeRead(
                     scope=PLATFORM, slug=slug, title=document.title, text=document.text
                 )
         entry = await self._knowledge().read(ctx, runtime.session_id, slug)
-        return KnowledgeRead(scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text)
+        return AgentKnowledgeRead(
+            scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text
+        )
 
 
 class SuggestionInput(ToolInput):
@@ -777,16 +783,16 @@ class Suggested(Platform):
     note: str
 
 
-class SuggestKnowledgeImpl(NativeToolImpl):
+class SuggestAgentKnowledgeImpl(NativeToolImpl):
     """Suggests an entry for the session's project, or its whole tenant when
     it has none. It waits for a person's review, and no session recalls,
     finds, or reads it before. A repeat would suggest it twice, so a call
     whose run was lost is never run again."""
 
     SPEC = ToolSpec(
-        name=kinds.SUGGEST_KNOWLEDGE,
+        name=kinds.SUGGEST_AGENT_KNOWLEDGE,
         description=(
-            "Suggests an entry for the knowledge base: what a later session should not have "
+            "Suggests an entry for the agent knowledge base: what a later session should not have "
             "to find out again, such as a procedure, a pitfall, or how a tool behaves here. "
             "Give it a title, the words that should bring it into a session that is about "
             "them, and its text. A person reviews it before any session reads it."
@@ -800,8 +806,8 @@ class SuggestKnowledgeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
-        self._knowledge = knowledge
+    def __init__(self, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]) -> None:
+        self._knowledge = agent_knowledge
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime

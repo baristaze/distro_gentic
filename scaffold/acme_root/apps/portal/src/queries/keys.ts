@@ -73,10 +73,10 @@ export const keys = {
     all: ["playbook"] as const,
     one: (name: string) => ["playbook", name] as const,
   },
-  knowledge: {
-    all: ["knowledge"] as const,
-    list: (status: string, limit: number) => ["knowledge", "list", status, limit] as const,
-    one: (id: string) => ["knowledge", id] as const,
+  agentKnowledge: {
+    all: ["agent_knowledge"] as const,
+    list: (status: string, limit: number) => ["agent_knowledge", "list", status, limit] as const,
+    one: (id: string) => ["agent_knowledge", id] as const,
   },
   // The org's events, newest first, as the audit reads them.
   audit: {

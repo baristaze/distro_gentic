@@ -193,14 +193,14 @@ off, in person; one that runs as its creator, only its creator.
 Readers: `list_agent_automations`, `read_agent_automation` (its trigger,
 its action, its limits, and its recent runs, newest first).
 
-## Knowledge
+## Agent knowledge
 
-The org's **knowledge** is what its people keep for later sessions: an
-entry for one project or the whole org. An agent may suggest one, and
-no session reads it until a person reviews it. The platform's own
-documentation, this page among it, is knowledge too.
+The org's **agent knowledge** is what its people keep for later
+sessions: an entry for one project or the whole org. An agent may
+suggest one, and no session reads it until a person reviews it. The
+platform's own documentation, this page among it, is knowledge too.
 
-Readers: `search_knowledge`, `read_knowledge`, `search_corpus`.
+Readers: `search_agent_knowledge`, `read_agent_knowledge`, `search_corpus`.
 
 ## Validation sessions
 

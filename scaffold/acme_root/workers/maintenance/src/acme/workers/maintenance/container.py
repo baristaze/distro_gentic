@@ -24,6 +24,8 @@ from acme.om.agent_billing.root import (
     refuse_open_money,
 )
 from acme.om.agent_billing.sweep import ProviderBillsUnknownImpl
+from acme.om.agent_knowledge.impl.manager import AgentKnowledgeOptions
+from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
@@ -40,8 +42,6 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.impl.manager import IntakeOptions
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
-from acme.om.knowledge.impl.manager import KnowledgeOptions
-from acme.om.knowledge.root import build_knowledge
 from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
@@ -274,7 +274,7 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # playbooks, knowledge, and notifications, for their purges.
+        # playbooks, agent_knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
         # Outside a local stack, an agent automation's session starts in a project:
@@ -290,8 +290,8 @@ class WorkerContainer:
         self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
             managers
         )
-        self.knowledge = build_knowledge(
-            storage, managers, options=KnowledgeOptions(purge_batch=batch)
+        self.agent_knowledge = build_agent_knowledge(
+            storage, managers, options=AgentKnowledgeOptions(purge_batch=batch)
         )
         self.connectors = build_connectors(
             storage,

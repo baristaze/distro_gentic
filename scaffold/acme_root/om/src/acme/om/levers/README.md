@@ -5,7 +5,7 @@ stalls an agent. This is one of the kinds of thing [Acme is made
 of](../../../../README.md).
 
 A lever is a [playbook](../playbooks/README.md) or a reviewed
-[knowledge](../knowledge/README.md) entry: words written for people
+[agent knowledge](../agent_knowledge/README.md) entry: words written for people
 that an agent then reads and follows. A phrase repeated until it looks
 load-bearing, a must and a must-not on one subject, a tool no kind
 holds, or "keep trying until it works" makes an agent spin. The levers
@@ -64,8 +64,8 @@ version.
 
 ## How another namespace composes it
 
-The playbooks and the knowledge swimlanes run the checks as a person
-publishes, writes, edits, or keeps an entry, against `reach_of` their
-root's kinds. The knowledge swimlane records the version each session
-recalls, or reads by its slug, as the playbooks swimlane records each
-invocation, and the reading reads both.
+The playbooks and the agent knowledge swimlanes run the checks as a
+person publishes, writes, edits, or keeps an entry, against `reach_of`
+their root's kinds. The agent knowledge swimlane records the version
+each session recalls, or reads by its slug, as the playbooks swimlane
+records each invocation, and the reading reads both.

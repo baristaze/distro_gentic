@@ -56,6 +56,27 @@ class Capability(RootModel[str]):
     root: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,62}$')]
 
 
+class AgentKnowledgeRequest(BaseModel):
+    """
+    An entry: its title, the words that trigger it, all of which must
+    appear in what a session is about, and what it says. A trigger word
+    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+    in it, so it would match every session.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    text: Annotated[str, Field(max_length=10000, min_length=1, title='Text')]
+    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
+    trigger: Annotated[list[str], Field(max_length=20, min_length=1, title='Trigger')]
+
+
+class AgentKnowledgeStatus(StrEnum):
+    suggested = 'suggested'
+    reviewed = 'reviewed'
+    rejected = 'rejected'
+
+
 class AgentRefView(BaseModel):
     """
     The agent that wrote a message: its kind and the session it runs in.
@@ -1091,27 +1112,6 @@ class KeyStatus(StrEnum):
     refused = 'refused'
 
 
-class KnowledgeRequest(BaseModel):
-    """
-    An entry: its title, the words that trigger it, all of which must
-    appear in what a session is about, and what it says. A trigger word
-    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
-    in it, so it would match every session.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    text: Annotated[str, Field(max_length=10000, min_length=1, title='Text')]
-    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
-    trigger: Annotated[list[str], Field(max_length=20, min_length=1, title='Trigger')]
-
-
-class KnowledgeStatus(StrEnum):
-    suggested = 'suggested'
-    reviewed = 'reviewed'
-    rejected = 'rejected'
-
-
 class LaneLoadView(BaseModel):
     kind: Annotated[str, Field(title='Kind')]
     lane: Annotated[str, Field(title='Lane')]
@@ -1160,7 +1160,7 @@ class LeverCheck(StrEnum):
 
 class LeverKind(StrEnum):
     playbook = 'playbook'
-    knowledge = 'knowledge'
+    agent_knowledge = 'agent_knowledge'
 
 
 class LeverView(BaseModel):
@@ -3292,26 +3292,6 @@ class JobCompletionRequest(BaseModel):
     text: Annotated[str | None, Field(max_length=1000000, title='Text')] = ''
 
 
-class KnowledgeView(BaseModel):
-    """
-    An entry, its state, who suggested and who reviewed it, the version
-    an edit names in `If-Match`, and what the lever checks found in its
-    words at that version: advice, never a refusal; null on a version they
-    never read, an empty list on one they read and found nothing in.
-    """
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
-    id: Annotated[UUID, Field(title='Id')]
-    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
-    status: KnowledgeStatus
-    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
-    text: Annotated[str, Field(title='Text')]
-    title: Annotated[str, Field(title='Title')]
-    trigger: Annotated[list[str], Field(title='Trigger')]
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    version: Annotated[int, Field(title='Version')]
-
-
 class LastOwnerDetail(BaseModel):
     """
     What a `last_owner` refusal carries: every team org the person is the
@@ -3967,6 +3947,26 @@ class AgentAutomationRequest(BaseModel):
     own_events: Annotated[bool | None, Field(title='Own Events')] = False
     runs_as: RunsAs | None = None
     trigger: TriggerBody
+
+
+class AgentKnowledgeView(BaseModel):
+    """
+    An entry, its state, who suggested and who reviewed it, the version
+    an edit names in `If-Match`, and what the lever checks found in its
+    words at that version: advice, never a refusal; null on a version they
+    never read, an empty list on one they read and found nothing in.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
+    id: Annotated[UUID, Field(title='Id')]
+    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
+    status: AgentKnowledgeStatus
+    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
+    text: Annotated[str, Field(title='Text')]
+    title: Annotated[str, Field(title='Title')]
+    trigger: Annotated[list[str], Field(title='Trigger')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class AgentSessionPageView(BaseModel):

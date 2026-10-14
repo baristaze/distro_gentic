@@ -1,8 +1,8 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, agent_automations, playbooks, knowledge, and notifications
+with the intake, agent_automations, playbooks, agent_knowledge, and notifications
 swimlanes wired as a root wires them, every integration served by its
 twin: the engine's tools manager wrapped in the trust layer,
-the playbooks layer, and the knowledge layer, and each manager built over
+the playbooks layer, and the agent knowledge layer, and each manager built over
 the engine's. What
 their suites share: a tenant whose members a case names with a role, the
 tenant's service context, and the steps a session holds."""
@@ -24,6 +24,8 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_automations.manager import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import agent_automation_principals, build_agent_automations
+from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
+from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -45,8 +47,6 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.knowledge.manager import KnowledgeManagerInterface
-from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.notifications.manager import NotificationsManagerInterface
@@ -155,7 +155,7 @@ class Wired:
     intake: IntakeManagerInterface
     agent_automations: AgentAutomationsManagerInterface
     playbooks: PlaybooksManagerInterface
-    knowledge: KnowledgeManagerInterface
+    agent_knowledge: AgentKnowledgeManagerInterface
     notifications: NotificationsManagerInterface
     chat: IntegrationTwinImpl
     forge: IntegrationTwinImpl
@@ -304,10 +304,10 @@ def wired(
         clock=clock,
     )
     playbooks = PlaybooksLayer(storage, clock=clock)
-    knowledge = KnowledgeLayer(storage, clock=clock)
+    agent_knowledge = AgentKnowledgeLayer(storage, clock=clock)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        return knowledge.tools(playbooks.tools(trust.tools(inner)))
+        return agent_knowledge.tools(playbooks.tools(trust.tools(inner)))
 
     managers = build_managers(
         storage,
@@ -380,7 +380,7 @@ def wired(
             playbooks=lambda: playbooks.build(managers),
         ),
         playbooks=playbooks.build(managers),
-        knowledge=knowledge.build(managers),
+        agent_knowledge=agent_knowledge.build(managers),
         notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
         chat=chat,
         forge=forge,

@@ -23,6 +23,8 @@ from acme.client.types import (
     AdvertisementBody,
     AgentAutomationRequest,
     AgentAutomationView,
+    AgentKnowledgeStatus,
+    AgentKnowledgeView,
     AgentSessionPageView,
     AgentSessionView,
     ClaimantClaimView,
@@ -50,8 +52,6 @@ from acme.client.types import (
     IssuedSessionView,
     IssuedTicketView,
     IssuedUploadView,
-    KnowledgeStatus,
-    KnowledgeView,
     LeasePageView,
     LeaseRequestView,
     LeaseView,
@@ -909,47 +909,49 @@ class ApiClient:
         )
         return AgentAutomationView.model_validate(edited)
 
-    async def knowledge(
+    async def agent_knowledge(
         self,
-        status: KnowledgeStatus = KnowledgeStatus.reviewed,
+        status: AgentKnowledgeStatus = AgentKnowledgeStatus.reviewed,
         *,
         after: UUID | None = None,
         limit: int = LIMIT_MAX,
-    ) -> list[KnowledgeView]:
+    ) -> list[AgentKnowledgeView]:
         """The entries in a state; the suggestions are what waits on a review."""
         params: dict[str, Any] = {"status": status.value, "limit": limit}
         if after is not None:
             params["after"] = str(after)
-        found = await self.request("GET", "/v1/knowledge", params=params)
-        return [KnowledgeView.model_validate(entry) for entry in found]
+        found = await self.request("GET", "/v1/agent-knowledge", params=params)
+        return [AgentKnowledgeView.model_validate(entry) for entry in found]
 
-    async def knowledge_entry(self, entry_id: UUID) -> KnowledgeView:
-        read = await self.request("GET", f"/v1/knowledge/{entry_id}")
-        return KnowledgeView.model_validate(read)
+    async def agent_knowledge_entry(self, entry_id: UUID) -> AgentKnowledgeView:
+        read = await self.request("GET", f"/v1/agent-knowledge/{entry_id}")
+        return AgentKnowledgeView.model_validate(read)
 
-    async def write_knowledge(self, title: str, trigger: list[str], text: str) -> KnowledgeView:
+    async def write_agent_knowledge(
+        self, title: str, trigger: list[str], text: str
+    ) -> AgentKnowledgeView:
         written = await self.request(
-            "POST", "/v1/knowledge", json={"title": title, "trigger": trigger, "text": text}
+            "POST", "/v1/agent-knowledge", json={"title": title, "trigger": trigger, "text": text}
         )
-        return KnowledgeView.model_validate(written)
+        return AgentKnowledgeView.model_validate(written)
 
-    async def edit_knowledge(
+    async def edit_agent_knowledge(
         self, entry_id: UUID, title: str, trigger: list[str], text: str, *, version: int
-    ) -> KnowledgeView:
+    ) -> AgentKnowledgeView:
         """The edit, on the version read; `precondition_failed` when it moved."""
         edited = await self.request(
             "PUT",
-            f"/v1/knowledge/{entry_id}",
+            f"/v1/agent-knowledge/{entry_id}",
             json={"title": title, "trigger": trigger, "text": text},
             if_match=version,
         )
-        return KnowledgeView.model_validate(edited)
+        return AgentKnowledgeView.model_validate(edited)
 
-    async def review_knowledge(self, entry_id: UUID, *, keep: bool) -> KnowledgeView:
+    async def review_agent_knowledge(self, entry_id: UUID, *, keep: bool) -> AgentKnowledgeView:
         reviewed = await self.request(
-            "POST", f"/v1/knowledge/{entry_id}/review", json={"keep": keep}
+            "POST", f"/v1/agent-knowledge/{entry_id}/review", json={"keep": keep}
         )
-        return KnowledgeView.model_validate(reviewed)
+        return AgentKnowledgeView.model_validate(reviewed)
 
     async def playbook(self, name: str) -> PlaybookView:
         """The latest version of the name."""
@@ -1550,7 +1552,7 @@ class ApiClient:
     async def admin_levers(
         self, org_id: UUID, since: datetime, until: datetime
     ) -> LeverReadingView:
-        """The playbooks and knowledge the org's sessions created in `[since,
+        """The playbooks and agent knowledge the org's sessions created in `[since,
         until)` reached, ranked by how much more often the sessions that
         reached them stalled; a read under `read`."""
         body = await self.request(

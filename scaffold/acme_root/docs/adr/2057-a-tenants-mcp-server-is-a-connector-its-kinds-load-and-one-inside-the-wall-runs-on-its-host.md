@@ -111,8 +111,8 @@ a host server's definitions to its review. Trigger: host connectors pass
 a tenth of the connectors tenants connect.
 
 **Not now: connectors in the reading of stalled sessions.** The lever
-reading names playbooks and knowledge. Trigger: a connector's toolset is
-loaded in a tenth of the sessions that stall.
+reading names playbooks and agent knowledge. Trigger: a connector's
+toolset is loaded in a tenth of the sessions that stall.
 
 ## Consequences
 

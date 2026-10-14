@@ -72,7 +72,7 @@ function answer(path: string): unknown {
   }
   if (path.startsWith("/v1/users")) return { items: [user], next_cursor: null };
   if (path.startsWith("/v1/agent-sessions")) return { items: [], next_cursor: null };
-  if (path.startsWith("/v1/knowledge")) return [];
+  if (path.startsWith("/v1/agent-knowledge")) return [];
   if (path.startsWith("/v1/projects")) return { items: [], next_cursor: null };
   // Uploads are off for Ajax alone, so a snapshot names the org it was read in.
   if (path === "/v1/flags") return { flags: { "media-uploads": slug !== "ajax" } } satisfies FlagsView;

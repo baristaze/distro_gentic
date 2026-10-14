@@ -1,0 +1,14 @@
+import pytest
+from contracts.agent_knowledge_storage import AgentKnowledgeStorageContract
+
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
+from acme.om.agent_knowledge.storage.impl.postgres import AgentKnowledgeStoragePostgresImpl
+from acme.om.storage.impl.pg_base import LoginSessions
+
+pytestmark = pytest.mark.integration
+
+
+class TestAgentKnowledgeStoragePostgres(AgentKnowledgeStorageContract):
+    @pytest.fixture
+    def storage(self, pg_sessions: LoginSessions) -> AgentKnowledgeStorageInterface:
+        return AgentKnowledgeStoragePostgresImpl(pg_sessions)

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
 from acme.services.api.services.agent_billing import AgentBillingServiceInterface
+from acme.services.api.services.agent_knowledge import AgentKnowledgeServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
@@ -17,7 +18,6 @@ from acme.services.api.services.flags import FlagsServiceInterface
 from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
-from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.leases import LeasesServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
@@ -39,6 +39,7 @@ __all__ = [
     "AdminServiceInterface",
     "AgentAutomationsServiceInterface",
     "AgentBillingServiceInterface",
+    "AgentKnowledgeServiceInterface",
     "AgentSessionsServiceInterface",
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
@@ -49,7 +50,6 @@ __all__ = [
     "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
-    "KnowledgeServiceInterface",
     "LeasesServiceInterface",
     "MatrixServiceInterface",
     "MediaServiceInterface",
@@ -144,7 +144,7 @@ class ServicesInterface(ABC):
     def get_projects_service(self) -> ProjectsServiceInterface: ...
 
     @abstractmethod
-    def get_knowledge_service(self) -> KnowledgeServiceInterface: ...
+    def get_agent_knowledge_service(self) -> AgentKnowledgeServiceInterface: ...
 
     @abstractmethod
     def get_connectors_service(self) -> ConnectorsServiceInterface: ...

@@ -76,7 +76,7 @@ def surfaces(**extra: Mapping[str, str]) -> dict[Surface, dict[str, str]]:
     """What the agent read, besides the objective and its evidence."""
     read = {
         Surface.PROMPT: {"kind": "You deliver the work, and submit it with its evidence."},
-        Surface.KNOWLEDGE: {"export": "The export runs nightly over every order."},
+        Surface.AGENT_KNOWLEDGE: {"export": "The export runs nightly over every order."},
         Surface.TOOL_SOURCE: {"validate": "Runs the project's checks on a fresh executor."},
         Surface.PULL_REQUEST: {"description": "Every order reaches the export again."},
     }

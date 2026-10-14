@@ -14,6 +14,7 @@ import pytest
 from contracts.intake import Wired, wired
 from contracts.loops import reply, said, use
 
+from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledgeStatus
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
@@ -27,7 +28,6 @@ from acme.om.context import (
     Role,
 )
 from acme.om.exceptions import NotAuthorized, ValidationFailed
-from acme.om.knowledge.types.knowledge import KnowledgeStatus
 from acme.om.levers.impl.manager import LeversOptions
 from acme.om.levers.root import build_levers
 from acme.om.levers.rules import (
@@ -251,28 +251,28 @@ async def test_a_publish_with_a_finding_lands_and_keeps_it_with_the_version(
     assert (plain.version, plain.findings) == (2, ())
 
 
-async def test_knowledge_carries_its_findings_from_its_writing_to_its_review(
+async def test_agent_knowledge_carries_its_findings_from_its_writing_to_its_review(
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    written = await platform.knowledge.write(
+    written = await platform.agent_knowledge.write(
         author, "Deploys", ("deploy",), "Keep retrying the deploy until it is green."
     )
     assert [f.check for f in written.findings or ()] == [LeverCheck.UNBOUNDED_RETRY]
-    edited = await platform.knowledge.edit(
+    edited = await platform.agent_knowledge.edit(
         author, written.id, "Deploys", ("deploy",), "Deploys go through the pipeline.", 1
     )
     assert edited.findings == ()
     session_id = await platform.start()
-    suggested = await platform.knowledge.suggest(
+    suggested = await platform.agent_knowledge.suggest(
         await platform.agents_call(platform.owner),
         session_id,
         "Vendors",
         ("vendor",),
         "You must call the vendor first. Never call the vendor.",
     )
-    kept = await platform.knowledge.review(author, suggested.id, keep=True)
-    assert kept.status is KnowledgeStatus.REVIEWED
+    kept = await platform.agent_knowledge.review(author, suggested.id, keep=True)
+    assert kept.status is AgentKnowledgeStatus.REVIEWED
     assert [f.check for f in kept.findings or ()] == [LeverCheck.CONTRADICTION]
 
 
@@ -301,7 +301,9 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
         )
         for name, body in (("flaky-deploys", DEFECTS[LeverCheck.UNBOUNDED_RETRY]), ("house", PLAIN))
     ]
-    note = await platform.knowledge.write(author, "Totals", ("totals",), "Totals are monthly.")
+    note = await platform.agent_knowledge.write(
+        author, "Totals", ("totals",), "Totals are monthly."
+    )
     since = platform.clock.now - timedelta(minutes=1)
     sessions = [await platform.start() for _ in range(5)]
     reached = {
@@ -315,7 +317,7 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
         for name in reached[at]:
             await platform.playbooks.invoke(platform.owner, session_id, name)
         if at in (0, 2, 4):
-            await platform.knowledge.recall(platform.owner, session_id, "the totals")
+            await platform.agent_knowledge.recall(platform.owner, session_id, "the totals")
         if at in (0, 1, 2):
             await spin(platform, session_id)
         else:
@@ -332,7 +334,9 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
     assert first.lever == LeverRef(kind=LeverKind.PLAYBOOK, id=flaky.id, version=1)
     assert set(first.spun_sessions) == {sessions[0], sessions[1]}
     assert (first.spun, first.sessions, first.spun_without, first.sessions_without) == (2, 2, 1, 3)
-    assert second.lever == LeverRef(kind=LeverKind.KNOWLEDGE, id=note.id, version=note.version)
+    assert second.lever == LeverRef(
+        kind=LeverKind.AGENT_KNOWLEDGE, id=note.id, version=note.version
+    )
     assert set(second.spun_sessions) == {sessions[0], sessions[2]}
     assert house.id not in {standing.lever.id for standing in reading.standings}
     # An operator who reads sees a lever's shape, never the tenant's words.
@@ -345,7 +349,9 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    note = await platform.knowledge.write(author, "Totals", ("totals",), "Totals are monthly.")
+    note = await platform.agent_knowledge.write(
+        author, "Totals", ("totals",), "Totals are monthly."
+    )
     assert note.slug is not None
     since = platform.clock.now - timedelta(minutes=1)
     sessions = [await platform.start() for _ in range(3)]
@@ -356,9 +362,9 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
     for session_id in sessions:
         await platform.playbooks.invoke(platform.owner, session_id, "house")
     agent = await platform.agents_call(platform.owner)
-    # What `read_knowledge` does: the entry by its slug, and a read again.
+    # What `read_agent_knowledge` does: the entry by its slug, and a read again.
     for _ in range(2):
-        assert (await platform.knowledge.read(agent, sessions[0], note.slug)).id == note.id
+        assert (await platform.agent_knowledge.read(agent, sessions[0], note.slug)).id == note.id
     await spin(platform, sessions[0])
     for session_id in sessions[1:]:
         await answer(platform, session_id)
@@ -367,7 +373,9 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
         operator(), platform.owner.org_id, since, utcnow() + timedelta(minutes=1)
     )
     (standing,) = reading.standings
-    assert standing.lever == LeverRef(kind=LeverKind.KNOWLEDGE, id=note.id, version=note.version)
+    assert standing.lever == LeverRef(
+        kind=LeverKind.AGENT_KNOWLEDGE, id=note.id, version=note.version
+    )
     assert (standing.sessions, standing.spun, standing.spun_sessions) == (1, 1, (sessions[0],))
 
 

@@ -4,12 +4,12 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.base import Platform
 from acme.om.context import OperatorContext, OperatorPermission
 from acme.om.exceptions import ValidationFailed
-from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.levers.manager import LeversManagerInterface
 from acme.om.levers.rules import id_floor, spin_of, standings
 from acme.om.levers.types.lever import LeverKind, LeverReading, LeverRef, SessionLevers
@@ -27,7 +27,7 @@ class LeversOptions(Platform):
     # The most steps of one session it reads, a page at a time.
     steps: int = Field(default=10_000, gt=0)
     page: int = Field(default=500, gt=0)
-    # The most playbooks, and knowledge entries, of one session it names.
+    # The most playbooks, and agent knowledge entries, of one session it names.
     levers: int = Field(default=50, gt=0)
     # The most sessions a standing names behind its figure.
     named: int = Field(default=20, gt=0)
@@ -42,13 +42,13 @@ class LeversManagerImpl(LeversManagerInterface):
         sessions: AgentSessionStorageInterface,
         shapes: StepStorageInterface,
         playbooks: PlaybookStorageInterface,
-        knowledge: KnowledgeStorageInterface,
+        agent_knowledge: AgentKnowledgeStorageInterface,
         options: LeversOptions,
     ) -> None:
         self._sessions = sessions
         self._shapes = shapes
         self._playbooks = playbooks
-        self._knowledge = knowledge
+        self._knowledge = agent_knowledge
         self._options = options
 
     async def read_levers(
@@ -114,7 +114,7 @@ class LeversManagerImpl(LeversManagerInterface):
             )
         ]
         levers += [
-            LeverRef(kind=LeverKind.KNOWLEDGE, id=recall.entry_id, version=recall.version)
+            LeverRef(kind=LeverKind.AGENT_KNOWLEDGE, id=recall.entry_id, version=recall.version)
             for recall in await self._knowledge.read_recalls(
                 org_id, session.id, self._options.levers
             )

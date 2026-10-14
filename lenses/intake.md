@@ -6,11 +6,11 @@ feedback returns to the same session.
 
 This group judges how the world's events reach a session and become
 work: intake, the routing that finds a session and decides what wakes
-it, twins in the suites, agent_automations, playbooks and knowledge,
-connectors, and notifications. It leaves the inbox and how data renders
-to the engine; steering messages to `watch`; who may speak as a
-principal and how outside text is labelled to `wall`; and the provenance
-a twin feeds into evidence to `evidence`.
+it, twins in the suites, agent_automations, playbooks and agent
+knowledge, connectors, and notifications. It leaves the inbox and how
+data renders to the engine; steering messages to `watch`; who may speak
+as a principal and how outside text is labelled to `wall`; and the
+provenance a twin feeds into evidence to `evidence`.
 
 ## INT-01 Events come in through the guideline's inbound queue
 
@@ -205,7 +205,7 @@ kind made after the pin holds its brief as its standing text, whole on
 every request, and its gates in its policy, and keeps that version for
 its life.
 
-**Source.** Work In, Results Out, Playbooks and Knowledge.
+**Source.** Work In, Results Out, Playbooks and Agent Knowledge.
 
 **Look for.** Who may publish a playbook; who may invoke one, and who
 may pin one; how its gates compile into the session's policy; where a
@@ -221,21 +221,21 @@ whose gates hold only after the session's first call.
 
 **Check.** review
 
-## INT-10 Knowledge a person has not reviewed is never recalled
+## INT-10 Agent knowledge a person has not reviewed is never recalled
 
-**Principle.** Knowledge is recalled into a session when its trigger
-matches, so a new session does not rediscover its environment. It
-renders as data. An agent may suggest knowledge, and a person reviews it
-before any session recalls it, so one session cannot plant instructions
-for the next.
+**Principle.** Agent knowledge is recalled into a session when its
+trigger matches, so a new session does not rediscover its environment.
+It renders as data. An agent may suggest agent knowledge, and a person
+reviews it before any session recalls it, so one session cannot plant
+instructions for the next.
 
-**Source.** Work In, Results Out, Playbooks and Knowledge.
+**Source.** Work In, Results Out, Playbooks and Agent Knowledge.
 
-**Look for.** How knowledge is suggested, reviewed, and recalled; how
-recalled knowledge renders.
+**Look for.** How agent knowledge is suggested, reviewed, and recalled;
+how recalled agent knowledge renders.
 
 **Violation.** An agent's suggestion recalled before a person reviews
-it; recalled knowledge rendered as an instruction.
+it; recalled agent knowledge rendered as an instruction.
 
 **Severity.** high
 

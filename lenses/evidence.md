@@ -291,10 +291,10 @@ a cited report), never the presence of files.
 surfaces it covers; what the harness scores.
 
 **Violation.** An acceptance verdict without the hidden suite; a prompt,
-knowledge, a tool source, evidence, or a pull request that names the
-hidden suite, or a surface the scanner skips; a harness that scores the
-presence of files; an edit to the checks or the system under test that
-goes uncaught.
+agent_knowledge, a tool source, evidence, or a pull request that names
+the hidden suite, or a surface the scanner skips; a harness that scores
+the presence of files; an edit to the checks or the system under test
+that goes uncaught.
 
 **Severity.** high
 

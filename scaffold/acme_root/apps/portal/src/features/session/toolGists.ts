@@ -46,9 +46,9 @@ export const PLATFORM_GISTS: Readonly<Record<string, Gist>> = {
     const exit = code !== null && code !== 0 ? ` · exit ${code}` : "";
     return `${verb(output, "Ran", "Run")} ${line ? `\`${oneLine(line, 80)}\`` : "a command"}${exit}`;
   },
-  search_knowledge: (input, output) => `${verb(output, "Searched", "Search")} knowledge for ${quoted(asked(input, "query"))}`.trim(),
-  read_knowledge: () => "Read a knowledge entry",
-  suggest_knowledge: (input, output) => `${verb(output, "Suggested", "Suggest")} a knowledge entry ${quoted(asked(input, "title"))}`.trim(),
+  search_agent_knowledge: (input, output) => `${verb(output, "Searched", "Search")} agent knowledge for ${quoted(asked(input, "query"))}`.trim(),
+  read_agent_knowledge: () => "Read an agent knowledge entry",
+  suggest_agent_knowledge: (input, output) => `${verb(output, "Suggested", "Suggest")} an agent knowledge entry ${quoted(asked(input, "title"))}`.trim(),
   validate: (_input, output) => `${verb(output, "Validated", "Validate")} the head`,
   open_pull_request: (input, output) => `${verb(output, "Opened", "Open")} a pull request ${quoted(asked(input, "title"))}`.trim(),
   submit_result: (input, output) => `${verb(output, "Submitted", "Submit")} its result: ${asked(input, "claim") ?? "a claim"}`,

@@ -20,6 +20,7 @@ from acme.om.agent_automations.actions import AgentAutomationActionInterface
 from acme.om.agent_billing.gate import MoneyGateInterface
 from acme.om.agent_billing.impl.gate import MoneyCallGateImpl
 from acme.om.agent_billing.impl.prices import PriceBookTableImpl
+from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
@@ -73,7 +74,6 @@ from acme.om.hosts.rules import ENROLLMENT_PREFIX
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
-from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.leases import LeasesManagerInterface
 from acme.om.leases.impl.kinds import NoopResourceKindImpl, OrchestrationWaiterImpl
 from acme.om.leases.impl.manager import LeasesManagerImpl, LeasesOptions
@@ -487,11 +487,11 @@ def agent_automations_absent() -> AgentAutomationsManagerInterface:
     raise Unavailable("no agent automations are read in this process")
 
 
-def knowledge_absent() -> KnowledgeManagerInterface:
-    """No knowledge in this process: a loud null, so a tool that searches,
-    reads, or suggests knowledge refuses rather than answer that none is
+def agent_knowledge_absent() -> AgentKnowledgeManagerInterface:
+    """No agent knowledge in this process: a loud null, so a tool that searches,
+    reads, or suggests agent knowledge refuses rather than answer that none is
     kept."""
-    raise Unavailable("no knowledge is kept in this process")
+    raise Unavailable("no agent knowledge is kept in this process")
 
 
 async def purge_held(
@@ -647,7 +647,7 @@ def build_managers(
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] | None = None,
-    knowledge: Callable[[], KnowledgeManagerInterface] | None = None,
+    agent_knowledge: Callable[[], AgentKnowledgeManagerInterface] | None = None,
     agent_automations: Callable[[], AgentAutomationsManagerInterface] | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
@@ -779,7 +779,7 @@ def build_managers(
     refused at boot (`UnsafeConfiguration`). None ships none.
     `intake` answers the intake the process builds over these managers,
     where the engineer's pull request is bound to its session; None binds
-    nothing, so that tool opens none. `knowledge` answers the knowledge the
+    nothing, so that tool opens none. `agent_knowledge` answers the agent knowledge the
     process builds over them, which the agents search, read, and suggest
     to; None keeps none, so those tools refuse. `agent_automations` answers the
     agent automations the process builds over them, which the assistant reads;
@@ -846,7 +846,7 @@ def build_managers(
             evidence=lambda: managers.evidence,
             workspaces=lambda: managers.workspaces,
             intake=intake or intake_absent,
-            knowledge=knowledge or knowledge_absent,
+            agent_knowledge=agent_knowledge or agent_knowledge_absent,
             integrations=IntegrationAbsentImpl
             if integrations is None
             else integrations.get_integration,

@@ -19,7 +19,7 @@ class Surface(StrEnum):
     """Every kind of text an agent reads. A scan covers each of them."""
 
     PROMPT = "prompt"
-    KNOWLEDGE = "knowledge"
+    AGENT_KNOWLEDGE = "agent_knowledge"
     TOOL_SOURCE = "tool_source"
     EVIDENCE = "evidence"
     PULL_REQUEST = "pull_request"

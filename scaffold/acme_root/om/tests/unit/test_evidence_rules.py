@@ -281,7 +281,7 @@ MARKERS = ("hidden_payments_suite", "tests/hidden/test_drop.py", "test_drop_at_p
 def clean() -> dict[Surface, dict[str, str]]:
     return {
         Surface.PROMPT: {"system": "Investigate why the export drops the record."},
-        Surface.KNOWLEDGE: {"staging": "The staging database is reset weekly."},
+        Surface.AGENT_KNOWLEDGE: {"staging": "The staging database is reset weekly."},
         Surface.TOOL_SOURCE: {"run_tests": "def run(): subprocess.run(['pytest', 'tests'])"},
         Surface.EVIDENCE: {"run-1": "unit passed 41 of 41 cases"},
         Surface.PULL_REQUEST: {"body": "Retry the charge once before the refund."},
