@@ -61,7 +61,7 @@ The shape of a kind is the four profiles in
 | File | Change |
 |------|--------|
 | `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
-| `om/src/<name>/om/platform_agents/tools.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output |
+| `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
 | `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
@@ -123,12 +123,14 @@ The shape of a kind is the four profiles in
    wrote changes in place.
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
-   A tool the platform ships for it is a `NativeToolImpl` in `tools.py`,
-   shape `ReadSessionImpl` for a read and
-   `HandOffToSoftwareEngineerImpl` for a spawn, registered in
-   `with_shipped`. The engine's `agentic-scaffold-tool` holds what a
-   tool's spec, target, and failures must be; follow it where it is
-   installed, and the shapes in `tools.py` either way, except that a
+   A tool the platform ships for it is a `NativeToolImpl` in the module
+   of its toolset under `tools/`, or of the toolset it is closest to
+   when it is in none, shape `ReadSessionImpl` (`tools/records.py`) for
+   a read and `HandOffToSoftwareEngineerImpl` (`tools/handoff.py`) for a
+   spawn, registered in `with_shipped`. The engine's
+   `agentic-scaffold-tool` holds what a tool's spec, target, and
+   failures must be; follow it where it is installed, and the shapes in
+   `tools/` either way, except that a
    product's class takes its ceiling in `PRODUCT_KINDS.ceilings` (step
    1). Its test goes in `om/tests/unit/test_platform_agents.py`.
    A `result_tool` kind names its result tool among its tools.

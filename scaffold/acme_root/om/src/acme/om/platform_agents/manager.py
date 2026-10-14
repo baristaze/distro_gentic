@@ -1,6 +1,6 @@
 """The platform's agents swimlane: the validation session, a delivery's
 check run with no agent at all. Its kinds and their tools are profiles over
-the engine's loop (`kinds.py`, `tools.py`), which a root wires; this
+the engine's loop (`kinds.py`, `tools/`), which a root wires; this
 manager holds what has a record of its own.
 
 A validation session is platform work on the same queue an agent's takes,

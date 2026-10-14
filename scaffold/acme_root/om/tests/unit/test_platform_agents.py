@@ -118,13 +118,9 @@ from acme.om.platform_agents.kinds import (
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
 )
-from acme.om.platform_agents.tools import (
-    MAX_EDIT,
-    MAX_MATCH_TEXT,
-    MAX_VIEW,
-    EditFileImpl,
-    SearchCodeImpl,
-)
+from acme.om.platform_agents.tools.code import MAX_EDIT, EditFileImpl
+from acme.om.platform_agents.tools.files import MAX_MATCH_TEXT, SearchCodeImpl
+from acme.om.platform_agents.tools.review import MAX_VIEW
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import ProductKinds, build_managers, engine_tools
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
