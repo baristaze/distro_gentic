@@ -132,7 +132,8 @@ The shape of a kind is the four profiles in
    failures must be; follow it where it is installed, and the shapes in
    `tools/` either way, except that a
    product's class takes its ceiling in `PRODUCT_KINDS.ceilings` (step
-   1). Its test goes in `om/tests/unit/test_platform_agents.py`.
+   1). Its test goes in its toolset's
+   `om/tests/unit/test_platform_tools_<toolset>.py`.
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it
