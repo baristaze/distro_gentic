@@ -317,7 +317,7 @@ class ProductKinds:
     most the prompt cache's life; one it names none for takes the
     default (`warm_grace`). It names, by name and version, the agent kinds
     of its own whose workspace starts from the workspace base its session's
-    project names (`workspace_bases`), as the platform names its engineer
+    project names (`workspace_bases`), as the platform names its software engineer
     (`platform_agents.kinds.WORKSPACE_BASE_KINDS`); a pair that is no agent
     kind of its own is refused.
     Its agent kinds join the platform's catalog, which refuses a version
@@ -778,7 +778,7 @@ def build_managers(
     work on, or a slot that names a tool the catalog does not hold, is
     refused at boot (`UnsafeConfiguration`). None ships none.
     `intake` answers the intake the process builds over these managers,
-    where the engineer's pull request is bound to its session; None binds
+    where the software engineer's pull request is bound to its session; None binds
     nothing, so that tool opens none. `agent_knowledge` answers the agent knowledge the
     process builds over them, which the agents search, read, and suggest
     to; None keeps none, so those tools refuse. `agent_automations` answers the

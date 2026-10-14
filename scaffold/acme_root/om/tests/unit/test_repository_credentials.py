@@ -1,7 +1,7 @@
 """The two credentials the platform reaches a project's repository with, and
 the agent never holds, over the memory roots and the forge's twin. A push
 token writes its session's own branch, its snapshots, and its pull request
-alone, and ends with its loop's workspace or its lifetime; the engineer
+alone, and ends with its loop's workspace or its lifetime; the software engineer
 opens its branch and pull request with one it never sees, and both are
 its session's work: the events on them find it. A fetch credential is
 kept in the tenant's store under its project, handed to the read of a
@@ -54,7 +54,7 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.route import Effect
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ENGINEER_KIND
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
@@ -67,10 +67,10 @@ from acme.om.workspaces.types.source import RepositoryBinding, RepositoryWrite, 
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
-ENGINEER = ENGINEER_KIND.model_copy(
-    update={"version": ENGINEER_KIND.version + 1, "isolation": TWIN}
+SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
+    update={"version": SOFTWARE_ENGINEER_KIND.version + 1, "isolation": TWIN}
 )
-"""The shipped engineer, whole, in the workspace this suite can prepare."""
+"""The shipped software engineer, whole, in the workspace this suite can prepare."""
 
 HEAD = "c" * 40
 PASSWORD = "fetch-only-0123456789"
@@ -78,7 +78,7 @@ WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 
 
 class Forged:
-    """An engineer's platform: its project binds `REPOSITORY`, the forge is
+    """A software engineer's platform: its project binds `REPOSITORY`, the forge is
     the integration's twin, the workspace's HEAD is `HEAD`, and intake binds
     a session's work as the session runner wires it."""
 
@@ -88,7 +88,7 @@ class Forged:
         self.reader = ReaderTwin(head=HEAD)
         self.loop: Loop = loop_over(
             tmp_path,
-            kinds=(ENGINEER,),
+            kinds=(SOFTWARE_ENGINEER,),
             platform_agents=PlatformAgents(corpus=CORPUS),
             intake=lambda: self.intake,
             workspace_projects=self.projects,
@@ -120,11 +120,11 @@ class Forged:
         transport.handler = checkout
 
     async def tenant_of(self, integration: str, installation: str) -> UUID | None:
-        """The engineer's tenant connected the forge's installation."""
+        """The software engineer's tenant connected the forge's installation."""
         return self.loop.owner.org_id
 
-    async def engineer(self) -> UUID:
-        return await self.loop.start(kinds.ENGINEER)
+    async def software_engineer(self) -> UUID:
+        return await self.loop.start(kinds.SOFTWARE_ENGINEER)
 
     async def held(self, session_id: UUID) -> SessionWorkspace:
         return await self.loop.managers.workspaces.get_workspace(self.loop.owner, session_id)
@@ -160,7 +160,7 @@ def held_with(digest: str | None, expires_in: timedelta) -> SessionWorkspace:
     )
 
 
-# Check 2: the engineer's branch and pull request open with a token scoped
+# Check 2: the software engineer's branch and pull request open with a token scoped
 # to that branch, and the token cannot push another branch or outlive its
 # session's loop.
 
@@ -203,11 +203,11 @@ def test_a_push_token_writes_its_sessions_branch_and_pull_request_alone() -> Non
     assert rules.push_refusal(held, None, "d1", branch, now) is not None, "no repository"
 
 
-async def test_the_engineer_opens_its_branch_and_pull_request_with_a_token_it_never_sees(
+async def test_the_software_engineer_opens_its_branch_and_pull_request_with_a_token_it_never_sees(
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total", body="It adds.")),
@@ -232,7 +232,7 @@ async def test_the_engineer_opens_its_branch_and_pull_request_with_a_token_it_ne
 async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
     platform = Forged(tmp_path)
     platform.head = "not a commit\nrefs/heads/main"
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     await platform.loop.say(session_id, "Fix it.")
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total")),
@@ -244,13 +244,13 @@ async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
     assert platform.forge.refs == {} and platform.forge.pull_requests == []
 
 
-# The engineer's branch and pull request are its session's work: a comment
+# The software engineer's branch and pull request are its session's work: a comment
 # or a person's push on either finds the session, and what follows from its
 # push names the session as its cause.
 
 
 async def opened(platform: Forged, session_id: UUID) -> OpenedPullRequest:
-    """The engineer opens its pull request and ends its turn; answers the
+    """The software engineer opens its pull request and ends its turn; answers the
     pull request as the forge holds it."""
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total")),
@@ -287,11 +287,11 @@ def from_forge(
     )
 
 
-async def test_a_comment_on_the_engineers_pull_request_reaches_its_session(
+async def test_a_comment_on_the_software_engineers_pull_request_reaches_its_session(
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
     pull_request = await opened(platform, session_id)
     comment = from_forge(
@@ -306,11 +306,11 @@ async def test_a_comment_on_the_engineers_pull_request_reaches_its_session(
     assert len(landed) == 1 and "Name the column Total." in landed[0].model_dump_json()
 
 
-async def test_a_persons_push_to_the_engineers_branch_hands_its_session_over(
+async def test_a_persons_push_to_the_software_engineers_branch_hands_its_session_over(
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
     await opened(platform, session_id)
     branch = WorkNames(branch=rules.session_branch(session_id))
@@ -336,7 +336,7 @@ def agent_automation_named(name: str) -> AgentAutomation:
         action=Action(
             kind=ActionKind.START_SESSION,
             brief="Fix what the event reports.",
-            agent_kind=kinds.ENGINEER,
+            agent_kind=kinds.SOFTWARE_ENGINEER,
             title=name,
         ),
         limits=Limits(
@@ -346,13 +346,13 @@ def agent_automation_named(name: str) -> AgentAutomation:
 
 
 @pytest.mark.parametrize("named_by", ["its_branch", "its_commit_alone"])
-async def test_a_check_on_the_engineers_push_follows_its_session_a_hop_on(
+async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_on(
     tmp_path: Path, named_by: str
 ) -> None:
-    """An agent automation starts the engineer, and CI fails on what it pushed.
-    The check names the engineer's branch, or only the commit the
+    """An agent automation starts the software engineer, and CI fails on what it pushed.
+    The check names the software engineer's branch, or only the commit the
     platform's account pushed for it. Either way its cause is the
-    engineer's session, and the agent automation it feeds fires a hop past the
+    software engineer's session, and the agent automation it feeds fires a hop past the
     run that started that session."""
     platform = Forged(tmp_path)
     agent_automations = build_agent_automations(
@@ -417,7 +417,7 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     lifetime = timedelta(minutes=7)
     platform = Forged(tmp_path, workspaces_options=WorkspacesOptions(push_token_lifetime=lifetime))
     workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
-    one, other = await platform.engineer(), await platform.engineer()
+    one, other = await platform.software_engineer(), await platform.software_engineer()
     before = utcnow()
     token = await workspaces.mint_push_token(owner, one)
     assert token.token.get_secret_value().startswith(rules.PUSH_TOKEN_PREFIX)
@@ -480,7 +480,7 @@ async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refus
 ) -> None:
     platform = Forged(tmp_path)
     workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
-    one = await platform.engineer()
+    one = await platform.software_engineer()
     await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
     token = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
 
@@ -518,7 +518,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     rotated = FetchCredential(username="reader", password=SecretStr("rotated"))
     assert (await workspaces.put_fetch_credential(owner, project_id, rotated)).version == 2
 
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
     await workspaces.delivery(owner, workspace)
     assert platform.reader.credentials == [rotated], "handed to the read of the work product"
@@ -548,7 +548,7 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
         owner.org_id, rules.fetch_secret_name(project_id)
     )
 
-    session_id = await platform.engineer()
+    session_id = await platform.software_engineer()
     with pytest.raises(Unavailable, match="is gone"):
         await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
     assert platform.reader.credentials == [], "no read without the value"

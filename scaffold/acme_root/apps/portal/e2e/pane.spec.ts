@@ -1,6 +1,6 @@
-// A session's right pane over the engineer's scene, on the stack the
+// A session's right pane over the software engineer's scene, on the stack the
 // timeline check runs (`portal_stack.py`, the scene's script, the forge's
-// twin). The owner starts an engineer on Home: Workspace opens itself
+// twin). The owner starts a software engineer on Home: Workspace opens itself
 // while it runs, and Changes once it delivers. A line of a work block opens
 // its step; "+" opens the rest. Then the owner takes control, runs
 // `pytest -q` on the host that holds its workspace (`portal_check.py host`
@@ -48,7 +48,7 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   check("scene", REPOSITORIES!, SLUG);
   const owner = await signedIn(browser, OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
-  await owner.getByRole("menuitemradio", { name: /^Engineer/ }).click();
+  await owner.getByRole("menuitemradio", { name: /^SoftwareEngineer/ }).click();
   await owner.keyboard.press("Escape");
   await owner.getByRole("button", { name: /^Project:/ }).click();
   await owner.getByRole("menuitemradio", { name: "First project" }).click();

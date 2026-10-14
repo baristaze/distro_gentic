@@ -119,9 +119,11 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
     assert PLATFORM_ASSISTANT_V1 in joined
     assert "read_tally" not in PLATFORM_ASSISTANT_V1.tools
     # A kind of the product's own never gains it.
-    engineer_id = await platform.start(kinds.ENGINEER)
-    engineer = await platform.managers.agent_sessions.get_session(platform.owner, engineer_id)
-    assert "read_tally" not in engineer.tools
+    software_engineer_id = await platform.start(kinds.SOFTWARE_ENGINEER)
+    software_engineer = await platform.managers.agent_sessions.get_session(
+        platform.owner, software_engineer_id
+    )
+    assert "read_tally" not in software_engineer.tools
 
 
 @pytest.mark.parametrize(
@@ -229,7 +231,7 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_o
     platform = platform_over(tmp_path, kinds=(CLERK,))
     first = await held_session(platform)
     second = await held_session(platform)
-    idle = await platform.start(kinds.ENGINEER)
+    idle = await platform.start(kinds.SOFTWARE_ENGINEER)
     projects = platform.storage.get_project_storage()
     project_id = await in_project(projects, platform.owner.org_id, first, idle)
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
@@ -286,7 +288,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
         platform.managers.steps,
         platform.owner,
     )
-    root = await sessions.get_session(owner, await platform.start(kinds.ENGINEER))
+    root = await sessions.get_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
     child = await sessions.create_session(owner, make_session(parent=root))
     asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     (message,) = await steps.append_inputs(
@@ -348,7 +350,7 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
     silent_since = now - 2 * HostsOptions().online_window
     holder = await a_host(platform, pool.id, "host-1", silent_since)
     await a_host(platform, pool.id, "host-2", now)
-    pinned = await platform.start(kinds.ENGINEER)
+    pinned = await platform.start(kinds.SOFTWARE_ENGINEER)
     await hosts.place_session(platform.owner, pinned, pool.id)
     await platform.managers.relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)

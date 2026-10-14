@@ -34,7 +34,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
-from acme.om.platform_agents.kinds import ENGINEER, WORKSPACE_BASE_KINDS
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER, WORKSPACE_BASE_KINDS
 from acme.om.projects.types.project import AgentWorkspaceBase
 from acme.om.root import ProductKinds
 from acme.om.steps.types.header import LoopOutcome
@@ -42,9 +42,9 @@ from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 NONE = EgressPolicy(mode=EgressMode.NONE)
 SEALED = IsolationSpec(mode=IsolationMode.TWIN, egress=NONE)
-TAKES = ASSISTANT.model_copy(update={"name": ENGINEER, "version": 8, "isolation": SEALED})
+TAKES = ASSISTANT.model_copy(update={"name": SOFTWARE_ENGINEER, "version": 8, "isolation": SEALED})
 """A kind the platform names among those that take their project's
-workspace_base: the engineer at version 8, here with the assistant's loop on
+workspace_base: the software engineer at version 8, here with the assistant's loop on
 the twin."""
 OWN = ASSISTANT.model_copy(update={"isolation": SEALED})
 """A kind that keeps its own base: none."""
@@ -170,9 +170,9 @@ def workspace_bases(tmp_path: Path) -> WorkspaceBases:
     return WorkspaceBases(tmp_path)
 
 
-def test_the_engineer_from_version_8_takes_its_projects_workspace_base() -> None:
-    assert (ENGINEER, 8) in WORKSPACE_BASE_KINDS
-    assert all(name != ENGINEER or version >= 8 for name, version in WORKSPACE_BASE_KINDS)
+def test_the_software_engineer_from_version_8_takes_its_projects_workspace_base() -> None:
+    assert (SOFTWARE_ENGINEER, 8) in WORKSPACE_BASE_KINDS
+    assert all(name != SOFTWARE_ENGINEER or version >= 8 for name, version in WORKSPACE_BASE_KINDS)
 
 
 def test_a_workspace_base_names_a_setup_whose_egress_follows_its_registries() -> None:
@@ -217,23 +217,25 @@ async def test_a_products_kind_its_slot_names_pins_its_projects_workspace_base(
     tmp_path: Path,
 ) -> None:
     """The root reads the product's kinds beside the platform's: the one its
-    slot names pins the base it names, as the engineer does, and the
+    slot names pins the base it names, as the software engineer does, and the
     one it does not keeps its own."""
     workspace_bases = WorkspaceBases(tmp_path, PRODUCT)
     workspace_bases.projects.workspace_base = WORKSPACE_BASE.base()
     builder = await workspace_bases.loop.start(BUILDER.name)
     reader = await workspace_bases.loop.start(READER.name)
-    engineer = await workspace_bases.loop.start(TAKES.name)
+    software_engineer = await workspace_bases.loop.start(TAKES.name)
 
     assert await workspace_bases.pinned(builder) == WORKSPACE_BASE.base()
     assert await workspace_bases.pinned(reader) is None, "its slot does not name it"
-    assert await workspace_bases.pinned(engineer) == WORKSPACE_BASE.base(), "the platform's too"
+    assert await workspace_bases.pinned(software_engineer) == WORKSPACE_BASE.base(), (
+        "the platform's too"
+    )
 
 
 def test_a_slot_names_only_the_products_own_kinds_at_a_version_it_declares() -> None:
     """A product never makes one of the platform's kinds take it, nor a
     version of its own it does not declare."""
-    for named in ((ENGINEER, 7), ("builder", 1), ("absent", 1)):
+    for named in ((SOFTWARE_ENGINEER, 7), ("builder", 1), ("absent", 1)):
         with pytest.raises(ValueError, match="no agent kind of the product's"):
             ProductKinds(agents=(BUILDER,), workspace_bases=frozenset({named}))
 

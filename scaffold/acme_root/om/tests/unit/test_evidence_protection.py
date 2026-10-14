@@ -2,7 +2,7 @@
 files reports the paths it changes as its target, the policy of the
 session's project says whether one is protected, and the platform's
 ceiling denies the call whatever the kind's defaults and the tenant's layer
-allow. The engineer's own `write_file` and `edit_file` refuse it at the
+allow. The software engineer's own `write_file` and `edit_file` refuse it at the
 call."""
 
 from datetime import timedelta
@@ -167,7 +167,7 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
         ("edit_file", {"start_line": 1, "end_line": 1, "new_text": "b"}),
     ],
 )
-async def test_the_engineers_change_to_a_protected_path_is_refused_at_the_call(
+async def test_the_software_engineers_change_to_a_protected_path_is_refused_at_the_call(
     tool: str, change: dict[str, object], tmp_path: Path
 ) -> None:
     org = make_org()

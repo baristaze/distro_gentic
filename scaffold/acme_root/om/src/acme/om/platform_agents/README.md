@@ -19,8 +19,8 @@ calls, and holds its workspace warm for a while after a loop.
   team knows; `delivery` validates, opens the pull request, and submits
   the result; `sub_agents` starts sub-agents and waits for them;
   `records` is the assistant's readers; `handoff` hands work to an
-  engineer; `artifacts` reads back a result kept outside the window;
-  `review` reads a pull request and its files at its head, notes
+  software engineer; `artifacts` reads back a result kept outside the
+  window; `review` reads a pull request and its files at its head, notes
   findings, and submits a review; and `operations` reads the tenant's
   hosts and its budgets' spend. Every shipped
   kind is built from them, and names alone a tool whose toolset would
@@ -36,44 +36,44 @@ calls, and holds its workspace warm for a while after a loop.
   [matrix](../matrix/README.md) answers an ask by its size's row, so a
   product's new kind gets a model with no edit to the matrix.
 - **A warm grace**: how long a kind's workspace stays held after a loop,
-  so a follow-up finds it warm. The engineer and analysis hold theirs for
-  the prompt cache's life, five minutes, the shortest a provider the
-  platform calls keeps a request's prefix. A product names a grace for
-  each of its kinds, never longer; one it names none for takes the
-  cache's life.
-- **The engineer** takes an objective to a validated, reviewable change.
-  It works in a container of its own, from which nothing leaves: it reads
-  files, searches the code, changes a file one place at a time or writes
-  it whole, and runs commands. It searches and reads the
-  [agent knowledge](../agent_knowledge/README.md) its session reaches, and suggests
-  an entry for a person to review. It opens its pull request on its
-  own branch, which puts its committed head on the repository, asks for a
-  validation of that head on a fresh executor, and submits its result
-  through the
+  so a follow-up finds it warm. The software engineer and analysis hold
+  theirs for the prompt cache's life, five minutes, the shortest a
+  provider the platform calls keeps a request's prefix. A product names
+  a grace for each of its kinds, never longer; one it names none for
+  takes the cache's life.
+- **The software engineer** takes an objective to a validated,
+  reviewable change. It works in a container of its own, from which
+  nothing leaves: it reads files, searches the code, changes a file one
+  place at a time or writes it whole, and runs commands. It searches and
+  reads the [agent knowledge](../agent_knowledge/README.md) its session
+  reaches, and suggests an entry for a person to review. It opens its
+  pull request on its own branch, which puts its committed head on the
+  repository, asks for a validation of that head on a fresh executor,
+  and submits its result through the
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
 - **Analysis** reads what a run produced (its logs, telemetry, and
   recordings) in a workspace of its own, searches it and the agent
   knowledge its session reaches, changes nothing, and answers with its
   findings.
-- **Sub-agents**: the engineer and analysis split independent work,
-  such as hypotheses to test or checks to run, into sub-agents, each in
-  a clean context of its own, and wait for their reports
+- **Sub-agents**: the software engineer and analysis split independent
+  work, such as hypotheses to test or checks to run, into sub-agents,
+  each in a clean context of its own, and wait for their reports
   ([ADR 1019](../../../../../docs/adr/1019-a-kind-starts-sub-agents-through-a-tool-and-a-report-clears-its-parents-wait.md)).
   A question that only reads or checks runs as analysis, and only work
-  that changes code runs as an engineer.
+  that changes code runs as a software engineer.
   Every kind roots the engine's tree: three levels deep, ten sub-agents
   besides its root, one budget and one deadline for all of them. Each
   kind a sub-agent may run as names its share, what one of them may
   spend over its life; the tree's budget still bounds them all
   ([ADR 2043](../../../../../docs/adr/2043-the-platforms-kinds-start-sub-agents-each-under-a-share-the-trees-budget-bounds.md)).
 - **A kind's versions**: a session keeps the version of its kind it
-  started on, so the engineer and analysis before they searched and
-  edited by one place, and before they started sub-agents, are still
+  started on, so the software engineer and analysis before they searched
+  and edited by one place, and before they started sub-agents, are still
   shipped beside them.
 - **The planner** turns findings into tasks. It reads where sessions
-  stand, hands new engineering work to an engineer, and answers with its
-  plan: each task and the session it goes to.
+  stand, hands new engineering work to a software engineer, and answers
+  with its plan: each task and the session it goes to.
 - **The platform assistant** helps the people who set up and run their
   part of the platform, on their own permissions. It explains the
   product from its corpus and the agent knowledge base, and cites them.
@@ -81,9 +81,9 @@ calls, and holds its workspace warm for a while after a loop.
   a session's park and its loop wait on, its projects, and its agent
   automations with their recent runs. It drafts the tenant's tool policy
   and shows the difference from what is live, and hands engineering work
-  to an engineer. It has no workspace, repository, or shell. A session
-  keeps the version of the assistant it started on, so the one before
-  its readers is still shipped.
+  to a software engineer. It has no workspace, repository, or shell. A
+  session keeps the version of the assistant it started on, so the one
+  before its readers is still shipped.
 - **The reviewer** reads one pull request through the forge's
   integration: its files and their patches, the checks at its head, and
   a file at its head. It notes each finding with a file, a line, and a
@@ -92,17 +92,18 @@ calls, and holds its workspace warm for a while after a loop.
   a file, runs code, or pushes; it comments on the pull request through
   the forge's `comment`, which a person approves. It names a share, so a
   lead may start it as a sub-agent on a pull request another kind opened
-  ([ADR 2058](../../../../../docs/adr/2058-a-reviewer-and-an-operator-ship-as-kinds-and-each-only-reads-what-it-judges.md)).
-- **The operator** reads the tenant's operations on its person's own
+  ([ADR
+  2058](../../../../../docs/adr/2058-a-reviewer-and-an-ops-analyst-ship-as-kinds-and-each-only-reads-what-it-judges.md)).
+- **The ops analyst** reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, its hosts and what
   each offers, its budgets and what they spent, and its projects and
   agent automations. Every tool it holds reads. A fix it finds leaves as
-  an objective a person hands to an engineer.
+  an objective a person hands to a software engineer.
 - **A lead** is any kind whose toolsets include `sub_agents`: it starts
-  the others, such as an engineer on a change and the reviewer on its
-  pull request, and answers with their reports. It holds every tool of
-  the kinds it starts, since a child's tools are cut to its parent's. It
-  is no kind of its own here.
+  the others, such as a software engineer on a change and the reviewer
+  on its pull request, and answers with their reports. It holds every
+  tool of the kinds it starts, since a child's tools are cut to its
+  parent's. It is no kind of its own here.
 - **The assistant's readers**, each a tool that reads through the asking
   person's own context: `list_sessions`, by status, park reason, and
   project, newest first; `read_session`, where one stands, each call it
@@ -136,27 +137,28 @@ calls, and holds its workspace warm for a while after a loop.
   finding answers an id, and one that fails names it, so a review that
   could not read its pull request fails citing why. `submit_review`
   ends the loop once the gate accepts it.
-- **Ask the operator.** A person asks why something waits or runs slow.
-  It reads first, with the assistant's readers, `list_hosts`, and
+- **Ask the ops analyst.** A person asks why something waits or runs
+  slow. It reads first, with the assistant's readers, `list_hosts`, and
   `read_spend`, then says what it waits on, what clears it, who may
   clear it, and where, and writes any engineering fix as an objective.
 - **Ask the assistant.** A person types in an assistant's session. It
   searches the corpus, reads live state, drafts, or hands work on, and
   answers. Asked why something waits, it reads first, then says what it
   waits on, what clears it, who may clear it, and where.
-- **Hand work on.** The assistant or the planner starts an engineer
-  session with an objective that stands on its own. The new session
-  names where it came from, holds only the objective, and starts when its
-  person confirms it. The agent that handed it on cannot steer it.
+- **Hand work on.** The assistant or the planner starts a software
+  engineer session with an objective that stands on its own. The new
+  session names where it came from, holds only the objective, and starts
+  when its person confirms it. The agent that handed it on cannot steer
+  it.
 - **Apply a draft.** A person who manages the tenant writes the policy a
   draft holds, at the version the draft was drawn from. A policy changed
   since is refused, never written over.
-- **Edit a file.** The engineer's `edit_file` replaces one place: a
-  text that matches exactly one place in the file, or a range of its
-  lines. A match of more than one place is refused, so an edit never
-  lands where the model did not mean, and so is a file past the bound one
-  read takes, or one that is not text. A path the session's project
-  protects is refused at the call, as `write_file` refuses it.
+- **Edit a file.** The software engineer's `edit_file` replaces one
+  place: a text that matches exactly one place in the file, or a range
+  of its lines. A match of more than one place is refused, so an edit
+  never lands where the model did not mean, and so is a file past the
+  bound one read takes, or one that is not text. A path the session's
+  project protects is refused at the call, as `write_file` refuses it.
 - **Search the code.** `search_code` runs the workspace's own search,
   through the transport, wherever the workspace runs, never in the
   platform's process. Its answer is bounded in matches, in each match's
@@ -168,11 +170,12 @@ calls, and holds its workspace warm for a while after a loop.
   reads one whole by its slug, a corpus document by its path.
   `suggest_agent_knowledge` suggests an entry for the session's project,
   which waits for a person's review.
-- **Open a pull request.** The engineer's `open_pull_request` takes a
-  title and a body, and nothing else. The workspace's committed head goes
-  to the session's own branch on its project's repository, with a push
-  token the workspaces mint for the call and check before each write
-  ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
+- **Open a pull request.** The software engineer's `open_pull_request`
+  takes a title and a body, and nothing else. The workspace's committed
+  head goes to the session's own branch on its project's repository,
+  with a push token the workspaces mint for the call and check before
+  each write ([ADR
+  2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
   The model never sees the token, and names neither the branch nor the
   repository. A second call moves the branch and keeps the one pull
   request. The platform's account pushes for every session, so the head
@@ -217,12 +220,13 @@ calls, and holds its workspace warm for a while after a loop.
   two tools of one name, is refused when the process starts, and so is a
   product's slot that names a tool the catalog does not hold, one past
   reading and handing on, or one the assistant holds already.
-- **The operator only reads, and the reviewer reads and comments.** The
-  operator's authority is delegated and the reviewer's steady; neither
-  has a workspace. Every tool the operator holds reads, and every tool
-  the reviewer holds reads but the forge's comment. A version of either
-  that reaches further, whoever declares it, is refused when the process
-  starts, over the whole catalog, the engine's tools included.
+- **The ops analyst only reads, and the reviewer reads and comments.**
+  The ops analyst's authority is delegated and the reviewer's steady;
+  neither has a workspace. Every tool the ops analyst holds reads, and
+  every tool the reviewer holds reads but the forge's comment. A version
+  of either that reaches further, whoever declares it, is refused when
+  the process starts, over the whole catalog, the engine's tools
+  included.
 - **A review counts only on its own reads and findings.** A reviewer's
   result cites calls of its own session to read the pull request, read
   its files, or note a finding. A success cites only calls that answered
@@ -271,12 +275,12 @@ assistant's current version. The toolsets a product's slot declares
 (`ProductKinds.toolsets`) join the platform's, and the session runner's
 held-workspace sweep reads each session's kind's warm grace from the slot
 (`ProductKinds.warm_grace`). The tools that read a manager take it late,
-once the root has built it; the engineer's pull request also takes the
-intake the process builds over those managers, and with none it opens
-nothing. The reviewer's reads take that intake too, and the root's
-integrations, which answer the forge; the forge's `comment` joins the
-platform's tools unless the process wires its own. The root wraps the
-result gate it builds with the review's gate (`impl/gate.py`), which
+once the root has built it; the software engineer's pull request also
+takes the intake the process builds over those managers, and with none
+it opens nothing. The reviewer's reads take that intake too, and the
+root's integrations, which answer the forge; the forge's `comment` joins
+the platform's tools unless the process wires its own. The root wraps
+the result gate it builds with the review's gate (`impl/gate.py`), which
 judges a reviewer's results and hands every other on unchanged. The
 agent automations the assistant reads are built over the managers too,
 by the session runner, and a process with none refuses those readers.

@@ -201,7 +201,7 @@ class RunnerContainer:
         built: list[Managers] = []
         held: list[RunnerContainer] = []
         # The tools through which a session acts as the platform's account
-        # record each act with intake, and the engineer's pull request binds
+        # record each act with intake, and the software engineer's pull request binds
         # its work there; the container builds it below.
         acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
         # The agent automations the platform assistant reads, built below over the

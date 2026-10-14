@@ -223,7 +223,7 @@ rebuilt from.
   and the paths changed; and dirty when the checkout this host holds has
   work that is not there. A private repository is read with its
   project's fetch credential, handed to that git alone.
-- The engineer's pull request goes through
+- The software engineer's pull request goes through
   `WorkspacesManagerInterface.open_pull_request`, which checks the push
   token, refuses a body with an image or a URL off the repository's host,
   since the forge renders it, bundles the committed head out of the

@@ -10,7 +10,7 @@ brings: an executor that writes the results stream a fresh executor would,
 and each bound repository cloned from a folder of bare repositories on
 this host (`E2E_REPOSITORIES`) instead of over HTTPS.
 
-With `E2E_CONTAINERS` set, the platform's engineer is the latest, in its
+With `E2E_CONTAINERS` set, the platform's software engineer is the latest, in its
 own container, and no session has a checkout: a container reaches no
 folder of this host's."""
 

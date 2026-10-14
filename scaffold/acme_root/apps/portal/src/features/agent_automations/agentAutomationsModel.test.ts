@@ -143,13 +143,13 @@ it("offers the principal no role above the granter's own", () => {
 
 describe("agentOptions", () => {
   const agents = [
-    { kind: "engineer", label: "Engineer" },
+    { kind: "software_engineer", label: "Software engineer" },
     { kind: "analysis", label: "Analysis" },
   ];
 
   it("offers the slot's agents, and keeps a saved kind that is none of them", () => {
-    expect(agentOptions(agents, "engineer")).toEqual([
-      { value: "engineer", label: "Engineer" },
+    expect(agentOptions(agents, "software_engineer")).toEqual([
+      { value: "software_engineer", label: "Software engineer" },
       { value: "analysis", label: "Analysis" },
     ]);
     expect(agentOptions(agents, "nightly_kind").at(-1)).toEqual({ value: "nightly_kind", label: "nightly_kind (as saved)" });

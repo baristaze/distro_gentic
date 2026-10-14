@@ -47,7 +47,7 @@ function answer(call: Call): unknown {
 const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   agents: [
-    { kind: "engineer", label: "Engineer", about: "Changes code." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code." },
     { kind: "assistant", label: "Assistant", about: "Answers questions." },
   ],
 };
@@ -74,8 +74,8 @@ describe("the agent automations list", () => {
 
   it("makes an agent automation from the form, on the agent picked from the slot's", async () => {
     await mount(routes, "/agent-automations", SLOT);
-    expect(field("Agent")!.value).toBe("engineer");
-    expect([...(field("Agent") as HTMLSelectElement).options].map((option) => option.textContent)).toEqual(["Engineer", "Assistant"]);
+    expect(field("Agent")!.value).toBe("software_engineer");
+    expect([...(field("Agent") as HTMLSelectElement).options].map((option) => option.textContent)).toEqual(["Software engineer", "Assistant"]);
     await enter("Name", "Nightly tidy");
     await enter("Agent", "assistant");
     await enter("Session title", "Tidy the docs");

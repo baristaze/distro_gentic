@@ -32,17 +32,18 @@ a workspace. `code` edits and writes its files and runs commands.
 `agent_knowledge` searches and reads what the team knows. `delivery`
 validates, opens the pull request, and submits the result. `sub_agents`
 starts sub-agents and waits for them. `records` holds the assistant's
-readers, `handoff` the hand-off to an engineer, and `artifacts` the read
-of a result kept outside the window.
+readers, `handoff` the hand-off to a software engineer, and `artifacts`
+the read of a result kept outside the window.
 
 **Every shipped kind is rebuilt from them, at every version.** A kind
 names alone a tool whose toolset would give it more than it may call.
 Analysis runs commands and edits nothing, so it names `run_command`
-alone. The engineer names `suggest_agent_knowledge` alone, the planner
-`read_session`, and the assistant its corpus search and its policy
-draft. Each version's tools are the same set as before, and the registry
-renders by name, so each renders the same tool definitions, byte for
-byte, and keeps its version. A kind whose tools change is a new version.
+alone. The software engineer names `suggest_agent_knowledge` alone, the
+planner `read_session`, and the assistant its corpus search and its
+policy draft. Each version's tools are the same set as before, and the
+registry renders by name, so each renders the same tool definitions,
+byte for byte, and keeps its version. A kind whose tools change is a new
+version.
 
 **A product adds toolsets beside the platform's.** `ProductKinds.toolsets`
 declares them. A toolset of its own under one of the platform's names is
@@ -96,10 +97,10 @@ end. So the grace sits beside the kind, not on the engine's type.
 own. One that names none takes the default. No grace runs past the
 prompt cache's life, five minutes, the shortest a provider the platform
 calls keeps a cached prefix: a product's grace past it is refused at
-boot. The engineer and analysis hold theirs for that life, as long as
-the runner's setting did. The held-workspace sweep reads the session's
-kind's grace once, when a pass first finds its instance unaccounted for,
-and the runner's setting is gone.
+boot. The software engineer and analysis hold theirs for that life, as
+long as the runner's setting did. The held-workspace sweep reads the
+session's kind's grace once, when a pass first finds its instance
+unaccounted for, and the runner's setting is gone.
 
 **Nothing is migrated.** A version's rows are stored as JSON, and a row
 stored without a size reads as one that names none.

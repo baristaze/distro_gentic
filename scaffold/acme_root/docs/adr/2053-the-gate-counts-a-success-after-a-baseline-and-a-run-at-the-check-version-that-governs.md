@@ -31,9 +31,9 @@ The baseline's rule lived in acceptance alone
 - **The refusal says what to do.** With no baseline at the base, the
   agent takes one, then validates the head again; with one taken after
   the head was validated, it validates the head again. The validate
-  tool, the engineer's prompt, and the notice of a rebuilt branch say to
-  take a baseline before validating a change, and again whenever the
-  base moves.
+  tool, the software engineer's prompt, and the notice of a rebuilt
+  branch say to take a baseline before validating a change, and again
+  whenever the base moves.
 - **The gate reads the session's validations at the base** for it, the
   oldest as many as `max_validations`, beside its read at the head.
 - **A run counts at the check version the policy declares now.** A run

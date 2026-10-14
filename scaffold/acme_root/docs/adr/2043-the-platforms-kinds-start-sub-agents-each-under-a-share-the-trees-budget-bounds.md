@@ -14,10 +14,10 @@ so one child cannot spend all its tree has left. The tree's budget, the
 root's, bounds every call of the tree, and a share never raises it.
 
 Every kind the platform ships declared a tree of one, and only the
-engineer named a share, so that a product's kind could spawn it. No
-platform session could split its work. Three things are open: which
-kinds start sub-agents, which kinds a sub-agent may run as, and how much
-each may spend.
+software engineer named a share, so that a product's kind could spawn
+it. No platform session could split its work. Three things are open:
+which kinds start sub-agents, which kinds a sub-agent may run as, and
+how much each may spend.
 
 ## Decision
 
@@ -28,28 +28,29 @@ at its kind's latest version. So the change reaches new trees only, and
 a tree already started keeps its bounds. The planner and the assistant
 hand work on and name no spawn tool, so their trees stay empty.
 
-**The engineer and analysis start sub-agents.** Both name the engine's
-two tools, and their policy runs a spawn unattended. That is safe
-because a child's calls are still decided under its own kind and under
-every kind above it, and the strictest decision holds. A prompt layer
-says when to split: questions that do not depend on each other, each
-worth a session of its own. It also says that a sub-agent works on a
-fresh checkout of the default branch, without its parent's changes, so
+**The software engineer and analysis start sub-agents.** Both name the
+engine's two tools, and their policy runs a spawn unattended. That is
+safe because a child's calls are still decided under its own kind and
+under every kind above it, and the strictest decision holds. A prompt
+layer says when to split: questions that do not depend on each other,
+each worth a session of its own. It also says that a sub-agent works on
+a fresh checkout of the default branch, without its parent's changes, so
 its objective carries what it needs. Analysis answers with a turn that
 calls no tool, which ends its session, so its prompt has it wait for
 every sub-agent's report first. Each change is a new version, and
 the version before it stays shipped while a session may run it.
 
-**A sub-agent runs as the engineer or as analysis, each under its
-share.** A spawn names one of the two, or takes its caller's. The
-engineer's prompt names analysis for a question that only reads or
-checks, and the engineer for work that changes code, since the spawn
-tool's input names no kind. Both shares are reference cost at list price: the loops a share pays for, at
-the kind's step guard, over a cached window at 0.10 a call.
+**A sub-agent runs as the software engineer or as analysis, each under
+its share.** A spawn names one of the two, or takes its caller's. The
+software engineer's prompt names analysis for a question that only reads
+or checks, and the software engineer for work that changes code, since
+the spawn tool's input names no kind. Both shares are reference cost at
+list price: the loops a share pays for, at the kind's step guard, over a
+cached window at 0.10 a call.
 
 | Kind | Share | Why |
 |---|---|---|
-| Engineer | 60 | Three loops at its step guard of 200: its change, and two follow-ups |
+| SoftwareEngineer | 60 | Three loops at its step guard of 200: its change, and two follow-ups |
 | Analysis | 10 | Two loops at the engine's step guard of 50: it reads and answers, and one follow-up |
 
 Each share is more than one worst-case call of the main role at a full
@@ -72,14 +73,15 @@ parent's session. So a parent's share never pays for its children.
 
 ## Consequences
 
-- An engineer or analysis session can start up to ten sub-agents, three
-  levels deep, and wait on them. It wakes on each report.
+- A software engineer or analysis session can start up to ten
+  sub-agents, three levels deep, and wait on them. It wakes on each
+  report.
 - A session that splits its work spends more: each child up to its
   share, the tree up to its budget.
 - A tree with no budget of its own can spend up to 600 through its
   sub-agents. A tenant that wants less sets a budget on the person, the
   project, or the tenant, or a run cap on the agent automation that
   starts it.
-- A session on the engineer's version 4 or analysis's version 2 keeps
-  its tools and starts no sub-agent.
+- A session on the software engineer's version 4 or analysis's version 2
+  keeps its tools and starts no sub-agent.
 - A product's kind may now spawn analysis too, under its share.

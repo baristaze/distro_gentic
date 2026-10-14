@@ -204,9 +204,9 @@ export const PLATFORM: PortalProduct = {
     },
   ],
   agents: [
-    { kind: "engineer", label: "Engineer", about: "Changes code in the project's repository, validates it, and opens a pull request." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code in the project's repository, validates it, and opens a pull request." },
     { kind: "analysis", label: "Analysis", about: "Reads what a run produced and answers with findings; it changes nothing." },
-    { kind: "planner", label: "Planner", about: "Turns findings into tasks, and hands engineering work to an engineer." },
+    { kind: "planner", label: "Planner", about: "Turns findings into tasks, and hands engineering work to a software engineer." },
     {
       kind: "platform_assistant",
       label: "Platform assistant",

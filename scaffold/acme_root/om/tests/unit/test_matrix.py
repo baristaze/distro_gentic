@@ -152,10 +152,10 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
         MatrixRow(fills=(SONNET,)),
         MatrixRow(key=MatrixKey(role=MAIN), fills=(OPUS,)),
         MatrixRow(key=MatrixKey(environment="production"), fills=(SOL,)),
-        MatrixRow(key=MatrixKey(kind="engineer", plan_tier="pro"), fills=(LUNA,)),
+        MatrixRow(key=MatrixKey(kind="software_engineer", plan_tier="pro"), fills=(LUNA,)),
         MatrixRow(key=MatrixKey(role=MAIN, workload="batch"), fills=(HAIKU,)),
         MatrixRow(
-            key=MatrixKey(environment="production", role=MAIN, kind="engineer"),
+            key=MatrixKey(environment="production", role=MAIN, kind="software_engineer"),
             fills=(kept_in(SONNET, EU),),
         ),
         MatrixRow(key=MatrixKey(size=ModelSize.L), fills=(OPUS, SOL)),
@@ -165,7 +165,7 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
         "environment": ("production", "staging"),
         "size": (ModelSize.L, None),
         "role": (MAIN, SUMMARIZER),
-        "kind": ("engineer", "assistant"),
+        "kind": ("software_engineer", "assistant"),
         "plan_tier": ("pro", "standard"),
         "workload": ("batch", "standard"),
     }
@@ -184,7 +184,11 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
         assert rules.answer(held, query, anywhere) == expected.fills, (len(held), query)
 
     query = MatrixQuery(
-        environment="production", role=MAIN, kind="engineer", plan_tier="pro", workload="batch"
+        environment="production",
+        role=MAIN,
+        kind="software_engineer",
+        plan_tier="pro",
+        workload="batch",
     )
     assert rules.answer(rows, query, anywhere) == (kept_in(SONNET, EU),), "three keys beat two"
     tie = query.model_copy(update={"kind": "assistant", "workload": "standard"})

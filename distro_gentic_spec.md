@@ -462,9 +462,9 @@ workspace itself stays a cache.
 
 `optional`
 
-An engineer works with no network, so it cannot install what its work
-needs, and open egress would make every command after its first tool
-result wait for a person. A project names its **workspace base**
+A software engineer works with no network, so it cannot install what its
+work needs, and open egress would make every command after its first
+tool result wait for a person. A project names its **workspace base**
 instead: an image, the commands that set it up, and the package
 registries the setup reaches. The platform builds it once and keeps it
 as a snapshot, and each session of the project starts from it, sealed.
@@ -473,8 +473,8 @@ Snapshots][e-snapshots]), as a project names it.
 
 - **Who chooses.** The project, set by whoever writes the tenant's
   configuration. An agent kind takes its project's workspace base only
-  from a version that says so, as the platform's engineer does. A kind
-  that takes none, and a project that names none, work as before.
+  from a version that says so, as the platform's software engineer does.
+  A kind that takes none, and a project that names none, work as before.
 - **Pinned with the session.** A session pins the workspace base its
   project names when it is created, and keeps it. A changed workspace
   base is another one, built again for the sessions created after it. A
@@ -488,7 +488,7 @@ Snapshots][e-snapshots]), as a project names it.
 - **The setup reaches registries, the workspace nothing.** A setup that
   names a registry runs with open egress, the project's recorded
   choice, and one that names none reaches nothing. A workspace on it
-  keeps its kind's egress; the engineer's is none. A host
+  keeps its kind's egress; the software engineer's is none. A host
   whose owner closed egress refuses a setup that reaches out.
 - **Its checks run on it.** A validation of a session's work runs on a
   new instance of the workspace base the session pinned, never on its
@@ -884,7 +884,7 @@ and keeps four apart. Confusing any two is a defect.
 | **Executor** | A machine's credential | A workspace host's key |
 | **Principal** | On whose behalf, and with what authority | The person who asked; an agent automation's creator; a service principal the tenant granted |
 | **Spender** | Who pays for a model call | The author of the latest principal input the model received |
-| **Actor** | Who acted | The engineer agent in one session; a person; the engine |
+| **Actor** | Who acted | The software engineer agent in one session; a person; the engine |
 
 An audit entry shows all four, so "which agent did this, for whom, paid
 by whom, on which machine" has four answers. The agent holds no
@@ -1069,9 +1069,10 @@ kinds the same way, as data, and the models and the rhythm follow. A
 tenant adds toolsets of its own to a kind: its connectors
 ([Connectors](#connectors)).
 
-- The **engineer** takes an objective to a validated, reviewable change.
-  Its workspace has no network and starts from its project's
-  workspace base ([A Project's Workspace Base](#a-projects-workspace-base)).
+- The **software engineer** takes an objective to a validated,
+  reviewable change. Its workspace has no network and starts from its
+  project's workspace base ([A Project's Workspace
+  Base](#a-projects-workspace-base)).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
@@ -1087,7 +1088,7 @@ tenant adds toolsets of its own to a kind: its connectors
   queued, what a host offers against what the queue needs. It drafts
   configuration, validates it against the tenant's real records, and
   shows the difference from what is live; a person applies it. It hands
-  engineering work to an engineer session with a self-contained
+  engineering work to a software engineer session with a self-contained
   objective, then steps back. Its authority is delegated, and it has no
   workspace, repository, or shell.
 - The **reviewer** reads a pull request through the forge's
@@ -1099,26 +1100,26 @@ tenant adds toolsets of its own to a kind: its connectors
   forge's integration, where its kind's policy allows: a person approves
   each comment. It asks the largest model size of its own turns, since a
   review is worth the defects it finds.
-- The **operator** reads the tenant's operations on its person's own
+- The **ops analyst** reads the tenant's operations on its person's own
   permissions: its sessions and what they wait on, each loop's place on
   the work queue, its hosts and what they offer, and its budgets and
   what they spent. Every tool it holds reads, so it changes nothing. A
   fix it finds leaves as a self-contained objective, which a person
-  hands to an engineer.
+  hands to a software engineer.
 
 A role of roles is a kind like any other: a lead, whose toolsets include
 starting the others as sub-agents. A lead that takes a change through
-review starts an engineer on it, then a reviewer on the pull request the
-engineer opened, and answers with both reports. A child holds no tool
-its lead may not call, each call passes its own kind's policy and the
-lead's, and each spends from its own share, so the lead adds no power
-and no noun.
+review starts a software engineer on it, then a reviewer on the pull
+request the software engineer opened, and answers with both reports. A
+child holds no tool its lead may not call, each call passes its own
+kind's policy and the lead's, and each spends from its own share, so the
+lead adds no power and no noun.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never
 leaks by default, and the words a customer reads and the words the team
 works from are the same text. There is no router between the assistant
-and the engineer: a person chooses by choosing where to type.
+and the software engineer: a person chooses by choosing where to type.
 
 ## Data, Retention, and the Wall
 

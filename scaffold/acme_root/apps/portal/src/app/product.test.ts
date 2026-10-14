@@ -15,7 +15,7 @@ const platform: PortalProduct = {
   sessionTabs: [{ id: "step", label: "Step", icon: null, tip: "", offered: () => true, render: () => null }],
   tools: { run_command: { gist: () => "" } },
   settings: [{ group: "Agents", id: "projects", label: "Projects", icon: null, about: "", routes: [{ path: "/projects", element: page }] }],
-  agents: [{ kind: "engineer", label: "Engineer", about: "" }],
+  agents: [{ kind: "software_engineer", label: "Software engineer", about: "" }],
   examples: { composer: "Describe a task", reply: "Reply", starters: ["one", "two", "three"] },
 };
 const product = (over: Partial<PortalProduct>): PortalProduct => ({ ...EMPTY_PRODUCT, ...over });
@@ -40,7 +40,7 @@ it("joins a product's entries after the platform's, its agents first, its exampl
     }),
   );
   expect(joined.nav.map((entry) => entry.id)).toEqual(["agent_automations", "lines"]);
-  expect(joined.agents.map((agent) => agent.kind)).toEqual(["inspector", "engineer"]);
+  expect(joined.agents.map((agent) => agent.kind)).toEqual(["inspector", "software_engineer"]);
   expect(joined.examples).toEqual({ composer: "Describe a task", reply: "Reply", starters: ["a", "b", "c"] });
   expect(routePaths(shellRoutes(joined))).toEqual(["/", "/sessions", "/sessions/:", "/lines", "/projects"]);
 });
@@ -74,7 +74,7 @@ it("refuses a duplicate id of each kind of entry", () => {
   expect(refusal({ settings: [{ group: "Agents", id: "projects", label: "P", icon: null, about: "", routes: [] }] })).toContain(
     'settings section "projects"',
   );
-  expect(refusal({ agents: [{ kind: "engineer", label: "Mine", about: "" }] })).toContain('agent kind "engineer"');
+  expect(refusal({ agents: [{ kind: "software_engineer", label: "Mine", about: "" }] })).toContain('agent kind "software_engineer"');
 });
 
 it("refuses a duplicate inside the product itself", () => {

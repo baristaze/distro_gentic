@@ -1,7 +1,7 @@
-// The engineer's scene over a local stack started for it: the API and the
+// The software engineer's scene over a local stack started for it: the API and the
 // runner of `services/api/tests/portal_stack.py`, the runner on the scene's
-// script (`portal_check.py script <path> --scene engineer`), paced, and the
-// forge's twin. The owner starts an engineer on Home and reads its session
+// script (`portal_check.py script <path> --scene software_engineer`), paced, and the
+// forge's twin. The owner starts a software engineer on Home and reads its session
 // as a chat while it runs: its first thought and words stream in before
 // their step lands; its calls fold into work blocks whose lines say what
 // ran; its edit opens as a diff; each command it holds waits on an action
@@ -42,7 +42,7 @@ async function approve(chat: Locator, shot?: string): Promise<string> {
   return held;
 }
 
-test("the engineer's session reads as a live chat: thoughts, work blocks, a diff, cards, and an approval that resumes it", async ({ browser }) => {
+test("the software engineer's session reads as a live chat: thoughts, work blocks, a diff, cards, and an approval that resumes it", async ({ browser }) => {
   test.skip(!REPOSITORIES, "PORTAL_REPOSITORIES names the folder the scene's runner clones from");
   execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "scene", REPOSITORIES!, SLUG], {
     cwd: ROOT,
@@ -50,7 +50,7 @@ test("the engineer's session reads as a live chat: thoughts, work blocks, a diff
   });
   const owner = await signedIn(browser, OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
-  await owner.getByRole("menuitemradio", { name: /^Engineer/ }).click();
+  await owner.getByRole("menuitemradio", { name: /^SoftwareEngineer/ }).click();
   await owner.keyboard.press("Escape");
   await owner.getByRole("button", { name: /^Project:/ }).click();
   await owner.getByRole("menuitemradio", { name: "First project" }).click();

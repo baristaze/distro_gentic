@@ -44,7 +44,7 @@ function sessionOf(id: string, by: string, visibility: AgentSessionView["visibil
     id,
     root_id: id,
     parent_id: null,
-    kind: "engineer",
+    kind: "software_engineer",
     kind_version: 1,
     title: id,
     status: "idle",

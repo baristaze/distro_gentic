@@ -44,7 +44,7 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const SLOT: PortalProduct = {
   ...EMPTY_PRODUCT,
   agents: [
-    { kind: "engineer", label: "Engineer", about: "Changes code." },
+    { kind: "software_engineer", label: "Software engineer", about: "Changes code." },
     { kind: "platform_assistant", label: "Platform assistant", about: "Answers how the platform works." },
   ],
   examples: { composer: 'Describe a task, e.g. "Fix the failing test"', starters: ["Add a test for leap years", "b", "c"] },
@@ -92,7 +92,7 @@ async function type(text: string) {
 it("shows the slot's example in the box, its first agent on the chip, and its starter prompts", async () => {
   await open();
   expect(box().placeholder).toBe('Describe a task, e.g. "Fix the failing test"');
-  expect(button("Agent").textContent).toContain("Engineer");
+  expect(button("Agent").textContent).toContain("Software engineer");
   expect(button("Project").textContent).toContain("No project");
   const starters = [...container.querySelectorAll("ul[aria-label='Starter prompts'] button")];
   expect(starters.map((each) => each.textContent)).toEqual(["Add a test for leap years", "b", "c"]);

@@ -51,11 +51,11 @@ WRITES = Toolset(
 )
 
 
-def operator(**shape: object) -> AgentKind:
-    """The operator kind at version 1, its tools as `shape` names them."""
+def ops_analyst(**shape: object) -> AgentKind:
+    """The ops analyst kind at version 1, its tools as `shape` names them."""
     return AgentKind.model_validate(
         {
-            "name": "operator",
+            "name": "ops_analyst",
             "version": 1,
             "done_rule": DoneRule.ANSWER,
             "authority": AuthorityMode.DELEGATED,
@@ -66,9 +66,9 @@ def operator(**shape: object) -> AgentKind:
     )
 
 
-FLAT = operator(tools=("lookup", "note", "send"))
-BUILT = operator(tools=("lookup",), toolsets=(WRITES,))
-DEFERS = operator(toolsets=(READS,), deferred=(WRITES,))
+FLAT = ops_analyst(tools=("lookup", "note", "send"))
+BUILT = ops_analyst(tools=("lookup",), toolsets=(WRITES,))
+DEFERS = ops_analyst(toolsets=(READS,), deferred=(WRITES,))
 
 
 def names(call_: ModelCall) -> list[str]:
@@ -124,7 +124,7 @@ def test_a_kinds_toolsets_and_deferred_toolsets_join_its_tools_once_and_refold_a
     assert DEFERS.waiting == frozenset({"note", "send"})
     again = AgentKind.model_validate(DEFERS.model_dump())
     assert again == DEFERS, "a folded kind folds to itself"
-    holds_both = operator(
+    holds_both = ops_analyst(
         toolsets=(READS, WRITES), deferred=(WRITES.model_copy(update={"name": "w"}),)
     )
     assert holds_both.waiting == frozenset(), "a tool a held toolset holds never waits"
@@ -148,13 +148,13 @@ def test_a_kinds_toolsets_and_deferred_toolsets_join_its_tools_once_and_refold_a
 )
 def test_a_kind_refuses_a_deferral_it_cannot_keep(shape: dict[str, object], refusal: str) -> None:
     with pytest.raises(ValueError, match=refusal):
-        operator(**shape)
+        ops_analyst(**shape)
 
 
 def test_a_catalog_refuses_two_toolsets_under_one_version() -> None:
     other = WRITES.model_copy(update={"tools": ("note",)})
     with pytest.raises(ValueError, match="declared twice"):
-        AgentKindCatalog(kinds=(DEFERS, operator(version=2, toolsets=(other,))))
+        AgentKindCatalog(kinds=(DEFERS, ops_analyst(version=2, toolsets=(other,))))
 
 
 def test_a_toolset_has_a_one_line_summary_and_never_holds_the_load() -> None:
@@ -173,7 +173,7 @@ async def test_a_kind_built_from_toolsets_renders_the_bytes_of_its_flat_tool_lis
     bodies: list[list[bytes]] = []
     for index, kind in enumerate((FLAT, BUILT)):
         loop = loop_over(tmp_path / str(index), kinds=(kind,))
-        session_id = await loop.start("operator")
+        session_id = await loop.start("ops_analyst")
         await loop.say(session_id, "What is the total?")
         loop.anthropic.add(reply(use("lookup", use_id="use_1")), reply(said("It is 12.")))
         await ran(loop, session_id)
@@ -189,7 +189,7 @@ async def test_a_deferred_toolset_loads_as_a_recorded_switch_and_its_history_rep
     tmp_path: Path,
 ) -> None:
     loop = loop_over(tmp_path, kinds=(DEFERS,))
-    session_id = await loop.start("operator")
+    session_id = await loop.start("ops_analyst")
     await loop.say(session_id, "Note the total.")
     loop.anthropic.add(
         reply(use("note", use_id="use_early")),
@@ -232,7 +232,7 @@ async def test_a_sessions_tool_definitions_change_only_by_a_recorded_load(
     tmp_path: Path,
 ) -> None:
     loop = loop_over(tmp_path, kinds=(DEFERS,))
-    session_id = await loop.start("operator")
+    session_id = await loop.start("ops_analyst")
     for question, replies in (
         ("What is the total?", [reply(use("lookup")), reply(said("It is 12."))]),
         (
@@ -281,7 +281,7 @@ async def test_a_call_of_a_tool_its_own_turn_loads_is_not_offered_and_the_sessio
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lost: bool
 ) -> None:
     loop = loop_over(tmp_path, kinds=(DEFERS,))
-    session_id = await loop.start("operator")
+    session_id = await loop.start("ops_analyst")
     await loop.say(session_id, "Note the total.")
     loop.anthropic.add(
         reply(call("load_toolset", toolset="writes"), use("note", use_id="use_early")),
@@ -367,7 +367,7 @@ async def test_a_toolset_attached_to_a_session_loads_as_its_kinds_own_would(
     find = Lookup("tracker__find")
     attaching = Attaching(find)
     loop = loop_over(tmp_path, kinds=(BUILT,), attached=attaching)
-    session_id = await loop.start("operator")
+    session_id = await loop.start("ops_analyst")
     await loop.say(session_id, "Find the ticket.")
     loop.anthropic.add(
         reply(use("tracker__find", use_id="use_early")),

@@ -7,7 +7,7 @@ The workspace's tools reach the world only through the call's runtime, so
 a kind with no workspace cannot use one even when it is handed one: an
 edit reads and writes its file there, and a search of the code runs there,
 bounded in its matches and its bytes, never in the platform's process. The
-engineer's pull request opens its own branch on its project's repository
+software engineer's pull request opens its own branch on its project's repository
 with a push token the platform mints for the call and checks before it
 writes; the model names neither the branch nor the repository, and never
 sees the token. The branch and the pull request are bound to the session,
@@ -1616,8 +1616,8 @@ class HandedOff(Platform):
     note: str
 
 
-class HandOffToEngineerImpl(NativeToolImpl):
-    """Hands engineering work to a new engineer session. Its objective is
+class HandOffToSoftwareEngineerImpl(NativeToolImpl):
+    """Hands engineering work to a new software engineer session. Its objective is
     data there, it waits for its person to confirm it, and the session that
     handed it over cannot steer it. The new session's id is the call's own,
     so a call asked again finds the session it made."""
@@ -1625,7 +1625,7 @@ class HandOffToEngineerImpl(NativeToolImpl):
     SPEC = ToolSpec(
         name=kinds.HAND_OFF,
         description=(
-            "Hands engineering work to a new engineer session, with a title and an objective "
+            "Hands engineering work to a new software engineer session, with a title and an objective "
             "that stands on its own: what to change, why, and how to know it is done. The "
             "session starts when its person confirms it; you cannot steer it after."
         ),
@@ -1647,7 +1647,7 @@ class HandOffToEngineerImpl(NativeToolImpl):
         assert isinstance(call_input, HandOffInput)
         handoff = Handoff(
             id=runtime.key,
-            kind=kinds.ENGINEER,
+            kind=kinds.SOFTWARE_ENGINEER,
             title=call_input.title,
             objective=call_input.objective,
         )

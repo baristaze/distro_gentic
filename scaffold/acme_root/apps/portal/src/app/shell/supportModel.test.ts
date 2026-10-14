@@ -12,7 +12,7 @@ it("continues the person's own conversation with the assistant", () => {
 
 it("never continues another member's, another kind's, an archived or a deleted session, or one before the person is known", () => {
   expect(continues({ ...mine, created_by: "u2" }, "u1")).toBe(false);
-  expect(continues({ ...mine, kind: "engineer" }, "u1")).toBe(false);
+  expect(continues({ ...mine, kind: "software_engineer" }, "u1")).toBe(false);
   expect(continues({ ...mine, archived_at: "2026-10-05T10:00:00Z" }, "u1")).toBe(false);
   expect(continues({ ...mine, deleted_at: "2026-10-05T10:00:00Z" }, "u1")).toBe(false);
   expect(continues(mine, null)).toBe(false);

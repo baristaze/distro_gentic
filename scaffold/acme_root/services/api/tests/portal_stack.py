@@ -5,10 +5,10 @@ the browser check and by no gate:
     python services/api/tests/portal_stack.py api --port <port>
     python services/api/tests/portal_stack.py runner
 
-Both register the scene's engineer and analysis beside the product's
+Both register the scene's software engineer and analysis beside the product's
 kinds: the platform's own, each in a directory on this host in place of
-its container, the engineer also writing a plan and asking its person.
-The engineer's scene starts two analysis sub-agents, within the tree the
+its container, the software engineer also writing a plan and asking its person.
+The software engineer's scene starts two analysis sub-agents, within the tree the
 platform's kinds root. The runner runs one loop at a time, since the
 scripted model answers every session from one script: so each turn goes
 to the session the scene wrote it for, in the order the loops are
@@ -34,28 +34,28 @@ REPO = Path(__file__).resolve().parents[3]
 
 
 def scene_kinds() -> ProductKinds:
-    """The product's kinds, and the scene's engineer and analysis, each as
+    """The product's kinds, and the scene's software engineer and analysis, each as
     its latest version: the shipped kind whole, its tree and its share
     included, on this host."""
     from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
-    from acme.om.platform_agents.kinds import ANALYSIS_KIND, ENGINEER_KIND
+    from acme.om.platform_agents.kinds import ANALYSIS_KIND, SOFTWARE_ENGINEER_KIND
     from acme.om.product_kinds import PRODUCT_KINDS
     from acme.om.root import ProductKinds
     from acme.om.tools.native.ask_person import ASK_PERSON
     from acme.om.tools.native.write_plan import WRITE_PLAN
 
     host = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
-    engineer = ENGINEER_KIND.model_copy(
+    software_engineer = SOFTWARE_ENGINEER_KIND.model_copy(
         update={
-            "version": ENGINEER_KIND.version + 1,
+            "version": SOFTWARE_ENGINEER_KIND.version + 1,
             "isolation": host,
-            "tools": (*ENGINEER_KIND.tools, WRITE_PLAN, ASK_PERSON),
+            "tools": (*SOFTWARE_ENGINEER_KIND.tools, WRITE_PLAN, ASK_PERSON),
         }
     )
     analysis = ANALYSIS_KIND.model_copy(
         update={"version": ANALYSIS_KIND.version + 1, "isolation": host}
     )
-    return ProductKinds(agents=(*PRODUCT_KINDS.agents, engineer, analysis))
+    return ProductKinds(agents=(*PRODUCT_KINDS.agents, software_engineer, analysis))
 
 
 def scene_container(settings: ApiSettings) -> AppContainer:

@@ -5,7 +5,7 @@ Agent Fleet Scale, and Operations of `distro_gentic_spec.md`.
 
 This group judges the agents a platform ships, what the agent fleet does
 when things fail, and how the platform is operated: the shipped kinds,
-the platform assistant, the reviewer, and the operator, a provider
+the platform assistant, the reviewer, and the ops analyst, a provider
 outage at scale, the sweep and its duties, operational skills, the
 dashboard, and the telemetry round trip.
 It leaves the outage signal itself to `money`, each sweep duty's own rule
@@ -15,8 +15,8 @@ defined to the engine.
 ## FLT-01 A platform's agents are kinds of one loop
 
 **Principle.** One loop, many kinds. A platform ships a few, each a
-profile with its own powers: the engineer takes an objective to a
-validated, reviewable change; analysis agents read what a run produced
+profile with its own powers: the software engineer takes an objective to
+a validated, reviewable change; analysis agents read what a run produced
 and turn it into findings; a planner turns findings into tasks and
 decides whether an existing session should continue or a new one should
 start.
@@ -80,21 +80,21 @@ steady authority.
 
 ## FLT-04 The assistant hands engineering off, and nothing routes
 
-**Principle.** The assistant hands engineering work to an engineer
-session with a self-contained objective, then steps back. There is no
-router between the assistant and the engineer: a person chooses by
-choosing where to type.
+**Principle.** The assistant hands engineering work to a software
+engineer session with a self-contained objective, then steps back. There
+is no router between the assistant and the software engineer: a person
+chooses by choosing where to type.
 
 **Source.** The Agents a Platform Ships.
 
-**Look for.** How the assistant starts an engineer session, and what it
-passes; any component that routes a person's message to one or the
-other.
+**Look for.** How the assistant starts a software engineer session, and
+what it passes; any component that routes a person's message to one or
+the other.
 
 **Violation.** A hand-off that passes the assistant's conversation
 instead of a self-contained objective; an assistant that keeps working
 on the engineering task; a router that picks the assistant or the
-engineer for a message.
+software engineer for a message.
 
 **Severity.** medium
 
@@ -305,18 +305,18 @@ and `scaffold/acme_root/om/src/acme/om/platform_agents/impl/gate.py`
 
 **Check.** review
 
-## FLT-15 The operator only reads
+## FLT-15 The ops analyst only reads
 
-**Principle.** The operator reads the tenant's operations on its
+**Principle.** The ops analyst reads the tenant's operations on its
 person's own permissions: its sessions and what they wait on, each
 loop's place on the work queue, its hosts and what they offer, and its
 budgets and what they spent. Every tool it holds reads, so it changes
 nothing. A fix it finds leaves as a self-contained objective, which a
-person hands to an engineer.
+person hands to a software engineer.
 
 **Source.** The Agents a Platform Ships.
 
-**Look for.** The operator kind's tools and their classes, its authority,
+**Look for.** The ops analyst's tools and their classes, its authority,
 and how a fix it finds leaves it.
 
 **Violation.** An operator tool of any class but read, a hand-off among

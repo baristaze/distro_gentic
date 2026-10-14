@@ -52,7 +52,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.container import WorkspaceContainerImpl
-from acme.om.platform_agents.kinds import ENGINEER
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 IMAGE = "python:3.14-slim"
@@ -144,9 +144,9 @@ pytestmark = [
 ]
 
 SEALED = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
-TAKES = ASSISTANT.model_copy(update={"name": ENGINEER, "version": 8, "isolation": SEALED})
+TAKES = ASSISTANT.model_copy(update={"name": SOFTWARE_ENGINEER, "version": 8, "isolation": SEALED})
 """A kind the platform names among those that take their project's
-workspace base: the engineer at version 8, here with the assistant's loop, in
+workspace base: the software engineer at version 8, here with the assistant's loop, in
 a container with no egress."""
 
 

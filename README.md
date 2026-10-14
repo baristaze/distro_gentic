@@ -7,9 +7,9 @@ on machines it does not always own.
 - It **defines** an agent as an agent kind: its toolsets, the model
   size each of its roles asks, the bounds it runs in, and a kind manual
   a tenant may pin to it. The kinds it ships are templates a product
-  copies: an engineer, an analysis agent, a planner, an assistant, a
-  reviewer, and an operator. A lead is a kind that starts the others as
-  sub-agents.
+  copies: a software engineer, an analysis agent, a planner, an
+  assistant, a reviewer, and an ops analyst. A lead is a kind that
+  starts the others as sub-agents.
 - It **runs** each agent as a session on the work queue, and closes the
   loop: work arrives on its own, evidence goes out, and the world's
   answer comes back into the same session.

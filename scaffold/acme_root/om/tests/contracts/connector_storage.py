@@ -85,7 +85,7 @@ def reviewed(connector: Connector, project_id: UUID | None = None) -> Connector:
             "tools": (make_tool(),),
             "review": connector.review + 1,
             "reviewed_by": new_id(),
-            "attachments": (ConnectorAttachment(kind="engineer", project_id=project_id),),
+            "attachments": (ConnectorAttachment(kind="software_engineer", project_id=project_id),),
             "version": connector.version + 1,
         }
     )

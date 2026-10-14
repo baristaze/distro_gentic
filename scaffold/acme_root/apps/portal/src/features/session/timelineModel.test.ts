@@ -236,12 +236,12 @@ describe("timeline", () => {
 
   it("draws a hand-off as a card that opens the session it started", () => {
     const asked = request(0);
-    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
-    const made = call(asks, "h1", "hand_off_to_engineer", 2);
+    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_software_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
+    const made = call(asks, "h1", "hand_off_to_software_engineer", 2);
     const done = answer(made, JSON.stringify({ session_id: "child-1", note: "started" }), 3);
     const card = only(read([asked, asks, made, done]).entries, "subagents");
     expect(card.title).toBe("Handed the work to another agent");
-    expect(card.rows).toMatchObject([{ title: "Fix the parser", agent: "engineer", childId: "child-1", words: "Started" }]);
+    expect(card.rows).toMatchObject([{ title: "Fix the parser", agent: "software engineer", childId: "child-1", words: "Started" }]);
   });
 
   it("draws a control, a park, a resume, and the loop's end as thin lines", () => {
@@ -394,12 +394,12 @@ describe("sub-agents", () => {
   it("shows a hand-off's row by the session it handed to, once that record is read", () => {
     const H = "0a1b2c3d-0000-4000-8000-0000000000aa";
     const asked = request(0);
-    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
-    const made = call(asks, "h1", "hand_off_to_engineer", 2);
+    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_software_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
+    const made = call(asks, "h1", "hand_off_to_software_engineer", 2);
     const steps = [asked, asks, made, answer(made, JSON.stringify({ session_id: H }), 3)];
     expect(handedTo(steps)).toEqual([H]);
     expect(handedTo(twoSpawns())).toEqual([]);
-    const handed = child(H, "Fix the parser", { kind: "engineer", created_at: at(3) });
+    const handed = child(H, "Fix the parser", { kind: "software_engineer", created_at: at(3) });
     expect(only(read(steps, { handed: [handed] }).entries, "subagents").rows).toMatchObject([{ childId: H, phase: "working", words: "Working", seconds: 597 }]);
     const settled = read(steps, { handed: [{ ...handed, status: "idle" }] });
     expect(only(settled.entries, "subagents").rows).toMatchObject([{ phase: "done", words: "Done", seconds: null }]);
@@ -410,8 +410,8 @@ describe("sub-agents", () => {
   it("times a row with no record only while its call starts the child: a day later it has not grown", () => {
     const H = "0a1b2c3d-0000-4000-8000-0000000000aa";
     const asked = request(0);
-    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser" })] });
-    const made = call(asks, "h1", "hand_off_to_engineer", 2);
+    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_software_engineer", { title: "Fix the parser" })] });
+    const made = call(asks, "h1", "hand_off_to_software_engineer", 2);
     const running = { status: "running" as const, park: null, archived_at: null };
     const dayLater = new Date(T0 + 86_400_000);
     expect(only(read([asked, asks, made], { session: running, now: new Date(T0 + 10_000) }).entries, "subagents").rows[0]).toMatchObject({ words: "Starting", seconds: 8 });
@@ -449,7 +449,7 @@ describe("sub-agents", () => {
   });
 
   it("draws a child's first message as From its parent, linking back", () => {
-    const objective = step({ type: "message", actor: "agent", origin: "parent", agent: { kind: "engineer", session_id: PARENT }, text: "Check every caller of parse." }, 0);
+    const objective = step({ type: "message", actor: "agent", origin: "parent", agent: { kind: "software_engineer", session_id: PARENT }, text: "Check every caller of parse." }, 0);
     expect(only(read([objective], { parent: { id: PARENT, title: "Fix the dates" } }).entries, "from")).toMatchObject({ sessionId: PARENT, title: "Fix the dates", text: "Check every caller of parse." });
     expect(only(read([objective]).entries, "from")).toMatchObject({ sessionId: PARENT, title: "its parent" });
   });

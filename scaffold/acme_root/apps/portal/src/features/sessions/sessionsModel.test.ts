@@ -80,7 +80,7 @@ describe("sessions model", () => {
   it("narrows the sessions read to the agent, the archived, the title's words, and those that need a person", () => {
     const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, ...over });
     const sessions = [
-      one("Flaky test", { created_by: "u1", kind: "engineer" }),
+      one("Flaky test", { created_by: "u1", kind: "software_engineer" }),
       one("Docs", { created_by: "u2", kind: "analysis" }),
       one("Old", { created_by: "u1", archived_at: "2026-10-04T00:00:00Z" }),
       one("Asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } }),
@@ -98,7 +98,7 @@ describe("sessions model", () => {
   it("leaves support conversations out, and shows them under the platform assistant's filter", () => {
     const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, ...over });
     const sessions = [
-      one("work", { title: "Fix the flaky test", kind: "engineer" }),
+      one("work", { title: "Fix the flaky test", kind: "software_engineer" }),
       one("support", { title: "Support", kind: "platform_assistant", created_by: "u1" }),
       one("theirs", { title: "Support", kind: "platform_assistant", created_by: "u2" }),
       one("composed", { title: "Draft the webhook settings", kind: "platform_assistant" }),

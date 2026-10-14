@@ -18,7 +18,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import Platform
 from acme.om.context import TenantContext
 from acme.om.platform_agents import kinds
-from acme.om.platform_agents.kinds import ENGINEER_KIND
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
@@ -101,15 +101,15 @@ def assistant(isolation: IsolationSpec = HOST) -> AgentKind:
 
 KINDS = (assistant(),)
 TOOLS: tuple[ToolInterface, ...] = (RunCommand(),)
-ENGINEER = ENGINEER_KIND.model_copy(
-    update={"version": ENGINEER_KIND.version + 1, "isolation": HOST}
+SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
+    update={"version": SOFTWARE_ENGINEER_KIND.version + 1, "isolation": HOST}
 )
-"""The platform's engineer, whole, in a directory on this host in place of
+"""The platform's software engineer, whole, in a directory on this host in place of
 its container: its result is judged by the result gate."""
 
-E2E_KINDS = (*KINDS, ENGINEER)
+E2E_KINDS = (*KINDS, SOFTWARE_ENGINEER)
 """The end-to-end suite's kinds, which run beside the platform's own tools:
-the assistant, and the engineer."""
+the assistant, and the software engineer."""
 
 ABSENT = (assistant(NO_WORKSPACE),)
 """The kind with no workspace, for a suite whose tool touches none."""

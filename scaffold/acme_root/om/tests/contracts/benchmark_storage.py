@@ -40,8 +40,12 @@ OPUS = Fill(
     max_output_tokens=32_000,
     context_window=1_000_000,
 )
-CANDIDATE = Contender(kind="engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=OPUS),))
-BASELINE = Contender(kind="engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=SONNET),))
+CANDIDATE = Contender(
+    kind="software_engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=OPUS),)
+)
+BASELINE = Contender(
+    kind="software_engineer", kind_version=2, fills=(RoleFill(role=MAIN, fill=SONNET),)
+)
 """The candidate changes the model alone: both arms run one kind at one
 version, so what the run shows is the model's."""
 

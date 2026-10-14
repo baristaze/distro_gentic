@@ -44,7 +44,7 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exceptions import Unavailable
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ENGINEER_KIND
+from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
@@ -69,10 +69,10 @@ WORKER = AgentKind(
     tree=TreeLimits(height=1, count=0),
     isolation=DIRECTORY,
 )
-ENGINEER = ENGINEER_KIND.model_copy(
-    update={"version": ENGINEER_KIND.version + 1, "isolation": DIRECTORY}
+SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
+    update={"version": SOFTWARE_ENGINEER_KIND.version + 1, "isolation": DIRECTORY}
 )
-"""The shipped engineer, in a directory on this host."""
+"""The shipped software engineer, in a directory on this host."""
 USER, PASSWORD = "reader", "fetch-only-5f1c0e9a7d"
 WRITER, WRITER_PASSWORD = "forge", "forge-writes-2c7d91e4b8"
 
@@ -337,7 +337,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     managers: Managers = build_managers(
         storage,
         infra,
-        agent_kinds=(ENGINEER,),
+        agent_kinds=(SOFTWARE_ENGINEER,),
         platform_agents=PlatformAgents(corpus=CORPUS),
         workspace_projects=projects,
         workspace_reader=on_loopback(),
@@ -354,7 +354,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
     await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
     session = await managers.agents.start_session(
-        owner, Start(id=new_id(), kind=ENGINEER.name, title="a fix")
+        owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER.name, title="a fix")
     )
     branch = rules.session_branch(session.id)
 

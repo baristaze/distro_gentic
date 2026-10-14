@@ -87,7 +87,7 @@ async def a_session(managers: Managers, owner: TenantContext) -> UUID:
         created_by=owner.user_id,
         updated_by=owner.user_id,
         title="a call over Postgres",
-        kind="operator",
+        kind="ops_analyst",
         kind_version=1,
         root_id=session_id,
     )

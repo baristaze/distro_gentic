@@ -23,9 +23,9 @@ uv run acme project list
 uv run acme agent-automation create triage.json   # the agent automation as the API takes it
 uv run acme agent-automation list
 uv run acme agent-playbook invoke <session-id> release-check   # its brief as your message
-uv run acme agent-playbook pin engineer release-check --project <id>   # the kind manual
+uv run acme agent-playbook pin software_engineer release-check --project <id>   # the kind manual
 uv run acme agent-playbook pins
-uv run acme agent-playbook unpin engineer --project <id>
+uv run acme agent-playbook unpin software_engineer --project <id>
 uv run acme listen                  # who did what to which record
 uv run acme logout
 ```

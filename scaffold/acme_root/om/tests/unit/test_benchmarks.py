@@ -39,7 +39,7 @@ async def test_a_run_is_stored_with_its_fill_set_kind_version_score_and_cost(
     assert stored == recorded
     assert (stored.candidate, stored.baseline) == (CANDIDATE, BASELINE)
     assert stored.candidate.fills[0].fill.model == "claude-opus-5-5"
-    assert (stored.candidate.kind, stored.candidate.kind_version) == ("engineer", 2)
+    assert (stored.candidate.kind, stored.candidate.kind_version) == ("software_engineer", 2)
     assert (stored.candidate_result.score, stored.candidate_result.passed) == (0.5, 1)
     assert stored.candidate_result.cost_micros == stored.baseline_result.cost_micros == 500_000
     # Every trial is preserved, each with the whole verdict that judged it.

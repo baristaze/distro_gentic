@@ -11,7 +11,7 @@ run can append nothing more, and the call it left open is settled by its
 effect.
 
 A project's workspace base runs on real Docker and the stack's object store:
-the first engineer session builds its base, whose setup installs a package
+the first software engineer session builds its base, whose setup installs a package
 from a registry on this host, and the next starts from the same base with
 no setup run, and imports the package with no egress.
 
@@ -663,10 +663,10 @@ FIXES_THE_REPORT = (
     "sh",
     "-c",
     "echo 'total = sum(rows)' >> src/report.py"
-    " && git -c user.name=Engineer -c user.email=engineer@example.test commit -qam 'Add the total'"
+    " && git -c user.name=SoftwareEngineer -c user.email=software_engineer@example.test commit -qam 'Add the total'"
     " && git push -q origin HEAD",
 )
-"""The engineer's change: committed, and pushed to its session's branch."""
+"""The software engineer's change: committed, and pushed to its session's branch."""
 
 
 async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success(
@@ -679,7 +679,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
         "runner-gates",
         [validates(baseline=True), runs(*FIXES_THE_REPORT), validates(), submits("succeeded")],
     )
-    session_id = await started(stack, person, "engineer")
+    session_id = await started(stack, person, "software_engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
     # The baseline runs before anything marks the session, and its answer
@@ -748,7 +748,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     ]
     command = next(audit for audit in audits if audit.tool == "run_command")
     assert command.executor.label == "runner-gates"
-    assert command.actor.agent is not None and command.actor.agent.kind == "engineer"
+    assert command.actor.agent is not None and command.actor.agent.kind == "software_engineer"
     found["audit"] = {
         "tool": command.tool,
         "executor": command.executor.label,
@@ -960,7 +960,7 @@ try:
 except Exception:
     print("no egress")
 """
-"""What the engineer runs: the package's import, then a reach for the
+"""What the software engineer runs: the package's import, then a reach for the
 registry its workspace base's setup used."""
 
 
@@ -1099,7 +1099,7 @@ def docker_runs() -> bool:
 
 @pytest.fixture
 async def shipped(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
-    """The stack with the platform's own engineer as the latest, in its
+    """The stack with the platform's own software engineer as the latest, in its
     container."""
     async with a_stack(tmp_path, KINDS) as built:
         yield built
@@ -1121,7 +1121,7 @@ def removed(deployment: str) -> None:
 
 
 @pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
-async def test_a_projects_workspace_base_is_built_once_and_its_engineer_imports_its_package_sealed(
+async def test_a_projects_workspace_base_is_built_once_and_its_software_engineer_imports_its_package_sealed(
     shipped: Stack, registry: Registry
 ) -> None:
     person = await owner_of(shipped)
@@ -1151,11 +1151,11 @@ async def test_a_projects_workspace_base_is_built_once_and_its_engineer_imports_
     )
     workspaces = shipped.container.managers.workspaces
     try:
-        first = await started(shipped, person, "engineer")
+        first = await started(shipped, person, "software_engineer")
         await say(shipped, person, first, "Check that the report's package imports.")
         first_steps = await until_steps(shipped, person, first, "loop_ended")
         built = registry.hits
-        second = await started(shipped, person, "engineer")
+        second = await started(shipped, person, "software_engineer")
         await say(shipped, person, second, "Check that the report's package imports.")
         second_steps = await until_steps(shipped, person, second, "loop_ended")
         pins = [await workspaces.get_workspace(person.ctx, UUID(s)) for s in (first, second)]

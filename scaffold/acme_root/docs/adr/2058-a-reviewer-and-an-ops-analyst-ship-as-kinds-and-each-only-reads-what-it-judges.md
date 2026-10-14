@@ -1,13 +1,13 @@
-# ADR 2058: A reviewer and an operator ship as kinds, and each only reads what it judges
+# ADR 2058: A reviewer and an ops analyst ship as kinds, and each only reads what it judges
 
 **Status**: accepted (2026-10-11)
 
 ## Context
 
-The platform shipped four kinds: the engineer, analysis, the planner,
-and the assistant. Two more roles are generic to any agentic product:
-reviewing a change, and reading how the platform runs. A product that
-wanted either wrote it whole.
+The platform shipped four kinds: the software engineer, analysis, the
+planner, and the assistant. Two more roles are generic to any agentic
+product: reviewing a change, and reading how the platform runs. A
+product that wanted either wrote it whole.
 
 The forge's integration only wrote. It pushed a branch, opened a pull
 request, and posted a comment; nothing read a pull request back.
@@ -77,35 +77,35 @@ gate it passed before, unchanged.
 integration call that acts outward, so the platform's ceiling holds it
 for a person's approval, and the reviewer's own layer runs reads alone.
 
-**The operator ships.** It is built from `records`, a new `operations`
-toolset (`list_hosts`, the tenant's hosts with what each offers, and
-`read_spend`, its budgets with what each spent), `agent_knowledge`, and
-`artifacts`. Its authority is delegated, it has no workspace, and it
-asks what the others ask. Every tool it holds reads. It holds no
-hand-off, a spawn: a fix it finds leaves as a self-contained objective,
-which a person hands to an engineer.
+**The ops analyst ships.** It is built from `records`, a new
+`operations` toolset (`list_hosts`, the tenant's hosts with what each
+offers, and `read_spend`, its budgets with what each spent),
+`agent_knowledge`, and `artifacts`. Its authority is delegated, it has
+no workspace, and it asks what the others ask. Every tool it holds
+reads. It holds no hand-off, a spawn: a fix it finds leaves as a
+self-contained objective, which a person hands to a software engineer.
 
 **A kind that only reads is held to it at boot.** The assistant, the
-operator, and the reviewer each have a reach: the classes of call they
-may make, their authority, and no workspace. A version of any of them,
-whoever declares it, that reaches further is refused. The check reads
-the whole catalog, the engine's tools included.
+ops analyst, and the reviewer each have a reach: the classes of call
+they may make, their authority, and no workspace. A version of any of
+them, whoever declares it, that reaches further is refused. The check
+reads the whole catalog, the engine's tools included.
 
 **The forge's comment ships with the agents.** A process that wires no
 `comment` of its own gets the platform's, over the intake it hands its
 root, so every root that ships the reviewer holds the tool it names.
 
 **A role of roles is a lead.** A kind whose toolsets include
-`sub_agents` starts the others, such as an engineer on a change and a
-reviewer on its pull request, and answers with their reports. A child
-holds no tool its lead may not call, so a lead holds the tools of every
-kind it starts. It is a kind like any other; no noun is added.
+`sub_agents` starts the others, such as a software engineer on a change
+and a reviewer on its pull request, and answers with their reports. A
+child holds no tool its lead may not call, so a lead holds the tools of
+every kind it starts. It is a kind like any other; no noun is added.
 
 **Nothing is migrated.**
 
 ## Consequences
 
-- A product takes the reviewer and the operator as it takes the other
+- A product takes the reviewer and the ops analyst as it takes the other
   shipped kinds, each version pinned: its tool definitions and its
   prompts render the same bytes for every session of that version.
 - A matrix version is published only with a row for XL, which the
@@ -116,7 +116,7 @@ kind it starts. It is a kind like any other; no noun is added.
 - The reviewer reads a branch at its head, file by file, and runs
   nothing on it. A check that needs the branch run is a validation, or
   the checks the forge reports.
-- The operator reads the tenant's own operations. The work queue's
+- The ops analyst reads the tenant's own operations. The work queue's
   lanes as a whole, the sweeps' runs, and spend by matrix version are
   read on the operator plane and from the platform's metrics, which a
   tool's tenant context never reaches.

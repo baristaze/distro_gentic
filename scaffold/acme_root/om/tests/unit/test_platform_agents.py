@@ -2,7 +2,7 @@
 one loop; the platform assistant holds no workspace, repository, or shell
 tool, and a call to one is refused; it drafts configuration and a
 person applies it; its corpus is what the knowledge map lists for the
-tenant's users and nothing else; the engineer's edit changes exactly the
+tenant's users and nothing else; the software engineer's edit changes exactly the
 one place it names, and a search of the code answers within its bound and
 inside the workspace alone; and a validation session is platform work on
 the queue, run on a fresh executor with no model call."""
@@ -26,8 +26,8 @@ from contracts.platform_agents import (
     CORPUS,
     Later,
     Platform,
-    an_engineer,
-    an_engineer_starts_two_sub_agents_and_wakes_on_each_report,
+    a_software_engineer,
+    a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report,
     calls,
     citing,
     on_the_twin,
@@ -107,16 +107,16 @@ from acme.om.platform_agents.kinds import (
     ANALYSIS_KIND,
     ANALYSIS_SHARE,
     ANALYSIS_V3,
-    ENGINEER_KIND,
-    ENGINEER_SHARE,
-    ENGINEER_V6,
-    ENGINEER_V7,
-    OPERATOR_KIND,
+    OPS_ANALYST_KIND,
     PLANNER_KIND,
     PLATFORM_ASSISTANT_KIND,
     REVIEWER_KIND,
     REVIEWER_SHARE,
     SHIPPED,
+    SOFTWARE_ENGINEER_KIND,
+    SOFTWARE_ENGINEER_SHARE,
+    SOFTWARE_ENGINEER_V6,
+    SOFTWARE_ENGINEER_V7,
 )
 from acme.om.platform_agents.tools import (
     MAX_EDIT,
@@ -234,14 +234,14 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     classes = classes_of(shipped_catalog())
     names = [(kind.name, kind.version) for kind in SHIPPED]
     assert names == [
-        ("engineer", 1),
-        ("engineer", 2),
-        ("engineer", 3),
-        ("engineer", 4),
-        ("engineer", 5),
-        ("engineer", 6),
-        ("engineer", 7),
-        ("engineer", 8),
+        ("software_engineer", 1),
+        ("software_engineer", 2),
+        ("software_engineer", 3),
+        ("software_engineer", 4),
+        ("software_engineer", 5),
+        ("software_engineer", 6),
+        ("software_engineer", 7),
+        ("software_engineer", 8),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
@@ -250,21 +250,23 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("platform_assistant", 1),
         ("platform_assistant", 2),
         ("reviewer", 1),
-        ("operator", 1),
+        ("ops_analyst", 1),
     ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
         assert kind.prompts, f"{kind.name} carries its prompts"
     delivering = {kind.name for kind in SHIPPED if kind.done_rule is DoneRule.RESULT_TOOL}
-    assert delivering == {"engineer", "reviewer"}, "the engineer and the reviewer deliver"
-    # Only the engineer changes a work product: the reviewer delivers a
+    assert delivering == {"software_engineer", "reviewer"}, (
+        "the software engineer and the reviewer deliver"
+    )
+    # Only the software engineer changes a work product: the reviewer delivers a
     # review, and nothing it holds writes.
     assert {classes[tool] for tool in REVIEWER_KIND.tools} == {"read", "integration"}
     assert REVIEWER_KIND.result_tool == kinds.SUBMIT_REVIEW
-    assert kinds.VALIDATE in ENGINEER_KIND.tools
-    assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
-    assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
-    # The engineer edits by one place, searches the code, and uses the
+    assert kinds.VALIDATE in SOFTWARE_ENGINEER_KIND.tools
+    assert SOFTWARE_ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
+    assert {classes[tool] for tool in SOFTWARE_ENGINEER_KIND.tools} >= {"write", "execute"}
+    # The software engineer edits by one place, searches the code, and uses the
     # agent knowledge base; analysis searches and reads, and changes nothing.
     assert {
         kinds.EDIT_FILE,
@@ -272,24 +274,26 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         kinds.SEARCH_AGENT_KNOWLEDGE,
         kinds.READ_AGENT_KNOWLEDGE,
         kinds.SUGGEST_AGENT_KNOWLEDGE,
-    } <= set(ENGINEER_KIND.tools)
+    } <= set(SOFTWARE_ENGINEER_KIND.tools)
     assert {kinds.SEARCH_CODE, kinds.SEARCH_AGENT_KNOWLEDGE, kinds.READ_AGENT_KNOWLEDGE} <= set(
         ANALYSIS_KIND.tools
     )
     assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute", "spawn"}
 
 
-def test_every_kind_roots_the_engines_tree_and_the_engineer_and_analysis_start_sub_agents() -> None:
+def test_every_kind_roots_the_engines_tree_and_the_software_engineer_and_analysis_start_sub_agents() -> (
+    None
+):
     """Every shipped kind, at every version, roots a tree three levels deep
     that holds ten sub-agents besides its root, never a tree of one. The
-    engineer and analysis name the engine's two tools, and their policy runs
+    software engineer and analysis name the engine's two tools, and their policy runs
     a spawn unattended; the planner and the assistant hand work on and start
     no sub-agent."""
     for kind in SHIPPED:
         assert (kind.tree.height, kind.tree.count) == (3, 10), (kind.name, kind.version)
     classes = classes_of(shipped_catalog())
     assert (classes[SPAWN_SUB_AGENT], classes[WAIT_FOR_SUB_AGENTS]) == ("spawn", "read")
-    for kind in (ENGINEER_KIND, ANALYSIS_KIND):
+    for kind in (SOFTWARE_ENGINEER_KIND, ANALYSIS_KIND):
         assert {SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS} <= set(kind.tools), kind.name
         decided = {rule.authorization_class: rule.decision for rule in kind.policy.rules}
         assert decided[ToolClass.SPAWN] is Decision.ALLOW, kind.name
@@ -302,38 +306,40 @@ def test_the_sub_agent_layer_says_a_sub_agent_starts_from_the_default_branch() -
     """A sub-agent's workspace is a fresh checkout of the default branch, so
     every kind that starts one is told its sub-agents lack its changes, and
     asks about the default branch or hands over what they need."""
-    for kind in (ENGINEER_KIND, ANALYSIS_KIND):
+    for kind in (SOFTWARE_ENGINEER_KIND, ANALYSIS_KIND):
         assert kinds.SUB_AGENTS in kind.prompts, kind.name
     assert "a fresh checkout of the default branch, without your changes" in kinds.SUB_AGENTS
     assert "hand it what it needs in its objective" in kinds.SUB_AGENTS
 
 
-def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_a_change() -> None:
-    """An engineer starts a question that only reads or checks as analysis,
-    under analysis's share, and another engineer only for work that changes
+def test_the_software_engineers_layers_name_analysis_for_a_question_and_the_software_engineer_for_a_change() -> (
+    None
+):
+    """A software engineer starts a question that only reads or checks as analysis,
+    under analysis's share, and another software engineer only for work that changes
     code: its prompt layers name both kinds, since the spawn tool's input
     names none."""
-    layers = " ".join(ENGINEER_KIND.prompts)
+    layers = " ".join(SOFTWARE_ENGINEER_KIND.prompts)
     assert f'kind "{kinds.ANALYSIS}" for a question that only reads or checks' in layers
-    assert f'your own kind, "{kinds.ENGINEER}" (or leave kind out)' in layers
+    assert f'your own kind, "{kinds.SOFTWARE_ENGINEER}" (or leave kind out)' in layers
     assert "only for work that changes code" in layers
     assert ANALYSIS_KIND.share == ANALYSIS_SHARE
 
 
-def test_the_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
+def test_the_software_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
     """A success counts only when a baseline at its base ran before its head
-    was validated, so an engineer whose base moved takes one there."""
-    layers = " ".join(ENGINEER_KIND.prompts)
+    was validated, so a software engineer whose base moved takes one there."""
+    layers = " ".join(SOFTWARE_ENGINEER_KIND.prompts)
     assert "Take a baseline with validate before you change anything" in layers
     assert "Take a baseline again whenever your base moves" in layers
 
 
 @pytest.mark.parametrize(
     ("latest", "before"),
-    [(ENGINEER_V7, ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
-    ids=["engineer", "analysis"],
+    [(SOFTWARE_ENGINEER_V7, SOFTWARE_ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
+    ids=["software_engineer", "analysis"],
 )
-def test_the_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their_own(
+def test_the_software_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their_own(
     latest: AgentKind, before: AgentKind
 ) -> None:
     """A result too large for the window, or one compaction elided, is read
@@ -356,15 +362,17 @@ def test_analysis_waits_for_every_report_before_it_answers() -> None:
     assert "wait for every sub-agent's report with wait_for_sub_agents before you answer" in layers
 
 
-def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
-    """An engineer a spawn or an agent automation starts parks for a person past the
+def test_the_software_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
+    """A software engineer a spawn or an agent automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share
     pays for its loops at that guard."""
-    assert ENGINEER_KIND.limits.step_guard == kinds.ENGINEER_STEP_GUARD
-    assert ENGINEER_KIND.limits.step_guard > Limits().step_guard
-    assert ENGINEER_KIND.share == ENGINEER_SHARE
-    assert ENGINEER_SHARE.cost_micros == (
-        kinds.ENGINEER_LOOPS * ENGINEER_KIND.limits.step_guard * kinds.CACHED_CALL_MICROS
+    assert SOFTWARE_ENGINEER_KIND.limits.step_guard == kinds.SOFTWARE_ENGINEER_STEP_GUARD
+    assert SOFTWARE_ENGINEER_KIND.limits.step_guard > Limits().step_guard
+    assert SOFTWARE_ENGINEER_KIND.share == SOFTWARE_ENGINEER_SHARE
+    assert SOFTWARE_ENGINEER_SHARE.cost_micros == (
+        kinds.SOFTWARE_ENGINEER_LOOPS
+        * SOFTWARE_ENGINEER_KIND.limits.step_guard
+        * kinds.CACHED_CALL_MICROS
     )
 
 
@@ -390,41 +398,53 @@ LEAD = AgentKind(
     tree=TreeLimits(height=2, count=1),
     isolation=NO_WORKSPACE,
 )
-"""A product's kind that delegates: it can grant the engineer its result
+"""A product's kind that delegates: it can grant the software engineer its result
 tool, and its tree has room for one child."""
 
 
 def test_every_shipped_kind_a_spawn_can_start_names_a_share() -> None:
-    """A spawn refuses a kind that names no share. The engineer and analysis
+    """A spawn refuses a kind that names no share. The software engineer and analysis
     split their work into sub-agents of either kind, a product's kind may
-    spawn the engineer, and a lead spawns the reviewer on the pull request
+    spawn the software engineer, and a lead spawns the reviewer on the pull request
     another kind opened, so each one's latest version names a share; the
     planner, the assistant, and the operator are started by a person and
     name none."""
     catalog = AgentKindCatalog(kinds=SHIPPED)
     latest = [catalog.latest(name) for name in dict.fromkeys(kind.name for kind in SHIPPED)]
     spawning = [kind for kind in latest if SPAWN_SUB_AGENT in kind.tools]
-    assert [kind.name for kind in spawning] == [kinds.ENGINEER, kinds.ANALYSIS]
+    assert [kind.name for kind in spawning] == [kinds.SOFTWARE_ENGINEER, kinds.ANALYSIS]
     spawned = [*spawning, REVIEWER_KIND]
-    assert [kind.share for kind in spawned] == [ENGINEER_SHARE, ANALYSIS_SHARE, REVIEWER_SHARE]
+    assert [kind.share for kind in spawned] == [
+        SOFTWARE_ENGINEER_SHARE,
+        ANALYSIS_SHARE,
+        REVIEWER_SHARE,
+    ]
     for kind in spawned:
         assert kind.share is not None and (kind.share.cost_micros or 0) > 0, kind.name
     assert all(kind.share is None for kind in latest if kind not in spawned)
 
 
-async def test_a_products_kind_spawns_the_engineer_under_its_share(tmp_path: Path) -> None:
+async def test_a_products_kind_spawns_the_software_engineer_under_its_share(tmp_path: Path) -> None:
     platform = platform_over(tmp_path, kinds=(LEAD,))
     lead_id = await platform.start(LEAD.name)
     asked = Spawn(
-        id=new_id(), kind=kinds.ENGINEER, title="the total", objective="Fix the report's total."
+        id=new_id(),
+        kind=kinds.SOFTWARE_ENGINEER,
+        title="the total",
+        objective="Fix the report's total.",
     )
 
     child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
 
-    assert (child.kind, child.kind_version) == (kinds.ENGINEER, ENGINEER_KIND.version)
+    assert (child.kind, child.kind_version) == (
+        kinds.SOFTWARE_ENGINEER,
+        SOFTWARE_ENGINEER_KIND.version,
+    )
     page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
     own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
-    assert [budget.amount for budget in page.items if budget.scope == own] == [ENGINEER_SHARE]
+    assert [budget.amount for budget in page.items if budget.scope == own] == [
+        SOFTWARE_ENGINEER_SHARE
+    ]
 
 
 async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> None:
@@ -450,7 +470,7 @@ async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> Non
     assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
 
 
-# Each shipped kind reaches an accepted end; the engineer's success only on
+# Each shipped kind reaches an accepted end; the software engineer's success only on
 # a passing validation at its head.
 
 
@@ -464,14 +484,14 @@ def evidenced(tmp_path: Path) -> tuple[Platform, ScriptedExecutor, WorkProductMe
     work = WorkProductMemoryImpl()
     platform = platform_over(
         tmp_path,
-        kinds=(on_the_twin(ENGINEER_KIND), on_the_twin(ANALYSIS_KIND)),
+        kinds=(on_the_twin(SOFTWARE_ENGINEER_KIND), on_the_twin(ANALYSIS_KIND)),
         executor=executor,
         work_product=work,
     )
     return platform, executor, work
 
 
-async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
+async def test_the_software_engineers_success_needs_a_passing_validation_at_its_head(
     evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
 ) -> None:
     platform, executor, work = evidenced
@@ -483,7 +503,7 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     # A baseline first, then no validation at its head, then a failing one:
     # no success counts, and a failure explained by the runs is an accepted end.
     executor.outcome = all_fail
-    failing = await an_engineer(platform, work, project_id)
+    failing = await a_software_engineer(platform, work, project_id)
     platform.anthropic.add(
         reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
@@ -500,7 +520,7 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
 
     # A passing validation at its head: the success is accepted, verified.
     executor.outcome = lambda check, trial: "passed"
-    passing = await an_engineer(platform, work, project_id)
+    passing = await a_software_engineer(platform, work, project_id)
     platform.anthropic.add(
         reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.VALIDATE, "use_validate")),
@@ -519,7 +539,7 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
     platform, _, _ = evidenced
     for kind, answer in (
         (kinds.ANALYSIS, "Finding: the total is dropped when a week has no rows (report.log)."),
-        (kinds.PLANNER, "Plan: one task, a new engineer session for the dropped total."),
+        (kinds.PLANNER, "Plan: one task, a new software engineer session for the dropped total."),
         (kinds.PLATFORM_ASSISTANT, "A session waits while its tenant is at its share."),
     ):
         session_id = await platform.start(kind)
@@ -532,15 +552,18 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
 
 
 RENDERED = {
-    (kinds.ENGINEER, 8): "358fcfc6c517cddf29916e858bf60038de42a67ad5cd190bad348a35078d18af",
+    (
+        kinds.SOFTWARE_ENGINEER,
+        8,
+    ): "e0ebd4337f44f2b666a9ac87c692694ab6e181d0827c3f8c6f89d3f90e61e77d",
     (kinds.ANALYSIS, 4): "c94610c01308fb29e151e946431dd622706a314ed7901ae2b8fcbc4f95c27a1c",
-    (kinds.PLANNER, 1): "6dee9c1af1944f29fc8cd2eae1ecdc105b8d76cd46ebc3c11cdba87cc5c06b85",
+    (kinds.PLANNER, 1): "7bf2a8de67d5c61b4947347bcfed8b7b50120beff54125446686a11272a36fa6",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "63e48b8296da80483b645dd11a68c47fa3f6edbcb452c5e5959eb580b8a4718c",
+    ): "a5930ae480ca5158fb24ad3d0256175d338a8ea78bbc73fb3de7141c9058bb14",
     (kinds.REVIEWER, 1): "72365994c5f47eb73b8f0c65cc9483d80e5f12d4cd637b707911c8424aea4e08",
-    (kinds.OPERATOR, 1): "83da872c4a578480f42abc1a6e7268dbecd18660680a2e029cc66e94398c2078",
+    (kinds.OPS_ANALYST, 1): "0d02f035193f1a56484fb2c0da2521a7cd910a044f5f116598e5b15efcfda800",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -563,16 +586,16 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
     platform, _, work = evidenced
     project_id = await in_project(platform.storage.get_project_storage(), platform.owner.org_id)
     for kind in (
-        ENGINEER_KIND,
+        SOFTWARE_ENGINEER_KIND,
         ANALYSIS_KIND,
         PLANNER_KIND,
         PLATFORM_ASSISTANT_KIND,
         REVIEWER_KIND,
-        OPERATOR_KIND,
+        OPS_ANALYST_KIND,
     ):
         before = len(platform.anthropic.calls)
-        if kind is ENGINEER_KIND:
-            session_id = await an_engineer(platform, work, project_id)
+        if kind is SOFTWARE_ENGINEER_KIND:
+            session_id = await a_software_engineer(platform, work, project_id)
         else:
             session_id = await platform.start(kind.name)
             await platform.say(session_id, "Go on.")
@@ -586,7 +609,7 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
 
 
 NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
-    (kinds.ENGINEER, 1): (
+    (kinds.SOFTWARE_ENGINEER, 1): (
         "list_files",
         "read_file",
         "write_file",
@@ -596,7 +619,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "submit_result",
     ),
     **{
-        (kinds.ENGINEER, version): (
+        (kinds.SOFTWARE_ENGINEER, version): (
             "list_files",
             "read_file",
             "search_code",
@@ -613,7 +636,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         for version in (2, 3, 4)
     },
     **{
-        (kinds.ENGINEER, version): (
+        (kinds.SOFTWARE_ENGINEER, version): (
             "list_files",
             "read_file",
             "search_code",
@@ -646,12 +669,12 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         )
         for version in (2, 3, 4)
     },
-    (kinds.PLANNER, 1): ("read_session", "hand_off_to_engineer"),
+    (kinds.PLANNER, 1): ("read_session", "hand_off_to_software_engineer"),
     (kinds.PLATFORM_ASSISTANT, 1): (
         "search_corpus",
         "read_session",
         "draft_tool_policy",
-        "hand_off_to_engineer",
+        "hand_off_to_software_engineer",
     ),
     (kinds.PLATFORM_ASSISTANT, 2): (
         "search_corpus",
@@ -665,7 +688,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "list_agent_automations",
         "read_agent_automation",
         "draft_tool_policy",
-        "hand_off_to_engineer",
+        "hand_off_to_software_engineer",
     ),
     (kinds.REVIEWER, 1): (
         "read_pull_request",
@@ -677,7 +700,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_agent_knowledge",
         "read_artifact",
     ),
-    (kinds.OPERATOR, 1): (
+    (kinds.OPS_ANALYST, 1): (
         "read_session",
         "list_sessions",
         "read_wait",
@@ -753,27 +776,29 @@ def test_a_products_kinds_name_the_platforms_toolsets_and_its_own() -> None:
 
 
 def test_each_kind_holds_its_workspace_warm_for_its_grace_within_the_cache_life() -> None:
-    """The engineer and analysis hold their workspace warm after a loop for
+    """The software engineer and analysis hold their workspace warm after a loop for
     the prompt cache's life, and no longer; a product's kind names its own
     grace, never past that life, and only for a kind of its own."""
     for kind in SHIPPED:
         assert timedelta(0) <= ProductKinds().warm_grace(kind.name) <= kinds.PROMPT_CACHE_LIFE
-    assert set(kinds.GRACES) == {kinds.ENGINEER, kinds.ANALYSIS}
+    assert set(kinds.GRACES) == {kinds.SOFTWARE_ENGINEER, kinds.ANALYSIS}
     brief = timedelta(minutes=1)
     product = ProductKinds(agents=(a_product_kind(),), graces={"triage": brief})
     assert product.warm_grace("triage") == brief
-    assert product.warm_grace(kinds.ENGINEER) == kinds.GRACES[kinds.ENGINEER]
+    assert product.warm_grace(kinds.SOFTWARE_ENGINEER) == kinds.GRACES[kinds.SOFTWARE_ENGINEER]
     assert ProductKinds().warm_grace("unknown") == kinds.WARM_GRACE
     with pytest.raises(ValueError, match="runs outside the prompt cache's life"):
         ProductKinds(agents=(a_product_kind(),), graces={"triage": timedelta(hours=1)})
     with pytest.raises(ValueError, match="no agent kind of the product's"):
-        ProductKinds(graces={kinds.ENGINEER: brief})
+        ProductKinds(graces={kinds.SOFTWARE_ENGINEER: brief})
 
 
-async def test_the_engineer_starts_two_sub_agents_and_wakes_on_each_report(
+async def test_the_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     tmp_path: Path,
 ) -> None:
-    await an_engineer_starts_two_sub_agents_and_wakes_on_each_report(*sub_agents_over(tmp_path))
+    await a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
+        *sub_agents_over(tmp_path)
+    )
 
 
 # Check 1: the assistant holds no workspace, repository, shell, or domain
@@ -816,7 +841,7 @@ def test_an_assistant_with_a_workspace_or_steady_authority_is_refused_at_boot(
 ) -> None:
     classes = classes_of(shipped_catalog())
     with_workspace = PLATFORM_ASSISTANT_KIND.model_copy(
-        update={"version": 3, "isolation": ENGINEER_KIND.isolation}
+        update={"version": 3, "isolation": SOFTWARE_ENGINEER_KIND.isolation}
     )
     steady = PLATFORM_ASSISTANT_KIND.model_copy(
         update={"version": 3, "authority": AuthorityMode.STEADY}
@@ -853,7 +878,7 @@ async def test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused(
             calls(kinds.WRITE_FILE, "use_write", path="notes.txt", text="x"),
             calls(kinds.READ_FILE, "use_read", path="README.md"),
         ),
-        reply(said("I cannot run commands or touch files; an engineer can.")),
+        reply(said("I cannot run commands or touch files; a software engineer can.")),
     )
 
     run = await platform.managers.loop.run(platform.owner, session_id)
@@ -867,10 +892,12 @@ async def test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused(
         failure, text = await platform.answer(session_id, use_id)
         assert failure is ToolFailure.INVALID_INPUT
         assert f"there is no tool named {tool!r}" in text
-    # The catalog holds every one of them: an engineer's session has them.
-    engineer_id = await platform.start(kinds.ENGINEER)
-    engineer = await platform.managers.agent_sessions.get_session(platform.owner, engineer_id)
-    assert {kinds.RUN_COMMAND, kinds.WRITE_FILE, kinds.READ_FILE} <= set(engineer.tools)
+    # The catalog holds every one of them: a software engineer's session has them.
+    software_engineer_id = await platform.start(kinds.SOFTWARE_ENGINEER)
+    software_engineer = await platform.managers.agent_sessions.get_session(
+        platform.owner, software_engineer_id
+    )
+    assert {kinds.RUN_COMMAND, kinds.WRITE_FILE, kinds.READ_FILE} <= set(software_engineer.tools)
 
 
 async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
@@ -888,7 +915,7 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
             said("This is engineering work."),
             calls(kinds.HAND_OFF, "use_hand", title="The missing total", objective=objective),
         ),
-        reply(said("An engineer session holds it; confirm it to start.")),
+        reply(said("A software engineer session holds it; confirm it to start.")),
     )
 
     run = await platform.managers.loop.run(platform.owner, session_id)
@@ -896,25 +923,30 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
     assert run.outcome is LoopOutcome.SUCCEEDED
     failure, text = await platform.answer(session_id, "use_hand")
     assert failure is None
-    engineer_id = UUID(json.loads(text)["session_id"])
-    engineer = await platform.managers.agent_sessions.get_session(platform.owner, engineer_id)
+    software_engineer_id = UUID(json.loads(text)["session_id"])
+    software_engineer = await platform.managers.agent_sessions.get_session(
+        platform.owner, software_engineer_id
+    )
     # A session of its own, which names where it came from and waits for its
     # person: the assistant's conversation is not in it, only the objective.
-    assert (engineer.kind, engineer.handed_off_from) == (kinds.ENGINEER, session_id)
-    assert engineer.status is SessionStatus.IDLE
-    handed = await platform.history(engineer_id)
+    assert (software_engineer.kind, software_engineer.handed_off_from) == (
+        kinds.SOFTWARE_ENGINEER,
+        session_id,
+    )
+    assert software_engineer.status is SessionStatus.IDLE
+    handed = await platform.history(software_engineer_id)
     assert [step.as_text() for step in handed] == [objective]
 
     await platform.say(session_id, "Where does it stand?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_SESSION, "use_read", session_id=str(engineer_id))),
+        reply(calls(kinds.READ_SESSION, "use_read", session_id=str(software_engineer_id))),
         reply(said("It waits for you to confirm it.")),
     )
     await platform.managers.loop.run(platform.owner, session_id)
     failure, text = await platform.answer(session_id, "use_read")
     assert failure is None
     state = json.loads(text)
-    assert (state["kind"], state["status"]) == (kinds.ENGINEER, "idle")
+    assert (state["kind"], state["status"]) == (kinds.SOFTWARE_ENGINEER, "idle")
 
 
 # Check 2: the assistant cannot apply configuration; a person does.
@@ -924,7 +956,7 @@ async def test_the_assistant_drafts_the_policy_and_a_person_applies_it(tmp_path:
     platform = platform_over(tmp_path)
     policies = platform.managers.tools
     session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "Let my engineers run commands unattended.")
+    await platform.say(session_id, "Let my software engineers run commands unattended.")
     platform.anthropic.add(
         reply(
             said("Here is a draft."),
@@ -1257,7 +1289,7 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
     assert [i.target_id for i in items_of(platform)] == [session.id]
 
 
-# The engineer's edit and search, in a directory on this host, with real
+# The software engineer's edit and search, in a directory on this host, with real
 # files and real processes.
 
 SOURCE = (
@@ -1502,26 +1534,26 @@ async def test_a_pattern_of_more_than_one_line_is_refused_before_it_runs(
     assert search.runs == 1
 
 
-# The reviewer and the operator are templates as data: each is built from
+# The reviewer and the ops analyst are templates as data: each is built from
 # the platform's toolsets, asks sizes, and is versioned in the catalog.
 
 
-def test_the_reviewer_and_the_operator_are_built_from_toolsets_and_ask_sizes() -> None:
+def test_the_reviewer_and_the_ops_analyst_are_built_from_toolsets_and_ask_sizes() -> None:
     catalog = AgentKindCatalog(kinds=SHIPPED)
     assert catalog.latest(kinds.REVIEWER) == REVIEWER_KIND
-    assert catalog.latest(kinds.OPERATOR) == OPERATOR_KIND
+    assert catalog.latest(kinds.OPS_ANALYST) == OPS_ANALYST_KIND
     assert REVIEWER_KIND.toolsets == (
         kinds.REVIEW_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
         kinds.ARTIFACTS_TOOLSET,
     )
-    assert OPERATOR_KIND.toolsets == (
+    assert OPS_ANALYST_KIND.toolsets == (
         kinds.RECORDS_TOOLSET,
         kinds.OPERATIONS_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
         kinds.ARTIFACTS_TOOLSET,
     )
-    for kind in (REVIEWER_KIND, OPERATOR_KIND):
+    for kind in (REVIEWER_KIND, OPS_ANALYST_KIND):
         assert set(kind.toolsets) <= set(kinds.TOOLSETS), kind.name
         held = {tool for toolset in kind.toolsets for tool in toolset.tools}
         # The reviewer names the forge's comment alone; the operator names
@@ -1530,7 +1562,7 @@ def test_the_reviewer_and_the_operator_are_built_from_toolsets_and_ask_sizes() -
         assert set(kind.tools) == held | alone, kind.name
     asked = {kind.name: {ask.role: ask.size for ask in kind.asks} for kind in SHIPPED}
     assert asked[kinds.REVIEWER] == {MAIN: ModelSize.XL, SUMMARIZER: ModelSize.S}
-    assert asked[kinds.OPERATOR] == {MAIN: ModelSize.L, SUMMARIZER: ModelSize.S}
+    assert asked[kinds.OPS_ANALYST] == {MAIN: ModelSize.L, SUMMARIZER: ModelSize.S}
     # A product builds its own kinds from the same toolsets.
     lead = a_product_kind(kinds.SUB_AGENTS_TOOLSET, name="lead")
     assert ProductKinds(agents=(lead,)).agents == (lead,)
@@ -1921,21 +1953,21 @@ async def test_a_pull_request_too_large_for_one_answer_keeps_its_id_and_head_who
         (kinds.REVIEWER, kinds.WRITE_FILE, ToolClass.WRITE),
         (kinds.REVIEWER, kinds.RUN_COMMAND, ToolClass.EXECUTE),
         (kinds.REVIEWER, SPAWN_SUB_AGENT, ToolClass.SPAWN),
-        (kinds.OPERATOR, kinds.HAND_OFF, ToolClass.SPAWN),
-        (kinds.OPERATOR, kinds.COMMENT, ToolClass.INTEGRATION),
-        (kinds.OPERATOR, kinds.DRAFT_TOOL_POLICY, "configuration"),
+        (kinds.OPS_ANALYST, kinds.HAND_OFF, ToolClass.SPAWN),
+        (kinds.OPS_ANALYST, kinds.COMMENT, ToolClass.INTEGRATION),
+        (kinds.OPS_ANALYST, kinds.DRAFT_TOOL_POLICY, "configuration"),
     ],
 )
-def test_a_reviewer_or_an_operator_that_reaches_further_is_refused(
+def test_a_reviewer_or_an_ops_analyst_that_reaches_further_is_refused(
     kind: str, tool: str, authorization_class: str
 ) -> None:
-    shipped = REVIEWER_KIND if kind == kinds.REVIEWER else OPERATOR_KIND
+    shipped = REVIEWER_KIND if kind == kinds.REVIEWER else OPS_ANALYST_KIND
     reaching = shipped.model_copy(update={"version": 2, "tools": (*shipped.tools, tool)})
     classes = {**classes_of(shipped_catalog()), tool: authorization_class}
     refusal = rules.reach_refusal(reaching, classes)
     assert refusal is not None and tool in refusal
     for other in (
-        shipped.model_copy(update={"version": 2, "isolation": ENGINEER_KIND.isolation}),
+        shipped.model_copy(update={"version": 2, "isolation": SOFTWARE_ENGINEER_KIND.isolation}),
         shipped.model_copy(
             update={
                 "version": 2,
@@ -1971,11 +2003,11 @@ def test_a_review_cites_only_its_own_reads_and_findings() -> None:
     assert not rules.review_verdict(Claim.FAILED, {other}, calls_of).accepted
 
 
-# The operator reads why a session waits from the records, and acts on
+# The ops analyst reads why a session waits from the records, and acts on
 # nothing: every tool it holds reads.
 
 
-async def test_an_operator_answers_why_a_session_waits_from_the_records(tmp_path: Path) -> None:
+async def test_an_ops_analyst_answers_why_a_session_waits_from_the_records(tmp_path: Path) -> None:
     platform = platform_over(tmp_path)
     hosts = platform.managers.hosts
     now = utcnow()
@@ -1996,10 +2028,10 @@ async def test_an_operator_answers_why_a_session_waits_from_the_records(tmp_path
     await platform.storage.get_hosts_storage().enroll(
         platform.owner.org_id, host, make_credential(host.id), ()
     )
-    waiting = await platform.start(kinds.ENGINEER)
+    waiting = await platform.start(kinds.SOFTWARE_ENGINEER)
     await hosts.place_session(platform.owner, waiting, pool.id)
-    asking = await platform.start(kinds.OPERATOR)
-    await platform.say(asking, "Why has my engineer not started?")
+    asking = await platform.start(kinds.OPS_ANALYST)
+    await platform.say(asking, "Why has my software engineer not started?")
     answer = "It waits for a host of build: host-1, its only one, is offline."
     platform.anthropic.add(
         reply(
@@ -2031,23 +2063,23 @@ async def test_an_operator_answers_why_a_session_waits_from_the_records(tmp_path
     assert answer in [step.as_text() for step in await platform.history(asking)]
 
 
-async def test_every_tool_the_operator_holds_reads(tmp_path: Path) -> None:
+async def test_every_tool_the_ops_analyst_holds_reads(tmp_path: Path) -> None:
     classes = classes_of(shipped_catalog())
-    assert {classes[tool] for tool in OPERATOR_KIND.tools} == {ToolClass.READ}
-    assert OPERATOR_KIND.isolation.mode is IsolationMode.NONE
-    assert OPERATOR_KIND.authority is AuthorityMode.DELEGATED
-    decided = {rule.authorization_class: rule.decision for rule in OPERATOR_KIND.policy.rules}
+    assert {classes[tool] for tool in OPS_ANALYST_KIND.tools} == {ToolClass.READ}
+    assert OPS_ANALYST_KIND.isolation.mode is IsolationMode.NONE
+    assert OPS_ANALYST_KIND.authority is AuthorityMode.DELEGATED
+    decided = {rule.authorization_class: rule.decision for rule in OPS_ANALYST_KIND.policy.rules}
     assert decided == {ToolClass.READ: Decision.ALLOW}
     platform = platform_over(tmp_path)
-    session_id = await platform.start(kinds.OPERATOR)
+    session_id = await platform.start(kinds.OPS_ANALYST)
     session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
     assert {classes[tool] for tool in session.tools} == {ToolClass.READ}
     # A version of it that holds a tool past reading is refused at boot,
     # whoever declares it.
-    acting = OPERATOR_KIND.model_copy(
-        update={"version": 2, "tools": (*OPERATOR_KIND.tools, kinds.HAND_OFF)}
+    acting = OPS_ANALYST_KIND.model_copy(
+        update={"version": 2, "tools": (*OPS_ANALYST_KIND.tools, kinds.HAND_OFF)}
     )
-    with pytest.raises(UnsafeConfiguration, match="operator v2: hand_off_to_engineer"):
+    with pytest.raises(UnsafeConfiguration, match="ops_analyst v2: hand_off_to_software_engineer"):
         build_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),

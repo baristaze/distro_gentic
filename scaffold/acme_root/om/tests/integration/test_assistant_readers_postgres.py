@@ -68,7 +68,9 @@ async def a_tenant(platform: Platform, name: str) -> TenantContext:
     return owner
 
 
-async def a_session(platform: Platform, owner: TenantContext, kind: str = kinds.ENGINEER) -> UUID:
+async def a_session(
+    platform: Platform, owner: TenantContext, kind: str = kinds.SOFTWARE_ENGINEER
+) -> UUID:
     start = Start(id=new_id(), kind=kind, title="the weekly report")
     return (await platform.managers.agents.start_session(owner, start)).id
 

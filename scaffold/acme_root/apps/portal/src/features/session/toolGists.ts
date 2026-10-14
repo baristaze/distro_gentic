@@ -54,5 +54,5 @@ export const PLATFORM_GISTS: Readonly<Record<string, Gist>> = {
   submit_result: (input, output) => `${verb(output, "Submitted", "Submit")} its result: ${asked(input, "claim") ?? "a claim"}`,
   write_plan: (_input, output) => `${verb(output, "Wrote", "Write")} a plan`,
   ask_person: (input, output) => `${verb(output, "Asked", "Ask")} ${quoted(asked(input, "question"))}`.trim(),
-  hand_off_to_engineer: (input, output) => `${verb(output, "Handed", "Hand")} off ${quoted(asked(input, "title"))}`.trim(),
+  hand_off_to_software_engineer: (input, output) => `${verb(output, "Handed", "Hand")} off ${quoted(asked(input, "title"))}`.trim(),
 };

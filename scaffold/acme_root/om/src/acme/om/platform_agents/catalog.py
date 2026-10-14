@@ -1,7 +1,7 @@
 """The shipped agents as a root wires them: the kinds, the tools they call
 beside the adopter's, the forge's comment among them, a product's own
 readers joined to the platform assistant, and the refusal, at boot, of a
-catalog that would let the assistant, the operator, or the reviewer
+catalog that would let the assistant, the ops analyst, or the reviewer
 reach past what it may. A process hands its root a `PlatformAgents`,
 which carries the assistant's corpus, read once at boot from the
 knowledge map (`read_corpus`)."""
@@ -26,7 +26,7 @@ from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools import (
     DraftToolPolicyImpl,
     EditFileImpl,
-    HandOffToEngineerImpl,
+    HandOffToSoftwareEngineerImpl,
     ListAgentAutomationsImpl,
     ListFilesImpl,
     ListHostsImpl,
@@ -139,7 +139,7 @@ def with_shipped(
         ListAgentAutomationsImpl.SPEC,
         ReadAgentAutomationImpl.SPEC,
         DraftToolPolicyImpl.SPEC,
-        HandOffToEngineerImpl.SPEC,
+        HandOffToSoftwareEngineerImpl.SPEC,
         ReadPullRequestImpl.SPEC,
         ReadPullRequestFileImpl.SPEC,
         NoteFindingImpl.SPEC,
@@ -172,7 +172,7 @@ def with_shipped(
         ListAgentAutomationsImpl(agent_automations),
         ReadAgentAutomationImpl(agent_automations),
         DraftToolPolicyImpl(policies, names, classes),
-        HandOffToEngineerImpl(agents),
+        HandOffToSoftwareEngineerImpl(agents),
         ReadPullRequestImpl(intake, integrations),
         ReadPullRequestFileImpl(intake, integrations),
         NoteFindingImpl(intake, integrations),
@@ -214,7 +214,7 @@ def with_assistant_tools(
 def refuse_reach(agent_kinds: Iterable[AgentKind], catalog: Iterable[ToolInterface]) -> None:
     """At boot, `UnsafeConfiguration` for a catalog that holds two tools of
     one name, since a registry could then hold either, or for a version of
-    the platform assistant, the operator, or the reviewer whose profile
+    the platform assistant, the ops analyst, or the reviewer whose profile
     reaches past what it may, whoever declares it (`rules.reach_refusal`)."""
     classes: dict[str, str] = {}
     for tool in catalog:

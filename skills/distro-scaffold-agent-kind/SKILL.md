@@ -30,7 +30,7 @@ session should take it".
   the profile.
 - `--done`: `answer` for an agent whose turn with no tool call is its
   answer; `result_tool` for one that delivers work, which only its
-  result tool ends, as the engineer's `submit_result` does.
+  result tool ends, as the software engineer's `submit_result` does.
 - `--authority`: `delegated` runs each call under the asking person's
   live permissions; `steady` under one principal fixed when the session
   is made. Unattended, an agent a person talks to is `delegated`, and
@@ -94,8 +94,8 @@ The shape of a kind is the four profiles in
    `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
    every process's entry point hands its root as `PlatformPorts.kinds`.
    A version of its kind whose workspace starts from its project's
-   workspace base, as the platform's engineer does from version 8, is
-   named by its name and version in `workspace_bases`.
+   workspace base, as the platform's software engineer does from version
+   8, is named by its name and version in `workspace_bases`.
    A class of the product's that must always wait for a person takes its
    ceiling in `ceilings`, never a row in `DEFAULT_CEILINGS` in the
    platform's `tools/rules.py`, whatever the engine's
@@ -124,13 +124,13 @@ The shape of a kind is the four profiles in
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
    A tool the platform ships for it is a `NativeToolImpl` in `tools.py`,
-   shape `ReadSessionImpl` for a read and `HandOffToEngineerImpl` for a
-   spawn, registered in `with_shipped`. The engine's
-   `agentic-scaffold-tool` holds what a tool's spec, target, and
-   failures must be; follow it where it is installed, and the shapes in
-   `tools.py` either way, except that a product's class takes its
-   ceiling in `PRODUCT_KINDS.ceilings` (step 1). Its test goes in
-   `om/tests/unit/test_platform_agents.py`.
+   shape `ReadSessionImpl` for a read and
+   `HandOffToSoftwareEngineerImpl` for a spawn, registered in
+   `with_shipped`. The engine's `agentic-scaffold-tool` holds what a
+   tool's spec, target, and failures must be; follow it where it is
+   installed, and the shapes in `tools.py` either way, except that a
+   product's class takes its ceiling in `PRODUCT_KINDS.ceilings` (step
+   1). Its test goes in `om/tests/unit/test_platform_agents.py`.
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it
@@ -150,7 +150,8 @@ The shape of a kind is the four profiles in
      list of names and set of delivering kinds take the new kind;
    - it ends as its done rule says, over the scripted provider, shape
      `test_analysis_the_planner_and_the_assistant_end_by_their_answer`
-     or `test_the_engineers_success_needs_a_passing_validation_at_its_head`;
+     or
+     `test_the_software_engineers_success_needs_a_passing_validation_at_its_head`;
    - a call past its policy layer is refused, shape
      `test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused`;
    - with `--roles`, a matrix version that serves not every role the

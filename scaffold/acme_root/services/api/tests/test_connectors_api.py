@@ -12,7 +12,7 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import add_member, build_container, client_over, sign_in, sign_in_as
-from unit.test_connectors import OPERATOR, RECORDS, Served, serve
+from unit.test_connectors import OPS_ANALYST, RECORDS, Served, serve
 
 from acme.integrations.mcp import McpListedTool
 from acme.om.connectors.impl.manager import connector_secret
@@ -24,7 +24,7 @@ from acme.services.api.container import AppContainer
 from acme.services.api.types.connectors import ReviewedToolBody
 
 TOKEN = "tok-0d6a92ce51b7f3"
-PORTS = PlatformPorts(kinds=ProductKinds(agents=(OPERATOR,), toolsets=(RECORDS,)))
+PORTS = PlatformPorts(kinds=ProductKinds(agents=(OPS_ANALYST,), toolsets=(RECORDS,)))
 
 
 @pytest.fixture
@@ -113,22 +113,22 @@ async def test_a_server_is_connected_reviewed_and_attached_and_its_credential_ne
     attached = await client.post(
         f"/v1/connectors/{connector['id']}/attachments",
         headers=owner,
-        json={"kind": "operator"},
+        json={"kind": "ops_analyst"},
     )
     assert attached.status_code == 200, attached.text
     assert attached.json()["attachments"] == [
-        {"kind": "operator", "project_id": None, "deferred": True}
+        {"kind": "ops_analyst", "project_id": None, "deferred": True}
     ]
     detached = await client.delete(
         f"/v1/connectors/{connector['id']}/attachments",
         headers=owner,
-        params={"kind": "operator"},
+        params={"kind": "ops_analyst"},
     )
     assert detached.status_code == 200 and detached.json()["attachments"] == []
     again = await client.delete(
         f"/v1/connectors/{connector['id']}/attachments",
         headers=owner,
-        params={"kind": "operator"},
+        params={"kind": "ops_analyst"},
     )
     assert again.status_code == 404
     everything = await client.get("/v1/connectors", headers=owner)

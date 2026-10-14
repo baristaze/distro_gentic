@@ -62,8 +62,8 @@ TOKEN = "tok-5be0c3a91d7f24"
 
 RECORDS = Toolset(name="ledger", version=1, summary="Look the records up.", tools=("lookup",))
 
-OPERATOR = AgentKind(
-    name="operator",
+OPS_ANALYST = AgentKind(
+    name="ops_analyst",
     version=1,
     toolsets=(RECORDS,),
     done_rule=DoneRule.ANSWER,
@@ -192,7 +192,7 @@ def tenant(
         options=ConnectorsOptions(private_addresses=True),
     )
     loop = loop_over(
-        tmp_path, kinds=(OPERATOR,), attached=layer.attached, storage=storage, infra=infra
+        tmp_path, kinds=(OPS_ANALYST,), attached=layer.attached, storage=storage, infra=infra
     )
     return Tenant(loop, layer.build(loop.managers))
 
@@ -247,14 +247,14 @@ async def review(at: Tenant, connector_id: UUID, *tools: str) -> None:
 
 async def connected(at: Tenant, url: str, *tools: str) -> UUID:
     """A cloud connector at `url`, its credential `TOKEN`, with `tools`
-    reviewed, attached to the operator."""
+    reviewed, attached to the ops analyst."""
     owner = at.loop.owner
     connector = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=url)
     )
     await at.connectors.put_credential(owner, connector.id, SecretStr(TOKEN))
     await review(at, connector.id, *tools)
-    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="operator"))
+    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="ops_analyst"))
     return connector.id
 
 
@@ -274,7 +274,7 @@ async def test_a_session_loads_a_connected_server_and_its_answer_renders_as_data
 ) -> None:
     at = tenant(tmp_path)
     await connected(at, words.url, "lookup", "whoami")
-    session_id = await at.loop.start("operator")
+    session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
@@ -337,7 +337,7 @@ async def test_a_changed_definition_is_refused_until_a_person_reviews_it_again(
     served = serve()
     try:
         connector_id = await connected(at, served.url, "lookup")
-        held = await at.loop.start("operator")
+        held = await at.loop.start("ops_analyst")
         await asked(
             at,
             held,
@@ -373,7 +373,7 @@ async def test_a_changed_definition_is_refused_until_a_person_reviews_it_again(
         )
         assert "no review of words serves it" in result_text(responses(steps)[-1])
         # A new session pins the new review, and its call goes through.
-        fresh = await at.loop.start("operator")
+        fresh = await at.loop.start("ops_analyst")
         steps = await asked(
             at,
             fresh,
@@ -394,7 +394,7 @@ async def test_a_withdrawn_tool_stops_at_its_next_call_in_a_session_that_pinned_
 ) -> None:
     at = tenant(tmp_path)
     connector_id = await connected(at, words.url, "lookup")
-    session_id = await at.loop.start("operator")
+    session_id = await at.loop.start("ops_analyst")
     await asked(
         at,
         session_id,
@@ -407,7 +407,7 @@ async def test_a_withdrawn_tool_stops_at_its_next_call_in_a_session_that_pinned_
         at, session_id, "Look.", reply(call("words__lookup", word="cat")), reply(said("No."))
     )
     assert failure_of(responses(steps)[-1]) is ToolFailure.PERMANENT
-    later = await at.loop.start("operator")
+    later = await at.loop.start("ops_analyst")
     await asked(at, later, "Hello.", reply(said("Hello.")))
     tools = [tool.name for tool in at.loop.anthropic.calls[-1].tools]
     assert tools == ["lookup"], "a connector with no tool reviewed is pinned by no session"
@@ -450,8 +450,8 @@ async def test_a_stricter_review_stops_a_pinned_tool_at_its_next_call(
         )
 
     await reviewed(ToolClass.READ, Effect.READ_ONLY)
-    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="operator"))
-    pinned = await at.loop.start("operator")
+    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="ops_analyst"))
+    pinned = await at.loop.start("ops_analyst")
     steps = await asked(
         at,
         pinned,
@@ -472,7 +472,7 @@ async def test_a_stricter_review_stops_a_pinned_tool_at_its_next_call(
     assert failure_of(refused) is ToolFailure.PERMANENT
     assert "reviewed it again as destructive" in result_text(refused)
     assert len(host.sent) == sent, "the refused call reached no server"
-    later = await at.loop.start("operator")
+    later = await at.loop.start("ops_analyst")
     await at.loop.say(later, "Look.")
     at.loop.anthropic.add(
         reply(call("load_toolset", toolset="words")), reply(call("words__lookup", word="cat"))
@@ -494,7 +494,7 @@ async def test_the_credential_reaches_no_step_and_no_log_line(
         connector = await at.connectors.get_connector(at.loop.owner, connector_id)
         assert connector.secret == connector_secret(connector_id), "a name, never a value"
         assert not leaks(connector.model_dump_json())
-        session_id = await at.loop.start("operator")
+        session_id = await at.loop.start("ops_analyst")
         steps = await asked(
             at,
             session_id,
@@ -553,13 +553,13 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
             definitions=(definition,),
         ),
     )
-    await at.connectors.attach(owner, inside.id, ConnectorAttachment(kind="operator"))
+    await at.connectors.attach(owner, inside.id, ConnectorAttachment(kind="ops_analyst"))
     # A cloud server attached too serves no session inside the wall.
     outside = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=words.url)
     )
-    await at.connectors.attach(owner, outside.id, ConnectorAttachment(kind="operator"))
-    session_id = await at.loop.start("operator")
+    await at.connectors.attach(owner, outside.id, ConnectorAttachment(kind="ops_analyst"))
+    session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
@@ -609,9 +609,9 @@ async def test_a_host_servers_failure_is_the_calls_and_its_review_carries_defini
         ),
     )
     await at.connectors.attach(
-        owner, inside.id, ConnectorAttachment(kind="operator", deferred=False)
+        owner, inside.id, ConnectorAttachment(kind="ops_analyst", deferred=False)
     )
-    session_id = await at.loop.start("operator")
+    session_id = await at.loop.start("ops_analyst")
     steps = await asked(
         at, session_id, "Find it.", reply(call("tracker__find")), reply(said("Not there."))
     )

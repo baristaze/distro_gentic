@@ -209,27 +209,27 @@ session that claims one.
 
 ## The agents the platform ships
 
-The platform ships six kinds of agent. The **engineer** takes an
-objective to a validated, reviewable change in a workspace of its own.
-**Analysis** reads what a run produced and turns it into findings. The
-**planner** turns findings into tasks, and hands new work to an
-engineer. The **platform assistant** answers the people who set up and
-run their part of the platform: it explains the product from its
+The platform ships six kinds of agent. The **software engineer** takes
+an objective to a validated, reviewable change in a workspace of its
+own. **Analysis** reads what a run produced and turns it into findings.
+The **planner** turns findings into tasks, and hands new work to an
+software engineer. The **platform assistant** answers the people who set
+up and run their part of the platform: it explains the product from its
 documentation and cites it, reads the tenant's sessions and what they
 wait on, its projects, and its agent automations, drafts the tool policy
-for a person to apply, and hands engineering work to an engineer. It
-acts on a person's own permissions, and it has no workspace, no
-repository, and no shell. The **reviewer** reads a pull request through
-the forge, its files at its head and its checks, and answers with
-findings, each with a file, a line, and a grade; it changes nothing, and
-a person approves each comment it posts. The **operator** reads the
-tenant's sessions and what they wait on, its hosts and what they offer,
-and its budgets' spend, on a person's own permissions, and acts on none
-of them.
+for a person to apply, and hands engineering work to a software
+engineer. It acts on a person's own permissions, and it has no
+workspace, no repository, and no shell. The **reviewer** reads a pull
+request through the forge, its files at its head and its checks, and
+answers with findings, each with a file, a line, and a grade; it changes
+nothing, and a person approves each comment it posts. The **ops
+analyst** reads the tenant's sessions and what they wait on, its hosts
+and what they offer, and its budgets' spend, on a person's own
+permissions, and acts on none of them.
 
 A kind whose toolsets include starting sub-agents is a lead: it starts
-the others, such as an engineer on a change and the reviewer on its pull
-request, and answers with their reports.
+the others, such as a software engineer on a change and the reviewer on
+its pull request, and answers with their reports.
 
 Nothing chooses an agent for a message: a person chooses by choosing
 the session they type in.

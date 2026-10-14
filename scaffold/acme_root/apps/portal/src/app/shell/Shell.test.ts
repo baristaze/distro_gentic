@@ -37,7 +37,7 @@ const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at
 const session = (id: string, over: Partial<AgentSessionView> = {}): AgentSessionView => ({
   id,
   title: id,
-  kind: "engineer",
+  kind: "software_engineer",
   kind_version: 1,
   status: "idle",
   park: null,
@@ -116,7 +116,7 @@ const SLOT: PortalProduct = {
     { group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/settings/projects" }] },
     { group: "Security", id: "api-keys", label: "API keys", icon: null, about: "Keys a program calls with", routes: [{ path: "/settings/api-keys" }] },
   ],
-  agents: [{ kind: "engineer", label: "Engineer", about: "Changes code." }],
+  agents: [{ kind: "software_engineer", label: "Software engineer", about: "Changes code." }],
 };
 
 const frame = ({ children }: { children?: ReactNode }) =>
@@ -278,7 +278,7 @@ it("raises a toast on any page when a sub-agent of the person's starts to need t
 
 it("narrows the sessions by the filter it keeps, and says so when none matches", async () => {
   net.sessions = [session("analysis", { kind: "analysis" })];
-  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, kind: "engineer" } });
+  usePreferencesStore.setState({ sessionFilter: { ...DEFAULT_FILTER, kind: "software_engineer" } });
   await mount();
   expect(q("aside")!.textContent).toContain("No session matches the filter.");
   expect(q("button[aria-label='Filter your sessions (on)']")).not.toBeNull();
@@ -551,9 +551,9 @@ describe("the support dock", () => {
   it("never reads another member's session through the dock, nor a session of another kind, and starts the person's own instead", async () => {
     net.sessions = [
       session("theirs", { kind: "platform_assistant", created_by: "u2" }),
-      session("engineer", { kind: "engineer" }),
+      session("software_engineer", { kind: "software_engineer" }),
     ];
-    for (const kept of ["theirs", "engineer"]) {
+    for (const kept of ["theirs", "software_engineer"]) {
       net.gets.length = 0;
       net.posts.length = 0;
       useSupportStore.setState({ conversations: { "o1/u1": kept } });

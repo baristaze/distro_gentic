@@ -716,7 +716,7 @@ app.add_typer(connector_app, name="connector")
 ConnectorId = Annotated[
     UUID, typer.Argument(help="The connector's id, as `connector connect` printed it.")
 ]
-ConnectorKind = Annotated[str, typer.Argument(help="The agent kind, such as engineer.")]
+ConnectorKind = Annotated[str, typer.Argument(help="The agent kind, such as software_engineer.")]
 ProjectOption = Annotated[
     UUID | None, typer.Option("--project", help="One project's sessions alone; none for every one.")
 ]

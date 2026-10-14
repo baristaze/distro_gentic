@@ -76,7 +76,7 @@ ON_WORKSPACE_BASE = IsolationSpec(
     base=WORKSPACE_BASE,
 )
 """A session pinned to its project's workspace base, in a container with no
-egress, as the engineer's is."""
+egress, as the software engineer's is."""
 WORKSPACE_BASE_SNAPSHOT = b"the workspace base, once its setup ran"
 """The base's snapshot, as the tenant keeps it: what the setup installed."""
 HOSTED = b"the workspace base, as the host built it"

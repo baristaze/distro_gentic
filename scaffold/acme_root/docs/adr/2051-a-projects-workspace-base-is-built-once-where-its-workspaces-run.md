@@ -4,11 +4,11 @@
 
 ## Context
 
-The engineer works in a container with no egress. It cannot install a
-package its work needs, and open egress would make every command after
-its first tool result act outward and wait for a person. The engine
-keeps a workspace base, an image and its setup built once for a tenant
-and kept as a snapshot
+The software engineer works in a container with no egress. It cannot
+install a package its work needs, and open egress would make every
+command after its first tool result act outward and wait for a person.
+The engine keeps a workspace base, an image and its setup built once for
+a tenant and kept as a snapshot
 ([ADR 1028](1028-a-workspace-base-is-built-once-for-its-tenant-and-kept-as-a-snapshot.md)),
 and the pin carries a kind's base
 ([ADR 2050](2050-a-snapshot-lives-on-its-workspaces-side-of-the-wall.md)).
@@ -27,13 +27,13 @@ reads it as an option.
 
 **A kind takes it from a version that says so.** The platform names the
 kinds that take their project's workspace base by name and version
-(`WORKSPACE_BASE_KINDS`): the engineer from version 8, which also tells its
-model that its workspace has no network and a missing package is named
-in its result. When such a session is created, its pin takes the base
-the workspace base names in place of its kind's own. A kind that takes
-none, a project that names none, and a session of no project pin what
-they pinned before. A product names its own kinds that take it the
-same way, by name and version, in its slot
+(`WORKSPACE_BASE_KINDS`): the software engineer from version 8, which
+also tells its model that its workspace has no network and a missing
+package is named in its result. When such a session is created, its pin
+takes the base the workspace base names in place of its kind's own. A
+kind that takes none, a project that names none, and a session of no
+project pin what they pinned before. A product names its own kinds that
+take it the same way, by name and version, in its slot
 (`ProductKinds.workspace_bases`), and never one of the platform's.
 
 **A session keeps the base it pinned.** The pin is read once. A changed
@@ -45,8 +45,8 @@ it started on.
 names a registry runs with open egress, since a setup's egress is open
 or none; one that names none reaches nothing. The registries are the
 record of why. A workspace on the workspace base keeps its kind's egress:
-the engineer's is none. Holding a setup to its registries alone waits
-on the egress proxy, as the engine's base does.
+the software engineer's is none. Holding a setup to its registries alone
+waits on the egress proxy, as the engine's base does.
 
 **It is built where its workspaces run.** In the cloud, the runner's
 provider builds it through the engine, into the platform's bucket under

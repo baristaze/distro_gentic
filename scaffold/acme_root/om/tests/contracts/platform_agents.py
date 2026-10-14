@@ -45,7 +45,7 @@ from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import Installation
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, ENGINEER_KIND
+from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, SOFTWARE_ENGINEER_KIND
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.root import Managers, ProductKinds, build_managers
@@ -235,7 +235,7 @@ def on_the_twin(kind: AgentKind) -> AgentKind:
 
 
 def citing(claim: Claim) -> Later:
-    """The engineer's turn that submits `claim`, citing the runs the last
+    """The software engineer's turn that submits `claim`, citing the runs the last
     validation it read answered."""
 
     def turn(call: ModelCall) -> ModelReply:
@@ -253,10 +253,12 @@ def citing(claim: Claim) -> Later:
     return turn
 
 
-async def an_engineer(platform: Platform, work: WorkProductMemoryImpl, project_id: UUID) -> UUID:
-    """An engineer session of the project, whose work product changed `src/`
+async def a_software_engineer(
+    platform: Platform, work: WorkProductMemoryImpl, project_id: UUID
+) -> UUID:
+    """A software engineer session of the project, whose work product changed `src/`
     and is committed, and whose policy requires its unit check there."""
-    session_id = await platform.start(kinds.ENGINEER)
+    session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
     binding = make_binding(session_id, project_id)
     await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
     delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
@@ -265,13 +267,13 @@ async def an_engineer(platform: Platform, work: WorkProductMemoryImpl, project_i
     return session_id
 
 
-# The engineer starts sub-agents.
+# The software engineer starts sub-agents.
 
 
 def sub_agents_over(
     tmp_path: Path, *, storage: StorageInterface | None = None
 ) -> tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl]:
-    """The platform with the shipped engineer on the twin, and analysis with
+    """The platform with the shipped software engineer on the twin, and analysis with
     no workspace: a sub-agent belongs to its parent's project, whose
     repository no suite can fetch, and the case's sub-agents read none."""
     executor = ScriptedExecutor(capabilities=frozenset())
@@ -282,7 +284,7 @@ def sub_agents_over(
     platform = platform_over(
         tmp_path,
         storage=storage,
-        kinds=(on_the_twin(ENGINEER_KIND), reader),
+        kinds=(on_the_twin(SOFTWARE_ENGINEER_KIND), reader),
         executor=executor,
         work_product=work,
     )
@@ -315,10 +317,10 @@ async def a_woken_root(platform: Platform, root: UUID) -> None:
     assert (session.status, session.park) == (SessionStatus.PENDING, None), "a report wakes it"
 
 
-async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
+async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     platform: Platform, executor: ScriptedExecutor, work: WorkProductMemoryImpl
 ) -> None:
-    """The shipped engineer takes its baseline, then starts two analysis
+    """The shipped software engineer takes its baseline, then starts two analysis
     sub-agents in one turn and parks on them. Each report wakes it: it reads
     the first and waits on the second, reads the second, validates its
     head, and ends through its result gate. Each sub-agent runs under its share in the root's project,
@@ -330,7 +332,7 @@ async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
         platform.owner, make_policy(policy_key(project_id))
     )
     executor.outcome = lambda check, trial: "passed"
-    root = await an_engineer(platform, work, project_id)
+    root = await a_software_engineer(platform, work, project_id)
     budget = await platform.managers.budgets.create_budget(
         platform.owner,
         make_budget(BudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP),
