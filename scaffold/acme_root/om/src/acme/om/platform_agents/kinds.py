@@ -75,7 +75,7 @@ PLATFORM_ASSISTANT = "platform_assistant"
 REVIEWER = "reviewer"
 OPS_ANALYST = "ops_analyst"
 
-# The tools the shipped kinds call, by name (`tools.py`).
+# The tools the shipped kinds call, by name (`tools/`).
 LIST_FILES = "list_files"
 READ_FILE = "read_file"
 WRITE_FILE = "write_file"

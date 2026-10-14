@@ -9,7 +9,7 @@ from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLim
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import Platform
 from acme.om.context import TenantContext
-from acme.om.platform_agents.tools import NativeToolImpl
+from acme.om.platform_agents.tools.base import NativeToolImpl
 from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target

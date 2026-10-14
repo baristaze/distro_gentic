@@ -31,7 +31,7 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import Conflict, NotAuthorized
-from acme.om.platform_agents.tools import (
+from acme.om.platform_agents.tools.agent_knowledge import (
     ReadAgentKnowledgeImpl,
     SearchAgentKnowledgeImpl,
     SuggestAgentKnowledgeImpl,

@@ -42,7 +42,7 @@ from acme.om.platform_agents.kinds import (
     PLATFORM_ASSISTANT_V1,
     SHIPPED,
 )
-from acme.om.platform_agents.tools import NativeToolImpl
+from acme.om.platform_agents.tools.base import NativeToolImpl
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,

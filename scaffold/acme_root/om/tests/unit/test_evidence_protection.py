@@ -21,7 +21,7 @@ from acme.om.base import Platform, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import CEILINGS, PROTECTED_CEILING
-from acme.om.platform_agents.tools import EditFileImpl, WriteFileImpl
+from acme.om.platform_agents.tools.code import EditFileImpl, WriteFileImpl
 from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.storage.impl.memory import StorageMemoryImpl
