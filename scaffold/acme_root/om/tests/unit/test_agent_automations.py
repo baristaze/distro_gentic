@@ -374,6 +374,18 @@ async def test_every_firing_is_a_recorded_run_and_one_event_makes_one(
     assert {r.id for r in recorded} == {first.id, refused.id}
 
 
+async def test_an_events_run_keeps_the_id_the_release_before_derived(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """The run's id is derived from bytes no rename moves: an event
+    delivered again across an upgrade finds the run it made."""
+    mine = await made(platform, creator)
+    firing = comment()
+    (run,) = await fired(platform, firing)
+    assert firing.event_id is not None and firing.occurred_at is not None
+    assert run.id == derived_id(firing.event_id, firing.occurred_at, f"automation:{mine.id}")
+
+
 async def test_a_creator_who_left_fires_nothing(platform: Wired, creator: TenantContext) -> None:
     await made(platform, creator)
     del platform.members.roles[creator.user_id]

@@ -42,6 +42,10 @@ from acme.om.windows.types.policy import CompactionPolicy
 PUBLISHED = "agent_playbooks.agent_playbook.created"
 PINNED = "agent_playbooks.pin.updated"
 UNPINNED = "agent_playbooks.pin.deleted"
+BRIEF_SEED = "playbook"
+"""The part an invocation's brief id is derived with. Its bytes are fixed,
+whatever the noun is called, so the id stays the one every release derived:
+an invocation run again sends its brief once."""
 
 
 class AgentPlaybooksOptions(Platform):
@@ -182,7 +186,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         # The brief is the caller's word: one message an invocation, so a
         # second invocation of the version sends nothing new.
         brief = message_step(
-            derived_id(invocation.id, invocation.created_at, "agent_playbook"),
+            derived_id(invocation.id, invocation.created_at, BRIEF_SEED),
             self._clock(),
             session_id,
             ctx,

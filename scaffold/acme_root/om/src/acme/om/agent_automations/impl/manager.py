@@ -58,6 +58,10 @@ UNHELD = (
     "with a run, so nothing would hold the run to its run_cap_micros"
 )
 """Why a `message_session` action never acts (ADR 2036)."""
+EVENT_RUN_SEED = "automation"
+"""The part an event's run id is derived with, before the automation's id.
+Its bytes are fixed, whatever the noun is called, so the id stays the one
+every release derived: an event delivered again finds the run it made."""
 
 
 class AgentAutomationsOptions(Platform):
@@ -284,7 +288,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         run_id = run_id or new_id()
         if firing.event_id is not None and firing.occurred_at is not None:
             run_id = derived_id(
-                firing.event_id, firing.occurred_at, f"agent_automation:{agent_automation.id}"
+                firing.event_id, firing.occurred_at, f"{EVENT_RUN_SEED}:{agent_automation.id}"
             )
         run = AgentAutomationRun(
             id=run_id,
