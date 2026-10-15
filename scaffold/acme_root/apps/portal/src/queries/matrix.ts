@@ -1,7 +1,7 @@
 // The tenant's part of the model matrix: for each model role, the fills it
 // may choose, and the fill it chose. A choice is written whole for its role.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { FillChoiceView, FillOptionsView, FillView } from "@acme/client";
+import type { matrix } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
@@ -10,14 +10,14 @@ const role = (name: string) => `/v1/matrix/choices/${encodeURIComponent(name)}`;
 export function useMatrixOptions() {
   return useQuery({
     queryKey: keys.matrix.options,
-    queryFn: ({ signal }) => api.get<FillOptionsView[]>("/v1/matrix/options", { signal }),
+    queryFn: ({ signal }) => api.get<matrix.FillOptionsView[]>("/v1/matrix/options", { signal }),
   });
 }
 
 export function useMatrixChoices() {
   return useQuery({
     queryKey: keys.matrix.choices,
-    queryFn: ({ signal }) => api.get<FillChoiceView[]>("/v1/matrix/choices", { signal }),
+    queryFn: ({ signal }) => api.get<matrix.FillChoiceView[]>("/v1/matrix/choices", { signal }),
   });
 }
 
@@ -25,7 +25,7 @@ export function useMatrixChoices() {
 export function useChoose() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, fill }: { name: string; fill: FillView }) => api.request<FillChoiceView>("PUT", role(name), { fill }),
+    mutationFn: ({ name, fill }: { name: string; fill: matrix.FillView }) => api.request<matrix.FillChoiceView>("PUT", role(name), { fill }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.matrix.choices }),
   });
 }

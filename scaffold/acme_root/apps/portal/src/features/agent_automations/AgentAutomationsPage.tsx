@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import type { Role } from "@acme/client";
+import type { common } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, Pill, Select, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -70,7 +70,7 @@ export function AgentAutomationsPage() {
                 label="Role"
                 value={vm.role}
                 options={[{ value: "", label: "Pick a role" }, ...vm.roles.map((role) => ({ value: role, label: role }))]}
-                onChange={(role) => vm.setRole(role as Role | "")}
+                onChange={(role) => vm.setRole(role as common.Role | "")}
               />
               <Button type="submit" disabled={vm.granting}>
                 {vm.granting ? "Granting" : "Grant"}

@@ -3,7 +3,7 @@
 // it. A trigger is an event that passes its filters or a schedule; an action
 // starts a session or messages a standing one; the limits bound what its
 // runs spend and how often they start. No React, no fetch.
-import type { AgentAutomationRequest, AgentAutomationView, AgentProjectView, Role } from "@acme/client";
+import type { agent_automations, agent_projects, common } from "@acme/client";
 import { costLine, microsOf } from "../../app/recordModel";
 
 export const NAME_MAX = 200;
@@ -65,7 +65,7 @@ export function perLine(duration: string): string {
   return everyLine(duration);
 }
 
-export function triggerLine(trigger: AgentAutomationView["trigger"]): string {
+export function triggerLine(trigger: agent_automations.AgentAutomationView["trigger"]): string {
   if (trigger.kind === "schedule") return everyLine(trigger.every);
   const filters = [
     trigger.integrations.length ? `from ${trigger.integrations.join(", ")}` : "",
@@ -81,14 +81,14 @@ export function platformAction(kind: string): kind is AgentAutomationDraft["acti
   return kind === "start_agent_session" || kind === "message_session";
 }
 
-export function actionLine(action: AgentAutomationView["action"], agentProjects: readonly Pick<AgentProjectView, "id" | "name">[]): string {
+export function actionLine(action: agent_automations.AgentAutomationView["action"], agentProjects: readonly Pick<agent_projects.AgentProjectView, "id" | "name">[]): string {
   if (!platformAction(action.kind)) return `run the product's action ${action.kind}`;
   if (action.kind === "message_session") return `message the session ${action.agent_session_id ?? ""}`.trim();
   const agentProject = action.agent_project_id ? (agentProjects.find((each) => each.id === action.agent_project_id)?.name ?? "an agent project") : null;
   return `start a session of the kind ${action.agent_kind ?? ""}${agentProject ? ` in ${agentProject}` : ""}${action.agent_playbook ? `, invoking ${action.agent_playbook}` : ""}`;
 }
 
-export function limitsLine(limits: AgentAutomationView["limits"]): string {
+export function limitsLine(limits: agent_automations.AgentAutomationView["limits"]): string {
   const period = perLine(limits.period);
   return `${costLine(limits.cost_cap_micros)} ${period} (${costLine(limits.run_cap_micros)} a run), ${limits.rate} firings ${period}, ${limits.concurrency} at once${limits.queue ? `, a queue of ${limits.queue_depth}` : ""}`;
 }
@@ -102,9 +102,9 @@ export interface AgentAutomationRow {
   enabled: boolean;
 }
 
-export const RUNS_AS_LABEL: Record<AgentAutomationView["runs_as"], string> = { creator: "its maker", agent_automation_principal: "the agent automation principal" };
+export const RUNS_AS_LABEL: Record<agent_automations.AgentAutomationView["runs_as"], string> = { creator: "its maker", agent_automation_principal: "the agent automation principal" };
 
-export function agentAutomationRow(agentAutomation: AgentAutomationView, agentProjects: readonly Pick<AgentProjectView, "id" | "name">[]): AgentAutomationRow {
+export function agentAutomationRow(agentAutomation: agent_automations.AgentAutomationView, agentProjects: readonly Pick<agent_projects.AgentProjectView, "id" | "name">[]): AgentAutomationRow {
   return {
     id: agentAutomation.id,
     name: agentAutomation.name,
@@ -166,7 +166,7 @@ export interface AgentAutomationDraft {
   rate: string;
   concurrency: string;
   queue: "no" | "yes";
-  runsAs: AgentAutomationView["runs_as"];
+  runsAs: agent_automations.AgentAutomationView["runs_as"];
   enabled: "yes" | "no";
 }
 
@@ -217,7 +217,7 @@ function periodOf(period: string): Pick<AgentAutomationDraft, "period" | "savedP
 
 /** The form as the saved agent automation stands, to edit; null for a product's
  * own action, which the form does not edit. */
-export function draftOf(agentAutomation: AgentAutomationView): AgentAutomationDraft | null {
+export function draftOf(agentAutomation: agent_automations.AgentAutomationView): AgentAutomationDraft | null {
   const { trigger, action, limits } = agentAutomation;
   if (!platformAction(action.kind)) return null;
   const every = trigger.every ? everyOf(trigger.every) : { every: EMPTY_DRAFT.every, everyUnit: EMPTY_DRAFT.everyUnit, savedEvery: null };
@@ -264,7 +264,7 @@ function wholeOf(text: string): number | null {
 /** What a saved agent automation holds that the form does not show: its queue
  * depth, its hop limit, and whether its own events fire it. A new one
  * takes the API's defaults for them. */
-export type KeptFields = Pick<AgentAutomationView, "own_events"> & { limits: Pick<AgentAutomationView["limits"], "queue_depth" | "hop_limit"> };
+export type KeptFields = Pick<agent_automations.AgentAutomationView, "own_events"> & { limits: Pick<agent_automations.AgentAutomationView["limits"], "queue_depth" | "hop_limit"> };
 
 /** The request a draft makes, or the first reason it may not be saved. An
  * edit carries what the form does not show as it stood. Where a session
@@ -272,11 +272,11 @@ export type KeptFields = Pick<AgentAutomationView, "own_events"> & { limits: Pic
 export function agentAutomationRequest(
   draft: AgentAutomationDraft,
   { kept = null, agentProjectRequired = false }: { kept?: KeptFields | null; agentProjectRequired?: boolean } = {},
-): { request: AgentAutomationRequest } | { problem: string } {
+): { request: agent_automations.AgentAutomationRequest } | { problem: string } {
   const name = draft.name.trim();
   if (!name) return { problem: "Give the agent automation a name." };
   if (name.length > NAME_MAX) return { problem: `A name is at most ${NAME_MAX} characters.` };
-  let trigger: AgentAutomationRequest["trigger"];
+  let trigger: agent_automations.AgentAutomationRequest["trigger"];
   if (draft.triggerKind === "schedule" && draft.everyUnit === AS_SAVED && draft.savedEvery !== null) {
     trigger = { kind: "schedule", every: draft.savedEvery, integrations: [], arrivals: [], effects: [] };
   } else if (draft.triggerKind === "schedule") {
@@ -293,7 +293,7 @@ export function agentAutomationRequest(
   const brief = draft.brief.trim();
   if (!brief) return { problem: "Write the brief the session is given." };
   if (brief.length > BRIEF_MAX) return { problem: `A brief is at most ${BRIEF_MAX} characters.` };
-  let action: AgentAutomationRequest["action"];
+  let action: agent_automations.AgentAutomationRequest["action"];
   if (draft.actionKind === "start_agent_session") {
     const agentKind = draft.agentKind.trim();
     const title = draft.title.trim();
@@ -345,7 +345,7 @@ const RANK: Readonly<Record<string, number>> = { viewer: 0, member: 1, admin: 2,
 
 /** The roles a member may grant the agent automation principal: never above their
  * own, and never the owner's. */
-export function principalRoles(mine: Role | undefined): Role[] {
+export function principalRoles(mine: common.Role | undefined): common.Role[] {
   const rank = mine ? (RANK[mine] ?? -1) : -1;
   return (["admin", "member", "viewer"] as const).filter((role) => RANK[role]! <= rank);
 }

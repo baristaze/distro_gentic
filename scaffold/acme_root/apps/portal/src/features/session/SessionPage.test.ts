@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type AgentStepView } from "@acme/client";
+import { ApiError, type agent_sessions, type evidence, type tenancy } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
 import { PLATFORM } from "../../app/platform";
 import { PaneSplitContext, ShellContext, type ShellActions } from "../../app/shell/shellContext";
@@ -27,12 +27,12 @@ const net = vi.hoisted(() => ({
   agentProjects: [] as { id: string; name: string }[],
   posts: [] as { path: string; body: unknown }[],
   /** What the session's record says past the fixture's: its status, its park. */
-  over: {} as Partial<AgentSessionView>,
+  over: {} as Partial<agent_sessions.AgentSessionView>,
   held: [] as unknown[],
 }));
 
 const at = "2026-10-03T10:00:00Z";
-const sessionOf = (id: string, title: string): AgentSessionView => ({
+const sessionOf = (id: string, title: string): agent_sessions.AgentSessionView => ({
   id,
   root_id: id,
   parent_id: null,
@@ -51,7 +51,7 @@ const sessionOf = (id: string, title: string): AgentSessionView => ({
 });
 const HELD = { a: sessionOf("sa", "Ajax's own session"), b: sessionOf("sb", "Beta's own session") };
 
-const step = (seq: number, fields: Partial<AgentStepView>): AgentStepView => ({
+const step = (seq: number, fields: Partial<agent_sessions.AgentStepView>): agent_sessions.AgentStepView => ({
   id: `st${seq}`,
   seq,
   loop_id: "l1",
@@ -83,7 +83,7 @@ const step = (seq: number, fields: Partial<AgentStepView>): AgentStepView => ({
   ...fields,
 });
 
-const RUN: ExecutionView = {
+const RUN: evidence.ExecutionView = {
   id: "r1",
   agent_step_id: "st3",
   validation_id: null,
@@ -107,7 +107,7 @@ const RUN: ExecutionView = {
 
 function answer(path: string): unknown {
   const held = { ...HELD[net.org], ...net.over };
-  if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as MeView;
+  if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as tenancy.MeView;
   if (path.startsWith("/v1/agent-sessions?")) return { items: [held], next_cursor: null };
   if (path.startsWith("/v1/agent-projects?")) return net.agentProjects;
   if (path === "/v1/users/u2") return { id: "u2", display_name: "Ada", email: "ada@example.test", created_at: at };
@@ -118,7 +118,7 @@ function answer(path: string): unknown {
     const query = new URLSearchParams(path.split("?")[1]);
     const after = Number(query.get("after_seq"));
     const limit = Number(query.get("limit"));
-    const rest = (net.history as AgentStepView[]).filter((each) => each.seq > after);
+    const rest = (net.history as agent_sessions.AgentStepView[]).filter((each) => each.seq > after);
     return { has_more: rest.length > limit, items: rest.slice(0, limit) };
   }
   if (part === "steps")
@@ -155,7 +155,7 @@ vi.mock("../../app/api", () => ({
       net.posts.push({ path, body });
       if (path.endsWith("/invocations"))
         return Promise.resolve({ id: "i1", agent_session_id: "sa", agent_playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
-      if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: AgentStepView["command"] }).command }));
+      if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: agent_sessions.AgentStepView["command"] }).command }));
       return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
     },
   },
@@ -168,7 +168,7 @@ document.body.append(container);
 let root: ReturnType<typeof createRoot> | null = null;
 let router: ReturnType<typeof createMemoryRouter> | null = null;
 
-async function open(org: "a" | "b", address: string, history: AgentStepView[] | null = null, page: ComponentType = SessionPage) {
+async function open(org: "a" | "b", address: string, history: agent_sessions.AgentStepView[] | null = null, page: ComponentType = SessionPage) {
   net.org = org;
   net.calls = [];
   net.history = history;
@@ -230,7 +230,7 @@ describe("the org's own session", () => {
   });
 
   it("folds a 3,000-step history into one work block, and draws a call's answer only once its chevron opens it", async () => {
-    const long: AgentStepView[] = [];
+    const long: agent_sessions.AgentStepView[] = [];
     for (let n = 1; n <= 1000; n += 1) {
       const asked = step(long.length + 1, { type: "model_response", actor: "model", tool_uses: [{ id: `u${n}`, name: "run_command", input: { argv: ["make", `t${n}`] } }] });
       const made = step(long.length + 2, { type: "tool_request", actor: "agent", refs: [asked.id], tool: "run_command", tool_use_id: `u${n}` });

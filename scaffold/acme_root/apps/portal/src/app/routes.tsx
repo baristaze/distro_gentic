@@ -7,7 +7,6 @@ import { PRODUCT } from "../product";
 import { useFlags } from "../queries/flags";
 import { RealtimeProvider } from "../realtime/RealtimeProvider";
 import { useAuthSessionStore } from "../store/authSession";
-import { useAuthSessionStore } from "../store/session";
 import { PLATFORM } from "./platform";
 import { joinProducts, shellRoutes } from "./product";
 import { RequireAuth } from "./RequireAuth";

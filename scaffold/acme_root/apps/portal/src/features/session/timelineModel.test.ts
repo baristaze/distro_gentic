@@ -1,7 +1,7 @@
 // A session's history as a chat: each kind of step reads as its row, from
 // steps as the API answers them.
 import { describe, expect, it } from "vitest";
-import type { AgentStepView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
 import { childGroups } from "./paneModel";
@@ -11,7 +11,7 @@ const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
 
 let seq = 0;
-function step(fields: Partial<AgentStepView> & Pick<AgentStepView, "type">, second = seq): AgentStepView {
+function step(fields: Partial<agent_sessions.AgentStepView> & Pick<agent_sessions.AgentStepView, "type">, second = seq): agent_sessions.AgentStepView {
   seq += 1;
   return {
     id: `step-${seq}`,
@@ -45,21 +45,21 @@ function step(fields: Partial<AgentStepView> & Pick<AgentStepView, "type">, seco
   };
 }
 
-const said = (text: string, actor: AgentStepView["actor"] = "person", origin: AgentStepView["origin"] = "portal") =>
+const said = (text: string, actor: agent_sessions.AgentStepView["actor"] = "person", origin: agent_sessions.AgentStepView["origin"] = "portal") =>
   step({ type: "message", actor, origin, text });
 const request = (second: number) => step({ type: "model_request", actor: "engine" }, second);
-function response(asked: AgentStepView, second: number, fields: Partial<AgentStepView>): AgentStepView {
+function response(asked: agent_sessions.AgentStepView, second: number, fields: Partial<agent_sessions.AgentStepView>): agent_sessions.AgentStepView {
   return step({ type: "model_response", actor: "model", responds_to: asked.id, ...fields }, second);
 }
 const toolUse = (id: string, name: string, input: Record<string, unknown>) => ({ id, name, input });
-function call(by: AgentStepView, id: string, tool: string, second: number): AgentStepView {
+function call(by: agent_sessions.AgentStepView, id: string, tool: string, second: number): agent_sessions.AgentStepView {
   return step({ type: "tool_request", actor: "agent", refs: [by.id], tool, tool_use_id: id }, second);
 }
-function answer(asked: AgentStepView, text: string, second: number, failure: AgentStepView["failure"] = null): AgentStepView {
+function answer(asked: agent_sessions.AgentStepView, text: string, second: number, failure: agent_sessions.AgentStepView["failure"] = null): agent_sessions.AgentStepView {
   return step({ type: "tool_response", responds_to: asked.id, tool: asked.tool, tool_use_id: asked.tool_use_id, text, failure }, second);
 }
 
-function read(steps: AgentStepView[], over: Partial<TimelineInput> = {}) {
+function read(steps: agent_sessions.AgentStepView[], over: Partial<TimelineInput> = {}) {
   return timeline({
     steps,
     live: [],
@@ -247,7 +247,7 @@ describe("timeline", () => {
   it("draws a control, a park, a resume, and the loop's end as thin lines", () => {
     const { entries } = read([
       step({ type: "control", actor: "person", command: "pause" }, 0),
-      step({ type: "parked", park: { reason: "resource", unlock: "workspace", retry_at: "2026-10-05T10:42:00Z", cause: null } }, 1),
+      step({ type: "parked", park: { reason: "leasable_resource", unlock: "agent_workspace", retry_at: "2026-10-05T10:42:00Z", cause: null } }, 1),
       step({ type: "resumed" }, 2),
       step({ type: "control", actor: "person", command: "deny", text: "Leave the migrations alone" }, 3),
       step({ type: "loop_ended", outcome: "succeeded" }, 252),

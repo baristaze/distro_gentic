@@ -6,7 +6,7 @@
 // the write, and is never on the page after it: not in a field, not in the
 // text.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentProjectView } from "@acme/client";
+import type { agent_projects } from "@acme/client";
 import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AgentProjectPage } from "./AgentProjectPage";
 import { AgentProjectsPage } from "./AgentProjectsPage";
@@ -17,7 +17,7 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const SECRET = "ghp_never-on-a-screen-1234";
 
-const agentProject = (org: "a" | "b", name: string): AgentProjectView => ({
+const agentProject = (org: "a" | "b", name: string): agent_projects.AgentProjectView => ({
   id: `p${org}`,
   name,
   repository: { host: "forge.example.com", path: `${org}/docs` },

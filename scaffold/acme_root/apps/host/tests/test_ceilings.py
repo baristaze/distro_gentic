@@ -11,7 +11,7 @@ import pytest
 
 from acme.apps.host.ceilings import Ceilings, HostServer, ask_of, load, refusals
 from acme.apps.host.config import BadSetting
-from acme.client.types import ClaimedWorkView, IsolationMode
+from acme.client.types.hosts import ClaimedWorkView, IsolationMode
 
 AGENT_PROJECT = uuid4()
 PROBED = frozenset({IsolationMode.container, IsolationMode.directory})

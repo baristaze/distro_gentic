@@ -4,7 +4,7 @@
 // answers as the API does: each org reads its own, and nothing of
 // another's reaches its screens.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView, BudgetUsageView, ChangeEventView } from "@acme/client";
+import type { agent_sessions, change_events, spend_budgets } from "@acme/client";
 import { AuditPage } from "./audit/AuditPage";
 import { buttons, container, mount, newNet, notFound, PEOPLE, press, unmount, type Call } from "./screenTesting";
 import { UsagePage } from "./usage/UsagePage";
@@ -14,11 +14,11 @@ vi.mock("../app/api", async () => (await import("./screenTesting")).fakeApi(net)
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const at = "2026-10-03T10:00:00Z";
-const EVENTS: Record<"a" | "b", ChangeEventView[]> = {
+const EVENTS: Record<"a" | "b", change_events.ChangeEventView[]> = {
   a: [{ seq: 1, kind: "agent_projects.agent_project.created", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id }],
   b: [{ seq: 1, kind: "agent_knowledge.entry.created", target_id: "kb", produced_at: at, actor_id: PEOPLE.b.id }],
 };
-const usage = (org: "a" | "b", spent: number): BudgetUsageView => ({
+const usage = (org: "a" | "b", spent: number): spend_budgets.BudgetUsageView => ({
   budget: { id: `b${org}`, scope_kind: "person", scope_key: PEOPLE[org].id, window_kind: "day", window_seconds: null, cost_micros: 10_000_000, tokens: null, version: 1 },
   window_start: at,
   spent_cost_micros: spent,
@@ -29,7 +29,7 @@ const usage = (org: "a" | "b", spent: number): BudgetUsageView => ({
 const USAGE = { a: [usage("a", 2_500_000)], b: [usage("b", 9_000_000)] };
 
 function answer(call: Call): unknown {
-  if (call.path.startsWith("/v1/events/recent?")) return EVENTS[net.org];
+  if (call.path.startsWith("/v1/change-events/recent?")) return EVENTS[net.org];
   if (call.path.startsWith("/v1/usage?")) return { items: USAGE[net.org], next_cursor: null };
   if (call.path.startsWith("/v1/agent-projects?")) return [];
   return notFound(call.path);
@@ -70,9 +70,9 @@ describe.each(["a", "b"] as const)("a member of org %s", (org) => {
 describe("the org's audit, past one page and past a trim", () => {
   it("opens the audit on the newest events and pages older ones back to the floor", async () => {
     // Kept: 71 to 250, the floor at 70. Each read answers the newest below `before_seq`.
-    const event = (seq: number): ChangeEventView => ({ seq, kind: "agent_projects.agent_project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
+    const event = (seq: number): change_events.ChangeEventView => ({ seq, kind: "agent_projects.agent_project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
     net.answer = (call) => {
-      if (call.path.startsWith("/v1/events/recent?")) {
+      if (call.path.startsWith("/v1/change-events/recent?")) {
         const query = new URLSearchParams(call.path.split("?")[1]);
         const top = Math.min(Number(query.get("before_seq") ?? 251) - 1, 250);
         const bottom = Math.max(top - Number(query.get("limit")), 70);
@@ -85,9 +85,9 @@ describe("the org's audit, past one page and past a trim", () => {
     expect(seqs().slice(0, 2)).toEqual([250, 249]);
     expect(seqs()).toHaveLength(100);
     await press("Load older");
-    expect(net.calls.map((call) => call.path).filter((path) => path.startsWith("/v1/events"))).toEqual([
-      "/v1/events/recent?limit=100",
-      "/v1/events/recent?limit=100&before_seq=151",
+    expect(net.calls.map((call) => call.path).filter((path) => path.startsWith("/v1/change-events"))).toEqual([
+      "/v1/change-events/recent?limit=100",
+      "/v1/change-events/recent?limit=100&before_seq=151",
     ]);
     expect(seqs()).toHaveLength(180);
     expect(seqs().at(-1)).toBe(71);
@@ -98,7 +98,7 @@ describe("the org's audit, past one page and past a trim", () => {
     const principal = { id: "pr1", role: "member", granted_by: PEOPLE.a.id, created_at: at };
     net.answer = (call) => {
       if (call.path === "/v1/agent-automations/principal") return principal;
-      if (call.path.startsWith("/v1/events/recent?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
+      if (call.path.startsWith("/v1/change-events/recent?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
       return answer(call);
     };
     await mount(routes, "/audit");
@@ -108,8 +108,8 @@ describe("the org's audit, past one page and past a trim", () => {
 });
 
 describe("the provider banner", () => {
-  const parked = (unlock: string, retry_at: string | null): AgentSessionView =>
-    ({ id: "s1", park: { reason: "provider", unlock, retry_at }, status: "parked" }) as unknown as AgentSessionView;
+  const parked = (unlock: string, retry_at: string | null): agent_sessions.AgentSessionView =>
+    ({ id: "s1", park: { reason: "provider", unlock, retry_at }, status: "parked" }) as unknown as agent_sessions.AgentSessionView;
 
   it("says nothing while no session waits on a provider", async () => {
     await mount(routes, "/usage");
@@ -124,7 +124,7 @@ describe("the provider banner", () => {
 
   it("counts a sub-agent parked on a provider under a root that waits on its children", async () => {
     const root = { id: "root", parent_id: null, status: "parked", archived_at: null, park: { reason: "children", unlock: "children", retry_at: null, cause: null } };
-    net.parked = [root as unknown as AgentSessionView];
+    net.parked = [root as unknown as agent_sessions.AgentSessionView];
     const sub = { ...parked("anthropic", null), id: "sub", parent_id: "root", archived_at: null };
     net.answer = (call) =>
       call.path.includes("/children?") ? { items: call.path.startsWith("/v1/agent-sessions/root/") ? [sub] : [], next_cursor: null } : answer(call);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentAutomationView } from "@acme/client";
+import type { agent_automations } from "@acme/client";
 import { actionLine, agentOptions, agentAutomationRequest, agentAutomationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AgentAutomationDraft } from "./agentAutomationsModel";
 
 const SESSION = "0b8e5d2a-1c3f-4e6a-9b7d-2f4c6e8a0b1c";
@@ -14,7 +14,7 @@ const draft = (fields: Partial<AgentAutomationDraft>): AgentAutomationDraft => (
   ...fields,
 });
 
-const saved: AgentAutomationView = {
+const saved: agent_automations.AgentAutomationView = {
   id: "a1",
   name: "Triage",
   trigger: { kind: "event", integrations: ["forge"], arrivals: ["comment"], effects: [], every: null },
@@ -98,7 +98,7 @@ describe("agentAutomationRequest", () => {
     });
   });
   it("keeps the agent playbook a saved start invokes through an edit, and refuses a name no publish could have", () => {
-    const start: AgentAutomationView = {
+    const start: agent_automations.AgentAutomationView = {
       ...saved,
       action: { kind: "start_agent_session", brief: "Look.", agent_kind: "assistant", title: "Triage", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: "triage-a-comment" },
     };
@@ -130,7 +130,7 @@ it("shows a row in words", () => {
 });
 
 it("shows a product's own action by its kind, and offers no form to edit it", () => {
-  const product: AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, agent_project_id: null, agent_session_id: null, params: { steps: 2 }, agent_playbook: null } };
+  const product: agent_automations.AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, agent_project_id: null, agent_session_id: null, params: { steps: 2 }, agent_playbook: null } };
   expect(actionLine(product.action, [])).toBe("run the product's action run_job");
   expect(draftOf(product)).toBeNull();
 });

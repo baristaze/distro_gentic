@@ -15,8 +15,8 @@ import pytest
 from host_support import Stack, Widened, directory_host
 
 from acme.apps.host.ceilings import Ceilings
-from acme.client.client import ApiError
-from acme.client.types import IsolationMode as HostMode
+from acme.client.transport import ApiError
+from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id
 from acme.om.placement.kinds import PlacementWorkKind

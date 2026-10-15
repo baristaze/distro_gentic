@@ -35,11 +35,12 @@ from acme.client.claimant.enrollment import (
     RoutesInterface,
     refused,
 )
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import (
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.exec_relay import ControlKind
+from acme.client.types.hosts import (
     AdvertisementBody,
     ClaimedWorkView,
-    ControlKind,
     IsolationMode,
     IssuedHostCredentialView,
 )

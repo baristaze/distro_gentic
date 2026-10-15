@@ -14,7 +14,7 @@ asks. It keeps no snapshot and starts from none: the pool keeps the
 machine's whole disk, and starts the machine again from it."""
 
 from acme.apps.host.probe import Probe, Probes, container
-from acme.client.types import IsolationMode as HostIsolation
+from acme.client.types.hosts import IsolationMode as HostIsolation
 
 
 def machine_probes() -> Probes:

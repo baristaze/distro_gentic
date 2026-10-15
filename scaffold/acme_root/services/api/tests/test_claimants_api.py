@@ -60,7 +60,9 @@ def _batch_claims(node: Claimant) -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 
 PRODUCT = ProductKinds(
-    work=(PlacedKindSpec(RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH),),
+    work=(
+        PlacedKindSpec(RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH),
+    ),
     claimants=(
         ClaimantKindSpec(BATCH, _batch_claims, prefix="bat_"),
         ClaimantKindSpec(PROBE, lambda _: (), prefix="prb_"),

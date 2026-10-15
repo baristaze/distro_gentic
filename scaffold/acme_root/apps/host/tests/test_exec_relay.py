@@ -39,7 +39,7 @@ from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.mcp import HostServers
 from acme.client.client import ApiClient
-from acme.client.types import IsolationMode as HostMode
+from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
     EgressMode,

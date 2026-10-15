@@ -36,7 +36,7 @@ from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
-from acme.client.types import IsolationMode as HostMode
+from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
     AgentWorkspaceLost,

@@ -30,8 +30,9 @@ from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_mod
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import IsolationMode as HostIsolation
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.hosts import IsolationMode as HostIsolation
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface, IsolationMode
 from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
 from acme.infra.agent_workspaces.machine import WorkspaceMachineImpl

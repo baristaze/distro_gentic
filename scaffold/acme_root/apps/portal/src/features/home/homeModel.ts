@@ -1,7 +1,7 @@
 // Pure: what Home's composer starts. The prompt's first line is the
 // session's title, cut at 80 characters, and the whole prompt is its first
 // message; the agent and the agent project come from the chips. No React, no fetch.
-import type { AgentProjectView, StartAgentSessionRequest } from "@acme/client";
+import type { agent_projects, agent_sessions } from "@acme/client";
 import type { AgentChoice } from "../../app/product";
 import { startRequest } from "../sessions/sessionsModel";
 
@@ -30,7 +30,7 @@ export interface ComposerDraft {
 export function composerStart(
   draft: ComposerDraft,
   agentProject: { required: boolean; count: number },
-): { request: StartAgentSessionRequest; text: string } | { problem: string } {
+): { request: agent_sessions.StartAgentSessionRequest; text: string } | { problem: string } {
   const text = draft.prompt.trim();
   if (!text) return { problem: "Describe the task first." };
   if (!draft.kind.trim()) return { problem: "Choose the agent that works on it." };
@@ -46,10 +46,10 @@ export function chosenAgent(agents: readonly AgentChoice[], kind: string | null)
 /** The agent project the chip shows: the one chosen, else the first where a
  * an agent project is required, else none. Null agent projects are not read yet. */
 export function chosenAgentProject(
-  agentProjects: readonly Pick<AgentProjectView, "id" | "name">[] | null,
+  agentProjects: readonly Pick<agent_projects.AgentProjectView, "id" | "name">[] | null,
   required: boolean,
   id: string | null,
-): Pick<AgentProjectView, "id" | "name"> | null {
+): Pick<agent_projects.AgentProjectView, "id" | "name"> | null {
   const list = agentProjects ?? [];
   if (id !== null) return list.find((agentProject) => agentProject.id === id) ?? null;
   return required ? (list[0] ?? null) : null;

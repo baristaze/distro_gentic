@@ -37,7 +37,9 @@ async def test_the_recent_read_opens_at_the_head_and_pages_back_to_the_floor(
     )
 
     async def page(headers: dict[str, str], **params: int) -> list[dict[str, object]]:
-        read = await client.get("/v1/change-events/recent", headers=headers, params={"limit": 2, **params})
+        read = await client.get(
+            "/v1/change-events/recent", headers=headers, params={"limit": 2, **params}
+        )
         assert read.status_code == 200, read.text
         return read.json()
 

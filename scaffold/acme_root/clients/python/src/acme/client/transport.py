@@ -7,7 +7,10 @@ the package that sends a request: each namespace's calls (`calls/`) go through
 import asyncio
 import random
 import ssl
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, Literal, Self
 
 import httpx
@@ -43,6 +46,11 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 RETRYABLE_FAILURES = (httpx.TimeoutException, httpx.NetworkError)
 """The wire failing before the API decided: the timeout, and a connection that
 was refused, reset, or lost. Every other transport failure stands as it is."""
+
+WIRE_FAILURES = (httpx.TransportError,)
+"""Every way the wire fails a call, no answer of the API's among them. A caller
+that outlasts the platform's absence, such as a workspace host, waits these
+out without naming the technology under the client."""
 
 AppName = Literal["portal", "admin", "cli", "api"]
 
@@ -159,6 +167,16 @@ def _error_of(response: httpx.Response) -> ApiError:
     return ApiError(
         response.status_code, "unknown_error", response.reason_phrase, request_id, retry_after
     )
+
+
+@dataclass(frozen=True)
+class Health:
+    """What `/healthz` answers, and the server's clock as its `Date` header
+    says, to the second; None when no header came with it."""
+
+    status: str
+    version: str
+    server_time: datetime | None
 
 
 class Transport:
@@ -318,3 +336,41 @@ class Transport:
                 f"{method} {path} answered with something other than JSON",
                 response.headers.get(REQUEST_ID_HEADER),
             ) from None
+
+    async def lines(
+        self, path: str, *, params: dict[str, Any] | None = None, idle_seconds: float
+    ) -> AsyncIterator[str]:
+        """A GET held open: each line that is not blank, as it arrives, until
+        the API ends it. A line that does not come within `idle_seconds` takes
+        the stream for lost. A refusal is raised as any other call's is, and
+        nothing is retried: the caller opens it again from where it stood."""
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        timeout = httpx.Timeout(self.timeout, read=idle_seconds)
+        async with self._http.stream(
+            "GET", path, params=params, headers=headers, timeout=timeout
+        ) as response:
+            if response.is_error:
+                await response.aread()
+                raise _error_of(response)
+            async for line in response.aiter_lines():
+                if line.strip():
+                    yield line
+
+    async def health(self) -> Health:
+        """Liveness, with no credential, and the server's clock: the one
+        call whose header is read, since a host's startup checks its own
+        clock against it. A failure is raised as any other call's is."""
+        response = await self._http.get("/healthz")
+        if response.is_error:
+            raise _error_of(response)
+        body = response.json()
+        stamped = response.headers.get("Date")
+        try:
+            server_time = parsedate_to_datetime(stamped) if stamped else None
+        except TypeError, ValueError:
+            server_time = None
+        return Health(
+            status=str(body.get("status", "")),
+            version=str(body.get("version", "")),
+            server_time=server_time,
+        )

@@ -4,7 +4,7 @@
 // org holds answers 404. A suggestion is kept or rejected only by a member
 // who may write, and an edit names the version it was read at.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentKnowledgeView } from "@acme/client";
+import type { agent_knowledge } from "@acme/client";
 import { buttons, container, enter, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { EntryPage } from "./EntryPage";
 import { AgentKnowledgePage } from "./AgentKnowledgePage";
@@ -13,7 +13,7 @@ const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
 vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(net));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-const entry = (org: "a" | "b", title: string, status: AgentKnowledgeView["status"]): AgentKnowledgeView => ({
+const entry = (org: "a" | "b", title: string, status: agent_knowledge.AgentKnowledgeView["status"]): agent_knowledge.AgentKnowledgeView => ({
   id: `k${org}`,
   title,
   trigger: ["release"],
@@ -27,7 +27,7 @@ const entry = (org: "a" | "b", title: string, status: AgentKnowledgeView["status
   updated_at: "2026-10-03T10:00:00Z",
 });
 const HELD = { a: entry("a", "Ajax release day", "suggested"), b: entry("b", "Beta release day", "reviewed") };
-const KEPT_FINDINGS: AgentKnowledgeView["findings"] = [
+const KEPT_FINDINGS: agent_knowledge.AgentKnowledgeView["findings"] = [
   { check: "contradiction", detail: "one instruction says to “release tuesday” and another says never to", excerpt: null },
 ];
 

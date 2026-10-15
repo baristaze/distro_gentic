@@ -4,7 +4,7 @@
 // live, and a page that splits itself folds its pane when the dock needs
 // the room.
 import { createContext, useContext, useEffect } from "react";
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import type { PaletteCommand } from "../../design/kit";
 
 export interface ShellActions {
@@ -39,9 +39,9 @@ export function usePageCommands(commands: readonly PaletteCommand[]): void {
 /** The sessions the shell keeps live for its left bar: every parked one,
  * and the newest. A page reads a tree beneath it from them, with no read of
  * its own; outside the shell there are none. */
-export const ShellSessionsContext = createContext<readonly AgentSessionView[]>([]);
+export const ShellSessionsContext = createContext<readonly agent_sessions.AgentSessionView[]>([]);
 
-export function useShellSessions(): readonly AgentSessionView[] {
+export function useShellSessions(): readonly agent_sessions.AgentSessionView[] {
   return useContext(ShellSessionsContext);
 }
 

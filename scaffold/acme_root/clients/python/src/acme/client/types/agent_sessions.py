@@ -3,6 +3,7 @@ history's steps as the wire carries them, and where its loop stands."""
 
 from acme.client.schema.agent_sessions import (
     AgentSessionControl,
+    AgentSessionPageView,
     AgentSessionStatus,
     AgentSessionView,
     AgentStepPageView,
@@ -12,6 +13,7 @@ from acme.client.schema.agent_sessions import (
 
 __all__ = [
     "AgentSessionControl",
+    "AgentSessionPageView",
     "AgentSessionStatus",
     "AgentSessionView",
     "AgentStepPageView",

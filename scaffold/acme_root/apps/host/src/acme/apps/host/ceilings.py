@@ -44,7 +44,7 @@ from typing import Any
 from uuid import UUID
 
 from acme.apps.host.config import BadSetting
-from acme.client.types import ClaimedWorkView, IsolationMode
+from acme.client.types.hosts import ClaimedWorkView, IsolationMode
 
 STRENGTH: dict[IsolationMode, int] = {
     IsolationMode.vm: 3,

@@ -4,11 +4,11 @@
 // call is decided on its session's own page.
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { ApprovalView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
-const toolsOf = (ids: readonly string[]) => (read: readonly { data?: ApprovalView[] }[]) => {
+const toolsOf = (ids: readonly string[]) => (read: readonly { data?: agent_sessions.ApprovalView[] }[]) => {
   const held = new Map<string, string>();
   read.forEach((one, index) => {
     const first = one.data?.[0];
@@ -29,7 +29,7 @@ export function useHeldTools(sessionIds: readonly string[]) {
   const data = useQueries({
     queries: ids.map((id) => ({
       queryKey: keys.agentSessions.read(id, "approvals"),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<ApprovalView[]>(`/v1/agent-sessions/${encodeURIComponent(id)}/approvals`, { signal }),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<agent_sessions.ApprovalView[]>(`/v1/agent-sessions/${encodeURIComponent(id)}/approvals`, { signal }),
     })),
     combine,
   });

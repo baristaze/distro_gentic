@@ -3,8 +3,8 @@ reads the record of each key, never a value."""
 
 from abc import ABC, abstractmethod
 
-from acme.integrations.model_providers.types import ProviderName
 from acme.om.context import TenantContext
+from acme.services.api.types.matrix import ProviderName
 from acme.services.api.types.trust import ProviderKeyView, SaveKeyRequest
 
 

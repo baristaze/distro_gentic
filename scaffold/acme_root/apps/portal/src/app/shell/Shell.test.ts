@@ -11,9 +11,9 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView, MeView, OrgView, UserView } from "@acme/client";
+import type { agent_sessions, tenancy } from "@acme/client";
 import { PREFERENCES_STORAGE_KEY, usePreferencesStore } from "../../store/preferences";
-import { useAuthSessionStore } from "../../store/session";
+import { useAuthSessionStore } from "../../store/authSession";
 import { useSupportStore } from "../../store/support";
 import { EMPTY_PRODUCT, type PortalProduct } from "../product";
 import { queryClient } from "../queryClient";
@@ -31,10 +31,10 @@ const net = vi.hoisted(() => ({
 }));
 
 const at = "2026-10-05T10:00:00Z";
-const user = { id: "u1", email: "owner@example.test", display_name: "Owner", created_at: at } as UserView;
-const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at, deleted_at: null } as OrgView;
+const user = { id: "u1", email: "owner@example.test", display_name: "Owner", created_at: at } as tenancy.UserView;
+const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at, deleted_at: null } as tenancy.OrgView;
 
-const session = (id: string, over: Partial<AgentSessionView> = {}): AgentSessionView => ({
+const session = (id: string, over: Partial<agent_sessions.AgentSessionView> = {}): agent_sessions.AgentSessionView => ({
   id,
   title: id,
   kind: "software_engineer",
@@ -58,10 +58,10 @@ vi.mock("../api", () => ({
     get: (path: string) => {
       net.gets.push(path);
       if (path === "/v1/me") {
-        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as MeView);
+        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as tenancy.MeView);
       }
       if (path.startsWith("/v1/auth/memberships")) return Promise.resolve({ items: [{ org, user, role: "owner" }], next_cursor: null });
-      const all = net.sessions as AgentSessionView[];
+      const all = net.sessions as agent_sessions.AgentSessionView[];
       const one = /^\/v1\/agent-sessions\/([^/?]+)(\/[a-z-]+)?/.exec(path);
       if (one) {
         const found = all.find((each) => each.id === one[1]);
@@ -77,7 +77,7 @@ vi.mock("../api", () => ({
       if (path.startsWith("/v1/agent-sessions?")) {
         // As the API lists them: roots alone, the person's own or every one they see.
         const query = new URLSearchParams(path.split("?")[1]);
-        const own = (each: AgentSessionView) => each.created_by === user.id || each.participants.includes(user.id);
+        const own = (each: agent_sessions.AgentSessionView) => each.created_by === user.id || each.participants.includes(user.id);
         const items = all.filter(
           (each) => each.parent_id === null && (query.get("among") !== "mine" || own(each)) && (query.get("status") !== "parked" || each.status === "parked"),
         );

@@ -24,7 +24,7 @@ from acme.client.claimant.credential import load_credential
 from acme.client.claimant.enrollment import CredentialRefused
 from acme.client.claimant.settings import ClaimantSettings
 from acme.client.client import ApiClient
-from acme.client.types import ReportOutcome
+from acme.client.types.placement import ReportOutcome
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec, PlacedKindSpec

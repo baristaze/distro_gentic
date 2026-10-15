@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ProviderName } from "@acme/client";
+import type { matrix } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { personName } from "../../app/recordModel";
 import { useChoose, useDropChoice, useMatrixChoices, useMatrixOptions } from "../../queries/matrix";
@@ -9,7 +9,7 @@ import { canManageMembers } from "../settings/settingsModel";
 import { shortTime } from "../sessions/sessionsModel";
 import { keyRows, liveKeyLine, PROVIDERS, roleRows, saveKeyRequest } from "./modelsModel";
 
-type ByProvider = Partial<Record<ProviderName, string>>;
+type ByProvider = Partial<Record<matrix.ProviderName, string>>;
 
 /** The org's own keys and its models by role. A key typed into its field
  * stays in the form until it is sent, and the field is emptied when the save
@@ -31,7 +31,7 @@ export function useModelsVm() {
   const nameOf = (id: string) => personName(users.data, id);
   const held = keys.data ?? [];
   const rows = options.data && choices.data ? roleRows(options.data, choices.data) : null;
-  const saveKey = (provider: ProviderName) => {
+  const saveKey = (provider: matrix.ProviderName) => {
     const made = saveKeyRequest(drafts[provider] ?? "");
     if ("problem" in made) {
       setKeyProblems({ ...keyProblems, [provider]: made.problem });
@@ -69,7 +69,7 @@ export function useModelsVm() {
       draft: drafts[provider] ?? "",
       problem: keyProblems[provider] ?? null,
     })),
-    setDraft: (provider: ProviderName, value: string) => setDrafts({ ...drafts, [provider]: value }),
+    setDraft: (provider: matrix.ProviderName, value: string) => setDrafts({ ...drafts, [provider]: value }),
     saveKey,
     savingKey: save.isPending ? (save.variables?.provider ?? null) : null,
     keyRows: keys.data ? keyRows(held, nameOf) : null,

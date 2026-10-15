@@ -3,13 +3,13 @@
 // while it is out (the park tries again by itself at its retry time), or the
 // provider and a cause (`anthropic:key` while no key of the org's own is
 // live). No React, no fetch.
-import type { AgentSessionView, ProviderName } from "@acme/client";
+import type { agent_sessions, matrix } from "@acme/client";
 import { countLine } from "../../app/recordModel";
 
-export const PROVIDER_NAMES: Record<ProviderName, string> = { anthropic: "Anthropic", openai: "OpenAI" };
+export const PROVIDER_NAMES: Record<matrix.ProviderName, string> = { anthropic: "Anthropic", openai: "OpenAI" };
 
 export function providerName(provider: string): string {
-  return PROVIDER_NAMES[provider as ProviderName] ?? provider;
+  return PROVIDER_NAMES[provider as matrix.ProviderName] ?? provider;
 }
 
 export interface OutageNotice {
@@ -26,7 +26,7 @@ export interface OutageNotice {
 
 /** One notice per provider and cause, from the parked sessions the org
  * holds; nothing when none waits on a provider. */
-export function outageNotices(sessions: readonly Pick<AgentSessionView, "park">[]): OutageNotice[] {
+export function outageNotices(sessions: readonly Pick<agent_sessions.AgentSessionView, "park">[]): OutageNotice[] {
   const notices = new Map<string, OutageNotice>();
   for (const { park } of sessions) {
     if (park?.reason !== "provider") continue;

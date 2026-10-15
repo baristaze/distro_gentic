@@ -3,7 +3,7 @@
 // once and never again, and each session keeps its own tabs and width
 // across visits, the kept panes read back from local storage.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import type { SessionTab, SlotSession } from "../../app/product";
 import {
   addable,
@@ -104,7 +104,7 @@ describe("a tab that opens itself", () => {
 });
 
 describe("+", () => {
-  const record = { id: "s1", status: "running" } as AgentSessionView;
+  const record = { id: "s1", status: "running" } as agent_sessions.AgentSessionView;
   const session: SlotSession = { session: record, calls: [], running: true, open: () => undefined };
   // A product's tab, offered only while the session runs.
   const preview: SessionTab = { id: "preview", label: "Preview", icon: null, tip: "What it built", offered: (s) => s.running, render: () => null };
@@ -238,7 +238,7 @@ describe("what the platform's tabs read from the calls", () => {
 });
 
 it("groups a session's sub-agents by where each stands: needs you, working, done", () => {
-  const child = (id: string, status: "running" | "parked" | "idle", park: { reason: "person" | "budget"; unlock: string; retry_at: null, cause: null } | null = null) => ({
+  const child = (id: string, status: "running" | "parked" | "idle", park: { reason: "person" | "spend_budget"; unlock: string; retry_at: null, cause: null } | null = null) => ({
     id,
     title: id,
     kind: "analysis",
@@ -252,7 +252,7 @@ it("groups a session's sub-agents by where each stands: needs you, working, done
   const groups = childGroups([
     child("reads", "running"),
     child("asks", "parked", { reason: "person", unlock: "answer", retry_at: null, cause: null }),
-    child("spends", "parked", { reason: "budget", unlock: "budget", retry_at: null, cause: null }),
+    child("spends", "parked", { reason: "spend_budget", unlock: "funds", retry_at: null, cause: null }),
     child("done", "idle"),
   ]);
   expect(groups.map((group) => [group.label, group.children.map((one) => one.id)])).toEqual([

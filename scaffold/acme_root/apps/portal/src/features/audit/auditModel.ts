@@ -1,7 +1,7 @@
 // Pure: the org's events as the audit lists them: what happened, to which
 // record, by whom, and when. An event's kind is `<namespace>.<entity>.<action>`.
 // No React, no fetch.
-import type { ChangeEventView } from "@acme/client";
+import type { change_events } from "@acme/client";
 
 export interface AuditRow {
   seq: number;
@@ -20,7 +20,7 @@ export function kindLine(kind: string): { what: string; area: string } {
   return { what: rest.join(" ").replace(/_/g, " "), area };
 }
 
-export function auditRows(events: readonly ChangeEventView[]): AuditRow[] {
+export function auditRows(events: readonly change_events.ChangeEventView[]): AuditRow[] {
   return events.map((event) => ({
     seq: event.seq,
     what: kindLine(event.kind).what,

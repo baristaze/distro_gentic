@@ -3,7 +3,7 @@
 // the part it last saw. A stream that is no longer open has become a step,
 // which the history shows.
 import { useEffect, useState } from "react";
-import type { LivePageView, LivePartView, LiveReadView, LiveStreamView } from "@acme/client";
+import type { watch } from "@acme/client";
 import { api } from "../app/api";
 
 export const LIVE_POLL_MS = 1000;
@@ -11,7 +11,7 @@ export const LIVE_POLL_MS = 1000;
 /** A run of one stream's parts of one kind, for one call when they name
  * one: a tool's input names the call it asks for, as its output may. */
 export interface LiveRun {
-  kind: LivePartView["kind"];
+  kind: watch.LivePartView["kind"];
   tool: string | null;
   toolUseId: string | null;
   text: string;
@@ -27,7 +27,7 @@ export interface LiveStream {
   runs: LiveRun[];
 }
 
-function joined(runs: readonly LiveRun[], parts: readonly LivePartView[]): LiveRun[] {
+function joined(runs: readonly LiveRun[], parts: readonly watch.LivePartView[]): LiveRun[] {
   const out = runs.map((run) => ({ ...run }));
   for (const part of parts) {
     const tail = out[out.length - 1];
@@ -42,7 +42,7 @@ function joined(runs: readonly LiveRun[], parts: readonly LivePartView[]): LiveR
 /** The streams a read answered, each added to what was held for it: the
  * open streams are the ones the read names, so a stream it no longer names
  * is gone. A stream the viewer had not seen starts from what it returned. */
-export function mergeLive(held: readonly LiveStream[], read: readonly LiveStreamView[]): LiveStream[] {
+export function mergeLive(held: readonly LiveStream[], read: readonly watch.LiveStreamView[]): LiveStream[] {
   const before = new Map(held.map((stream) => [stream.stepId, stream]));
   return read.map((stream) => {
     const known = before.get(stream.agent_step_id);
@@ -65,17 +65,17 @@ export function useLiveStreams(id: string, active: boolean): LiveStream[] {
   useEffect(() => {
     if (!active) return;
     let stopped = false;
-    let handle: LiveReadView | null = null;
+    let handle: watch.LiveReadView | null = null;
     let shown: LiveStream[] = [];
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       try {
         if (!handle || Date.parse(handle.expires_at) - Date.now() < LIVE_POLL_MS * 5) {
-          handle = await api.post<LiveReadView>(`/v1/agent-sessions/${encodeURIComponent(id)}/live`);
+          handle = await api.post<watch.LiveReadView>(`/v1/agent-sessions/${encodeURIComponent(id)}/live`);
         }
         const params = new URLSearchParams({ handle: handle.handle });
         for (const stream of shown) if (stream.last !== null) params.append("after", `${stream.stepId}:${stream.last}`);
-        const page = await api.get<LivePageView>(`/v1/live?${params}`);
+        const page = await api.get<watch.LivePageView>(`/v1/live?${params}`);
         if (stopped) return;
         shown = mergeLive(shown, page.streams);
         setStreams(shown);

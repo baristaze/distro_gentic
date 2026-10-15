@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, type FetchCredentialView } from "@acme/client";
+import { ApiError, type agent_projects } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { personName } from "../../app/recordModel";
 import { useAgentProject, usePutCredential, useRemoveAgentProject, useRenameAgentProject } from "../../queries/agentProjects";
@@ -25,7 +25,7 @@ export function useAgentProjectVm(id: string) {
   const [renameProblem, setRenameProblem] = useState<string | null>(null);
   const [draft, setDraft] = useState<CredentialDraft>({ username: "", password: "" });
   const [credentialProblem, setCredentialProblem] = useState<string | null>(null);
-  const [saved, setSaved] = useState<FetchCredentialView | null>(null);
+  const [saved, setSaved] = useState<agent_projects.FetchCredentialView | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [removeProblem, setRemoveProblem] = useState<string | null>(null);
   const current = agentProject.data?.name ?? "";

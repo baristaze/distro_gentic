@@ -39,8 +39,10 @@ from acme.client.claimant.enrollment import (
 )
 from acme.client.claimant.journal import Entry, Journal
 from acme.client.claimant.settings import ClaimantSettings
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import ClaimantWorkView, ReportOutcome
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.hosts import ClaimantWorkView
+from acme.client.types.placement import ReportOutcome
 
 log = logging.getLogger(__name__)
 

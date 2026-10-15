@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 from acme.client.transport import LIMIT_MAX, Transport
 from acme.client.types.agent_sessions import (
     AgentSessionControl,
+    AgentSessionPageView,
+    AgentSessionStatus,
     AgentSessionView,
     AgentStepPageView,
     AgentStepView,
@@ -18,14 +20,23 @@ class AgentSessionsCalls(Transport):
     """An agent session's start, its messages and controls, and its history."""
 
     async def start_agent_session(
-        self, kind: str, title: str, *, idempotency_key: str | None = None
+        self,
+        kind: str,
+        title: str,
+        *,
+        agent_project_id: UUID | None = None,
+        idempotency_key: str | None = None,
     ) -> AgentSessionView:
         """A session on the latest version of `kind`, idle until a message
-        wakes it. Always under an idempotency key."""
+        wakes it, in `agent_project_id`: a stack outside a local one refuses a
+        session in none. Always under an idempotency key."""
+        body: dict[str, object] = {"kind": kind, "title": title}
+        if agent_project_id is not None:
+            body["agent_project_id"] = str(agent_project_id)
         started = await self.request(
             "POST",
             "/v1/agent-sessions",
-            json={"kind": kind, "title": title},
+            json=body,
             idempotency_key=idempotency_key or str(uuid4()),
         )
         return AgentSessionView.model_validate(started)
@@ -33,6 +44,22 @@ class AgentSessionsCalls(Transport):
     async def agent_session(self, agent_session_id: UUID) -> AgentSessionView:
         read = await self.request("GET", f"/v1/agent-sessions/{agent_session_id}")
         return AgentSessionView.model_validate(read)
+
+    async def agent_sessions(
+        self,
+        *,
+        status: AgentSessionStatus | None = None,
+        cursor: str | None = None,
+        limit: int = LIMIT_MAX,
+    ) -> AgentSessionPageView:
+        """One page of the tenant's sessions in `status`, or in any, by id."""
+        params: dict[str, Any] = {"limit": limit}
+        if status is not None:
+            params["status"] = status.value
+        if cursor:
+            params["cursor"] = cursor
+        page = await self.request("GET", "/v1/agent-sessions", params=params)
+        return AgentSessionPageView.model_validate(page)
 
     async def send_message(
         self, agent_session_id: UUID, text: str, *, idempotency_key: str | None = None

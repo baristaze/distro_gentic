@@ -46,9 +46,11 @@ from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
-from acme.client.types import IsolationMode as HostIsolation
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.exec_relay import ExecDetailView, OutputStream
+from acme.client.types.hosts import ClaimedWorkView
+from acme.client.types.hosts import IsolationMode as HostIsolation
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
     AgentWorkspaceLost,

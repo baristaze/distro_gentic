@@ -2,7 +2,7 @@
 // agent automation principal: its grant read, and a role granted to it. The list
 // is read whole, a page at a time, each page after the last id.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, type AgentAutomationPrincipalView, type AgentAutomationRequest, type AgentAutomationView, type Role } from "@acme/client";
+import { ApiError, type agent_automations, type common } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
@@ -13,10 +13,10 @@ export function useAgentAutomations() {
   return useQuery({
     queryKey: keys.agentAutomations.list(PAGE_SIZE),
     queryFn: async ({ signal }) => {
-      const read: AgentAutomationView[] = [];
+      const read: agent_automations.AgentAutomationView[] = [];
       for (let after: string | null = null; ; ) {
         const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
-        const page = await api.get<AgentAutomationView[]>(`/v1/agent-automations?limit=${PAGE_SIZE}${cursor}`, { signal });
+        const page = await api.get<agent_automations.AgentAutomationView[]>(`/v1/agent-automations?limit=${PAGE_SIZE}${cursor}`, { signal });
         read.push(...page);
         const last = page[page.length - 1];
         if (page.length < PAGE_SIZE || last === undefined) return read;
@@ -29,14 +29,14 @@ export function useAgentAutomations() {
 export function useAgentAutomation(id: string) {
   return useQuery({
     queryKey: keys.agentAutomations.one(id),
-    queryFn: ({ signal }) => api.get<AgentAutomationView>(path(id), { signal }),
+    queryFn: ({ signal }) => api.get<agent_automations.AgentAutomationView>(path(id), { signal }),
   });
 }
 
 export function useCreateAgentAutomation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: AgentAutomationRequest) => api.post<AgentAutomationView>("/v1/agent-automations", body, { idempotencyKey: crypto.randomUUID() }),
+    mutationFn: (body: agent_automations.AgentAutomationRequest) => api.post<agent_automations.AgentAutomationView>("/v1/agent-automations", body, { idempotencyKey: crypto.randomUUID() }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentAutomations.list(PAGE_SIZE) }),
   });
 }
@@ -44,7 +44,7 @@ export function useCreateAgentAutomation() {
 export function useUpdateAgentAutomation(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: AgentAutomationRequest) => api.request<AgentAutomationView>("PUT", path(id), body),
+    mutationFn: (body: agent_automations.AgentAutomationRequest) => api.request<agent_automations.AgentAutomationView>("PUT", path(id), body),
     onSuccess: (saved) => {
       queryClient.setQueryData(keys.agentAutomations.one(id), saved);
       return queryClient.invalidateQueries({ queryKey: keys.agentAutomations.list(PAGE_SIZE) });
@@ -58,7 +58,7 @@ export function useAgentAutomationPrincipal() {
     queryKey: keys.agentAutomations.principal,
     queryFn: async ({ signal }) => {
       try {
-        return await api.get<AgentAutomationPrincipalView>("/v1/agent-automations/principal", { signal });
+        return await api.get<agent_automations.AgentAutomationPrincipalView>("/v1/agent-automations/principal", { signal });
       } catch (caught) {
         if (caught instanceof ApiError && caught.status === 404) return null;
         throw caught;
@@ -70,7 +70,7 @@ export function useAgentAutomationPrincipal() {
 export function useGrantPrincipal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (role: Role) => api.request<AgentAutomationPrincipalView>("PUT", "/v1/agent-automations/principal", { role }),
+    mutationFn: (role: common.Role) => api.request<agent_automations.AgentAutomationPrincipalView>("PUT", "/v1/agent-automations/principal", { role }),
     onSuccess: (granted) => queryClient.setQueryData(keys.agentAutomations.principal, granted),
   });
 }

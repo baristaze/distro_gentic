@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
-import { ApiError, type AgentSessionView, type MeView, type Permission, type Role } from "@acme/client";
+import { ApiError, type agent_sessions, type common, type tenancy } from "@acme/client";
 import { EMPTY_PRODUCT, type PortalProduct } from "../app/product";
 import { SlotProvider } from "../app/slot";
 
@@ -23,13 +23,13 @@ export interface Call {
 
 export interface Net {
   org: Org;
-  role: Role;
+  role: common.Role;
   calls: Call[];
-  parked: AgentSessionView[];
+  parked: agent_sessions.AgentSessionView[];
   answer: (call: Call) => unknown;
 }
 
-export const PERMISSIONS: Record<Role, Permission[]> = {
+export const PERMISSIONS: Record<common.Role, common.Permission[]> = {
   owner: ["read", "write", "manage_members", "manage_keys"],
   admin: ["read", "write", "manage_members", "manage_keys"],
   member: ["read", "write", "manage_keys"],
@@ -51,7 +51,7 @@ export function notFound(path: string): never {
   throw new ApiError(404, "not_found", `nothing at ${path}`, "req-1");
 }
 
-function common(net: Net, call: Call): unknown {
+function shared(net: Net, call: Call): unknown {
   if (call.method !== "GET") return undefined;
   if (call.path === "/v1/me") {
     return {
@@ -60,7 +60,7 @@ function common(net: Net, call: Call): unknown {
       permissions: PERMISSIONS[net.role],
       user: PEOPLE[net.org],
       org: { id: `org-${net.org}`, name: net.org === "a" ? "Ajax" : "Beta", slug: net.org, kind: "team", created_at: "" },
-    } as unknown as MeView;
+    } as unknown as tenancy.MeView;
   }
   if (call.path.startsWith("/v1/users?")) return { items: [PEOPLE[net.org]], next_cursor: null };
   if (call.path.startsWith("/v1/agent-sessions?") && call.path.includes("status=parked")) return { items: net.parked, next_cursor: null };
@@ -75,7 +75,7 @@ export function fakeApi(net: Net) {
     if (options?.ifMatch !== undefined) call.ifMatch = options.ifMatch;
     net.calls.push(call);
     try {
-      return Promise.resolve(common(net, call) ?? net.answer(call));
+      return Promise.resolve(shared(net, call) ?? net.answer(call));
     } catch (caught) {
       return Promise.reject(caught);
     }

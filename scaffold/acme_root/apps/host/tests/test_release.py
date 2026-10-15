@@ -28,7 +28,7 @@ from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
-from acme.client.types import IsolationMode
+from acme.client.types.hosts import IsolationMode
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationRefused
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl

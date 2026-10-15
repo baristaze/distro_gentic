@@ -4,7 +4,7 @@
 // another org holds answers 404. A member who may not write is offered no
 // form; one who does not manage the org is offered no grant.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentAutomationView } from "@acme/client";
+import type { agent_automations } from "@acme/client";
 import { EMPTY_PRODUCT, type PortalProduct } from "../../app/product";
 import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AgentAutomationPage } from "./AgentAutomationPage";
@@ -15,7 +15,7 @@ vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(
 vi.mock("../../app/config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-const agentAutomation = (org: "a" | "b", name: string): AgentAutomationView => ({
+const agentAutomation = (org: "a" | "b", name: string): agent_automations.AgentAutomationView => ({
   id: `au${org}`,
   name,
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },

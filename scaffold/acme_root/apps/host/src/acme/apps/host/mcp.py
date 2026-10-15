@@ -17,7 +17,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from acme.apps.host.ceilings import HostServer
-from acme.client.types import ExecDetailView
+from acme.client.types.exec_relay import ExecDetailView
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets import SecretsInterface
 from acme.integrations.mcp import McpAnswer, McpClientInterface, McpListedTool, McpServer, McpStdio

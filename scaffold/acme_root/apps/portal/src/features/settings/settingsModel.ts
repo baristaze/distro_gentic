@@ -1,5 +1,5 @@
 // Pure: rows, formatting, and gating predicates for the Settings sections.
-import type { ApiKeyView, InvitationView, MembershipView, MeView, Role, UserView } from "@acme/client";
+import type { common, tenancy } from "@acme/client";
 
 export interface MemberRow {
   id: string;
@@ -134,13 +134,13 @@ export interface OrgLines {
   name: string;
   slug: string;
   kind: string;
-  role: Role;
+  role: common.Role;
   /** "3 members"; null while the list is on the way. */
   members: string | null;
 }
 
 /** What Organization › General says of the org the tab is in. */
-export function orgLines(me: MeView, memberCount: number | null): OrgLines {
+export function orgLines(me: tenancy.MeView, memberCount: number | null): OrgLines {
   return {
     name: me.org.name,
     slug: me.org.slug,

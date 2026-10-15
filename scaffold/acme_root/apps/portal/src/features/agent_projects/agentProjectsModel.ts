@@ -1,7 +1,7 @@
 // Pure: the tenant's agent projects as the screens show them, a new agent project's
 // request from what a person typed, and the fetch credential's form, whose
 // password goes out once and is never shown again. No React, no fetch.
-import type { CreateAgentProjectRequest, FetchCredentialRequest, FetchCredentialView, AgentProjectView, RepositoryView } from "@acme/client";
+import type { agent_projects } from "@acme/client";
 
 export const NAME_MAX = 200;
 
@@ -10,7 +10,7 @@ export const NAME_MAX = 200;
 const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const PATH = /^[a-z0-9_][a-z0-9_.-]*(\/[a-z0-9_][a-z0-9_.-]*)+$/;
 
-export function repositoryLine(repository: RepositoryView): string {
+export function repositoryLine(repository: agent_projects.RepositoryView): string {
   return `${repository.host}/${repository.path}`;
 }
 
@@ -21,13 +21,13 @@ export interface AgentProjectRow {
   createdAt: string;
 }
 
-export function agentProjectRow(agentProject: AgentProjectView): AgentProjectRow {
+export function agentProjectRow(agentProject: agent_projects.AgentProjectView): AgentProjectRow {
   return { id: agentProject.id, name: agentProject.name, repository: repositoryLine(agentProject.repository), createdAt: agentProject.created_at };
 }
 
 /** A repository from its address as a person writes it: `host/owner/name`,
  * with or without `https://` before it and `.git` after it. */
-export function repositoryOf(text: string): RepositoryView | { problem: string } {
+export function repositoryOf(text: string): agent_projects.RepositoryView | { problem: string } {
   const address = text
     .trim()
     .toLowerCase()
@@ -48,7 +48,7 @@ export interface NewAgentProjectDraft {
   repository: string;
 }
 
-export function createRequest(draft: NewAgentProjectDraft): { request: CreateAgentProjectRequest } | { problem: string } {
+export function createRequest(draft: NewAgentProjectDraft): { request: agent_projects.CreateAgentProjectRequest } | { problem: string } {
   const name = draft.name.trim();
   if (!name) return { problem: "Give the agent project a name." };
   if (name.length > NAME_MAX) return { problem: `A name is at most ${NAME_MAX} characters.` };
@@ -76,7 +76,7 @@ export interface CredentialDraft {
 
 /** The credential's request. The password is sent as typed, never trimmed:
  * a token's every character is its own. */
-export function credentialRequest(draft: CredentialDraft): { request: FetchCredentialRequest } | { problem: string } {
+export function credentialRequest(draft: CredentialDraft): { request: agent_projects.FetchCredentialRequest } | { problem: string } {
   const username = draft.username.trim();
   if (!username) return { problem: "Name the user the credential reads as." };
   if (username.length > USERNAME_MAX) return { problem: `A user name is at most ${USERNAME_MAX} characters.` };
@@ -88,7 +88,7 @@ export function credentialRequest(draft: CredentialDraft): { request: FetchCrede
 /** What the page says of the credential: only that one was set, by whom,
  * and when, from the write's answer. No read gives it back, so a page opened
  * later says only how it is kept. */
-export function credentialLine(saved: Pick<FetchCredentialView, "updated_at"> | null, by: string, when: (iso: string) => string): string {
+export function credentialLine(saved: Pick<agent_projects.FetchCredentialView, "updated_at"> | null, by: string, when: (iso: string) => string): string {
   if (saved === null) return "A credential, once set, is never shown again. Setting one replaces the last.";
   return `A credential is set: by ${by}, ${when(saved.updated_at)}. It is never shown again.`;
 }

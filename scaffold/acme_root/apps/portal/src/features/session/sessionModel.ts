@@ -2,15 +2,7 @@
 // The status and why a parked session waits, the composer's words, its
 // runs, what it delivered, and what a person may do to it now.
 // No React, no fetch.
-import type {
-  AgentSessionView,
-  WorkProductView,
-  ExecutionView,
-  ParkView,
-  Role,
-  SessionModelUsageView,
-  Visibility,
-} from "@acme/client";
+import type { agent_sessions, attribution, common, evidence } from "@acme/client";
 
 export type Tone = "plain" | "accent" | "danger";
 
@@ -21,7 +13,7 @@ export interface StatusLine {
 
 /** An archived session says so first; otherwise its status, a parked one in
  * the warning tone, a running one in the accent. */
-export function statusLine(session: Pick<AgentSessionView, "status" | "archived_at">): StatusLine {
+export function statusLine(session: Pick<agent_sessions.AgentSessionView, "status" | "archived_at">): StatusLine {
   if (session.archived_at) return { label: "archived", tone: "plain" };
   switch (session.status) {
     case "running":
@@ -35,11 +27,11 @@ export function statusLine(session: Pick<AgentSessionView, "status" | "archived_
   }
 }
 
-const REASONS: Record<ParkView["reason"], string> = {
+const REASONS: Record<agent_sessions.ParkView["reason"], string> = {
   person: "It waits on a person.",
   provider: "Its model provider did not answer.",
-  budget: "Its budget is spent.",
-  resource: "It waits for a resource.",
+  spend_budget: "Its budget is spent.",
+  leasable_resource: "It waits for a resource.",
   job: "It waits for work it started.",
   children: "It waits for the sessions it started.",
   handover: "A person has control.",
@@ -53,7 +45,7 @@ const UNLOCKS: Record<string, string> = {
   deadline: "moving its deadline",
   principal: "naming a principal for it",
   spender: "a spender for its budget",
-  workspace: "its workspace",
+  agent_workspace: "its workspace",
   permission: "a permission",
 };
 
@@ -69,7 +61,7 @@ export interface ParkLine {
   action: ParkAction;
 }
 
-export function parkLine(park: ParkView): ParkLine {
+export function parkLine(park: agent_sessions.ParkView): ParkLine {
   let action: ParkAction = null;
   if (park.reason === "pause") action = "resume";
   else if (park.reason === "handover") action = "give_back";
@@ -96,7 +88,7 @@ export interface RunRow {
   seconds: number;
 }
 
-const PROVENANCE: Record<ExecutionView["provenance"], string> = {
+const PROVENANCE: Record<evidence.ExecutionView["provenance"], string> = {
   real: "real",
   twin: "twin, never reported as real",
   double: "test double, never validation",
@@ -105,7 +97,7 @@ const PROVENANCE: Record<ExecutionView["provenance"], string> = {
 
 /** One run of one check, as its row says it: a run against a twin or a
  * double says so beside its outcome. */
-export function runRow(run: ExecutionView): RunRow {
+export function runRow(run: evidence.ExecutionView): RunRow {
   const counts = [
     run.cases.passed ? `${run.cases.passed} passed` : null,
     run.cases.failed ? `${run.cases.failed} failed` : null,
@@ -132,7 +124,7 @@ export interface WorkProductLines {
   report: string | null;
 }
 
-export function workProductLines(workProduct: WorkProductView): WorkProductLines {
+export function workProductLines(workProduct: evidence.WorkProductView): WorkProductLines {
   const report = workProduct.report;
   return {
     branch: workProduct.branch,
@@ -143,7 +135,7 @@ export function workProductLines(workProduct: WorkProductView): WorkProductLines
 }
 
 /** "3 model calls: 1,200 tokens in, 340 out". */
-export function usageLine(usage: SessionModelUsageView): string {
+export function usageLine(usage: agent_sessions.SessionModelUsageView): string {
   const count = (n: number) => n.toLocaleString("en-US");
   return `${count(usage.calls)} model ${usage.calls === 1 ? "call" : "calls"}: ${count(usage.input)} tokens in, ${count(usage.output)} out`;
 }
@@ -167,13 +159,13 @@ export interface Allowed {
 
 /** Who holds the session's environment when its hand-over names someone
  * other than `me`; null when nobody does, or `me` does. */
-export function heldBy(session: Pick<AgentSessionView, "park">, me: string | null): string | null {
+export function heldBy(session: Pick<agent_sessions.AgentSessionView, "park">, me: string | null): string | null {
   const park = session.park;
   if (park?.reason !== "handover" || !park.holder) return null;
   return park.holder === me ? null : park.holder;
 }
 
-export function allowed(session: AgentSessionView, mayWrite: boolean, me: string | null, takesPart = true): Allowed {
+export function allowed(session: agent_sessions.AgentSessionView, mayWrite: boolean, me: string | null, takesPart = true): Allowed {
   const handedOver = session.park?.reason === "handover";
   const paused = session.park?.reason === "pause";
   const open = session.status === "running" || session.status === "parked" || session.status === "pending";
@@ -277,7 +269,7 @@ export interface PullRequestBadge {
 }
 
 /** The pull request the session opened, for its header; null before one. */
-export function pullRequestBadge(workProduct: Pick<WorkProductView, "work">): PullRequestBadge | null {
+export function pullRequestBadge(workProduct: Pick<evidence.WorkProductView, "work">): PullRequestBadge | null {
   const opened = workProduct.work.filter((work) => work.kind === "pull_request").map((work) => work.handle);
   const last = opened[opened.length - 1];
   if (last === undefined) return null;
@@ -289,7 +281,7 @@ export function pullRequestBadge(workProduct: Pick<WorkProductView, "work">): Pu
  * neither, when the org's view offers it to join. */
 export type Standing = "made" | "joined" | "none";
 
-export function standingOf(session: Pick<AgentSessionView, "created_by" | "participants">, me: string | null): Standing {
+export function standingOf(session: Pick<agent_sessions.AgentSessionView, "created_by" | "participants">, me: string | null): Standing {
   if (me !== null && session.created_by === me) return "made";
   if (me !== null && session.participants.includes(me)) return "joined";
   return "none";
@@ -300,7 +292,7 @@ export function standingOf(session: Pick<AgentSessionView, "created_by" | "parti
 export interface Member {
   id: string;
   name: string;
-  role: Role | null;
+  role: common.Role | null;
 }
 
 export interface Person {
@@ -312,7 +304,7 @@ export interface Person {
 /** Who sees a session, who takes part in it, who steers it, and what the
  * person reading may change of that. */
 export interface Sharing {
-  visibility: Visibility;
+  visibility: attribution.Visibility;
   /** The one whose messages instruct it; null when no person steers it. */
   steerer: Person | null;
   steering: boolean;
@@ -338,7 +330,7 @@ export interface Sharing {
  * null until the member list is read whole, and no steerer counts as lapsed
  * before then. */
 export function sharingOf(
-  session: AgentSessionView,
+  session: agent_sessions.AgentSessionView,
   me: string | null,
   permissions: readonly string[],
   members: readonly Member[] | null,
@@ -374,7 +366,7 @@ export function sharingOf(
 }
 
 /** The words a sharing step leaves in the history. */
-export function sharedWords(change: { steerer: string | null; visibility: Visibility | null }, nameOf: (id: string) => string): string {
+export function sharedWords(change: { steerer: string | null; visibility: attribution.Visibility | null }, nameOf: (id: string) => string): string {
   if (change.steerer !== null) {
     const who = nameOf(change.steerer);
     return who === "You" ? "You steer it from here" : `${who} steers it from here`;

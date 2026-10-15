@@ -34,7 +34,7 @@ from acme.apps.host.config import DEFAULT_IMAGE
 from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.snapshots import HostSnapshots
-from acme.client.types import IsolationMode as HostMode
+from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
     EgressMode,
     EgressPolicy,

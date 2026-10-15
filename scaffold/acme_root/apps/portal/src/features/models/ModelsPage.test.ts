@@ -5,7 +5,7 @@
 // page never shows it again. A member who does not manage the org is
 // offered no field and no choice.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { FillView, ProviderKeyView } from "@acme/client";
+import type { matrix, trust } from "@acme/client";
 import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { ModelsPage } from "./ModelsPage";
 
@@ -14,7 +14,7 @@ vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const SECRET = "sk-test-never-on-a-screen-5678";
-const fill = (model: string): FillView => ({
+const fill = (model: string): matrix.FillView => ({
   provider: "anthropic",
   model,
   effort: null,
@@ -26,7 +26,7 @@ const fill = (model: string): FillView => ({
   context_window: 200_000,
   eligibility: { region: null, zero_retention: false },
 });
-const key = (org: "a" | "b", provider: ProviderKeyView["provider"]): ProviderKeyView => ({
+const key = (org: "a" | "b", provider: trust.ProviderKeyView["provider"]): trust.ProviderKeyView => ({
   id: `k${org}`,
   provider,
   status: "live",
@@ -43,7 +43,7 @@ function answer(call: Call): unknown {
   if (call.method === "GET" && call.path === "/v1/matrix/choices") return [];
   if (call.method === "PUT" && call.path.startsWith("/v1/provider-keys/")) return { ...key(net.org, "openai"), id: "knew" };
   if (call.method === "PUT" && call.path.startsWith("/v1/matrix/choices/")) {
-    return { id: "c1", role: "worker", fill: (call.body as { fill: FillView }).fill, created_at: "", updated_at: "", updated_by: PEOPLE[net.org].id };
+    return { id: "c1", role: "worker", fill: (call.body as { fill: matrix.FillView }).fill, created_at: "", updated_at: "", updated_by: PEOPLE[net.org].id };
   }
   return notFound(call.path);
 }

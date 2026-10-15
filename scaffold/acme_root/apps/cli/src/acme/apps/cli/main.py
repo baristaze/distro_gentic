@@ -39,14 +39,15 @@ from acme.apps.cli.product_commands import PRODUCT_COMMANDS
 from acme.client.client import ApiClient
 from acme.client.realtime import ChannelRefused
 from acme.client.transport import ApiError
-from acme.client.types import (
-    AgentAutomationRequest,
+from acme.client.types.agent_automations import AgentAutomationRequest
+from acme.client.types.agent_playbooks import PinView
+from acme.client.types.agent_sessions import (
+    AgentSessionControl,
     AgentSessionStatus,
-    ConnectorReviewRequest,
-    ConnectorView,
-    PinView,
+    AgentSessionView,
+    AgentStepView,
 )
-from acme.client.types.agent_sessions import AgentSessionControl, AgentSessionView, AgentStepView
+from acme.client.types.connectors import ConnectorReviewRequest, ConnectorView
 from acme.client.types.tenancy import IssuedAuthSessionView, IssuedLoginView
 
 EXIT_REFUSED = 1

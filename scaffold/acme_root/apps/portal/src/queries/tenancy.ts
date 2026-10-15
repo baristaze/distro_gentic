@@ -115,7 +115,7 @@ export function useUpdateMemberRole() {
 export function useUpdateMe() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { display_name: string }) => api.patch<UserView>("/v1/me", body),
+    mutationFn: (body: { display_name: string }) => api.patch<tenancy.UserView>("/v1/me", body),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: keys.me }),

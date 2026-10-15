@@ -1,12 +1,12 @@
 // The live view's streams: each read adds to what was held for a stream,
 // a stream the read no longer names is gone, and a dropped buffer says so.
 import { describe, expect, it, vi } from "vitest";
-import type { LivePartView } from "@acme/client";
+import type { watch } from "@acme/client";
 import { mergeLive } from "./live";
 
 vi.mock("../app/api", () => ({ api: {} }));
 
-function part(n: number, kind: LivePartView["kind"], text: string, tool: string | null = null, toolUseId: string | null = null): LivePartView {
+function part(n: number, kind: watch.LivePartView["kind"], text: string, tool: string | null = null, toolUseId: string | null = null): watch.LivePartView {
   return { n, last: n, kind, text, tool, index: null, channel: null, tool_use_id: toolUseId };
 }
 

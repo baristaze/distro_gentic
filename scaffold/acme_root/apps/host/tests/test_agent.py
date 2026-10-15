@@ -23,8 +23,9 @@ from acme.apps.host.config import BadSetting, settings_from_env
 from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS
 from acme.client.claimant.credential import load_credential
 from acme.client.claimant.enrollment import NotEnrolled
-from acme.client.client import ApiClient, ApiError
-from acme.client.types import ClaimedWorkView, IsolationMode
+from acme.client.client import ApiClient
+from acme.client.transport import ApiError
+from acme.client.types.hosts import ClaimedWorkView, IsolationMode
 from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.om.base import new_id, utcnow
 from acme.om.hosts import rules
@@ -32,7 +33,7 @@ from acme.om.hosts.rules import WireType
 from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.rules import pool_lane
 from acme.om.placement.types.work import WorkspaceOperation
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 AGENT_PROJECT = new_id()
 CEILINGS = Ceilings(
@@ -84,7 +85,7 @@ def agent(
     )
 
 
-async def enqueue(api: Stack, kind: WorkKind, payload: dict[str, Any], lane: str) -> WorkItem:
+async def enqueue(api: Stack, kind: PlacementWorkKind, payload: dict[str, Any], lane: str) -> WorkItem:
     """An item as a producer will write it, with the fields a host reads of
     what it asks (`ceilings.ask_of`), on the lane placement gives it. It is
     landed in the queue directly: the payloads of today's kinds carry where
@@ -109,7 +110,7 @@ async def enqueue(api: Stack, kind: WorkKind, payload: dict[str, Any], lane: str
     return item
 
 
-def an_item(api: Stack, kind: WorkKind, payload: dict[str, Any]) -> WorkItem:
+def an_item(api: Stack, kind: PlacementWorkKind, payload: dict[str, Any]) -> WorkItem:
     now = utcnow()
     return WorkItem(
         id=new_id(),

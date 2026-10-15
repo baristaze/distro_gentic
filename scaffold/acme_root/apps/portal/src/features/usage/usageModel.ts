@@ -2,7 +2,7 @@
 // window, and what its current window spent and holds against its amount,
 // in reference cost and in tokens. A limit counts settled spend and open
 // holds together. No React, no fetch.
-import type { BudgetUsageView } from "@acme/client";
+import type { spend_budgets } from "@acme/client";
 import { costLine } from "../../app/recordModel";
 import { spanLine } from "../agent_automations/agentAutomationsModel";
 
@@ -32,7 +32,7 @@ export function scopeLine(kind: string, key: string, nameOf: { person: (id: stri
       return "the org";
     case "person":
       return nameOf.person(key);
-    case "project":
+    case "agent_project":
       return `the agent project ${nameOf.agentProject(key)}`;
     default:
       return `the ${kind} ${key}`;
@@ -46,7 +46,7 @@ function amountLine(spent: number, held: number, amount: number | null, show: (v
 
 const tokenCount = (value: number) => value.toLocaleString();
 
-export function usageRow(usage: BudgetUsageView, nameOf: Parameters<typeof scopeLine>[2]): UsageRow {
+export function usageRow(usage: spend_budgets.BudgetUsageView, nameOf: Parameters<typeof scopeLine>[2]): UsageRow {
   const { budget } = usage;
   const shares = [
     budget.cost_micros ? (usage.spent_cost_micros + usage.held_cost_micros) / budget.cost_micros : null,

@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
-import type { MeView } from "@acme/client";
+import type { tenancy } from "@acme/client";
 import { EMPTY_PRODUCT, type PortalProduct } from "../../app/product";
 import { SlotProvider } from "../../app/slot";
 import { NO_AGENT_PROJECT } from "../sessions/sessionsModel";
@@ -25,7 +25,7 @@ vi.mock("../../app/api", () => ({
   api: {
     get: (path: string) => {
       if (path === "/v1/me") {
-        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user: { id: "u1" }, org: { id: "o1" } } as unknown as MeView);
+        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user: { id: "u1" }, org: { id: "o1" } } as unknown as tenancy.MeView);
       }
       if (path.startsWith("/v1/agent-projects?")) return Promise.resolve(net.agentProjects);
       return Promise.reject(new Error(`no read for ${path}`));

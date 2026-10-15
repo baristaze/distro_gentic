@@ -43,8 +43,6 @@ export const keys = {
     one: (id: string) => ["user", "one", id] as const,
   },
   // A copy adds its entries below this line.
-  // The person behind the auth session: their address and their time zone.
-  identity: ["identity"] as const,
   // The tenant's agent projects, which a new session starts in. No push names an
   // agent project, so the list is read on its own clock.
   agentProjects: {

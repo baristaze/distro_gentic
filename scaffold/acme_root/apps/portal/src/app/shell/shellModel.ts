@@ -6,7 +6,7 @@
 // is never hidden under a quiet parent. A support conversation is the
 // dock's, and shows only under the platform assistant's filter. No React,
 // no fetch.
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import { parkLine } from "../../features/session/sessionModel";
 import type { SessionFilter } from "./sessionFilter";
 import { listedFor } from "./supportModel";
@@ -42,11 +42,11 @@ export interface ShellGroups {
 export const RECENT_MAX = 30;
 
 /** A session waits on a person: it is parked for one. */
-export function needsYou(session: Pick<AgentSessionView, "status" | "park" | "archived_at">): boolean {
+export function needsYou(session: Pick<agent_sessions.AgentSessionView, "status" | "park" | "archived_at">): boolean {
   return session.archived_at === null && session.status === "parked" && session.park?.reason === "person";
 }
 
-export function groupOf(session: Pick<AgentSessionView, "status" | "park" | "archived_at">): Group {
+export function groupOf(session: Pick<agent_sessions.AgentSessionView, "status" | "park" | "archived_at">): Group {
   if (needsYou(session)) return "needs_you";
   if (session.archived_at === null && session.status !== "idle") return "running";
   return "recent";
@@ -54,7 +54,7 @@ export function groupOf(session: Pick<AgentSessionView, "status" | "park" | "arc
 
 const WAITS: Record<string, string> = {
   provider: "Waiting on the model provider",
-  budget: "Waiting on its budget",
+  spend_budget: "Waiting on its budget",
   job: "Waiting on work it started",
   children: "Waiting on its sub-agents",
   handover: "A person has control",
@@ -63,7 +63,7 @@ const WAITS: Record<string, string> = {
 
 /** The status in words. `held` names the tool of the call it holds for a
  * decision, when that is known. */
-export function statusWords(session: Pick<AgentSessionView, "status" | "park" | "archived_at">, held?: string): string {
+export function statusWords(session: Pick<agent_sessions.AgentSessionView, "status" | "park" | "archived_at">, held?: string): string {
   if (session.archived_at !== null) return "Archived";
   const park = session.park;
   switch (session.status) {
@@ -79,12 +79,12 @@ export function statusWords(session: Pick<AgentSessionView, "status" | "park" | 
         if (park.unlock === "approval") return held ? `Needs your decision: ${held}` : "Needs your decision";
         return `Needs you: ${parkLine(park).unlock}`;
       }
-      if (park.reason === "resource") return park.unlock === "workspace" ? "Waiting for a workspace" : "Waiting for a resource";
+      if (park.reason === "leasable_resource") return park.unlock === "agent_workspace" ? "Waiting for a workspace" : "Waiting for a resource";
       return WAITS[park.reason] ?? "Waiting";
   }
 }
 
-function dotOf(session: AgentSessionView): Dot {
+function dotOf(session: agent_sessions.AgentSessionView): Dot {
   if (session.archived_at !== null) return "archived";
   if (needsYou(session)) return "needs";
   if (session.status === "running") return "running";
@@ -94,7 +94,7 @@ function dotOf(session: AgentSessionView): Dot {
 
 const RANK: Record<Group, number> = { needs_you: 0, running: 1, recent: 2 };
 
-function kept(session: AgentSessionView, filter: SessionFilter): boolean {
+function kept(session: agent_sessions.AgentSessionView, filter: SessionFilter): boolean {
   if (session.archived_at !== null && !filter.archived) return false;
   if (!listedFor(session, filter.kind)) return false;
   if (filter.status !== "any" && session.status !== filter.status) return false;
@@ -109,10 +109,10 @@ const oldestFirst = (a: { at: string }, b: { at: string }) => -newestFirst(a, b)
  * whose parent is not shown stands as a row of its own. `held` maps a
  * session to the tool it holds for a decision. */
 export function shellGroups(
-  sessions: readonly AgentSessionView[],
+  sessions: readonly agent_sessions.AgentSessionView[],
   options: { filter: SessionFilter; held?: ReadonlyMap<string, string> },
 ): ShellGroups {
-  const byId = new Map<string, AgentSessionView>();
+  const byId = new Map<string, agent_sessions.AgentSessionView>();
   for (const session of sessions) {
     if (!byId.has(session.id) && kept(session, options.filter)) byId.set(session.id, session);
   }
@@ -178,7 +178,7 @@ export interface NeedsYouNotice {
 
 /** What a session that needs its person needs, in a few words. `held`
  * names the tool of the call it holds for a decision, when that is known. */
-export function needWords(session: Pick<AgentSessionView, "status" | "park" | "archived_at">, held?: string): string {
+export function needWords(session: Pick<agent_sessions.AgentSessionView, "status" | "park" | "archived_at">, held?: string): string {
   const park = session.park;
   if (park?.unlock === "approval") return held ? `Approve ${held}` : "Decide on a held call";
   if (park?.unlock === "answer") return "Answer its question";
@@ -189,13 +189,13 @@ export function needWords(session: Pick<AgentSessionView, "status" | "park" | "a
  * sub-agent anywhere in a tree they steer. Its creator steers it until a
  * hand-off; a participant who does not steer it is not asked. */
 export function needingYou(
-  sessions: readonly AgentSessionView[],
+  sessions: readonly agent_sessions.AgentSessionView[],
   me: string | null,
   held?: ReadonlyMap<string, string>,
 ): Map<string, NeedsYouNotice> {
   const byId = new Map(sessions.map((session) => [session.id, session]));
-  const steererOf = (session: AgentSessionView) => (session.parent_id === null ? session.steerer : byId.get(session.root_id)?.steerer);
-  const mine = (session: AgentSessionView) => steererOf(session) === me;
+  const steererOf = (session: agent_sessions.AgentSessionView) => (session.parent_id === null ? session.steerer : byId.get(session.root_id)?.steerer);
+  const mine = (session: agent_sessions.AgentSessionView) => steererOf(session) === me;
   const needing = new Map<string, NeedsYouNotice>();
   if (me === null) return needing;
   for (const session of byId.values()) {
@@ -243,10 +243,10 @@ export function nextToasts(state: ToastState, needing: ReadonlyMap<string, Needs
  * one, and the newest), linked by `parent_id`, with no read of its own. A
  * child with none waiting beneath it is not in the map. */
 export function waitingBeneath(
-  sessions: readonly AgentSessionView[],
-  children: readonly Pick<AgentSessionView, "id">[],
+  sessions: readonly agent_sessions.AgentSessionView[],
+  children: readonly Pick<agent_sessions.AgentSessionView, "id">[],
 ): Map<string, { id: string; title: string }> {
-  const below = new Map<string, AgentSessionView[]>();
+  const below = new Map<string, agent_sessions.AgentSessionView[]>();
   const listed = new Set<string>();
   for (const session of sessions) {
     if (listed.has(session.id) || session.parent_id === null) continue;

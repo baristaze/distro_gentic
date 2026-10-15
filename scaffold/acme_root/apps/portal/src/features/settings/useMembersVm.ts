@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Role } from "@acme/client";
+import type { common } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { useMe, useMemberships, useUpdateMemberRole, useUsers } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
@@ -19,7 +19,7 @@ export function useMembersVm() {
   );
 
   // A refusal is said in the server's words: the rules are the server's.
-  const setRole = async (userId: string, role: Role) => {
+  const setRole = async (userId: string, role: common.Role) => {
     try {
       await changeRole.mutateAsync({ userId, body: { role } });
     } catch (caught) {

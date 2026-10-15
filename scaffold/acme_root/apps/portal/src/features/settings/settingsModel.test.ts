@@ -159,7 +159,7 @@ describe("orgLines", () => {
     permissions: [],
     user: { id: "u1", email: "ada@a.test", display_name: "Ada", created_at: "" },
     org: { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: "", deleted_at: null },
-  } as unknown as MeView;
+  } as unknown as tenancy.MeView;
 
   it("says the org's name, short name, kind, the person's role, and its members", () => {
     expect(orgLines(me, 3)).toEqual({ name: "Ajax", slug: "ajax", kind: "A team's", role: "admin", members: "3 members" });

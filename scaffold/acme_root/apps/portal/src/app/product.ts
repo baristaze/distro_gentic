@@ -7,7 +7,7 @@
 // platform screen in silence.
 import type { ReactNode } from "react";
 import type { RouteObject } from "react-router-dom";
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import type { Call } from "../features/session/timelineModel";
 
 /** What a route says of itself, as its `handle`: one line on the page, and
@@ -20,7 +20,7 @@ export interface RouteAbout {
 
 /** A session as a product's tab or tool card sees it. */
 export interface SlotSession {
-  session: AgentSessionView;
+  session: agent_sessions.AgentSessionView;
   /** Its steps paired into tool calls, each with what it was asked and
    * what it answered. */
   calls: readonly Call[];

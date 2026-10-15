@@ -29,9 +29,9 @@ from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
 from acme.apps.host.seed import forget_key, read_seed
 from acme.client.claimant.credential import BadSetting
-from acme.client.client import ApiError
-from acme.client.types import AdvertisementBody, IssuedHostCredentialView
-from acme.client.types import IsolationMode as HostMode
+from acme.client.transport import ApiError
+from acme.client.types.hosts import AdvertisementBody, IssuedHostCredentialView
+from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
     AgentWorkspaceBase,
     Durability,

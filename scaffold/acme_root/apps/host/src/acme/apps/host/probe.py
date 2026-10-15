@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import truststore
 
 from acme.client.client import ApiClient
-from acme.client.types import AdvertisementBody, IsolationMode
+from acme.client.types.hosts import AdvertisementBody, IsolationMode
 
 PROBE_TIMEOUT_SECONDS = 10.0
 """The longest one probe's command may run."""

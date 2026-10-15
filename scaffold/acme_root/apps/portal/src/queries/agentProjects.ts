@@ -3,7 +3,7 @@
 // last id the one before held. The fetch credential is written and never
 // read back: its write answers who gave it and when, never its value.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateAgentProjectRequest, FetchCredentialRequest, FetchCredentialView, AgentProjectView } from "@acme/client";
+import type { agent_projects } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
@@ -16,10 +16,10 @@ export function useAgentProjects(enabled = true) {
   return useQuery({
     queryKey: keys.agentProjects.list(PAGE_SIZE),
     queryFn: async ({ signal }) => {
-      const read: AgentProjectView[] = [];
+      const read: agent_projects.AgentProjectView[] = [];
       for (let after: string | null = null; ; ) {
         const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
-        const page = await api.get<AgentProjectView[]>(`/v1/agent-projects?limit=${PAGE_SIZE}${cursor}`, { signal });
+        const page = await api.get<agent_projects.AgentProjectView[]>(`/v1/agent-projects?limit=${PAGE_SIZE}${cursor}`, { signal });
         read.push(...page);
         const last = page[page.length - 1];
         if (page.length < PAGE_SIZE || last === undefined) return read;
@@ -33,14 +33,14 @@ export function useAgentProjects(enabled = true) {
 export function useAgentProject(id: string) {
   return useQuery({
     queryKey: keys.agentProjects.one(id),
-    queryFn: ({ signal }) => api.get<AgentProjectView>(path(id), { signal }),
+    queryFn: ({ signal }) => api.get<agent_projects.AgentProjectView>(path(id), { signal }),
   });
 }
 
 export function useCreateAgentProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateAgentProjectRequest) => api.post<AgentProjectView>("/v1/agent-projects", body, { idempotencyKey: crypto.randomUUID() }),
+    mutationFn: (body: agent_projects.CreateAgentProjectRequest) => api.post<agent_projects.AgentProjectView>("/v1/agent-projects", body, { idempotencyKey: crypto.randomUUID() }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentProjects.all }),
   });
 }
@@ -48,7 +48,7 @@ export function useCreateAgentProject() {
 export function useRenameAgentProject(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => api.patch<AgentProjectView>(path(id), { name }),
+    mutationFn: (name: string) => api.patch<agent_projects.AgentProjectView>(path(id), { name }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentProjects.all }),
   });
 }
@@ -56,7 +56,7 @@ export function useRenameAgentProject(id: string) {
 export function useRemoveAgentProject(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.del<AgentProjectView>(path(id)),
+    mutationFn: () => api.del<agent_projects.AgentProjectView>(path(id)),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: keys.agentProjects.one(id) });
       return queryClient.invalidateQueries({ queryKey: keys.agentProjects.list(PAGE_SIZE) });
@@ -67,6 +67,6 @@ export function useRemoveAgentProject(id: string) {
 /** The repository's read credential; a later one replaces it. */
 export function usePutCredential(id: string) {
   return useMutation({
-    mutationFn: (body: FetchCredentialRequest) => api.request<FetchCredentialView>("PUT", `${path(id)}/credential`, body),
+    mutationFn: (body: agent_projects.FetchCredentialRequest) => api.request<agent_projects.FetchCredentialView>("PUT", `${path(id)}/credential`, body),
   });
 }

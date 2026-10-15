@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { FillView, ProviderKeyView } from "@acme/client";
+import type { matrix, trust } from "@acme/client";
 import { fillLine, keyRows, liveKeyLine, roleRows, saveKeyRequest } from "./modelsModel";
 
-const key = (id: string, provider: ProviderKeyView["provider"], status: ProviderKeyView["status"], last_used_at: string | null = null): ProviderKeyView => ({
+const key = (id: string, provider: trust.ProviderKeyView["provider"], status: trust.ProviderKeyView["status"], last_used_at: string | null = null): trust.ProviderKeyView => ({
   id,
   provider,
   status,
@@ -10,7 +10,7 @@ const key = (id: string, provider: ProviderKeyView["provider"], status: Provider
   created_by: "u1",
   last_used_at,
 });
-const fill = (model: string, fields: Partial<FillView> = {}): FillView => ({
+const fill = (model: string, fields: Partial<matrix.FillView> = {}): matrix.FillView => ({
   provider: "anthropic",
   model,
   effort: null,

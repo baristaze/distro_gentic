@@ -26,7 +26,7 @@ from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
 from acme.client.client import ApiClient
-from acme.client.types import IsolationMode
+from acme.client.types.hosts import IsolationMode
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
