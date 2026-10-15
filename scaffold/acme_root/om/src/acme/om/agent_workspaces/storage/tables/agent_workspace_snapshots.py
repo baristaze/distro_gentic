@@ -17,7 +17,7 @@ class AgentWorkspaceSnapshots(IdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "agent_workspace_snapshots"
     __org_id_index__ = False
     __table_args__ = (
-        Index("ix_agent_workspace_snapshots_org_id_session_id", "org_id", "agent_session_id"),
+        Index("ix_agent_workspace_snapshots_org_id_agent_session_id", "org_id", "agent_session_id"),
     )
     agent_session_id: Mapped[UUID]
     hash: Mapped[str]

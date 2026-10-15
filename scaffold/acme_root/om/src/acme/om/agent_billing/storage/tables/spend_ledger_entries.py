@@ -21,7 +21,7 @@ class SpendLedgerEntries(IdentifiableMixin, CreatedMixin, Base):
         # index the second time. An entry of no hold names none, and a null
         # never meets another.
         Index(
-            "uq_spend_ledger_entries_org_id_kind_hold_id",
+            "uq_spend_ledger_entries_org_id_kind_spend_hold_id",
             "org_id",
             "kind",
             "spend_hold_id",
@@ -37,9 +37,9 @@ class SpendLedgerEntries(IdentifiableMixin, CreatedMixin, Base):
         ),
         # A call's entries, and a session's recent holds and approvals, which
         # the anomaly guard reads before every call.
-        Index("ix_spend_ledger_entries_org_id_hold_id", "org_id", "spend_hold_id"),
+        Index("ix_spend_ledger_entries_org_id_spend_hold_id", "org_id", "spend_hold_id"),
         Index(
-            "ix_spend_ledger_entries_org_id_session_id_created_at",
+            "ix_spend_ledger_entries_org_id_agent_session_id_created_at",
             "org_id",
             "agent_session_id",
             "created_at",

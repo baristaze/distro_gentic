@@ -1,14 +1,14 @@
 """Each tenant's fair share of the loops, with its fence.
 
 Revision ID: 202610121726
-Revises: 202610121725
+Revises: 202610150049
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610121726"
-down_revision = "202610121725"
+down_revision = "202610150049"
 branch_labels = None
 depends_on = None
 

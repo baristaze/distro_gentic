@@ -2,14 +2,14 @@
 column takes the name, and every value stays.
 
 Revision ID: 202610041627
-Revises: 202610041626
+Revises: 202610034000
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610041627"
-down_revision = "202610041626"
+down_revision = "202610034000"
 branch_labels = None
 depends_on = None
 

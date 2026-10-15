@@ -21,7 +21,7 @@ class AgentAutomationRuns(IdentifiableMixin, CreatedMixin, Base):
             "agent_automation_id",
             "created_at",
         ),
-        Index("ix_agent_automation_runs_org_id_session_id", "org_id", "agent_session_id"),
+        Index("ix_agent_automation_runs_org_id_agent_session_id", "org_id", "agent_session_id"),
         # Its queued runs, oldest first, on every tick, and their count at
         # every admission: runs are never trimmed, so the status leads.
         Index(

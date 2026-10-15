@@ -3,14 +3,14 @@ its fence, kept to SELECT and INSERT for the serving logins and taken with
 their session or their tenant by the purge login.
 
 Revision ID: 202610030801
-Revises: 202610021301
+Revises: 202610150049
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610030801"
-down_revision = "202610021301"
+down_revision = "202610150049"
 branch_labels = None
 depends_on = None
 

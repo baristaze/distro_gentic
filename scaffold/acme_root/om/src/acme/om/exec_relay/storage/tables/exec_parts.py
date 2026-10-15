@@ -15,7 +15,7 @@ class ExecParts(IdentifiableMixin, CreatedMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index("uq_exec_parts_org_id_row_id_seq", "org_id", "row_id", "seq", unique=True),
-        Index("ix_exec_parts_org_id_session_id", "org_id", "agent_session_id"),
+        Index("ix_exec_parts_org_id_agent_session_id", "org_id", "agent_session_id"),
     )
     agent_session_id: Mapped[UUID]
     row_id: Mapped[UUID]

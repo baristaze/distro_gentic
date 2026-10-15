@@ -14,7 +14,7 @@ class PoolVms(GlobalIdentifiableMixin, CreatedMixin, Base):
 
     __tablename__ = "pool_vms"
     __table_args__ = (
-        Index("ix_pool_vms_tenant_id_session_id", "tenant_id", "agent_session_id"),
+        Index("ix_pool_vms_tenant_id_agent_session_id", "tenant_id", "agent_session_id"),
         Index("uq_pool_vms_key_digest", "key_digest", unique=True),
         Index("uq_pool_vms_name", "name", unique=True),
     )

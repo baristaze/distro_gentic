@@ -22,18 +22,18 @@ UPDATE activity.spend_ledger_entries
 ALTER TABLE activity.spend_ledger_entries FORCE ROW LEVEL SECURITY;
 
 -- The kinds of the events they announce move in place.
-ALTER TABLE activity.events NO FORCE ROW LEVEL SECURITY;
-UPDATE activity.events SET kind = CASE kind
+ALTER TABLE activity.change_events NO FORCE ROW LEVEL SECURITY;
+UPDATE activity.change_events SET kind = CASE kind
         WHEN 'billing.account.created' THEN 'agent_billing.spend_account.created'
         WHEN 'billing.account.updated' THEN 'agent_billing.spend_account.updated'
         WHEN 'intake.account_link.deleted' THEN 'intake.identity_link.deleted'
     END
     WHERE kind IN ('billing.account.created', 'billing.account.updated', 'intake.account_link.deleted');
-UPDATE activity.events
+UPDATE activity.change_events
     SET payload = jsonb_set(payload, '{kind}', to_jsonb(CASE payload ->> 'kind'
         WHEN 'billing.account.created' THEN 'agent_billing.spend_account.created'
         WHEN 'billing.account.updated' THEN 'agent_billing.spend_account.updated'
         WHEN 'intake.account_link.deleted' THEN 'intake.identity_link.deleted'
     END))
     WHERE kind = 'outbox.row.failed' AND payload ->> 'kind' IN ('billing.account.created', 'billing.account.updated', 'intake.account_link.deleted');
-ALTER TABLE activity.events FORCE ROW LEVEL SECURITY;
+ALTER TABLE activity.change_events FORCE ROW LEVEL SECURITY;

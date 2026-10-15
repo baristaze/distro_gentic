@@ -15,7 +15,7 @@ class Validations(IdentifiableMixin, CreatedMixin, Base):
     __tablename__ = "validations"
     __org_id_index__ = False
     __table_args__ = (
-        Index("ix_validations_org_id_session_id_id", "org_id", "agent_session_id", "id"),
+        Index("ix_validations_org_id_agent_session_id_id", "org_id", "agent_session_id", "id"),
     )
     agent_session_id: Mapped[UUID]
     agent_project: Mapped[str]

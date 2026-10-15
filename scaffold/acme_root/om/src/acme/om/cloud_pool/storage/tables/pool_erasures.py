@@ -13,7 +13,7 @@ class PoolErasures(GlobalIdentifiableMixin, CreatedMixin, Base):
     __tablename__ = "pool_erasures"
     __table_args__ = (
         Index(
-            "uq_pool_erasures_tenant_id_session_id", "tenant_id", "agent_session_id", unique=True
+            "uq_pool_erasures_tenant_id_agent_session_id", "tenant_id", "agent_session_id", unique=True
         ),
     )
     tenant_id: Mapped[UUID]

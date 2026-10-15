@@ -16,7 +16,7 @@ class AgentKnowledgeRecalls(IdentifiableMixin, CreatedMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index(
-            "uq_agent_knowledge_recalls_org_id_session_id_entry_id",
+            "uq_agent_knowledge_recalls_org_id_agent_session_id_entry_id",
             "org_id",
             "agent_session_id",
             "entry_id",

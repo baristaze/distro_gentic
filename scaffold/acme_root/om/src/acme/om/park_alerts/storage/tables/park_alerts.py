@@ -16,7 +16,7 @@ class ParkAlerts(IdentifiableMixin, CreatedMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index("ix_park_alerts_org_id_recipient_created_at", "org_id", "recipient", "created_at"),
-        Index("ix_park_alerts_org_id_session_id", "org_id", "agent_session_id"),
+        Index("ix_park_alerts_org_id_agent_session_id", "org_id", "agent_session_id"),
     )
     recipient: Mapped[UUID]
     agent_session_id: Mapped[UUID]

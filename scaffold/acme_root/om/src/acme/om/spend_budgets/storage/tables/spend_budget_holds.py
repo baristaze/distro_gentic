@@ -17,7 +17,7 @@ class SpendBudgetHolds(IdentifiableMixin, CreatedMixin, Base):
     __table_args__ = (
         # The sweep reads the holds no settlement closed, across tenants, a
         # slice of their opening times at a time.
-        Index("ix_budget_holds_created_at", "created_at"),
+        Index("ix_spend_budget_holds_created_at", "created_at"),
     )
     spender_id: Mapped[UUID]
     agent_session_id: Mapped[UUID | None]

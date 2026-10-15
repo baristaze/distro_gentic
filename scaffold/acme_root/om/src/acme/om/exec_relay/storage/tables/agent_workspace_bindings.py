@@ -15,7 +15,7 @@ class AgentWorkspaceBindings(IdentifiableMixin, TrackableMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index(
-            "uq_agent_workspace_bindings_org_id_session_id",
+            "uq_agent_workspace_bindings_org_id_agent_session_id",
             "org_id",
             "agent_session_id",
             unique=True,
