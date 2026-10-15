@@ -1,7 +1,8 @@
 """The platform's half of the API's container: the managers the platform's
 root builds, every layer the platform builds over them in this process, and
 the services, the engine's beside the platform's and the product's
-(`product_api.PRODUCT_API`). The container calls `build_platform_api` once,
+(`product_api.PRODUCT_API`), each product service over the live parts built
+here (`products.ProductLive`). The container calls `build_platform_api` once,
 and holds what it answers."""
 
 from dataclasses import dataclass
@@ -47,6 +48,7 @@ from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api import product_api
+from acme.services.api.products import ProductLive
 from acme.services.api.services.impl.platform_root import build_platform_services
 from acme.services.api.services.impl.root import build_services
 from acme.services.api.services.platform import PlatformServicesInterface
@@ -151,12 +153,14 @@ def build_platform_api(
     held.append(intake)
     # The streams the runners write, read from the shared cache.
     stream = build_stream(infra, lambda: managers.change_events, product_kinds=ports.kinds)
-    # A product's claimants write its streams for the items they hold.
+    # A product's claimants write its streams for the items they hold, and
+    # its own services write the kinds no claimant does.
+    kind_streams = build_kind_streams(infra, ports.kinds)
     watch = build_watch(
         managers,
         stream,
         WatchOptions(live_read_key=settings.live_read_key),
-        kind_streams=build_kind_streams(infra, ports.kinds),
+        kind_streams=kind_streams,
     )
     # Outside a local stack, a session starts in an agent project.
     agent_project_required = settings.environment != LOCAL
@@ -212,9 +216,13 @@ def build_platform_api(
             client=McpClientSdkImpl(),
             options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
         ),
-        # Each namespace the product serves, over the managers it builds.
+        # Each namespace the product serves, over the managers it builds and
+        # the live parts built here.
         products=product_api.PRODUCT_API.services(
-            storage, managers, product_namespaces.PRODUCT_NAMESPACES
+            storage,
+            managers,
+            product_namespaces.PRODUCT_NAMESPACES,
+            ProductLive(watch, kind_streams),
         ),
     )
     return PlatformApi(managers, services, stream)
