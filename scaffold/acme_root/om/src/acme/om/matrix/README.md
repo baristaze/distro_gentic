@@ -7,7 +7,7 @@ made of](../../../../README.md).
 ## What it holds
 
 - **Question**: what a session asks for each [model
-  role](../models/README.md): the environment the platform runs in, the
+  role](../language_models/README.md): the environment the platform runs in, the
   model size its agent kind asks of the role, if it asks one, the model
   role, the session's agent kind, its tenant's plan tier, and its workload
   class. A product names its sessions' workload classes; with none named,

@@ -11,7 +11,7 @@ session in the platform's cloud cannot run a command or validate. The spec
 names a VM per session as the cloud's level, and the engine gives the
 VMs it needs: an interface that starts, stops, snapshots, and
 destroys a VM by name, on Lima locally
-([ADR 1029](1029-a-vm-workspace-is-a-VM-of-its-own-and-its-snapshot-is-its-disk.md)).
+([ADR 1029](1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)).
 A host inside a tenant's wall already prepares a workspace, runs its
 calls, and answers them through the exec relay, and a session kept by
 snapshots already keeps them on its workspace's side of the wall

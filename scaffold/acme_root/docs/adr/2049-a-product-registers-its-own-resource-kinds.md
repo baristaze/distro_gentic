@@ -5,7 +5,7 @@
 ## Context
 
 The guideline's leases grant a scarce resource to one holder at a time
-([ADR 0086](0086-a-scarce-resource-is-leased-under-a-fencing-token.md)),
+([ADR 0086](0086-a-scarce-leasable-resource-is-leased-under-a-fencing-token.md)),
 and a kind registers as a work kind does, with its hooks. The scaffold
 names its kinds in an enum, `LeasableResourceKind`, keeps each ask's shape in
 `ASK_PAYLOADS`, and builds the leases manager with one hook per kind at

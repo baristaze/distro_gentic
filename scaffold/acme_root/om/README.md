@@ -363,4 +363,3 @@ the first one's answer.
 - The matrix and what its operators record of a model are the
   platform's, no org's. A session's pin to a version, and an org's own
   choice of fill, name their org, and go with it.
-

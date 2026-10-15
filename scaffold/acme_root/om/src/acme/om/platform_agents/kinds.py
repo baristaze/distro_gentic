@@ -509,7 +509,9 @@ ANALYSIS_V3 = revised(
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET))
+ANALYSIS_KIND = revised(
+    ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET)
+)
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way a software engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with

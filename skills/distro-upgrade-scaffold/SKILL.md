@@ -1,6 +1,6 @@
 ---
 name: distro-upgrade-scaffold
-description: "Move a product's base to a later platform release: a product rendered from the platform's scaffold, or a layer that takes its scaffold/ folder unchanged. Runs the guideline's arch-upgrade-scaffold with the platform as its source, so one move takes all three foundations, and adds what the platform's layer holds: its releases, its ADR numbers, its migrations and their stamps, and a layer's gates in a copy."
+description: "Move a product's base to a later platform release: a product rendered from the platform's scaffold, or a layer that takes its scaffold/ folder unchanged. Runs the guideline's arch-upgrade-scaffold with the platform as its source, so one move takes all three foundations, and adds what the platform's layer holds: its releases, its ADR numbers, its migrations, and a layer's gates in a copy."
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash(curl:*), Bash(gh api:*), Bash(gh release view:*), Bash(python3:*), Bash(git status:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git switch:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(git merge:*), Bash(git merge-base:*), Bash(git checkout:*), Bash(git rm:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(grep:*), Bash(uv lock:*), Bash(pnpm install:*), Bash(docker info:*), Bash(lsof:*), Bash(make setup), Bash(make check), Bash(make openapi), Bash(make infra-up), Bash(make migrate), Bash(make migrate-check), Bash(make test-integration)
 ---
 
@@ -92,26 +92,11 @@ read as the guideline's skill reads them, with these differences.
   above a layer's own on a layer built on it. A scaffold ADR never takes
   a number in the checkout's thousand, and the checkout's never one in
   the scaffold's.
-- **Migrations and their stamps** (its step 6). The platform's
-  migrations sit in the guideline's four role chains, after the
-  engine's, which sit after the guideline's, and all three are the
-  scaffold's. A role's scaffold head is the render's: the platform's
-  last migration of that role where it has one, else the engine's, else
-  the guideline's. A migration's stamp is its `revision`, and its parent
-  is its `down_revision`. The checkout's own migrations keep their
-  stamps in a copy, which applies databases: what a database applied is
-  never renamed. In a layer, which applies none, the scaffold's gate
-  holds each role's head to its highest stamp, so the first of a role's
-  own chain is re-pointed to the new scaffold head and the chain takes
-  stamps above that head, in order, each parent following. Where the
-  guideline's table re-points the first of a role's own chain in a
-  copy, only its `down_revision` changes. A migration the checkout writes
-  for a scaffold change takes a stamp above every stamp of its role,
-  the scaffold's included, and its role's head as its parent. After the
-  merge, each role has one head:
-  `grep -rn "^down_revision" <root>/om/migrations/versions/<role>/`
-  names every parent once, and the gates' `make migrate` applies each
-  chain from empty.
+- **Migrations** (its step 6). The platform's migrations sit in the
+  guideline's four role chains, after the engine's, which sit after the
+  guideline's, and all three are the scaffold's. A role's scaffold head
+  is the render's: the platform's last migration of that role where it
+  has one, else the engine's, else the guideline's.
 - **A layer's gates** (its step 8). A layer runs its scaffold's gates in
   a copy, as the platform's CI does, never in `<root>`. From the
   checkout's root, `python3 scaffold/new.py <dir>/<name>` copies it into
