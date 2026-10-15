@@ -3,11 +3,22 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from uuid import UUID
 
-from acme.infra.workspaces import IsolationMode
+from acme.infra.agent_workspaces import IsolationMode
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.limits import deadline_park
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.rules import standing_step
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import Content, TextBlock
+from acme.om.agent_steps.types.header import (
+    AgentWorkspaceSnapshot,
+    ControlCommand,
+    ControlHeader,
+    InputHeader,
+)
 from acme.om.agents.gate import ResultGateInterface
+from acme.om.agents.hooks import NO_ATTACHED_TOOLSETS, AttachedToolsets, LoopHooksInterface
 from acme.om.agents.manager import AgentsManagerInterface
 from acme.om.agents.rules import (
     CHILDREN_PARK,
@@ -26,10 +37,9 @@ from acme.om.agents.types.result import Result, Verdict
 from acme.om.agents.types.tree import AgentTree
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.attribution.rules import visibility_of
-from acme.om.attribution.types.authority import SessionAuthority
+from acme.om.attribution.types.authority import AgentSessionAuthority
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
-from acme.om.base import Platform, derived_id, new_id, utcnow
-from acme.om.budgets import BudgetsManagerInterface
+from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     KeyRevoked,
@@ -40,16 +50,7 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.rules import standing_step
-from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import (
-    ControlCommand,
-    ControlHeader,
-    InputHeader,
-    WorkspaceSnapshot,
-)
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.rules import instruct_refusal
@@ -60,7 +61,7 @@ CREATED = "agents.agent_tree.created"
 UPDATED = "agents.agent_tree.updated"
 
 
-class AgentsOptions(Platform):
+class AgentsOptions(OmBase):
     max_limit: int = 50  # children one read of the cascade holds
     purge_batch: int = 1000  # trees one purge statement deletes at most
 
@@ -70,7 +71,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
         self,
         storage: AgentStorageInterface,
         sessions: AgentSessionsManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         attribution: AttributionManagerInterface,
         gate: ResultGateInterface,
         kinds: AgentKindCatalog,
@@ -79,13 +80,15 @@ class AgentsManagerImpl(AgentsManagerInterface):
         options: AgentsOptions,
         clock: Callable[[], datetime] = utcnow,
         *,
-        budgets: BudgetsManagerInterface,
+        budgets: SpendBudgetsManagerInterface,
         windows: WindowsManagerInterface,
         tool_classes: Mapping[str, str],
         secret_tools: frozenset[str],
         tools: ToolsManagerInterface,
+        hooks: LoopHooksInterface,
     ) -> None:
         self._tools = tools
+        self._hooks = hooks
         self._budgets = budgets
         self._windows = windows
         self._tool_classes = tool_classes
@@ -101,16 +104,19 @@ class AgentsManagerImpl(AgentsManagerInterface):
         self._options = options
         self._clock = clock
 
-    async def start_session(self, ctx: TenantContext, start: Start) -> AgentSession:
+    async def start_agent_session(self, ctx: TenantContext, start: Start) -> AgentSession:
         ctx.require(Permission.WRITE)
         kind = self._kinds.latest(start.kind)
-        self._may_instruct(ctx, kind.tools)
+        # What the hooks attach is asked of a session that stands, so it is
+        # classed at each instruction (`require_instructor`), the first one
+        # that wakes the session included.
+        self._may_instruct(ctx, kind.tools, NO_ATTACHED_TOOLSETS)
         # The tree first: a session never stands without the tree it draws on.
         await self._create_tree(
             ctx, tree_for(kind, start.id, start.deadline, self._clock(), ctx.user_id)
         )
         session = self._session(ctx, kind, start.id, start.title, start.participants)
-        created = await self._sessions.create_session(ctx, session)
+        created = await self._sessions.create_agent_session(ctx, session)
         await self._open(ctx, created)
         standing = self._standing(ctx, created, start.standing)
         if standing:
@@ -118,30 +124,32 @@ class AgentsManagerImpl(AgentsManagerInterface):
         return created
 
     async def switch_standing(
-        self, ctx: TenantContext, session_id: UUID, switch: SwitchStanding
-    ) -> Step:
+        self, ctx: TenantContext, agent_session_id: UUID, switch: SwitchStanding
+    ) -> AgentStep:
         ctx.require(Permission.WRITE)
-        step = standing_step(switch.id, self._clock(), session_id, ctx, switch.standing)
-        (stored,), _ = await self._sessions.receive(ctx, session_id, [step])
+        step = standing_step(switch.id, self._clock(), agent_session_id, ctx, switch.standing)
+        (stored,), _ = await self._sessions.receive(ctx, agent_session_id, [step])
         return stored
 
-    async def require_instructor(self, ctx: TenantContext, session_id: UUID) -> None:
+    async def require_instructor(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         ctx.require(Permission.WRITE)
-        session = await self._find(ctx, session_id)
+        session = await self._find(ctx, agent_session_id)
         if session is not None:
-            self._may_instruct(ctx, session.tools)
+            attached = await self._hooks.attached_toolsets(ctx, session)
+            self._may_instruct(ctx, session.tools, attached)
 
     async def spawn(
         self, ctx: TenantContext, parent_id: UUID, spawn: Spawn, fork: TakeSnapshot | None = None
     ) -> AgentSession:
         ctx.require(Permission.WRITE)
-        parent = await self._sessions.get_session(ctx, parent_id)
+        parent = await self._sessions.get_agent_session(ctx, parent_id)
         child = await self._find(ctx, spawn.id)
         if child is not None and child.parent_id != parent_id:
             raise ValidationFailed(f"agent session {spawn.id} is not a child of {parent_id}")
         taken: TakenSnapshot | None = None
         if child is not None:
-            self._may_instruct(ctx, child.tools)
+            attached = await self._hooks.attached_toolsets(ctx, child)
+            self._may_instruct(ctx, child.tools, attached)
         else:
             kind = self._kinds.latest(spawn.kind)
             if kind.result_tool is not None and kind.result_tool not in parent.tools:
@@ -154,7 +162,8 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 raise ValidationFailed(f"agent kind {kind.name} has no workspace to fork into")
             # Its objective instructs it: whoever spawns it may make every
             # call it will offer, asked before anything is made.
-            self._may_instruct(ctx, [tool for tool in kind.tools if tool in parent.tools])
+            cut = [tool for tool in kind.tools if tool in parent.tools]
+            self._may_instruct(ctx, cut, NO_ATTACHED_TOOLSETS)
             tree = await self._tree(ctx, parent.root_id)
             refusal = tree_refusal(tree, parent.depth + 1)
             if refusal is not None:
@@ -170,7 +179,11 @@ class AgentsManagerImpl(AgentsManagerInterface):
             # and the principal and the spender the authority's, each taken
             # from the parent.
             made = self._session(ctx, kind, spawn.id, spawn.title, (), parent_id)
-            child = await self._sessions.create_session(ctx, made)
+            child = await self._sessions.create_agent_session(ctx, made)
+            # What the hooks attach is asked of the child once it stands,
+            # before its objective instructs it: one refused wakes nothing,
+            # and a spawn asked again is refused again above.
+            self._may_instruct(ctx, (), await self._hooks.attached_toolsets(ctx, child))
         share = self._kinds.get(child.kind, child.kind_version).share
         if share is not None:
             # Its share is its own budget, written before the objective wakes
@@ -197,12 +210,12 @@ class AgentsManagerImpl(AgentsManagerInterface):
             # makes the same step, which the inbox answers as stored.
             copy = await self._fork_copy(ctx, child, fork, taken)
             restore_id = derived_id(child.id, child.created_at, "fork")
-            restore = Step(
+            restore = AgentStep(
                 id=restore_id,
                 created_at=self._clock(),
-                session_id=child.id,
+                agent_session_id=child.id,
                 loop_id=restore_id,
-                type=StepType.CONTROL,
+                type=AgentStepType.CONTROL,
                 actor=Actor.ENGINE,
                 origin=Origin.PARENT,
                 header=ControlHeader(command=ControlCommand.RESTORE, snapshot=copy),
@@ -221,7 +234,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
         child: AgentSession,
         fork: TakeSnapshot,
         taken: TakenSnapshot | None,
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         """The child's copy of its parent's workspace, under an id its
         spawn derives. A spawn asked again answers the copy the child's
         history already names; one that never got so far takes the
@@ -234,16 +247,16 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 taken = await fork()
         return await self._tools.fork_snapshot(ctx, child.id, snapshot_id, taken)
 
-    async def tree_of(self, ctx: TenantContext, session_id: UUID) -> AgentTree:
+    async def tree_of(self, ctx: TenantContext, agent_session_id: UUID) -> AgentTree:
         ctx.require(Permission.READ)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         return await self._tree(ctx, session.root_id)
 
     async def set_deadline(
-        self, ctx: TenantContext, session_id: UUID, deadline: datetime | None
+        self, ctx: TenantContext, agent_session_id: UUID, deadline: datetime | None
     ) -> AgentTree:
         ctx.require(Permission.WRITE)
-        tree = await self.tree_of(ctx, session_id)
+        tree = await self.tree_of(ctx, agent_session_id)
         moved = AgentTree.model_validate(
             {
                 **tree.model_dump(),
@@ -262,24 +275,24 @@ class AgentsManagerImpl(AgentsManagerInterface):
             # member marked deleted waits on nothing, and the rest go on.
             for member in (tree.id, *await self._below(ctx, tree.id)):
                 with contextlib.suppress(NotFound):
-                    await self._sessions.wake_session(ctx, member, deadline_park())
+                    await self._sessions.wake_agent_session(ctx, member, deadline_park())
         return moved
 
-    async def cancel_children(self, ctx: TenantContext, session_id: UUID) -> tuple[UUID, ...]:
+    async def cancel_children(self, ctx: TenantContext, agent_session_id: UUID) -> tuple[UUID, ...]:
         ctx.require(Permission.WRITE)
-        below = await self._below(ctx, session_id)
+        below = await self._below(ctx, agent_session_id)
         return tuple([child for child in below if await self._cancel(ctx, child)])
 
     async def report_to_parent(
-        self, ctx: TenantContext, session_id: UUID, report: Report
-    ) -> Step | None:
+        self, ctx: TenantContext, agent_session_id: UUID, report: Report
+    ) -> AgentStep | None:
         ctx.require(Permission.WRITE)
         if report.park is not None and not notes_parent(report.park):
             return None
         # The mark and the private data as the child's history stands now:
         # data it read, or a report it took, since its cached status was
         # folded count too.
-        child = await self._sessions.get_session_at_head(ctx, session_id)
+        child = await self._sessions.get_agent_session_at_head(ctx, agent_session_id)
         if child.parent_id is None:
             return None
         parent = await self._find(ctx, child.parent_id)
@@ -288,22 +301,22 @@ class AgentsManagerImpl(AgentsManagerInterface):
         principal = await self._attribution.call_principal(ctx, child.id)
         if report.outcome is not None:
             # One end a loop: a run that ends it again writes this report once.
-            step_id = derived_id(report.loop_id, child.created_at, "report")
+            agent_step_id = derived_id(report.loop_id, child.created_at, "report")
         else:
-            step_id = new_id()
+            agent_step_id = new_id()
         # The child's words are data in its parent: an agent's message, never
         # its parent's instruction, and it marks the parent as data does.
         # What the child holds private, its parent holds once it reads them.
         step = self._input(
             parent,
             principal,
-            step_id,
+            agent_step_id,
             from_agent=child,
             origin=Origin.ENGINE,
             text=report_text(child, report),
             waking=report_wakes(report),
             untrusted=child.untrusted,
-            holds_private=child.holds_private,
+            holds_private=await self._holds_private(ctx, child),
         )
         try:
             # A report over the bound seals its whole under the parent's key.
@@ -313,39 +326,39 @@ class AgentsManagerImpl(AgentsManagerInterface):
             (stored,), parent = await self._sessions.receive(ctx, parent.id, [bounded])
         except KeyRevoked:
             # The parent's content is past its life: it takes no content
-            # again, so the report has no reader, its artifact included, and
+            # again, so the report has no reader, its tool output included, and
             # the child's loop ends as under a parent gone.
             return None
         if report_wakes(report) and parent.park == CHILDREN_PARK:
             # A parent that waits on its children waits for this report: it
             # clears the park, and the parent's gates run again as it resumes.
-            await self._sessions.wake_session(ctx, parent.id, CHILDREN_PARK)
+            await self._sessions.wake_agent_session(ctx, parent.id, CHILDREN_PARK)
         return stored
 
     async def hand_off(
-        self, ctx: TenantContext, session_id: UUID, handoff: Handoff
+        self, ctx: TenantContext, agent_session_id: UUID, handoff: Handoff
     ) -> AgentSession:
         ctx.require(Permission.WRITE)
-        source = await self._sessions.get_session(ctx, session_id)
+        source = await self._sessions.get_agent_session(ctx, agent_session_id)
         session = await self._find(ctx, handoff.id)
-        if session is not None and session.handed_off_from != session_id:
+        if session is not None and session.handed_off_from != agent_session_id:
             raise ValidationFailed(
-                f"agent session {handoff.id} was not handed over by {session_id}"
+                f"agent session {handoff.id} was not handed over by {agent_session_id}"
             )
         if session is None:
             kind = self._kinds.latest(handoff.kind)
             await self._create_tree(
                 ctx, tree_for(kind, handoff.id, None, self._clock(), ctx.user_id)
             )
-            principal = await self._attribution.call_principal(ctx, session_id)
+            principal = await self._attribution.call_principal(ctx, agent_session_id)
             person = principal.id if principal.kind is PrincipalKind.PERSON else None
             participants = () if person is None else (person,)
             # It runs under the principal its source's calls run under, who
             # steers it from its start.
             made = self._session(
-                ctx, kind, handoff.id, handoff.title, participants, handed_off_from=session_id
+                ctx, kind, handoff.id, handoff.title, participants, handed_off_from=agent_session_id
             ).model_copy(update={"steerer": person})
-            session = await self._sessions.create_session(ctx, made)
+            session = await self._sessions.create_agent_session(ctx, made)
         authority = await self._open(ctx, session)
         # The objective is the agent's, so it is data and wakes nothing: the
         # session starts when its principal speaks.
@@ -358,18 +371,21 @@ class AgentsManagerImpl(AgentsManagerInterface):
             text=handoff.objective,
             waking=False,
             untrusted=session.untrusted,
+            holds_private=await self._holds_private(ctx, source),
         )
         standing = self._standing(ctx, session, handoff.standing)
         await self._steps.append_inputs(ctx, session.id, [*standing, objective])
         return session
 
-    async def judge_result(self, ctx: TenantContext, session_id: UUID, result: Result) -> Verdict:
+    async def judge_result(
+        self, ctx: TenantContext, agent_session_id: UUID, result: Result
+    ) -> Verdict:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         refusal = claim_refusal(result)
         if refusal is not None:
             return Verdict(accepted=False, reason=refusal)
-        return await self._gate.check(ctx, session_id, result)
+        return await self._gate.check(ctx, agent_session_id, result)
 
     async def purge_tree(self, org_id: UUID, tree_id: UUID) -> bool:
         return await self._storage.purge_tree(org_id, tree_id)
@@ -380,23 +396,41 @@ class AgentsManagerImpl(AgentsManagerInterface):
             return 0
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
-    def _may_instruct(self, ctx: TenantContext, tools: Iterable[str]) -> None:
+    def _may_instruct(
+        self, ctx: TenantContext, tools: Iterable[str], attached: AttachedToolsets
+    ) -> None:
         """The classes a registry offers are what its sender must be able to
-        make. A name the catalog cannot class offers a call no one can
-        check, so it is refused, never skipped."""
-        names = tuple(tools)
-        unknown = sorted(name for name in names if name not in self._tool_classes)
+        make: its tools', as the catalog classes them, and those of the tools
+        its `attached` toolsets give, deferred ones included, as their own
+        specs do. A name nothing can class offers a call no one can check,
+        so it is refused, never skipped."""
+        classes = {
+            **self._tool_classes,
+            **{tool.spec.name: tool.spec.authorization_class for tool in attached.tools},
+        }
+        names = (*tools, *attached.names)
+        unknown = sorted(name for name in names if name not in classes)
         if unknown:
             raise NotAuthorized(f"no tool of the catalog classes {', '.join(unknown)}")
-        refusal = instruct_refusal(ctx, [self._tool_classes[name] for name in names])
+        refusal = instruct_refusal(ctx, [classes[name] for name in names])
         if refusal is not None:
             raise NotAuthorized(refusal)
+
+    async def _holds_private(self, ctx: TenantContext, session: AgentSession) -> bool:
+        """Whether `session` holds private data or credentials, as a message
+        it writes into another session carries it: its own mark, or a tool
+        the toolsets its hooks attach is given a secret, which its mark,
+        set when it was made, never counts."""
+        if session.holds_private:
+            return True
+        attached = await self._hooks.attached_toolsets(ctx, session)
+        return any(tool.spec.secrets for tool in attached.tools)
 
     def _session(
         self,
         ctx: TenantContext,
         kind: AgentKind,
-        session_id: UUID,
+        agent_session_id: UUID,
         title: str,
         participants: tuple[UUID, ...],
         parent_id: UUID | None = None,
@@ -410,7 +444,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
         set."""
         now = self._clock()
         return AgentSession(
-            id=session_id,
+            id=agent_session_id,
             created_at=now,
             updated_at=now,
             created_by=ctx.user_id,
@@ -423,19 +457,19 @@ class AgentsManagerImpl(AgentsManagerInterface):
             holds_private=kind.private_data or not self._secret_tools.isdisjoint(kind.tools),
             visibility=visibility_of(kind.authority),
             parent_id=parent_id,
-            root_id=session_id,
+            root_id=agent_session_id,
             handed_off_from=handed_off_from,
         )
 
-    def _standing(self, ctx: TenantContext, session: AgentSession, text: str) -> list[Step]:
+    def _standing(self, ctx: TenantContext, session: AgentSession, text: str) -> list[AgentStep]:
         """The standing text a session pins when it is made, under an id its
         making derives, so a retry pins the one it pinned: none for none."""
         if not text:
             return []
-        step_id = derived_id(session.id, session.created_at, "standing")
-        return [standing_step(step_id, self._clock(), session.id, ctx, text)]
+        agent_step_id = derived_id(session.id, session.created_at, "standing")
+        return [standing_step(agent_step_id, self._clock(), session.id, ctx, text)]
 
-    async def _open(self, ctx: TenantContext, session: AgentSession) -> SessionAuthority:
+    async def _open(self, ctx: TenantContext, session: AgentSession) -> AgentSessionAuthority:
         """The session's authority, in the mode of the kind version it
         pinned; made once, and answered as stored after."""
         mode = self._kinds.get(session.kind, session.kind_version).authority
@@ -445,7 +479,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
         self,
         session: AgentSession,
         principal: Principal,
-        step_id: UUID,
+        agent_step_id: UUID,
         *,
         from_agent: AgentSession,
         origin: Origin,
@@ -453,17 +487,18 @@ class AgentsManagerImpl(AgentsManagerInterface):
         waking: bool,
         untrusted: bool,
         holds_private: bool = False,
-    ) -> Step:
+    ) -> AgentStep:
         """A message an agent writes into `session`: on the authority
         `principal`, naming the agent that wrote it, and carrying the mark of
-        the session it came from, `untrusted`, and, for a report, whether
-        that session holds private data, `holds_private`."""
-        return Step(
-            id=step_id,
+        the session it came from, `untrusted`, and, for a report or a
+        hand-over's objective, whether that session holds private data or
+        credentials, `holds_private`."""
+        return AgentStep(
+            id=agent_step_id,
             created_at=self._clock(),
-            session_id=session.id,
-            loop_id=step_id,
-            type=StepType.MESSAGE,
+            agent_session_id=session.id,
+            loop_id=agent_step_id,
+            type=AgentStepType.MESSAGE,
             actor=Actor.AGENT,
             origin=origin,
             header=InputHeader(
@@ -472,7 +507,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 agent=AgentRef(
                     kind=from_agent.kind,
                     version=from_agent.kind_version,
-                    session_id=from_agent.id,
+                    agent_session_id=from_agent.id,
                 ),
                 untrusted=untrusted,
                 holds_private=holds_private,
@@ -480,43 +515,45 @@ class AgentsManagerImpl(AgentsManagerInterface):
             content=Content(blocks=(TextBlock(text=text),)),
         )
 
-    async def _cancel(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def _cancel(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         """A `cancel` control on the loop the session has open, or is about
         to open, decided from its status brought up to its history: an idle
         session has none and is left as it is, and so is one marked deleted,
         which was idle when it was marked. A session pending after its loop
         ended waits on an input, which begins the next loop."""
         try:
-            session = await self._sessions.project_status(ctx, session_id)
+            session = await self._sessions.project_status(ctx, agent_session_id)
         except NotFound:
             return False
-        cursor = await self._steps.get_cursor(ctx, session_id)
-        if session.status is SessionStatus.IDLE or cursor.head == 0:
+        cursor = await self._steps.get_cursor(ctx, agent_session_id)
+        if session.status is AgentSessionStatus.IDLE or cursor.head == 0:
             return False
-        (last,) = (await self._steps.get_steps(ctx, session_id, cursor.head - 1, 1)).items
+        (last,) = (
+            await self._steps.get_agent_steps(ctx, agent_session_id, cursor.head - 1, 1)
+        ).items
         loop_id = last.loop_id
-        if last.type is StepType.LOOP_ENDED and session.pending_input is not None:
+        if last.type is AgentStepType.LOOP_ENDED and session.pending_input is not None:
             loop_id = session.pending_input
-        control = Step(
+        control = AgentStep(
             id=new_id(),
             created_at=self._clock(),
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             loop_id=loop_id,
-            type=StepType.CONTROL,
+            type=AgentStepType.CONTROL,
             actor=Actor.ENGINE,
             origin=Origin.PARENT,
             header=ControlHeader(command=ControlCommand.CANCEL),
         )
         # Through the inbox: a parked child the cancel clears turns pending,
         # and its loop's run is asked for to end it.
-        await self._sessions.receive(ctx, session_id, [control])
+        await self._sessions.receive(ctx, agent_session_id, [control])
         return True
 
-    async def _below(self, ctx: TenantContext, session_id: UUID) -> list[UUID]:
-        """Every session below `session_id`, children and theirs, a level at
+    async def _below(self, ctx: TenantContext, agent_session_id: UUID) -> list[UUID]:
+        """Every session below `agent_session_id`, children and theirs, a level at
         a time; the tree's count bounds the walk."""
         below: list[UUID] = []
-        parents = [session_id]
+        parents = [agent_session_id]
         while parents:
             parent_id = parents.pop(0)
             after: UUID | None = None
@@ -532,9 +569,9 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 after = page.items[-1].id
         return below
 
-    async def _find(self, ctx: TenantContext, session_id: UUID) -> AgentSession | None:
+    async def _find(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession | None:
         try:
-            return await self._sessions.get_session(ctx, session_id)
+            return await self._sessions.get_agent_session(ctx, agent_session_id)
         except NotFound:
             return None
 

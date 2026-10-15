@@ -3,16 +3,13 @@ one folder, for tests and the fast gate."""
 
 from pathlib import Path
 
+from acme.infra.agent_root import AgentInfra, AgentInfraRoot
 from acme.infra.buckets import BucketsInterface
 from acme.infra.buckets.local import BucketsLocalImpl
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.cache.memory import CacheMemoryImpl
 from acme.infra.flags import FlagsInterface
 from acme.infra.flags.memory import FlagsMemoryImpl
-from acme.infra.keys import KeyServiceInterface
-from acme.infra.keys.memory import KeyServiceMemoryImpl
-from acme.infra.machines import MachinesInterface
-from acme.infra.machines.twin import MachinesTwinImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.null import OutageSignalNullImpl
 from acme.infra.queues import QueuesInterface
@@ -22,14 +19,9 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.topics import TopicsInterface
 from acme.infra.topics.memory import TopicsMemoryImpl
-from acme.infra.transports import CredentialBrokerInterface, TransportInterface
-from acme.infra.transports.broker import BrokerTwinImpl
-from acme.infra.transports.twin import TransportTwinImpl
-from acme.infra.workspaces import WorkspaceProviderInterface
-from acme.infra.workspaces.twin import WorkspaceTwinImpl
 
 
-class InfraLocalImpl(InfraInterface):
+class InfraLocalImpl(AgentInfraRoot, InfraInterface):
     def __init__(self, root: Path) -> None:
         self._root = root
         self._caches: dict[CacheScope, CacheInterface] = {
@@ -41,12 +33,8 @@ class InfraLocalImpl(InfraInterface):
         self._topics = TopicsMemoryImpl()
         self._queues = QueueMemoryImpl()
         self._secrets = SecretsLocalImpl(root / "secrets.env")
-        self._keys = KeyServiceMemoryImpl()
-        self._machines = MachinesTwinImpl(root / "machines")
-        self._workspaces = WorkspaceTwinImpl()
-        self._broker = BrokerTwinImpl()
-        self._transport = TransportTwinImpl(self._secrets, self._broker)
         self._flags = FlagsMemoryImpl(file=root / "flags.json")
+        self._agent_infra = AgentInfra.local(root, self._secrets)
 
     def get_cache(self, scope: CacheScope) -> CacheInterface:
         return self._caches[scope]
@@ -63,21 +51,6 @@ class InfraLocalImpl(InfraInterface):
     def get_secrets(self) -> SecretsInterface:
         return self._secrets
 
-    def get_keys(self) -> KeyServiceInterface:
-        return self._keys
-
-    def get_workspaces(self) -> WorkspaceProviderInterface:
-        return self._workspaces
-
-    def get_machines(self) -> MachinesInterface:
-        return self._machines
-
-    def get_transport(self) -> TransportInterface:
-        return self._transport
-
-    def get_broker(self) -> CredentialBrokerInterface:
-        return self._broker
-
     def get_flags(self) -> FlagsInterface:
         return self._flags
 
@@ -92,11 +65,7 @@ class InfraLocalImpl(InfraInterface):
             self._buckets.describe(),
             self._queues.describe(),
             self._secrets.describe(),
-            self._keys.describe(),
-            self._machines.describe(),
-            self._workspaces.describe(),
-            self._transport.describe(),
-            self._broker.describe(),
+            *self._agent_infra.describe(),
             self._flags.describe(),
         ]
 
@@ -107,21 +76,17 @@ class InfraLocalImpl(InfraInterface):
             self._buckets,
             self._queues,
             self._secrets,
-            self._keys,
             self._flags,
         ):
             await capability.start()
-        for runtime in (self._broker, self._machines, self._workspaces, self._transport):
-            await runtime.start()
+        await self._agent_infra.start()
 
     async def close(self) -> None:
-        for runtime in (self._transport, self._workspaces, self._machines, self._broker):
-            await runtime.close()
+        await self._agent_infra.close()
         for cache in self._caches.values():
             await cache.close()
         for capability in (
             self._flags,
-            self._keys,
             self._secrets,
             self._queues,
             self._buckets,

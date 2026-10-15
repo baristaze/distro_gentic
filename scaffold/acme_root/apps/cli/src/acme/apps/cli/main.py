@@ -2,7 +2,7 @@
 the orgs, the switch between them, who the session is, a file's upload, and
 a session with an agent: started, spoken to, steered, and read.
 `listen` stays and prints every change in the org as it happens, and
-`session steps --follow` every step of a loop until it stops. Every
+`agent-session steps --follow` every step of a loop until it stops. Every
 command is a thin call into the client; the API decides, the CLI shows.
 Exit codes: 0 done, 1 the API refused, 2 usage, 3 not signed in, 4 the API
 is unreachable, 5 a followed loop stopped without succeeding."""
@@ -32,15 +32,11 @@ from acme.apps.cli.model import (
     settled,
     step_line,
 )
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import ApiClient
 from acme.client.realtime import ChannelRefused
-from acme.client.types import (
-    AgentSessionView,
-    IssuedLoginView,
-    IssuedSessionView,
-    SessionControl,
-    StepView,
-)
+from acme.client.transport import ApiError
+from acme.client.types.agent_sessions import AgentSessionControl, AgentSessionView, AgentStepView
+from acme.client.types.tenancy import IssuedAuthSessionView, IssuedLoginView
 
 EXIT_REFUSED = 1
 EXIT_USAGE = 2
@@ -208,7 +204,7 @@ def login(
     kept."""
     api_url = config.api_url(api)
     # Read before the sign-in: keeping the new session overwrites the file.
-    replaced = config.load_session()
+    replaced = config.load_auth_session()
 
     async def go() -> None:
         async with build_client(api_url, None) as client:
@@ -221,7 +217,7 @@ def login(
             except LookupError as slugs:
                 # The API signed the person in; what is missing is the flag.
                 _fail(f"choose an org with --org: {slugs}", EXIT_USAGE)
-            session = await client.exchange_session(issued.token, chosen.org.id)
+            session = await client.exchange_auth_session(issued.token, chosen.org.id)
             path = keep(api_url, session)
             typer.echo(
                 f"signed in as {session.user.display_name} at {session.org.name}"
@@ -233,7 +229,7 @@ def login(
     _run(go())
 
 
-async def end_replaced(replaced: config.Session) -> None:
+async def end_replaced(replaced: config.AuthSession) -> None:
     """Ends the session a login replaced, at the API that issued it and with
     its own token, as `logout` does. Best effort: the new session is kept
     whatever the API answers, and a session it could not end lapses when it
@@ -256,16 +252,16 @@ async def end_replaced(replaced: config.Session) -> None:
     typer.echo("the session kept before is ended")
 
 
-def keep(api_url: str, session: IssuedSessionView) -> Path:
-    """The one session the CLI holds, in the file the next command reads."""
-    return config.save_session(
-        config.Session(
+def keep(api_url: str, auth_session: IssuedAuthSessionView) -> Path:
+    """The one auth session the CLI holds, in the file the next command reads."""
+    return config.save_auth_session(
+        config.AuthSession(
             api_url=api_url,
-            token=session.token,
-            email=session.user.email,
-            display_name=session.user.display_name,
-            org_slug=session.org.slug,
-            org_name=session.org.name,
+            token=auth_session.token,
+            email=auth_session.user.email,
+            display_name=auth_session.user.display_name,
+            org_slug=auth_session.org.slug,
+            org_name=auth_session.org.name,
         )
     )
 
@@ -293,7 +289,7 @@ def switch(
     the same write, so the CLI never holds two. `ACME_TOKEN` is the
     environment's credential, not the CLI's to end, so only the kept session
     switches."""
-    session = config.load_session()
+    session = config.load_auth_session()
     if session is None:
         _fail("no kept session to switch; run `acme login`", EXIT_NOT_SIGNED_IN)
     client = setting(lambda: build_client(session.api_url, session.token))
@@ -304,7 +300,7 @@ def switch(
                 chosen = choose_org(await client.every_membership(), org)
             except LookupError as slugs:
                 _fail(f"no org {org!r} to switch to; yours are: {slugs}", EXIT_USAGE)
-            switched = await client.switch_session(chosen.org.id)
+            switched = await client.switch_auth_session(chosen.org.id)
             keep(session.api_url, switched)
             typer.echo(
                 f"switched to {switched.org.name} as {switched.user.display_name}"
@@ -318,7 +314,7 @@ def switch(
 def logout(api: Api = None) -> None:
     """Revoke the session `login` kept and forget it. `ACME_TOKEN` is the
     environment's credential, not the CLI's to revoke, and is left alone."""
-    session = config.load_session()
+    session = config.load_auth_session()
     if session is None:
         hint = "; ACME_TOKEN is the environment's, unset it" if setting(config.token) else ""
         typer.echo(f"no session to forget{hint}")
@@ -356,7 +352,7 @@ def logout(api: Api = None) -> None:
         try:
             outcome = asyncio.run(revoke())
         finally:
-            config.clear_session()
+            config.clear_auth_session()
     except ApiError as error:
         _fail(f"session forgotten, not revoked; the API refused: {error}", EXIT_REFUSED)
     except httpx.TransportError as error:
@@ -407,19 +403,21 @@ def upload(
 
 # Sessions with an agent
 
-session_app = typer.Typer(
+agent_session_app = typer.Typer(
     help="A session with an agent: start one, speak to it, steer it, read its history.",
     no_args_is_help=True,
 )
-app.add_typer(session_app, name="session")
+app.add_typer(agent_session_app, name="agent-session")
 
-SessionId = Annotated[UUID, typer.Argument(help="The session's id, as `session start` printed it.")]
+AgentSessionId = Annotated[
+    UUID, typer.Argument(help="The session's id, as `agent-session start` printed it.")
+]
 FOLLOW_SECONDS = 1.0
 """How long `steps --follow` waits between two reads of the history."""
 
 
-@session_app.command("start")
-def start_session(
+@agent_session_app.command("start")
+def start_agent_session(
     kind: Annotated[str, typer.Argument(help="The agent kind the session runs.")],
     title: Annotated[str, typer.Argument(help="What the session is about.")],
     as_json: Json = False,
@@ -437,23 +435,23 @@ def start_session(
     run(go, api)
 
 
-@session_app.command("say")
+@agent_session_app.command("say")
 def say(
-    session_id: SessionId,
+    agent_session_id: AgentSessionId,
     text: Annotated[str, typer.Argument(help="The message, in your name.")],
     as_json: Json = False,
     api: Api = None,
 ) -> None:
     """Send a message. It is kept when this returns; an idle session wakes,
     and a running loop reads it at its next model call."""
-    said = run(lambda client: client.send_message(session_id, text), api)
+    said = run(lambda client: client.send_message(agent_session_id, text), api)
     typer.echo(said.model_dump_json(indent=2) if as_json else step_line(said))
 
 
-@session_app.command("control")
+@agent_session_app.command("control")
 def control(
-    session_id: SessionId,
-    command: Annotated[SessionControl, typer.Argument(help="What the loop is told.")],
+    agent_session_id: AgentSessionId,
+    command: Annotated[AgentSessionControl, typer.Argument(help="What the loop is told.")],
     call: Annotated[
         int | None,
         typer.Option("--call", help="The seq of the tool request an interrupt stops."),
@@ -470,16 +468,16 @@ def control(
     the snapshot the session's workspace starts from next."""
     sent = run(
         lambda client: client.send_control(
-            session_id, command, request_seq=call, snapshot_id=snapshot
+            agent_session_id, command, request_seq=call, snapshot_id=snapshot
         ),
         api,
     )
     typer.echo(sent.model_dump_json(indent=2) if as_json else step_line(sent))
 
 
-@session_app.command("decide")
+@agent_session_app.command("decide")
 def decide(
-    session_id: SessionId,
+    agent_session_id: AgentSessionId,
     seq: Annotated[int, typer.Argument(help="The seq of the tool request the loop waits on.")],
     approve: Annotated[
         bool, typer.Option("--approve/--deny", help="Let the call run, or refuse it.")
@@ -489,14 +487,14 @@ def decide(
 ) -> None:
     """Decide a tool call the loop parked on."""
     decided = run(
-        lambda client: client.decide_call(session_id, seq, approve=approve, note=note), api
+        lambda client: client.decide_call(agent_session_id, seq, approve=approve, note=note), api
     )
     typer.echo(step_line(decided))
 
 
-@session_app.command("steps")
+@agent_session_app.command("steps")
 def steps(
-    session_id: SessionId,
+    agent_session_id: AgentSessionId,
     after: Annotated[int, typer.Option("--after", help="Start after this seq.")] = 0,
     follow: Annotated[
         bool,
@@ -511,11 +509,11 @@ def steps(
     """The session's history, one step a line, in its order."""
 
     async def go(client: ApiClient) -> bool:
-        seen: list[StepView] = []
+        seen: list[AgentStepView] = []
         cursor = after
         stopped: AgentSessionView | None = None
         while True:
-            page = await client.agent_session_steps(session_id, cursor)
+            page = await client.agent_session_steps(agent_session_id, cursor)
             for step in page.items:
                 typer.echo(step.model_dump_json() if as_json else step_line(step))
             seen.extend(page.items)
@@ -526,7 +524,7 @@ def steps(
                 return True
             if stopped is not None:
                 return follow_succeeded(stopped, seen)
-            session = await client.agent_session(session_id)
+            session = await client.agent_session(agent_session_id)
             if settled(session):
                 # One more read: the steps the loop wrote before it stopped.
                 stopped = session

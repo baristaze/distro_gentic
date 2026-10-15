@@ -2,30 +2,33 @@
 
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
+from acme.om.agent_steps.storage import AgentStepStorageInterface
+from acme.om.agent_steps.storage.impl.memory import AgentStepStorageMemoryImpl
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
-from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
-from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
-from acme.om.events.storage import EventStorageInterface
-from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
+from acme.om.change_events.storage import ChangeEventStorageInterface
+from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.language_models.storage import FillSetStorageInterface
+from acme.om.language_models.storage.impl.memory import FillSetStorageMemoryImpl
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.leases.storage.impl.memory import LeasesStorageMemoryImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
-from acme.om.models.storage import FillSetStorageInterface
-from acme.om.models.storage.impl.memory import FillSetStorageMemoryImpl
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.memory import OrchestrationsStorageMemoryImpl
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
-from acme.om.steps.storage import StepStorageInterface
-from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
+from acme.om.spend_budgets.storage import LedgerStorageInterface, SpendBudgetStorageInterface
+from acme.om.spend_budgets.storage.impl.memory import (
+    LedgerStorageMemoryImpl,
+    SpendBudgetStorageMemoryImpl,
+)
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tenancy.storage.impl.memory import TenancyStorageMemoryImpl
@@ -51,17 +54,42 @@ class StorageMemoryImpl(StorageInterface):
         # Postgres impl runs its statement in the request's transaction.
         self._leases = LeasesStorageMemoryImpl(self._outbox, self._orchestrations)
         self._media = MediaStorageMemoryImpl(self._outbox)
-        self._events = EventStorageMemoryImpl()
-        self._steps = StepStorageMemoryImpl()
+        self._change_events = ChangeEventStorageMemoryImpl()
+        # A copy adds its entries below this line.
+        self._agent_steps = AgentStepStorageMemoryImpl()
         self._agent_sessions = AgentSessionStorageMemoryImpl(self._outbox)
         self._agents = AgentStorageMemoryImpl(self._outbox)
         self._attribution = AttributionStorageMemoryImpl(self._outbox)
         self._privacy = PrivacyStorageMemoryImpl(self._outbox)
-        self._budgets = BudgetStorageMemoryImpl(self._outbox)
+        self._spend_budgets = SpendBudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
         self._fill_sets = FillSetStorageMemoryImpl()
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
+
+    async def healthcheck(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        return None
+
+    def get_change_event_storage(self) -> ChangeEventStorageInterface:
+        return self._change_events
+
+    def get_idempotency_storage(self) -> IdempotencyStorageInterface:
+        return self._idempotency
+
+    def get_lease_storage(self) -> LeasesStorageInterface:
+        return self._leases
+
+    def get_media_storage(self) -> MediaStorageInterface:
+        return self._media
+
+    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
+        return self._orchestrations
+
+    def get_outbox_storage(self) -> OutboxStorageInterface:
+        return self._outbox
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -69,26 +97,10 @@ class StorageMemoryImpl(StorageInterface):
     def get_work_storage(self) -> WorkStorageInterface:
         return self._work
 
-    def get_media_storage(self) -> MediaStorageInterface:
-        return self._media
+    # A copy adds its entries below this line.
 
-    def get_idempotency_storage(self) -> IdempotencyStorageInterface:
-        return self._idempotency
-
-    def get_event_storage(self) -> EventStorageInterface:
-        return self._events
-
-    def get_outbox_storage(self) -> OutboxStorageInterface:
-        return self._outbox
-
-    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
-        return self._orchestrations
-
-    def get_lease_storage(self) -> LeasesStorageInterface:
-        return self._leases
-
-    def get_step_storage(self) -> StepStorageInterface:
-        return self._steps
+    def get_agent_step_storage(self) -> AgentStepStorageInterface:
+        return self._agent_steps
 
     def get_agent_session_storage(self) -> AgentSessionStorageInterface:
         return self._agent_sessions
@@ -102,8 +114,8 @@ class StorageMemoryImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
-    def get_budget_storage(self) -> BudgetStorageInterface:
-        return self._budgets
+    def get_spend_budget_storage(self) -> SpendBudgetStorageInterface:
+        return self._spend_budgets
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
@@ -116,9 +128,3 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
-
-    async def healthcheck(self) -> bool:
-        return True
-
-    async def close(self) -> None:
-        return None

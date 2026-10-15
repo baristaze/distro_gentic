@@ -12,18 +12,19 @@ from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, IntegrationsOverImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_steps.impl.manager import AgentStepsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
-from acme.om.budgets.impl.manager import BudgetsOptions
-from acme.om.events.impl.manager import EventsOptions
+from acme.om.change_events.impl.manager import ChangeEventsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
+from acme.om.language_models.impl.manager import LanguageModelsOptions
 from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.media.impl.manager import MediaOptions
-from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.root import Managers, build_managers
-from acme.om.steps.impl.manager import StepsOptions
+from acme.om.spend_budgets.impl.manager import SpendBudgetsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
@@ -47,11 +48,11 @@ LEASE_SWEEP_BATCH = LeasesOptions().sweep_batch
 or more may have left some due."""
 
 
-def events_options(settings: MaintenanceSettings) -> EventsOptions:
+def change_events_options(settings: MaintenanceSettings) -> ChangeEventsOptions:
     """The sweep's trim of each living org's stream, 90 days by default and
     off at 0, a batch per call like every purge."""
-    days = settings.event_retention_days
-    return EventsOptions(
+    days = settings.change_event_retention_days
+    return ChangeEventsOptions(
         retention=timedelta(days=days) if days else None, purge_batch=settings.worker_purge_batch
     )
 
@@ -76,7 +77,6 @@ def worker_managers(
             purge_batch=batch,
         ),
         integrations=integrations,
-        environment=settings.environment,
         media_options=MediaOptions(
             retention=timedelta(days=settings.media_retention_days),
             pending_expiry=timedelta(hours=settings.media_pending_expiry_hours),
@@ -85,23 +85,26 @@ def worker_managers(
         idempotency_options=IdempotencyOptions(
             retention=timedelta(hours=settings.idempotency_retention_hours), purge_batch=batch
         ),
-        events_options=events_options(settings),
+        change_events_options=change_events_options(settings),
         work_options=WorkOptions(
             retention=timedelta(days=settings.work_retention_days), purge_batch=batch
         ),
         orchestrations_options=OrchestrationsOptions(purge_batch=batch),
         leases_options=LeasesOptions(purge_batch=batch),
-        steps_options=StepsOptions(purge_batch=batch),
-        agent_sessions_options=AgentSessionsOptions(
-            purge_batch=batch,
-            retention=timedelta(days=settings.agent_session_retention_days),
-            purge_sessions=AGENT_SESSION_PURGE_BATCH,
+        agent_root_options=AgentRootOptions(
+            environment=settings.environment,
+            steps_options=AgentStepsOptions(purge_batch=batch),
+            agent_sessions_options=AgentSessionsOptions(
+                purge_batch=batch,
+                retention=timedelta(days=settings.agent_session_retention_days),
+                purge_sessions=AGENT_SESSION_PURGE_BATCH,
+            ),
+            agents_options=AgentsOptions(purge_batch=batch),
+            attribution_options=AttributionOptions(purge_batch=batch),
+            budgets_options=SpendBudgetsOptions(purge_batch=batch),
+            language_models_options=LanguageModelsOptions(purge_batch=batch),
+            tools_options=ToolsOptions(purge_batch=batch),
         ),
-        agents_options=AgentsOptions(purge_batch=batch),
-        attribution_options=AttributionOptions(purge_batch=batch),
-        budgets_options=BudgetsOptions(purge_batch=batch),
-        models_options=ModelsOptions(purge_batch=batch),
-        tools_options=ToolsOptions(purge_batch=batch),
     )
 
 

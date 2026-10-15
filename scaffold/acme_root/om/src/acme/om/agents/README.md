@@ -29,7 +29,7 @@ of](../../../../README.md).
   own.
 - **Loop**: what an agent does from what woke its session to how the
   loop ended. The model chooses; the loop does. It has no record of its
-  own: it is a span of the session's [steps](../steps/README.md), its id
+  own: it is a span of the session's [steps](../agent_steps/README.md), its id
   is its first step's, and a closing step names its outcome.
 - **Run**: one stretch of a loop in one process. A run takes the
   session's next writer epoch before it reads anything, so a run that
@@ -37,6 +37,11 @@ of](../../../../README.md).
 - **Stream part**: a live piece of what a step will hold, numbered and
   naming its step, handed to a carrier for whoever watches and never
   kept.
+- **Loop hooks**: where a layer above the engine extends a run without
+  editing the loop: the toolsets it attaches to a session beyond its
+  kind's, held or deferred, and the steps it appends before a run's
+  first model call. With no hooks supplied, a session holds its kind's
+  tools and nothing is appended.
 
 ## What can happen
 
@@ -69,7 +74,7 @@ of](../../../../README.md).
   ends, and a note when it parks on a person. It names the child, says
   how its loop stands and what it said last, and wakes the parent. A
   report above the size bound a tool result has arrives as its head, its
-  tail, and the handle of the artifact that keeps it whole.
+  tail, and the handle of the tool output that keeps it whole.
 - **Hand off.** The new session holds the objective and where it came
   from, and starts only when its person speaks to it.
 - **Submit** a result through the gate.
@@ -181,7 +186,7 @@ of](../../../../README.md).
 - **A wait in line holds until its answer.** A tool that answers
   `InLine` asks for a leased resource with the session as its waiter,
   and answers at once with its place. When the agent's turn ends while
-  an ask waits, the loop parks on `resource`, naming the request, its
+  an ask waits, the loop parks on `leasable_resource`, naming the request, its
   place, and its estimate, and calls no model until a grant or the
   request's end clears the park. The run reads its asks once more after
   it parks, so an answer that came just before is never missed. The
@@ -208,7 +213,7 @@ of](../../../../README.md).
 - **An interrupt stops the call it names,** and no other.
 - **Isolation is refused, never weakened.** A refusal of the kind's spec
   that cannot clear ends the loop before its first model call. One that
-  waits for a workspace that may come parks the loop on `resource`, and
+  waits for a workspace that may come parks the loop on `leasable_resource`, and
   it asks again after a wait. A workspace whose durable state is gone
   parks the loop, loudly, for a person. The step that ends or parks the
   loop names its cause for a person: what the spec asks that the
@@ -233,6 +238,10 @@ turns pending, and again when a run's time is up. Nothing else drives a
 loop. A job's report comes in through the loop too, from whatever the
 product connects to the system the job runs on. A session waits in a
 line of the [leases](../leases/README.md) as a waiter the root
-registers, and a grant reaches it through the work queue.
+registers, and a grant reaches it through the work queue. A layer above
+the engine extends a run through the loop's hooks, which the root wires:
+once a run, the loop asks them for the toolsets a session holds beyond
+its kind, and, once its workspace is prepared, for the steps they append
+before its first model call.
 Each session is an [agent session](../agent_sessions/README.md); what it
 may do and who pays is [attribution](../attribution/README.md)'s.

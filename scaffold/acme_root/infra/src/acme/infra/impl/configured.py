@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import aioboto3
 
+from acme.infra.agent_root import AGENT_UNSAFE_IN_CLOUD, AgentInfra, AgentInfraRoot
 from acme.infra.breaker import Breaker
 from acme.infra.buckets import BucketsInterface
 from acme.infra.buckets.local import BucketsLocalImpl
@@ -20,12 +21,6 @@ from acme.infra.flags.launchdarkly import launchdarkly_config, launchdarkly_flag
 from acme.infra.flags.memory import FlagsMemoryImpl
 from acme.infra.impl.settings import ENVIRONMENTS, InfraSettings
 from acme.infra.impl.valkey import ValkeyConnection
-from acme.infra.keys import KeyServiceInterface
-from acme.infra.keys.kms import KeyServiceKmsImpl
-from acme.infra.keys.memory import KeyServiceMemoryImpl, root_key
-from acme.infra.machines import MachinesInterface
-from acme.infra.machines.lima import MachinesLimaImpl
-from acme.infra.machines.twin import MachinesNullImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.cache import OutageSignalCacheImpl
 from acme.infra.outages.null import OutageSignalNullImpl
@@ -40,18 +35,6 @@ from acme.infra.topics import TopicsInterface
 from acme.infra.topics.breaker import TopicsBreakerImpl
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.topics.valkey import TopicsValkeyImpl
-from acme.infra.transports import CredentialBrokerInterface, TransportInterface
-from acme.infra.transports.broker import BrokerNullImpl
-from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.transports.local import TransportLocalImpl
-from acme.infra.transports.twin import TransportNullImpl
-from acme.infra.transports.vm import TransportVmImpl
-from acme.infra.workspaces import WorkspaceProviderInterface
-from acme.infra.workspaces.account import WorkspaceAccountImpl
-from acme.infra.workspaces.container import WorkspaceContainerImpl
-from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.infra.workspaces.twin import WorkspaceNullImpl
-from acme.infra.workspaces.vm import WorkspaceVmImpl
 
 
 class UnsafeConfiguration(InfraException):
@@ -64,18 +47,8 @@ UNSAFE_IN_CLOUD: tuple[tuple[str, str, str], ...] = (
     ("topics_backend", "memory", "ACME_TOPICS_BACKEND"),
     ("buckets_backend", "local", "ACME_BUCKETS_BACKEND"),
     ("queues_backend", "memory", "ACME_QUEUES_BACKEND"),
-    ("keys_backend", "memory", "ACME_KEYS_BACKEND"),
-    # A directory on the host confines files only: a tenant's command would
-    # reach other tenants' workspaces, the records, and this process's own
-    # environment. An account serves one workspace at a time, on a host that
-    # grants the switch. A deployed process runs tools in containers, or none.
-    ("workspace_backend", "host", "ACME_WORKSPACE_BACKEND"),
-    ("workspace_backend", "account", "ACME_WORKSPACE_BACKEND"),
-    # A Lima machine reaches this host's own loopback through its gateway,
-    # and its egress cannot be closed: a deployed process runs its machines
-    # on the cloud's.
-    ("machines_backend", "lima", "ACME_MACHINES_BACKEND"),
     ("flags_backend", "memory", "ACME_FLAGS_BACKEND"),
+    *AGENT_UNSAFE_IN_CLOUD,
 )
 
 
@@ -103,7 +76,7 @@ def refuse_unsafe(settings: InfraSettings) -> None:
             )
 
 
-class InfraConfiguredImpl(InfraInterface):
+class InfraConfiguredImpl(AgentInfraRoot, InfraInterface):
     def __init__(self, settings: InfraSettings) -> None:
         refuse_unsafe(settings)
         self._settings = settings
@@ -190,73 +163,14 @@ class InfraConfiguredImpl(InfraInterface):
         else:
             self._secrets = SecretsLocalImpl(settings.secrets_file, settings.secret_overrides)
 
-        if settings.keys_backend == "kms":
-            self._keys: KeyServiceInterface = KeyServiceKmsImpl(
-                self._aws,
-                region=settings.aws_region,
-                key_id=settings.kms_key_id,
-                timeout=aws_timeout,
-            )
-        else:
-            root = settings.keys_root_key
-            self._keys = KeyServiceMemoryImpl(
-                None if root is None else root_key(root.get_secret_value())
-            )
-
-        # No credential broker runs here, so a brokered secret is refused
-        # rather than injected.
-        self._broker: CredentialBrokerInterface = BrokerNullImpl()
-        self._machines = self._build_machines(settings)
-        self._workspaces, self._transport = self._build_runtime(settings)
         self._flags = self._build_flags()
-
-    def _build_runtime(
-        self, settings: InfraSettings
-    ) -> tuple[WorkspaceProviderInterface, TransportInterface]:
-        """The provider and the transport that runs in what it prepares, as a
-        pair."""
-        records = settings.workspaces_root / ".records"
-        broker = self._broker
-        if settings.workspace_backend == "host":
-            return (
-                WorkspaceHostImpl(settings.workspaces_root),
-                TransportLocalImpl(records, self._secrets, broker),
-            )
-        if settings.workspace_backend == "account":
-            account = settings.workspace_account
-            return (
-                WorkspaceAccountImpl(
-                    settings.workspaces_root,
-                    account,
-                    protected_hardlinks=settings.workspace_protected_hardlinks,
-                ),
-                TransportLocalImpl(records, self._secrets, broker, account=account),
-            )
-        if settings.workspace_backend == "container":
-            timeout = timedelta(seconds=settings.docker_timeout_seconds)
-            return (
-                WorkspaceContainerImpl(settings.workspace_image, timeout),
-                TransportContainerImpl(records, self._secrets, broker, timeout),
-            )
-        if settings.workspace_backend == "vm":
-            timeout = timedelta(seconds=settings.machine_timeout_seconds)
-            machines = self._machines
-            return (
-                WorkspaceVmImpl(machines, settings.machine_image, settings.machine_prefix, timeout),
-                TransportVmImpl(records, self._secrets, broker, machines, timeout),
-            )
-        return WorkspaceNullImpl(), TransportNullImpl()
-
-    def _build_machines(self, settings: InfraSettings) -> MachinesInterface:
-        """The machines a VM workspace runs on; none runs no machine, and its
-        probe refuses every VM workspace."""
-        if settings.machines_backend == "lima":
-            return MachinesLimaImpl(
-                timedelta(seconds=settings.machine_timeout_seconds),
-                timedelta(seconds=settings.machine_boot_timeout_seconds),
-                encrypted=settings.machine_store_encrypted,
-            )
-        return MachinesNullImpl()
+        self._agent_infra = AgentInfra.configured(
+            settings,
+            aws=self._aws,
+            region=settings.aws_region,
+            aws_timeout=aws_timeout,
+            secrets=self._secrets,
+        )
 
     def _build_flags(self) -> FlagsInterface:
         """Built now and connected at start: the vendor's client blocks while
@@ -297,21 +211,6 @@ class InfraConfiguredImpl(InfraInterface):
     def get_secrets(self) -> SecretsInterface:
         return self._secrets
 
-    def get_keys(self) -> KeyServiceInterface:
-        return self._keys
-
-    def get_workspaces(self) -> WorkspaceProviderInterface:
-        return self._workspaces
-
-    def get_machines(self) -> MachinesInterface:
-        return self._machines
-
-    def get_transport(self) -> TransportInterface:
-        return self._transport
-
-    def get_broker(self) -> CredentialBrokerInterface:
-        return self._broker
-
     def get_flags(self) -> FlagsInterface:
         return self._flags
 
@@ -326,11 +225,7 @@ class InfraConfiguredImpl(InfraInterface):
             self._buckets.describe(),
             self._queues.describe(),
             self._secrets.describe(),
-            self._keys.describe(),
-            self._machines.describe(),
-            self._workspaces.describe(),
-            self._transport.describe(),
-            self._broker.describe(),
+            *self._agent_infra.describe(),
             self._flags.describe(),
         ]
 
@@ -343,23 +238,19 @@ class InfraConfiguredImpl(InfraInterface):
             self._buckets,
             self._queues,
             self._secrets,
-            self._keys,
             self._flags,
         ):
             await capability.start()
-        for runtime in (self._broker, self._machines, self._workspaces, self._transport):
-            await runtime.start()
+        await self._agent_infra.start()
 
     async def close(self) -> None:
         """Reverse order of start; the caches first and the shared client
         last, once nothing holds it."""
-        for runtime in (self._transport, self._workspaces, self._machines, self._broker):
-            await runtime.close()
+        await self._agent_infra.close()
         for cache in self._caches.values():
             await cache.close()
         for capability in (
             self._flags,
-            self._keys,
             self._secrets,
             self._queues,
             self._buckets,

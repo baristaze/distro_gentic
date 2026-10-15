@@ -49,18 +49,18 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "sqs_endpoint_url": "the hosted endpoint; only ElasticMQ needs one",
     "secrets_file": "the local secrets backend only",
     "keys_root_key": "the memory key service only; the cloud wraps under KMS",
-    "workspace_backend": "the API and the sweep run no tool, so they prepare no workspace",
-    "workspaces_root": "the host, account, and container workspace backends only",
-    "workspace_account": "the account workspace backend only",
-    "workspace_protected_hardlinks": "the account workspace backend only",
-    "workspace_image": "the container workspace backend only",
+    "agent_workspace_backend": "the API and the sweep run no tool, so they prepare no workspace",
+    "agent_workspaces_root": "the host, account, and container workspace backends only",
+    "agent_workspace_account": "the account workspace backend only",
+    "agent_workspace_protected_hardlinks": "the account workspace backend only",
+    "agent_workspace_image": "the container workspace backend only",
     "docker_timeout_seconds": "the container workspace backend only",
-    "machines_backend": "the API and the sweep run no tool, so they run no machine",
-    "machine_image": "the vm workspace backend only",
-    "machine_prefix": "the vm workspace backend only",
-    "machine_store_encrypted": "the vm workspace backend only",
-    "machine_timeout_seconds": "the vm workspace backend only",
-    "machine_boot_timeout_seconds": "the vm workspace backend only",
+    "vms_backend": "the API and the sweep run no tool, so they run no VM",
+    "vm_image": "the vm workspace backend only",
+    "vm_prefix": "the vm workspace backend only",
+    "vm_store_encrypted": "the vm workspace backend only",
+    "vm_timeout_seconds": "the vm workspace backend only",
+    "vm_boot_timeout_seconds": "the vm workspace backend only",
     "flags_file": "the local flags backend only",
     "log_level": "INFO everywhere",
     "otel_endpoint": "traces go to the collector sidecar, wired in the task, not a knob",
@@ -82,19 +82,19 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "sign_in_delay_base_seconds": "the local delay is the delay",
     "sign_in_delay_cap_seconds": "the local cap is the cap",
     "login_lifetime_seconds": "the local lifetime is the lifetime",
-    "session_lifetime_seconds": "the local lifetime is the lifetime",
-    "session_idle_lifetime_seconds": "the local lifetime is the lifetime",
+    "auth_session_lifetime_seconds": "the local lifetime is the lifetime",
+    "auth_session_idle_lifetime_seconds": "the local lifetime is the lifetime",
     "operator_token_max_lifetime_seconds": "an hour, the guideline's bound, everywhere",
     "dev_sign_in_enabled": "off everywhere it is not set, and refused outside local and test",
     "invitation_lifetime_days": "the local lifetime is the lifetime",
     "workos_base_url": "the hosted API everywhere",
-    "model_providers": "no process here calls a model; none until a process that runs a loop is deployed",
+    "llm_providers": "no process here calls a model; none until a process that runs a loop is deployed",
     "anthropic_api_key": "no process here calls a model",
-    "model_script": "the scripted twin's only, which a deployed process refuses",
+    "llm_script": "the scripted twin's only, which a deployed process refuses",
     "anthropic_base_url": "the hosted API everywhere",
     "openai_api_key": "no process here calls a model",
     "openai_base_url": "the hosted API everywhere",
-    "model_timeout_seconds": "the local default is the tuning",
+    "llm_timeout_seconds": "the local default is the tuning",
     "workos_timeout_seconds": "the local default is the tuning",
     "realtime_send_buffer_size": "the local size is the size",
     "realtime_control_buffer_size": "the local size is the size",
@@ -204,8 +204,8 @@ def test_a_session_lasts_thirty_days_and_fourteen_idle() -> None:
     (ADR 0063)."""
     absolute, idle = timedelta(days=30), timedelta(days=14)
     fields = ApiSettings.model_fields
-    assert timedelta(seconds=fields["session_lifetime_seconds"].default) == absolute
-    assert timedelta(seconds=fields["session_idle_lifetime_seconds"].default) == idle
+    assert timedelta(seconds=fields["auth_session_lifetime_seconds"].default) == absolute
+    assert timedelta(seconds=fields["auth_session_idle_lifetime_seconds"].default) == idle
     documented = dict(
         re.findall(
             r"^([A-Z][A-Z0-9_]*)=(.*)$",
@@ -213,7 +213,7 @@ def test_a_session_lasts_thirty_days_and_fourteen_idle() -> None:
             flags=re.MULTILINE,
         )
     )
-    assert timedelta(seconds=int(documented[f"{PREFIX}SESSION_LIFETIME_SECONDS"])) == absolute
-    assert timedelta(seconds=int(documented[f"{PREFIX}SESSION_IDLE_LIFETIME_SECONDS"])) == idle
+    assert timedelta(seconds=int(documented[f"{PREFIX}AUTH_SESSION_LIFETIME_SECONDS"])) == absolute
+    assert timedelta(seconds=int(documented[f"{PREFIX}AUTH_SESSION_IDLE_LIFETIME_SECONDS"])) == idle
     options = TenancyOptions()
-    assert (options.session_ttl, options.session_idle_ttl) == (absolute, idle)
+    assert (options.auth_session_ttl, options.auth_session_idle_ttl) == (absolute, idle)

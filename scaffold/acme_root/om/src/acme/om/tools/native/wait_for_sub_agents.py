@@ -11,11 +11,11 @@ from datetime import timedelta
 from uuid import UUID
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
-from acme.om.base import Platform
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
@@ -35,14 +35,14 @@ class WaitForSubAgentsInput(ToolInput):
     """No input: the call waits on the session's own children."""
 
 
-class SubAgent(Platform):
-    session_id: UUID
+class SubAgent(OmBase):
+    agent_session_id: UUID
     title: str
     kind: str
-    status: SessionStatus
+    status: AgentSessionStatus
 
 
-class Waiting(Platform):
+class Waiting(OmBase):
     """The sub-agents the loop waits on: the session's children whose loop
     is open."""
 
@@ -80,14 +80,12 @@ class WaitForSubAgentsToolImpl(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, WaitForSubAgentsInput)
         running = [
             child
-            for child in await self._children(ctx, runtime.session_id)
-            if child.status is not SessionStatus.IDLE
+            for child in await self._children(ctx, runtime.agent_session_id)
+            if child.status is not AgentSessionStatus.IDLE
         ]
         if not running:
             raise ToolFailed(
@@ -98,19 +96,22 @@ class WaitForSubAgentsToolImpl(ToolInterface):
         return Waiting(
             sub_agents=tuple(
                 SubAgent(
-                    session_id=child.id, title=child.title, kind=child.kind, status=child.status
+                    agent_session_id=child.id,
+                    title=child.title,
+                    kind=child.kind,
+                    status=child.status,
                 )
                 for child in running
             )
         )
 
-    async def _children(self, ctx: TenantContext, session_id: UUID) -> list[AgentSession]:
+    async def _children(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentSession]:
         """Every child of the session, a page at a time; its tree's count
         bounds them."""
         children: list[AgentSession] = []
         after: UUID | None = None
         while True:
-            page = await self._sessions.get_children(ctx, session_id, after, CHILDREN_PAGE)
+            page = await self._sessions.get_children(ctx, agent_session_id, after, CHILDREN_PAGE)
             children.extend(page.items)
             if not page.has_more or not page.items:
                 return children

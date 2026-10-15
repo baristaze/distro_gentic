@@ -29,7 +29,7 @@ SOURCE_ROOTS = (
     "integrations/src",
     "ops/src",
     "workers/maintenance/src",
-    "workers/session_runner/src",
+    "workers/agent_session_runner/src",
 )
 
 CLIENT_CONSTRUCTORS = {
@@ -116,8 +116,9 @@ def test_every_client_construction_names_a_timeout() -> None:
     found = client_constructions()
     sites = {site.split(":")[0] for site, _ in found}
     assert sites >= {
-        "clients/python/src/acme/client/client.py",
+        "clients/python/src/acme/client/calls/media.py",
         "clients/python/src/acme/client/realtime.py",
+        "clients/python/src/acme/client/transport.py",
         "infra/src/acme/infra/buckets/s3.py",
         "infra/src/acme/infra/queues/sqs.py",
         "infra/src/acme/infra/secrets/aws.py",
