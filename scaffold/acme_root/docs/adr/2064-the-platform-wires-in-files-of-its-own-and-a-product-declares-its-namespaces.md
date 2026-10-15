@@ -40,8 +40,11 @@ delivery providers beside the engine's (`PlatformWorkerLoop`). Each purge
 runs before the one it names. The session runner builds through
 `build_runner_platform`. Infra holds the platform's capabilities as one
 `PlatformInfra`, named once where each root describes, starts, and closes
-them, with its settings in `PlatformInfraSettings`. `.env.example` and the
-Makefile hold the platform's lines in one trailing block each.
+them, with its settings in `PlatformInfraSettings`. The integrations and
+the API take the platform's settings the same way, in
+`PlatformIntegrationsSettings` and `PlatformApiSettings`, each checking
+its own secrets. `.env.example` and the Makefile hold the platform's
+lines in one trailing block each.
 
 **A product declares a namespace once, at each layer it lives in.** Its
 managers and its purges, each with the purge it runs before, go beside
@@ -74,8 +77,8 @@ with the row's prefix.
 | `om/src/acme/om/agent_sessions/`, `om/src/acme/om/agents/`, `om/src/acme/om/attribution/`, `om/src/acme/om/steps/`, `om/src/acme/om/tools/`, `om/src/acme/om/privacy/`, `om/src/acme/om/events/`, `om/src/acme/om/tenancy/` | A session is org-wide or private and stalls, a loop folds in attached toolsets, a fork is taken at a host, a tool spec declares what the platform reads, a member's removal asks for what the tenant keeps of them, and the sweep asks whether a tenant is gone. Each is behaviour of an engine namespace, upstream or staying. |
 | `om/src/acme/om/storage/`, `om/migrations/versions/` | The storage roots hold a getter for each of the platform's namespaces, its scopes, and its logins. A storage root has no seam a layer's tables register through. One engine migration's parent is a migration of the platform's, where the two chains meet in one role's history. |
 | `infra/src/acme/infra/machines/`, `infra/src/acme/infra/transports/`, `infra/src/acme/infra/workspaces/`, `infra/src/acme/infra/observability.py`, `infra/src/acme/infra/outages/` | The machines hand a seed, a transport carries the host's network, a container workspace carries its deployment and pulls with a limit, and the platform's metrics sit beside the engine's. These change the capabilities themselves. |
-| `integrations/` | The forge, the chat, and the scripted twin's pace are integrations the configured root picks and the settings name. |
-| `services/api/src/acme/services/api/` (its other files), `services/api/README.md` | The engine's routes and commands carry the platform's behaviour: a session's agent project, the integration webhooks, the event kinds, admission, and an operator's grant of a tenant's content. The seed of a local org's platform parts is a command of the platform's own. Not now: once a base move conflicts in `main.py`, it joins the platform's half through one hook. |
+| `integrations/` | The forge, the chat, and the scripted twin's pace are integrations the configured root picks. The settings take the platform's section, `PlatformIntegrationsSettings`, in one line. |
+| `services/api/src/acme/services/api/` (its other files), `services/api/README.md` | The engine's routes and commands carry the platform's behaviour: a session's agent project, the integration webhooks, the event kinds, admission, and an operator's grant of a tenant's content. The seed of a local org's platform parts is a command of the platform's own. The settings take the platform's sections in one line. Not now: once a base move conflicts in `main.py`, it joins the platform's half through one hook. |
 | `workers/maintenance/src/`, `workers/session_runner/src/`, `apps/cli/`, `ops/` | The loop runs ticks, duties across tenants in recovery, and the fleet's gauges. The runner claims a placed lane and holds warm workspaces. The CLI and the operations tool reach the platform's routes. |
 | `clients/` | The document and both clients' types are generated from the copy's whole API, and the clients' calls name its routes. |
 | `apps/portal/` | The portal has no registry a layer's pages join. Not now: once the engine's portal ships one, the platform's pages register through it. |
