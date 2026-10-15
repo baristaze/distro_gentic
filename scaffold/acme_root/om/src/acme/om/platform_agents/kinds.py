@@ -438,7 +438,7 @@ WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset({(SOFTWARE_ENGINEER
 the workspace base its session's agent project names: the software engineer from version 8.
 A later version that takes it joins here; the versions before it keep
 their own base. A product names its own beside these, in its slot
-(`root.ProductKinds.workspace_bases`)."""
+(`platform_root.ProductKinds.workspace_bases`)."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,

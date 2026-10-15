@@ -5,7 +5,7 @@ started ended, so the run closes on that end rather than as lost, and a
 check of the person who writes the agent automation, so one its firings would
 refuse is refused when it is written. Each
 root builds the one registry from what the product hands it
-(`root.ProductKinds.actions`), and a name the platform's actions hold, or
+(`platform_root.ProductKinds.actions`), and a name the platform's actions hold, or
 one registered twice, is refused at boot."""
 
 import re

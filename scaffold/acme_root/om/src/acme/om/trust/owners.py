@@ -3,7 +3,7 @@ the owners of that kind (an agent project, or a product's own), whether one is t
 tenant's, and which one a session is placed on: the one placement whose
 sessions reach a secret declared on it. The platform's agent project registers
 here as a product's owner kind does at its roots
-(`root.PlatformPorts.kinds`), and a secret is resolved through every kind
+(`platform_root.PlatformPorts.kinds`), and a secret is resolved through every kind
 alike."""
 
 import re
