@@ -8,7 +8,7 @@ the placement that says which side of the wall a session is on and the
 relay that reaches the host inside it:
 
     layer = ConnectorsLayer(storage, infra, client, placement=placement, host=relay.call_mcp)
-    options = PlatformRootOptions(attached_toolsets=layer.attached)
+    options = PlatformRootOptions(loop_hooks=layer.loop_hooks)
     managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     connectors = layer.build(managers)
 

@@ -2,7 +2,9 @@
 and attaches it to a kind; a session of the kind loads the toolset and
 calls a tool, whose answer renders as data. A changed definition is
 refused until a person reviews it, the credential reaches no step and no
-log line, and a server inside the wall is called through its host alone."""
+log line, and a server inside the wall is called through its host alone.
+A child attached a connector that carries its tenant's credential holds
+it, and its report says so to its parent."""
 
 import json
 import logging
@@ -27,8 +29,9 @@ from acme.infra.transports.redaction import forms
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
-from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
+from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
@@ -56,7 +59,7 @@ from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor
 
 from contracts.doubles import APP
-from contracts.loops import ALLOWED, call, reply, said
+from contracts.loops import ALLOWED, LEAD, WORKER, call, reply, said
 from contracts.platform_loops import PlatformLoop, platform_loop_over
 from contracts.tools import failure_of, result_text
 
@@ -180,6 +183,7 @@ def tenant(
     inside: bool = False,
     client: McpClientSdkImpl | None = None,
     host: HostCalls | None = None,
+    kinds: tuple[AgentKind, ...] = (OPS_ANALYST,),
 ) -> Tenant:
     """A tenant whose sessions run on one side of the wall, its servers
     reached through `client` from the cloud and through `host` inside it."""
@@ -194,7 +198,7 @@ def tenant(
         options=ConnectorsOptions(private_addresses=True),
     )
     loop = platform_loop_over(
-        tmp_path, kinds=(OPS_ANALYST,), loop_hooks=layer.loop_hooks, storage=storage, infra=infra
+        tmp_path, kinds=kinds, loop_hooks=layer.loop_hooks, storage=storage, infra=infra
     )
     return Tenant(loop, layer.build(loop.platform))
 
@@ -247,16 +251,16 @@ async def review(at: Tenant, connector_id: UUID, *tools: str) -> None:
     await at.connectors.review(owner, connector_id, ConnectorReview(tools=named))
 
 
-async def connected(at: Tenant, url: str, *tools: str) -> UUID:
+async def connected(at: Tenant, url: str, *tools: str, kind: str = "ops_analyst") -> UUID:
     """A cloud connector at `url`, its credential `TOKEN`, with `tools`
-    reviewed, attached to the ops analyst."""
+    reviewed, attached to `kind`."""
     owner = at.loop.owner
     connector = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=url)
     )
     await at.connectors.put_credential(owner, connector.id, SecretStr(TOKEN))
     await review(at, connector.id, *tools)
-    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="ops_analyst"))
+    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind=kind))
     return connector.id
 
 
@@ -516,6 +520,46 @@ async def test_the_credential_reaches_no_step_and_no_log_line(
         assert not leaks(request.model_dump_json())
     assert "probe" in written.getvalue(), "the log is read"
     assert not leaks(written.getvalue())
+
+
+# The rule of two reads what the platform's hooks attach: a child given a
+# connector's credential holds it, and its report carries it to its parent.
+
+
+async def test_a_child_attached_a_credentialed_connector_reports_to_its_parent_as_private(
+    tmp_path: Path, words: Served
+) -> None:
+    """Neither kind holds private data, and the connector reaches both
+    through the platform's loop hooks alone, a sub-agent pinning what its
+    parent pinned: the child holds the tenant's credential, so the report
+    it submits marks its parent, which nothing else marked."""
+    lead = LEAD.model_copy(update={"name": "public_lead", "private_data": False})
+    worker = WORKER.model_copy(update={"private_data": False})
+    at = tenant(tmp_path, kinds=(lead, worker))
+    owner = at.loop.owner
+    connector_id = await connected(at, words.url, "whoami", kind=lead.name)
+    await at.connectors.attach(owner, connector_id, ConnectorAttachment(kind=worker.name))
+    parent_id = await at.loop.start(lead.name)
+    await at.loop.say(parent_id, "Find out who I am.")
+    at.loop.anthropic.add(reply(said("A sub-agent will find it.")))
+    await at.loop.loops.run(owner, parent_id)
+    spawn = Spawn(id=new_id(), kind=worker.name, title="who", objective="Find who I am.")
+    child_id = (await at.loop.managers.agents.spawn(owner, parent_id, spawn)).id
+    child = await at.loop.managers.agent_sessions.get_agent_session(owner, child_id)
+    parent = await at.loop.managers.agent_sessions.get_agent_session(owner, parent_id)
+    assert not (child.holds_private or parent.holds_private), "no kind's own mark"
+    (objective,) = await at.loop.history(child_id)
+    submit = call("submit", claim="succeeded", evidence=[str(objective.id)])
+    at.loop.anthropic.add(reply(said("You are the tenant's owner."), submit))
+
+    run = await at.loop.loops.run(owner, child_id)
+
+    assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
+    report = (await at.loop.history(parent_id))[-1].header
+    assert isinstance(report, InputHeader) and report.agent is not None
+    assert report.holds_private, "the report carries the credential the child holds"
+    parent = await at.loop.managers.agent_sessions.get_agent_session(owner, parent_id)
+    assert parent.holds_private, "and marks the parent that reads it"
 
 
 # Check 2: a server inside the wall is called by its host alone.
