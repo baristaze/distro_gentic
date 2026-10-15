@@ -1,7 +1,7 @@
 ---
 name: distro-upgrade-scaffold
 description: "Move a product's base to a later platform release: a product rendered from the platform's scaffold, or a layer that takes its scaffold/ folder unchanged. Runs the guideline's arch-upgrade-scaffold with the platform as its source, so one move takes all three foundations, and adds what the platform's layer holds: its releases, its ADR numbers, its migrations, and a layer's gates in a copy."
-allowed-tools: Read, Grep, Glob, Edit, Write, Bash(curl:*), Bash(gh api:*), Bash(gh release view:*), Bash(python3:*), Bash(git status:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git switch:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(git merge:*), Bash(git merge-base:*), Bash(git checkout:*), Bash(git rm:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(grep:*), Bash(uv lock:*), Bash(pnpm install:*), Bash(docker info:*), Bash(lsof:*), Bash(make setup), Bash(make check), Bash(make openapi), Bash(make infra-up), Bash(make migrate), Bash(make migrate-check), Bash(make test-integration)
+allowed-tools: Read, Grep, Glob, Edit, Write, Bash(curl:*), Bash(gh api:*), Bash(gh release view:*), Bash(python3:*), Bash(git status:*), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git symbolic-ref:*), Bash(git switch:*), Bash(git log:*), Bash(git show:*), Bash(git diff:*), Bash(git merge:*), Bash(git merge-base:*), Bash(git checkout:*), Bash(git rm:*), Bash(git add:*), Bash(git commit:*), Bash(git ls-files:*), Bash(git ls-tree:*), Bash(grep:*), Bash(uv lock:*), Bash(uv run:*), Bash(pnpm install:*), Bash(docker info:*), Bash(lsof:*), Bash(make setup), Bash(make check), Bash(make openapi), Bash(make infra-up), Bash(make migrate), Bash(make migrate-check), Bash(make test-integration)
 ---
 
 # distro-upgrade-scaffold
@@ -101,9 +101,16 @@ read as the guideline's skill reads them, with these differences.
   never by the file name: a folded revision sorts below the parents it
   follows. A product whose chain for a role is the render's files, with
   any revisions of its own on them, takes that role's chain as the render
-  has it, its folds included, as the guideline's merge table has a layer
-  take its source's: the first of the product's own revisions, if it has
-  one, has its `down_revision` re-pointed to the render's head.
+  has it, its folds included: the first of the product's own revisions,
+  if it has one, has its `down_revision` re-pointed to the render's head.
+  The move runs no reset: a database at an older head, or at one of the
+  product's own revisions, is made anew by whoever keeps it. A product
+  with a deployed database at an older head, whose data stays, keeps its
+  own chain instead, as the guideline's merge table has a copy keep it.
+  It has one when part 3 of the fold's precondition
+  (`<root>/.agents/skills/docs-compact/references/fold.md`) reads a
+  deploy of any environment: that environment's database sits on the
+  product's chain before the move.
 - **A product's wiring** (its step 6). A product declares what it adds
   in the platform's product seams
   (`../../scaffold/acme_root/docs/adr/2064-the-platform-wires-in-files-of-its-own-and-a-product-declares-its-namespaces.md`):
@@ -115,7 +122,20 @@ read as the guideline's skill reads them, with these differences.
   resolved by the merge table's row for a line both sides changed, which
   would keep them. Each moves into its seam, and the platform's file
   keeps the render's lines. An entry no seam carries stays, and the
-  output names it.
+  output names it. A file that defines a seam, such as `products.py`
+  with its `ProductApiNamespace` and `ProductLive`, is the platform's: a
+  product's own earlier edit to it, such as a widened
+  `ProductApiNamespace.service`, is no entry. The file takes the
+  render's (`git checkout scaffold -- <path>`), and the product's own
+  code adapts to the seam as the render gives it.
+- **A product's gates** (its step 8). A stack that ran before the move
+  holds databases on the chain before it, and they cannot migrate in
+  place across a fold the move took or a parent it re-pointed. So
+  `make migrate`, `make migrate-check`, and `make test-integration` run
+  on a database the run makes and drops, never the stack's own, as
+  `<root>/.agents/skills/docs-compact/SKILL.md` runs them in its step 8,
+  under the name `audit_upgrade_<yyyymmdd>`. The move never resets a
+  stack.
 - **A layer's gates** (its step 8). A layer runs its scaffold's gates in
   a copy, as the platform's CI does, never in `<root>`. From the
   checkout's root, `python3 scaffold/new.py <dir>/<name>` copies it into
