@@ -130,7 +130,7 @@ class PlacementOperatorManagerInterface(ABC):
 
     @abstractmethod
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
     ) -> SessionStanding:
         """Why the named tenant's session is or is not moving: its status, its
         park and when it last changed, its tenant's share, where it runs and

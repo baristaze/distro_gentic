@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agents.types.result import Claim
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Target
@@ -43,7 +43,7 @@ class NativeToolImpl(ToolInterface):
         return None
 
 
-class Text(Platform):
+class Text(OmBase):
     text: str
 
 

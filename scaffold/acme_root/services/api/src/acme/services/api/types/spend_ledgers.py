@@ -16,23 +16,23 @@ from acme.services.api.types.common import RequestBody, View
 class SpendLedgerEntryView(View):
     """One entry, written once. A field a kind does not carry is null:
 
-    - `hold`: `session_id`, `units` (the worst case, null when no price
+    - `hold`: `agent_session_id`, `units` (the worst case, null when no price
       applies), and `cost_micros` (the exposure).
-    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+    - `settlement`: `spend_hold_id`, `cost_micros` and `tokens` (what it spent).
+    - `charge`: `spend_hold_id`, `units`, and `amount_micros` (what the money
       buckets paid).
     - `credit`: `amount_micros` and `reference` (the payment's).
     - `grant`: `units`, `reason`, and `by` (the operator).
-    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+    - `raise`: `spend_budget_id`, `cost_micros`, `tokens`, and `by`.
+    - `approval`: `agent_session_id`, `amount_micros` (the cost it allows), and
       `by`."""
 
     kind: EntryKind
     id: UUID
     created_at: datetime
-    session_id: UUID | None = None
-    hold_id: UUID | None = None
-    budget_id: UUID | None = None
+    agent_session_id: UUID | None = None
+    spend_hold_id: UUID | None = None
+    spend_budget_id: UUID | None = None
     units: int | None = None
     amount_micros: int | None = None
     cost_micros: int | None = None

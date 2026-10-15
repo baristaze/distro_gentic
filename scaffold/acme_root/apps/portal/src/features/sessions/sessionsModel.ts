@@ -2,12 +2,12 @@
 // own, and the org's to explore and join), the filters it offers and keeps
 // in the address bar, and what a new session needs before it may start. No
 // React, no fetch.
-import type { AgentSessionView, Among, AgentProjectView, SessionStatus, StartSessionRequest, Visibility } from "@acme/client";
+import type { AgentSessionView, Among, AgentProjectView, AgentSessionStatus, StartAgentSessionRequest, Visibility } from "@acme/client";
 import { listedFor } from "../../app/shell/supportModel";
 import { standingOf, statusLine, type Standing, type Tone } from "../session/sessionModel";
 
 /** A status, or the parked sessions that wait on a person: "Needs you". */
-export type StatusFilter = SessionStatus | "any" | "needs_you";
+export type StatusFilter = AgentSessionStatus | "any" | "needs_you";
 
 export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
   { value: "any", label: "All" },
@@ -24,7 +24,7 @@ export function statusFilter(value: string | null): StatusFilter {
 }
 
 /** The status the server is asked for: "Needs you" reads the parked ones. */
-export function serverStatus(filter: StatusFilter): SessionStatus | null {
+export function serverStatus(filter: StatusFilter): AgentSessionStatus | null {
   if (filter === "any") return null;
   return filter === "needs_you" ? "parked" : filter;
 }
@@ -182,7 +182,7 @@ export function agentProjectChoice(agentProjects: readonly Pick<AgentProjectView
 export function startRequest(
   draft: NewSessionDraft,
   agentProject: { required: boolean; count: number },
-): { request: StartSessionRequest } | { problem: string } {
+): { request: StartAgentSessionRequest } | { problem: string } {
   const title = draft.title.trim();
   const kind = draft.kind.trim();
   if (!title) return { problem: "Give the session a title." };

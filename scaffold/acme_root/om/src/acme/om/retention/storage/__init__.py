@@ -49,7 +49,9 @@ class RetentionStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_snapshot(self, org_id: UUID, session_id: UUID) -> SessionRetention | None: ...
+    async def read_snapshot(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionRetention | None: ...
 
     @abstractmethod
     async def write_snapshot(

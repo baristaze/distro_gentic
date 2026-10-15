@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type MeView, type StepView } from "@acme/client";
+import { ApiError, type AgentSessionView, type MeView, type AgentStepView } from "@acme/client";
 import { PLATFORM } from "../../app/platform";
 import { SlotProvider } from "../../app/slot";
 import { usePanesStore } from "../../store/panes";
@@ -23,7 +23,7 @@ const at = "2026-10-12T10:00:00Z";
 const server = vi.hoisted(() => ({
   me: "u1",
   sessions: [] as AgentSessionView[],
-  steps: {} as Record<string, StepView[]>,
+  steps: {} as Record<string, AgentStepView[]>,
   writes: [] as { method: string; path: string; body?: unknown }[],
 }));
 
@@ -36,7 +36,7 @@ const PEOPLE = [
 const ROLES: Record<string, { role: string; permissions: string[] }> = {
   u1: { role: "member", permissions: ["read", "write"] },
   u2: { role: "member", permissions: ["read", "write"] },
-  u3: { role: "admin", permissions: ["read", "write", "manage_members", "manage_sessions"] },
+  u3: { role: "admin", permissions: ["read", "write", "manage_members", "manage_agent_sessions"] },
 };
 
 function sessionOf(id: string, by: string, visibility: AgentSessionView["visibility"], participants: string[] = []): AgentSessionView {
@@ -59,7 +59,7 @@ function sessionOf(id: string, by: string, visibility: AgentSessionView["visibil
   };
 }
 
-function stepOf(seq: number, fields: Partial<StepView>): StepView {
+function stepOf(seq: number, fields: Partial<AgentStepView>): AgentStepView {
   return {
     id: `st${seq}`,
     seq,
@@ -95,7 +95,7 @@ function stepOf(seq: number, fields: Partial<StepView>): StepView {
 
 const takesPart = (session: AgentSessionView, person: string) => session.created_by === person || session.participants.includes(person);
 const sees = (session: AgentSessionView, person: string) =>
-  takesPart(session, person) || session.visibility === "org_wide" || ROLES[person]!.permissions.includes("manage_sessions");
+  takesPart(session, person) || session.visibility === "org_wide" || ROLES[person]!.permissions.includes("manage_agent_sessions");
 const refused = (status: number, path: string) => new ApiError(status, status === 404 ? "not_found" : "forbidden", `refused ${path}`, "req-1");
 
 function read(path: string): unknown {

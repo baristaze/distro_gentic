@@ -53,7 +53,7 @@ describe("runs, work product, and usage", () => {
   it("says a run's check, outcome, cases, and a twin's provenance beside it", () => {
     const run: ExecutionView = {
       id: "r1",
-      step_id: "step-4",
+      agent_step_id: "step-4",
       validation_id: null,
       purpose: "work",
       check: "unit",

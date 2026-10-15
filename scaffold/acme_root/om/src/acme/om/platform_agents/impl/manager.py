@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.attribution.rules import principal_of
-from acme.om.base import Platform, utcnow
+from acme.om.base import OmBase, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.rules import policy_key
@@ -25,7 +25,7 @@ CREATED = "platform_agents.validation_session.created"
 UPDATED = "platform_agents.validation_session.updated"
 
 
-class PlatformAgentsOptions(Platform):
+class PlatformAgentsOptions(OmBase):
     purge_batch: int = 1000  # validation sessions one purge statement deletes at most
 
 
@@ -88,16 +88,16 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         await self._relay_all(ctx, rows)
         return session
 
-    async def get_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
+    async def get_validation(self, ctx: TenantContext, agent_session_id: UUID) -> ValidationSession:
         ctx.require(Permission.READ)
-        found = await self._storage.read_validation(ctx.org_id, session_id)
+        found = await self._storage.read_validation(ctx.org_id, agent_session_id)
         if found is None:
-            raise NotFound(f"validation session {session_id} not found")
+            raise NotFound(f"validation session {agent_session_id} not found")
         return found
 
-    async def run_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
+    async def run_validation(self, ctx: TenantContext, agent_session_id: UUID) -> ValidationSession:
         ctx.require(Permission.WRITE)
-        stored = await self.get_validation(ctx, session_id)
+        stored = await self.get_validation(ctx, agent_session_id)
         if stored.status is ValidationStatus.FINISHED:
             return stored
         if stored.refusal is not None:
@@ -124,28 +124,30 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
                     stored.base,
                 )
             except PreconditionFailed as refused:
-                await self.refuse_validation(ctx, session_id, refused.message)
+                await self.refuse_validation(ctx, agent_session_id, refused.message)
                 raise
         if not validation.records:
-            raise ValidationFailed(f"validation session {session_id} kept no run of its check")
+            raise ValidationFailed(
+                f"validation session {agent_session_id} kept no run of its check"
+            )
         # A rated check's trials are one batch; the session names the last,
         # and its verdict reads the whole batch by that run's validation.
-        return await self.finish_validation(ctx, session_id, validation.records[-1])
+        return await self.finish_validation(ctx, agent_session_id, validation.records[-1])
 
     async def finish_validation(
-        self, ctx: TenantContext, session_id: UUID, run_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, run_id: UUID
     ) -> ValidationSession:
         ctx.require(Permission.WRITE)
-        stored = await self.get_validation(ctx, session_id)
+        stored = await self.get_validation(ctx, agent_session_id)
         if stored.status is ValidationStatus.FINISHED:
             if stored.run_id == run_id:
                 return stored
             raise PreconditionFailed(
-                f"validation session {session_id} finished already, with run {stored.run_id}"
+                f"validation session {agent_session_id} finished already, with run {stored.run_id}"
             )
         if stored.refusal is not None:
             raise PreconditionFailed(
-                f"validation session {session_id} is refused: {stored.refusal}"
+                f"validation session {agent_session_id} is refused: {stored.refusal}"
             )
         now = self._clock()
         finished = stored.model_copy(
@@ -164,15 +166,15 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         return finished
 
     async def refuse_validation(
-        self, ctx: TenantContext, session_id: UUID, reason: str
+        self, ctx: TenantContext, agent_session_id: UUID, reason: str
     ) -> ValidationSession:
         ctx.require(Permission.WRITE)
-        stored = await self.get_validation(ctx, session_id)
+        stored = await self.get_validation(ctx, agent_session_id)
         if stored.status is ValidationStatus.REFUSED:
             return stored
         if stored.status is ValidationStatus.FINISHED:
             raise PreconditionFailed(
-                f"validation session {session_id} finished already, with run {stored.run_id}"
+                f"validation session {agent_session_id} finished already, with run {stored.run_id}"
             )
         now = self._clock()
         refused = stored.model_copy(

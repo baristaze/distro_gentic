@@ -22,7 +22,7 @@ const agentProject = (org: "a" | "b", name: string): AgentProjectView => ({
   name,
   repository: { host: "forge.example.com", path: `${org}/docs` },
   workspace_snapshots: true,
-  workspace_base: null,
+  agent_workspace_base: null,
   created_at: "2026-10-03T10:00:00Z",
   created_by: PEOPLE[org].id,
   updated_at: "2026-10-03T10:00:00Z",

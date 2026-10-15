@@ -22,12 +22,12 @@ import type {
   InvokeRequest,
   PrincipalRequest,
   QuestionView,
-  SessionControl,
-  SessionStatus,
+  AgentSessionControl,
+  AgentSessionStatus,
   SessionModelUsageView,
-  StartSessionRequest,
-  StepPageView,
-  StepView,
+  StartAgentSessionRequest,
+  AgentStepPageView,
+  AgentStepView,
   ToolCallPageView,
   ToolCallView,
   ValidationView,
@@ -66,7 +66,7 @@ export function useWalk(query: {
   return walking;
 }
 
-export function useAgentSessions(among: Among, status: SessionStatus | null) {
+export function useAgentSessions(among: Among, status: AgentSessionStatus | null) {
   const query = useInfiniteQuery({
     queryKey: keys.agentSessions.list(among, status ?? "any", SESSIONS_PAGE_SIZE),
     initialPageParam: null as string | null,
@@ -166,10 +166,10 @@ function bySeq<T extends { seq: number }>(pages: InfiniteData<{ items: T[] }> | 
 }
 
 /** The steps after `after`, page after page to the end. */
-async function stepsAfter(id: string, after: number, signal: AbortSignal): Promise<StepView[]> {
-  const read: StepView[] = [];
+async function stepsAfter(id: string, after: number, signal: AbortSignal): Promise<AgentStepView[]> {
+  const read: AgentStepView[] = [];
   for (let from = after; ; ) {
-    const page = await api.get<StepPageView>(`${path(id)}/steps?after_seq=${from}&limit=${WHOLE_PAGE_SIZE}`, { signal });
+    const page = await api.get<AgentStepPageView>(`${path(id)}/steps?after_seq=${from}&limit=${WHOLE_PAGE_SIZE}`, { signal });
     read.push(...page.items);
     const last = page.items[page.items.length - 1];
     if (!page.has_more || last === undefined) return read;
@@ -187,7 +187,7 @@ function stepsQuery(queryClient: QueryClient, id: string, active: boolean, enabl
   return {
     queryKey,
     queryFn: async ({ signal }: { signal: AbortSignal }) => {
-      const held = queryClient.getQueryData<StepView[]>(queryKey) ?? [];
+      const held = queryClient.getQueryData<AgentStepView[]>(queryKey) ?? [];
       const fresh = await stepsAfter(id, held[held.length - 1]?.seq ?? 0, signal);
       return fresh.length === 0 ? held : [...held, ...fresh];
     },
@@ -200,13 +200,13 @@ export function useSteps(id: string, active: boolean, enabled = true) {
   return useQuery(stepsQuery(useQueryClient(), id, active, enabled));
 }
 
-const stepsOf = (read: readonly { data?: StepView[] }[]) => read.map((one) => one.data);
+const stepsOf = (read: readonly { data?: AgentStepView[] }[]) => read.map((one) => one.data);
 
 /** The histories of a session's sub-agents, in their order, each read as
  * its own page reads it, so opening one shows what is already held: what
  * each does now shows on its parent's page. A child that is done is not
  * read again. One array for as long as no history changes. */
-export function useChildSteps(children: readonly AgentSessionView[]): readonly (StepView[] | undefined)[] {
+export function useChildSteps(children: readonly AgentSessionView[]): readonly (AgentStepView[] | undefined)[] {
   const queryClient = useQueryClient();
   const works = (child: AgentSessionView) => child.archived_at === null && child.status !== "idle";
   return useQueries({ queries: children.map((child) => stepsQuery(queryClient, child.id, works(child), works(child))), combine: stepsOf });
@@ -276,7 +276,7 @@ export function useStepsBeforeAnswer(id: string, enabled: boolean) {
       const park = parks.find((one) => one.unlock === "answer");
       if (!park) return [];
       const after = Math.max(0, park.seq - ASKED_WINDOW);
-      return (await api.get<StepPageView>(`${path(id)}/steps?after_seq=${after}&limit=${ASKED_WINDOW}`, { signal })).items;
+      return (await api.get<AgentStepPageView>(`${path(id)}/steps?after_seq=${after}&limit=${ASKED_WINDOW}`, { signal })).items;
     },
     enabled,
   });
@@ -304,7 +304,7 @@ export function useCommandProgress(id: string, key: string | null) {
 export function useStartSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: StartSessionRequest) => api.post<AgentSessionView>("/v1/agent-sessions", body),
+    mutationFn: (body: StartAgentSessionRequest) => api.post<AgentSessionView>("/v1/agent-sessions", body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
   });
 }
@@ -329,7 +329,7 @@ export function useJoinSession() {
 export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, text }: { id: string; text: string }) => api.post<StepView>(`${path(id)}/messages`, { text }),
+    mutationFn: ({ id, text }: { id: string; text: string }) => api.post<AgentStepView>(`${path(id)}/messages`, { text }),
     onSettled: (_step, _error, { id }) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: keys.agentSessions.one(id) }),
@@ -347,16 +347,16 @@ export function useSessionActions(id: string) {
     Promise.all([settled(), queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists })]);
   return {
     message: useMutation({
-      mutationFn: (text: string) => api.post<StepView>(`${path(id)}/messages`, { text }),
+      mutationFn: (text: string) => api.post<AgentStepView>(`${path(id)}/messages`, { text }),
       onSettled: settled,
     }),
     control: useMutation({
-      mutationFn: (body: { command: SessionControl; request_seq?: number }) => api.post<StepView>(`${path(id)}/controls`, body),
+      mutationFn: (body: { command: AgentSessionControl; request_seq?: number }) => api.post<AgentStepView>(`${path(id)}/controls`, body),
       onSettled: settled,
     }),
     decide: useMutation({
       mutationFn: ({ seq, ...body }: { seq: number } & Pick<DecisionRequest, "approve"> & Partial<DecisionRequest>) =>
-        api.post<StepView>(`${path(id)}/calls/${seq}/decision`, body),
+        api.post<AgentStepView>(`${path(id)}/calls/${seq}/decision`, body),
       onSettled: settled,
     }),
     takeControl: useMutation({
@@ -401,7 +401,7 @@ export function useSessionActions(id: string) {
      * arrives as the person's message, and its gates hold from now on. */
     invoke: useMutation({
       mutationFn: (name: string) =>
-        api.post<InvocationView>(`/v1/agent-playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
+        api.post<InvocationView>(`/v1/agent-playbooks/${encodeURIComponent(name)}/invocations`, { agent_session_id: id } satisfies InvokeRequest, {
           idempotencyKey: crypto.randomUUID(),
         }),
       onSettled: settled,

@@ -6,7 +6,7 @@ from uuid import UUID, uuid5
 
 from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
     CredentialExpired,
@@ -64,7 +64,7 @@ HOST_REVOKED_KIND = "hosts.host.revoked"
 PLACEMENT_KIND = "hosts.session_placement.updated"
 
 
-class HostsOptions(Platform):
+class HostsOptions(OmBase):
     # An enrollment token lives a day: long enough to install a few hosts,
     # short enough that one left in a script does not let hosts in for long.
     enrollment_ttl: timedelta = timedelta(days=1)
@@ -85,7 +85,7 @@ class HostsOptions(Platform):
     purge_batch: int = 1000
 
 
-class Provenance(Platform):
+class Provenance(OmBase):
     """What a host's write records as its provenance: the person who issued
     the token the host enrolled with, under the host's request. A host is no
     person and acts for nobody, so the person who let it in answers for it."""
@@ -113,18 +113,18 @@ def mint(prefix: str) -> tuple[str, str]:
     return secret, hash_token(secret)
 
 
-def session_pool_id(org_id: UUID, session_id: UUID) -> UUID:
+def session_pool_id(org_id: UUID, agent_session_id: UUID) -> UUID:
     """The id of a session's pool in the cloud pool: one per session, the same
     whichever process makes it first."""
-    return uuid5(org_id, f"cloud-pool:{session_id}")
+    return uuid5(org_id, f"cloud-pool:{agent_session_id}")
 
 
 def _the_tenants(pool: HostPool) -> HostPool:
     """A pool a person places a session on or enrolls a host into: the
     tenant's own, never a session's pool of the platform's cloud."""
-    if pool.session_id is not None:
+    if pool.agent_session_id is not None:
         raise ValidationFailed(
-            f"pool {pool.id} is the platform's, for session {pool.session_id} alone"
+            f"pool {pool.id} is the platform's, for session {pool.agent_session_id} alone"
         )
     return pool
 
@@ -138,7 +138,7 @@ def claimant_of(identity: ClaimantIdentity) -> Claimant:
         id=identity.id,
         org_id=identity.org_id,
         pool_id=identity.pool_id,
-        session_id=identity.session_id,
+        agent_session_id=identity.agent_session_id,
     )
 
 
@@ -282,10 +282,10 @@ class HostsManagerImpl(HostsManagerInterface):
     async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> EnrolledClaimant:
         ctx.require(Permission.MANAGE_MEMBERS)
         host = await self._storage.read_host(ctx.org_id, claimant_id)
-        if host is not None and host.session_id is not None:
+        if host is not None and host.agent_session_id is not None:
             # Its machine runs on: it would bill with no host to work for.
             raise ValidationFailed(
-                f"host {claimant_id} is the platform's, for session {host.session_id} alone: "
+                f"host {claimant_id} is the platform's, for session {host.agent_session_id} alone: "
                 "it ends with its machine, when the session ends"
             )
         rows = (outbox_row(ctx, HOST_REVOKED_KIND, claimant_id, {}),)
@@ -299,18 +299,18 @@ class HostsManagerImpl(HostsManagerInterface):
         return revoked
 
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, pool_id: UUID | None
+        self, ctx: TenantContext, agent_session_id: UUID, pool_id: UUID | None
     ) -> SessionPlacement:
         ctx.require(Permission.WRITE)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if session.root_id != session.id:
             raise ValidationFailed(
-                f"session {session_id} is a sub-agent: it runs where its root "
+                f"session {agent_session_id} is a sub-agent: it runs where its root "
                 f"{session.root_id} runs, so place its root"
             )
         if pool_id is not None:
             _the_tenants(await self._pool(ctx, pool_id))
-        stored = await self._storage.read_placement(ctx.org_id, session_id)
+        stored = await self._storage.read_placement(ctx.org_id, agent_session_id)
         now = self._clock()
         if stored is None:
             placed = SessionPlacement(
@@ -319,7 +319,7 @@ class HostsManagerImpl(HostsManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 pool_id=pool_id,
             )
         else:
@@ -331,28 +331,28 @@ class HostsManagerImpl(HostsManagerInterface):
                     "version": stored.version + 1,
                 }
             )
-        rows = (versioned_row(ctx, PLACEMENT_KIND, session_id, placed.version),)
+        rows = (versioned_row(ctx, PLACEMENT_KIND, agent_session_id, placed.version),)
         expected = 0 if stored is None else stored.version
         await self._storage.write_placement(ctx.org_id, placed, expected, rows)
         await self._relay.relay_all(ctx.org_id, rows)
         return placed
 
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
         ctx.require(Permission.READ)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         # A sub-agent runs where its tree's root runs.
         placed = await self._storage.read_placement(ctx.org_id, session.root_id)
         if placed is None:
-            return PlacementState(session_id=session_id)
+            return PlacementState(agent_session_id=agent_session_id)
         if placed.pool_id is None:
-            return PlacementState(session_id=session_id, version=placed.version)
+            return PlacementState(agent_session_id=agent_session_id, version=placed.version)
         pool = await self._storage.read_pool(ctx.org_id, placed.pool_id)
         if pool is None:
             # A pinned session whose pool is gone stays pinned to it: it waits,
             # and never falls back to the cloud.
-            raise NotFound(f"pool {placed.pool_id} of session {session_id} not found")
+            raise NotFound(f"pool {placed.pool_id} of session {agent_session_id} not found")
         return PlacementState(
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             pool=pool,
             hosts_online=await self._online(ctx.org_id, pool.id),
             version=placed.version,
@@ -360,26 +360,32 @@ class HostsManagerImpl(HostsManagerInterface):
 
     # The cloud pool's side: a pool of one per session, and its machine's host.
 
-    async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
+    async def session_pool(
+        self, ctx: TenantContext, agent_session_id: UUID, region: str
+    ) -> HostPool:
         ctx.require(Permission.WRITE)
         now = self._clock()
         pool = HostPool(
-            id=session_pool_id(ctx.org_id, session_id),
+            id=session_pool_id(ctx.org_id, agent_session_id),
             created_at=now,
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            name=f"cloud-{session_id}",
+            name=f"cloud-{agent_session_id}",
             region=region,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
         )
-        rows = (outbox_row(ctx, POOL_CREATED_KIND, pool.id, {"session_id": str(session_id)}),)
+        rows = (
+            outbox_row(
+                ctx, POOL_CREATED_KIND, pool.id, {"agent_session_id": str(agent_session_id)}
+            ),
+        )
         if await self._storage.create_pool(ctx.org_id, pool, rows):
             await self._relay.relay_all(ctx.org_id, rows)
             return pool
         stored = await self._storage.read_pool(ctx.org_id, pool.id)
-        if stored is None or stored.session_id != session_id:
-            raise NotFound(f"the cloud pool of session {session_id} not found")
+        if stored is None or stored.agent_session_id != agent_session_id:
+            raise NotFound(f"the cloud pool of session {agent_session_id} not found")
         return stored
 
     async def admit_machine(
@@ -392,7 +398,7 @@ class HostsManagerImpl(HostsManagerInterface):
         enrollment: Enrollment,
     ) -> IssuedCredential:
         pool = await self._storage.read_pool(org_id, pool_id)
-        if pool is None or pool.session_id is None:
+        if pool is None or pool.agent_session_id is None:
             raise InvalidCredential("a machine enrolls only into its session's cloud pool")
         self._at_or_above_floor(enrollment.exec_version)
         now = self._clock()
@@ -409,7 +415,7 @@ class HostsManagerImpl(HostsManagerInterface):
             advertisement=enrollment.advertisement,
             exec_version=enrollment.exec_version,
             last_seen_at=now,
-            session_id=pool.session_id,
+            agent_session_id=pool.agent_session_id,
         )
         return await self._admit(rctx, org_id, host)
 
@@ -434,15 +440,17 @@ class HostsManagerImpl(HostsManagerInterface):
         await self._relay.relay_all(org_id, rows)
         await self._revoked(rctx, org_id, host_id)
 
-    async def work_placement(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
-        placed = await self.placement_of(ctx, session_id)
+    async def work_placement(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
+        placed = await self.placement_of(ctx, agent_session_id)
         if placed.pool is not None:
             return placed
-        pool = await self._storage.read_pool(ctx.org_id, session_pool_id(ctx.org_id, session_id))
-        if pool is None or pool.session_id != session_id:
+        pool = await self._storage.read_pool(
+            ctx.org_id, session_pool_id(ctx.org_id, agent_session_id)
+        )
+        if pool is None or pool.agent_session_id != agent_session_id:
             return placed
         return PlacementState(
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             pool=pool,
             hosts_online=await self._online(ctx.org_id, pool.id),
             version=placed.version,
@@ -684,7 +692,7 @@ class HostsManagerImpl(HostsManagerInterface):
             pool_id=claimant.pool_id,
             credential_id=held.id,
             expires_at=held.expires_at,
-            session_id=claimant.session_id,
+            agent_session_id=claimant.agent_session_id,
         )
 
     async def _live(self, claimant: ClaimantIdentity) -> EnrolledClaimant:

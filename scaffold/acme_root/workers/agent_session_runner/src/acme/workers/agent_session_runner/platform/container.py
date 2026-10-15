@@ -50,8 +50,8 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 from acme.workers.maintenance.platform.container import cloud_pool_options
-from acme.workers.session_runner.settings import SessionRunnerSettings
 
 
 class RunnerPlatform:
@@ -85,7 +85,7 @@ class RunnerPlatform:
 
 
 def build_runner_platform(
-    settings: SessionRunnerSettings,
+    settings: AgentSessionRunnerSettings,
     storage: StorageInterface,
     infra: InfraInterface,
     integrations: IntegrationsInterface,
@@ -200,9 +200,9 @@ def build_runner_platform(
         environment=settings.environment,
         tool_catalog=acts,
         attachment_reader=attachment_reader,
-        budget_gate=ports.budget_gate or build_money_gate(storage),
+        spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
         result_gate=ports.result_gate,
-        models_layer=matrix.layer,
+        language_models_layer=matrix.layer,
         # A call of a session the tenant's agent automation principal started
         # runs on that principal's grant; every other on a member's place.
         principal_context=agent_automation_principals(
@@ -215,7 +215,7 @@ def build_runner_platform(
             agent_knowledge=agent_knowledge.manager,
             agent_automations=lambda: agent_automations[0],
             executor=ports.executor,
-            executor_options=ExecutorOptions(image=settings.workspace_image),
+            executor_options=ExecutorOptions(image=settings.agent_workspace_image),
             work_product=ports.work_product,
             agent_session_projects=ports.agent_session_projects,
             workspace_agent_projects=ports.workspace_agent_projects,

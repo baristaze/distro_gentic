@@ -10,8 +10,8 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Identifiable, Platform, Trackable
-from acme.om.steps.types.header import SNAPSHOT_HASH
+from acme.om.agent_steps.types.header import SNAPSHOT_HASH
+from acme.om.base import Identifiable, OmBase, Trackable
 
 DIGEST = r"^sha256:[0-9a-f]{64}$"
 """The digest a host declares of the bytes it keeps: their SHA-256."""
@@ -30,7 +30,7 @@ class KeptSnapshot(Identifiable, Trackable):
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ()
 
-    session_id: UUID
+    agent_session_id: UUID
     hash: str = Field(pattern=SNAPSHOT_HASH.pattern)
     size: int = Field(ge=0)
     pool_id: UUID | None = None
@@ -62,7 +62,7 @@ class KeptSnapshot(Identifiable, Trackable):
         return self.machine
 
 
-class HostSnapshot(Platform):
+class HostSnapshot(OmBase):
     """A snapshot as a host is asked to keep it, or to start a workspace from
     it: its id, and, once kept, the reference its store knows it by, the
     digest of its bytes, their size, and the host that kept it

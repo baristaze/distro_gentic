@@ -24,7 +24,9 @@ class LanguageModelsLayer:
     beside it."""
 
     resolver: Callable[[ModelPricesInterface], ModelResolverInterface]
-    models: Callable[[LanguageModelsManagerInterface, TenancyManagerInterface], LanguageModelsManagerInterface]
+    models: Callable[
+        [LanguageModelsManagerInterface, TenancyManagerInterface], LanguageModelsManagerInterface
+    ]
     credentials: Callable[[ModelProvidersInterface], CallCredentialsInterface]
     version: Callable[[TenantContext, UUID], Awaitable[int | None]] | None = None
     tier: Callable[[TenantContext, UUID], Awaitable[str]] | None = None

@@ -9,18 +9,18 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
 from acme.infra.transports import OutputSink
-from acme.infra.workspaces import IsolationSpec, Workspace
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, ToolFailure, ToolRequestHeader
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
-from acme.om.steps.types.header import ToolFailure, ToolRequestHeader, WorkspaceSnapshot
-from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import response
 from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted
-from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
+from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
 from acme.om.trust.exceptions import SecretCrossesWall
 from acme.om.trust.manager import TrustManagerInterface
 
@@ -50,17 +50,17 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        defaults: PolicyLayer,
-        request: Step,
+        defaults: ToolPolicyLayer,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
-        above: Sequence[PolicyLayer] = (),
+        above: Sequence[ToolPolicyLayer] = (),
     ) -> Gate:
         resolved = await self._resolved(ctx, registry, request)
-        if isinstance(resolved, Step):
+        if isinstance(resolved, AgentStep):
             return Gate(outcome=GateOutcome.REFUSE, response=resolved)
         return await self._inner.gate(
             ctx,
@@ -78,17 +78,17 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         resolved = await self._resolved(ctx, registry, request)
-        if isinstance(resolved, Step):
+        if isinstance(resolved, AgentStep):
             return resolved
         await self._trust().audit_call(ctx, request)
         return await self._inner.execute(
@@ -107,17 +107,17 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         resolved = await self._resolved(ctx, registry, request)
-        if isinstance(resolved, Step):
+        if isinstance(resolved, AgentStep):
             return resolved
         await self._trust().audit_call(ctx, request)
         return await self._inner.recover(
@@ -136,16 +136,16 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | JobNotStarted | Step:
+    ) -> JobHandle | JobNotStarted | AgentStep:
         resolved = await self._resolved(ctx, registry, request)
-        if isinstance(resolved, Step):
+        if isinstance(resolved, AgentStep):
             # Refused before its tool ran: nothing started.
             return JobNotStarted(response=resolved)
         await self._trust().audit_call(ctx, request)
@@ -168,45 +168,45 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
     async def write_policy(self, ctx: TenantContext, policy: ToolPolicy) -> ToolPolicy:
         return await self._inner.write_policy(ctx, policy)
 
-    async def prepare_workspace(
+    async def prepare_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: WorkspaceSnapshot | None = None,
-    ) -> Workspace:
-        return await self._inner.prepare_workspace(ctx, session_id, spec, restore)
+        restore: AgentWorkspaceSnapshot | None = None,
+    ) -> AgentWorkspace:
+        return await self._inner.prepare_agent_workspace(ctx, agent_session_id, spec, restore)
 
-    async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
-        await self._inner.release_workspace(ctx, workspace)
+    async def release_agent_workspace(self, ctx: TenantContext, workspace: AgentWorkspace) -> None:
+        await self._inner.release_agent_workspace(ctx, workspace)
 
-    async def snapshot_workspace(
+    async def snapshot_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
-        return await self._inner.snapshot_workspace(
-            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+    ) -> AgentStep:
+        return await self._inner.snapshot_agent_workspace(
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
         )
 
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
 
     async def find_snapshot(
-        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
-    ) -> WorkspaceSnapshot:
-        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
+        self, ctx: TenantContext, agent_session_id: UUID, snapshot_id: UUID
+    ) -> AgentWorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, agent_session_id, snapshot_id)
 
     async def input_hash(
-        self, ctx: TenantContext, session_id: UUID, call_input: Mapping[str, Any]
+        self, ctx: TenantContext, agent_session_id: UUID, call_input: Mapping[str, Any]
     ) -> str:
-        return await self._inner.input_hash(ctx, session_id, call_input)
+        return await self._inner.input_hash(ctx, agent_session_id, call_input)
 
     async def cancel_job(self, ctx: TenantContext, registry: ToolRegistry, job: JobHandle) -> None:
         await self._inner.cancel_job(ctx, registry, job)
@@ -214,21 +214,21 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
     async def decide_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         request_seq: int,
         *,
         approve: bool,
         note: str = "",
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.decide_call(
-            ctx, session_id, request_seq, approve=approve, note=note
+            ctx, agent_session_id, request_seq, approve=approve, note=note
         )
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
-        await self._inner.purge_workspace(org_id, session_id)
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> None:
+        await self._inner.purge_agent_workspace(org_id, agent_session_id)
 
-    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
-        await self._inner.erase_snapshots(ctx, session_id)
+    async def erase_snapshots(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        await self._inner.erase_snapshots(ctx, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)
@@ -236,8 +236,8 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
     # Helpers.
 
     async def _resolved(
-        self, ctx: TenantContext, registry: ToolRegistry, request: Step
-    ) -> Step | dict[str, str]:
+        self, ctx: TenantContext, registry: ToolRegistry, request: AgentStep
+    ) -> AgentStep | dict[str, str]:
         """The name the tenant's store keeps each of the call's secrets
         under, for its session; or the `denied` answer to a call whose tool
         declares a secret that would cross its session's wall. A tool's
@@ -250,7 +250,9 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         if tool is None or not tool.spec.secrets:
             return {}
         try:
-            return await self._trust().resolve_secrets(ctx, request.session_id, tool.spec.secrets)
+            return await self._trust().resolve_secrets(
+                ctx, request.agent_session_id, tool.spec.secrets
+            )
         except SecretCrossesWall as refused:
             return response(
                 new_id(),

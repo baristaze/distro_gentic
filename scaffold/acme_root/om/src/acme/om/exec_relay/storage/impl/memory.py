@@ -31,20 +31,22 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
         return self._get(self._items, org_id, item_id)
 
     async def read_items_by_key(
-        self, org_id: UUID, session_id: UUID, key: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, key: UUID, limit: int
     ) -> list[ExecItem]:
         found = [
             item
             for item in self._rows(self._items, org_id)
-            if item.session_id == session_id and item.key == key
+            if item.agent_session_id == agent_session_id and item.key == key
         ]
         return sorted(found, key=lambda item: (item.created_at, item.id))[:limit]
 
-    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+    async def read_running(
+        self, org_id: UUID, agent_session_id: UUID, limit: int
+    ) -> list[ExecItem]:
         found = [
             item
             for item in self._rows(self._items, org_id)
-            if item.session_id == session_id and item.state is ExecState.RUNNING
+            if item.agent_session_id == agent_session_id and item.state is ExecState.RUNNING
         ]
         return sorted(found, key=lambda item: (item.created_at, item.id))[:limit]
 
@@ -110,22 +112,24 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         async with self._lock:
-            stored = await self.read_binding(org_id, binding.session_id)
+            stored = await self.read_binding(org_id, binding.agent_session_id)
             stored_version = 0 if stored is None else stored.version
             if stored_version != expected_version or (
                 stored is not None and stored.id != binding.id
             ):
                 raise PreconditionFailed(
-                    f"the workspace binding of session {binding.session_id} is no longer at "
+                    f"the workspace binding of session {binding.agent_session_id} is no longer at "
                     f"version {expected_version}"
                 )
             if stored is None and binding.id in self._bindings:
                 raise PreconditionFailed(f"binding {binding.id} is another session's")
             self._put(self._bindings, org_id, binding, outbox_rows)
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> AgentWorkspaceBinding | None:
+    async def read_binding(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         for binding in self._rows(self._bindings, org_id):
-            if binding.session_id == session_id:
+            if binding.agent_session_id == agent_session_id:
                 return binding
         return None
 
@@ -135,14 +139,15 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
         found = sorted(self._rows_across_tenants(self._bindings), key=lambda row: row[1].id)
         return [(org_id, b) for org_id, b in found if after is None or b.id > after][:limit]
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = 0
             for table in (self._parts, self._controls, self._items, self._bindings):
                 gone = [
                     entity_id
                     for entity_id, (row_org, entity) in table.items()
-                    if row_org == org_id and getattr(entity, "session_id", None) == session_id
+                    if row_org == org_id
+                    and getattr(entity, "agent_session_id", None) == agent_session_id
                 ][:limit]
                 for entity_id in gone:
                     del table[entity_id]

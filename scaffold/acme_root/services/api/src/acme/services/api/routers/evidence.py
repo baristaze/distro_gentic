@@ -15,30 +15,30 @@ from acme.services.api.types.evidence import ExecutionPageView, ValidationView, 
 router = APIRouter(prefix="/agent-sessions", tags=["evidence"])
 
 
-@router.get("/{session_id}/executions", response_model=ExecutionPageView)
+@router.get("/{agent_session_id}/executions", response_model=ExecutionPageView)
 async def list_executions(
     ctx: Ctx,
     evidence: EvidenceService,
-    session_id: UUID,
+    agent_session_id: UUID,
     cursor: str | None = None,
     limit: int = LIMIT_DEFAULT,
 ) -> ExecutionPageView:
     """The runs of checks the session recorded or the executor ran for it,
     oldest first, a page at a time."""
-    return await evidence.get_executions(ctx, session_id, cursor, limit)
+    return await evidence.get_executions(ctx, agent_session_id, cursor, limit)
 
 
-@router.get("/{session_id}/validations", response_model=list[ValidationView])
+@router.get("/{agent_session_id}/validations", response_model=list[ValidationView])
 async def list_validations(
-    ctx: Ctx, evidence: EvidenceService, session_id: UUID, limit: int = LIMIT_DEFAULT
+    ctx: Ctx, evidence: EvidenceService, agent_session_id: UUID, limit: int = LIMIT_DEFAULT
 ) -> list[ValidationView]:
-    return await evidence.get_validations(ctx, session_id, limit)
+    return await evidence.get_validations(ctx, agent_session_id, limit)
 
 
-@router.get("/{session_id}/work-product", response_model=WorkProductView)
+@router.get("/{agent_session_id}/work-product", response_model=WorkProductView)
 async def get_work_product(
-    ctx: Ctx, evidence: EvidenceService, session_id: UUID
+    ctx: Ctx, evidence: EvidenceService, agent_session_id: UUID
 ) -> WorkProductView:
     """Its branch, the pull requests and branches bound to it, and the result
     it submitted that the gate accepted."""
-    return await evidence.get_work_product(ctx, session_id)
+    return await evidence.get_work_product(ctx, agent_session_id)

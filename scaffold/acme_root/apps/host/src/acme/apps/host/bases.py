@@ -32,17 +32,17 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret
-from acme.infra.exceptions import InfraException
-from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface, secret_held
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceBase,
+    AgentWorkspaceProviderInterface,
     BaseSetupFailed,
     Durability,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    WorkspaceBase,
-    WorkspaceProviderInterface,
 )
+from acme.infra.exceptions import InfraException
+from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface, secret_held
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class HostBases:
     def __init__(
         self,
         store: HostSnapshots,
-        workspaces: Mapping[IsolationMode, WorkspaceProviderInterface],
+        workspaces: Mapping[IsolationMode, AgentWorkspaceProviderInterface],
         transports: Mapping[IsolationMode, TransportInterface],
         *,
         build_limit: timedelta = BUILD_LIMIT,
@@ -120,7 +120,7 @@ class HostBases:
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._store = store
-        self._workspaces = workspaces
+        self._agent_workspaces = workspaces
         self._transports = transports
         self._build_limit = build_limit
         self._wait = wait
@@ -165,7 +165,7 @@ class HostBases:
         """The base `spec` names goes from the store, and what its provider
         keeps of it, so the next prepare builds it again."""
         key = base_key(spec)
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         if provider is not None:
             await provider.purge(org_id, uuid.uuid5(KEPT_UNDER, f"{org_id}/{key}"))
         await self._store.drop_base(org_id, key)
@@ -202,7 +202,7 @@ class HostBases:
         the setup's egress and what a package manager needs (`building`),
         then snapshotted, scanned, and kept."""
         base = spec.base
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         transport = self._transports.get(spec.mode)
         if base is None or provider is None or transport is None:
             raise IsolationRefused(f"this host builds no base of a {spec.mode.value} workspace")
@@ -210,7 +210,7 @@ class HostBases:
             update={
                 "egress": base.egress,
                 "durability": Durability.SNAPSHOT,
-                "base": WorkspaceBase(image=base.image),
+                "base": AgentWorkspaceBase(image=base.image),
             }
         )
         build_id = uuid.uuid4()

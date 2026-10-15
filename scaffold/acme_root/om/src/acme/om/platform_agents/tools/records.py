@@ -17,9 +17,12 @@ from acme.om.agent_automations.types.agent_automation import Limits as AgentAuto
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_projects.types.agent_project import AgentProject
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import ParkReason, ToolRequestHeader
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import Role, TenantContext
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
@@ -28,13 +31,10 @@ from acme.om.park_alerts.rules import held_calls
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools.base import HOSTS_MAX, LIST_MAX, NativeToolImpl, PageInput
 from acme.om.platform_agents.types.draft import PolicyDraft
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ParkReason, ToolRequestHeader
-from acme.om.steps.types.step import Step
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.rules import approver_roles
 from acme.om.tools.tool import ToolRuntime
-from acme.om.tools.types.policy import ApproverRule, PolicyRule
+from acme.om.tools.types.policy import ApproverRule, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
@@ -57,10 +57,10 @@ HISTORY_PAGE = 200  # steps one read of a history takes
 
 
 class SessionInput(ToolInput):
-    session_id: UUID
+    agent_session_id: UUID
 
 
-class HeldCall(Platform):
+class HeldCall(OmBase):
     """A call the session holds for a person's decision: the tool, its
     class, and the roles the tenant's policy lets decide that class."""
 
@@ -71,13 +71,13 @@ class HeldCall(Platform):
     decided_by: tuple[Role, ...]
 
 
-class ChildLine(Platform):
-    session_id: UUID
+class ChildLine(OmBase):
+    agent_session_id: UUID
     kind: str
-    status: SessionStatus
+    status: AgentSessionStatus
 
 
-class SessionState(Platform):
+class AuthSessionState(OmBase):
     """Where a session stands, as its record says: never its content."""
 
     kind: str
@@ -87,7 +87,7 @@ class SessionState(Platform):
     agent_project_id: UUID | None = None
     parent_id: UUID | None = None
     handed_off_from: UUID | None = None
-    status: SessionStatus
+    status: AgentSessionStatus
     waiting_input: bool  # a message that woke it has not reached the model yet
     park_reason: ParkReason | None = None
     unlock: str | None = None  # what clears the park: an approval, a budget's id, a job
@@ -119,14 +119,14 @@ async def tree_of(
 
 
 async def history_of(
-    steps: StepsManagerInterface, ctx: TenantContext, session_id: UUID
-) -> list[Step]:
+    steps: AgentStepsManagerInterface, ctx: TenantContext, agent_session_id: UUID
+) -> list[AgentStep]:
     """A session's whole history, in order, a page at a time. Read after the
     session itself, so another tenant's is never reached."""
-    history: list[Step] = []
+    history: list[AgentStep] = []
     while True:
         after = history[-1].seq if history else 0
-        page = await steps.get_steps(ctx, session_id, after, HISTORY_PAGE)
+        page = await steps.get_agent_steps(ctx, agent_session_id, after, HISTORY_PAGE)
         history.extend(page.items)
         if not page.has_more or not page.items:
             return history
@@ -147,7 +147,7 @@ class ReadSessionImpl(NativeToolImpl):
             "sub-agents answers them."
         ),
         input_model=SessionInput,
-        output_model=SessionState,
+        output_model=AuthSessionState,
         timeout=timedelta(seconds=10),
         authorization_class=ToolClass.READ,
         effect=Effect.READ_ONLY,
@@ -158,7 +158,7 @@ class ReadSessionImpl(NativeToolImpl):
     def __init__(
         self,
         sessions: Callable[[], AgentSessionsManagerInterface],
-        steps: Callable[[], StepsManagerInterface],
+        steps: Callable[[], AgentStepsManagerInterface],
         policies: Callable[[], ToolsManagerInterface],
         agent_projects: Callable[[], AgentProjectsManagerInterface],
     ) -> None:
@@ -169,9 +169,9 @@ class ReadSessionImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SessionInput)
-        session = await self._sessions().get_session(ctx, call_input.session_id)
+        session = await self._sessions().get_agent_session(ctx, call_input.agent_session_id)
         park = session.park
         agent_project = await self._agent_projects().agent_project_of(ctx, session.id)
         held: tuple[HeldCall, ...] = ()
@@ -186,10 +186,10 @@ class ReadSessionImpl(NativeToolImpl):
         if park is not None and park.reason is ParkReason.CHILDREN:
             page = await self._sessions().get_children(ctx, session.id, None, CHILDREN_MAX)
             children = tuple(
-                ChildLine(session_id=child.id, kind=child.kind, status=child.status)
+                ChildLine(agent_session_id=child.id, kind=child.kind, status=child.status)
                 for child in page.items
             )
-        return SessionState(
+        return AuthSessionState(
             kind=session.kind,
             kind_version=session.kind_version,
             title=session.title,
@@ -208,7 +208,7 @@ class ReadSessionImpl(NativeToolImpl):
         )
 
 
-def held_call(request: Step, roles: tuple[Role, ...]) -> HeldCall:
+def held_call(request: AgentStep, roles: tuple[Role, ...]) -> HeldCall:
     header = request.header
     assert isinstance(header, ToolRequestHeader)
     return HeldCall(
@@ -221,7 +221,7 @@ def held_call(request: Step, roles: tuple[Role, ...]) -> HeldCall:
 
 
 class SessionsQuery(ToolInput):
-    status: SessionStatus | None = None
+    status: AgentSessionStatus | None = None
     park_reason: ParkReason | None = None
     agent_project_id: UUID | None = None
     before: UUID | None = None  # the `next` an earlier answer gave
@@ -229,22 +229,22 @@ class SessionsQuery(ToolInput):
 
     @model_validator(mode="after")
     def _a_park_reason_lists_parked_sessions(self) -> Self:
-        if self.park_reason is not None and self.status not in (None, SessionStatus.PARKED):
+        if self.park_reason is not None and self.status not in (None, AgentSessionStatus.PARKED):
             raise ValueError("a park reason lists parked sessions: leave status out")
         return self
 
 
-class SessionLine(Platform):
-    session_id: UUID
+class SessionLine(OmBase):
+    agent_session_id: UUID
     title: str
     kind: str
-    status: SessionStatus
+    status: AgentSessionStatus
     park_reason: ParkReason | None = None
     started_by: UUID
     created_at: datetime
 
 
-class SessionList(Platform):
+class SessionList(OmBase):
     sessions: tuple[SessionLine, ...]
     next: UUID | None  # pass it as `before` to read on; none once the list is read
 
@@ -285,7 +285,7 @@ class ListSessionsImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SessionsQuery)
         # A sub-agent waits under a root in any status, an idle one included,
         # so the scan reads every root, and the filter reads each session.
@@ -316,7 +316,7 @@ class ListSessionsImpl(NativeToolImpl):
         if session.deleted_at is not None:
             return None
         reason = query.park_reason
-        status = SessionStatus.PARKED if reason is not None else query.status
+        status = AgentSessionStatus.PARKED if reason is not None else query.status
         if status is not None and session.status is not status:
             return None
         if reason is not None and (session.park is None or session.park.reason is not reason):
@@ -326,7 +326,7 @@ class ListSessionsImpl(NativeToolImpl):
             if agent_project is None or agent_project.id != query.agent_project_id:
                 return None
         return SessionLine(
-            session_id=session.id,
+            agent_session_id=session.id,
             title=session.title,
             kind=session.kind,
             status=session.status,
@@ -336,7 +336,7 @@ class ListSessionsImpl(NativeToolImpl):
         )
 
 
-class WaitingItem(Platform):
+class WaitingItem(OmBase):
     """The session's loop on the work queue: the item made last for it."""
 
     status: WorkStatus
@@ -349,19 +349,19 @@ class WaitingItem(Platform):
     running_ahead: int | None = None  # the tenant's loops running ahead of it, while queued
 
 
-class PoolHost(Platform):
+class PoolHost(OmBase):
     host_id: UUID
     name: str
     online: bool
     last_seen_at: datetime
 
 
-class SessionWait(Platform):
+class SessionWait(OmBase):
     """What a session waits on outside its own history: its loop's place on
     the work queue, and where it runs, with the hosts that may take it."""
 
-    session_id: UUID
-    status: SessionStatus
+    agent_session_id: UUID
+    status: AgentSessionStatus
     park_reason: ParkReason | None = None
     retry_at: datetime | None = None
     loop: WaitingItem | None = None
@@ -417,9 +417,9 @@ class ReadWaitImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SessionInput)
-        session = await self._sessions().get_session(ctx, call_input.session_id)
+        session = await self._sessions().get_agent_session(ctx, call_input.agent_session_id)
         item = await self._work().latest_for_target(ctx, WorkKind.LOOP, session.id)
         loop: WaitingItem | None = None
         if item is not None:
@@ -452,7 +452,7 @@ class ReadWaitImpl(NativeToolImpl):
                     holder = None
         park = session.park
         return SessionWait(
-            session_id=session.id,
+            agent_session_id=session.id,
             status=session.status,
             park_reason=None if park is None else park.reason,
             retry_at=None if park is None else park.retry_at,
@@ -479,7 +479,7 @@ class AgentProjectInput(ToolInput):
     agent_project_id: UUID
 
 
-class AgentProjectRead(Platform):
+class AgentProjectRead(OmBase):
     agent_project_id: UUID
     name: str
     repository: str  # its host and path, such as github.com/octo/reports
@@ -487,7 +487,7 @@ class AgentProjectRead(Platform):
     created_by: UUID
 
 
-class AgentProjectList(Platform):
+class AgentProjectList(OmBase):
     agent_projects: tuple[AgentProjectRead, ...]
     next: UUID | None  # pass it as `after` to read on; none once the list is read
 
@@ -523,7 +523,7 @@ class ListAgentProjectsImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
         rows = await self._agent_projects().list_agent_projects(ctx, call_input.after, limit + 1)
@@ -556,14 +556,14 @@ class ReadAgentProjectImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, AgentProjectInput)
         return agent_project_read(
             await self._agent_projects().get_agent_project(ctx, call_input.agent_project_id)
         )
 
 
-class AgentAutomationLine(Platform):
+class AgentAutomationLine(OmBase):
     agent_automation_id: UUID
     name: str
     trigger: str  # an event or a schedule
@@ -572,7 +572,7 @@ class AgentAutomationLine(Platform):
     runs_as: str
 
 
-class AgentAutomationList(Platform):
+class AgentAutomationList(OmBase):
     agent_automations: tuple[AgentAutomationLine, ...]
     next: UUID | None  # pass it as `after` to read on; none once the list is read
 
@@ -582,7 +582,7 @@ class AgentAutomationInput(ToolInput):
     runs: int = Field(default=5, ge=1, le=RUNS_MAX)
 
 
-class RunLine(Platform):
+class RunLine(OmBase):
     """One firing of an agent automation, as recorded: started, queued, or refused
     and why, the session it started or messaged, and how it ended."""
 
@@ -591,14 +591,14 @@ class RunLine(Platform):
     status: str
     refusal: str | None = None
     hop: int
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     opened: bool
     outcome: str | None = None
     started_at: datetime | None = None
     closed_at: datetime | None = None
 
 
-class AgentAutomationRead(Platform):
+class AgentAutomationRead(OmBase):
     """An agent automation's shape and its recent runs: never the text a person
     briefed it with or an event brought."""
 
@@ -615,7 +615,7 @@ class AgentAutomationRead(Platform):
     action: str
     agent_kind: str | None = None
     agent_project_id: UUID | None = None
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     limits: AgentAutomationLimits
     runs: tuple[RunLine, ...]  # newest first
 
@@ -653,7 +653,7 @@ class ListAgentAutomationsImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
         rows = await self._agent_automations().list_agent_automations(
@@ -692,7 +692,7 @@ class ReadAgentAutomationImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, AgentAutomationInput)
         agent_automation = await self._agent_automations().get_agent_automation(
             ctx, call_input.agent_automation_id
@@ -713,7 +713,7 @@ class ReadAgentAutomationImpl(NativeToolImpl):
             action=action.kind,
             agent_kind=action.agent_kind,
             agent_project_id=action.agent_project_id,
-            session_id=action.session_id,
+            agent_session_id=action.agent_session_id,
             limits=agent_automation.limits,
             runs=tuple(
                 RunLine(
@@ -722,7 +722,7 @@ class ReadAgentAutomationImpl(NativeToolImpl):
                     status=run.status,
                     refusal=run.refusal,
                     hop=run.hop,
-                    session_id=run.session_id,
+                    agent_session_id=run.agent_session_id,
                     opened=run.opened,
                     outcome=run.outcome,
                     started_at=run.started_at,
@@ -734,7 +734,7 @@ class ReadAgentAutomationImpl(NativeToolImpl):
 
 
 class DraftInput(ToolInput):
-    rules: tuple[PolicyRule, ...] = ()
+    rules: tuple[ToolPolicyRule, ...] = ()
     approvers: tuple[ApproverRule, ...] = ()
 
 
@@ -772,7 +772,7 @@ class DraftToolPolicyImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, DraftInput)
         live = await self._policies().get_policy(ctx)
         return rules.draft_policy(

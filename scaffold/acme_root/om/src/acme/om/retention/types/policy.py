@@ -14,8 +14,8 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Identifiable, Platform, Trackable
-from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.base import Identifiable, OmBase, Trackable
+from acme.om.privacy.types.agent_session_privacy import StorageMode
 
 REGION = r"^[a-z0-9][a-z0-9-]{0,31}$"
 """A region as a cloud names it, such as `eu-central-1`."""
@@ -30,7 +30,7 @@ refuses a lifetime past it (`retention.rules.past_bound`); the type does
 not, so a stored row that holds one still reads."""
 
 
-class RetentionPolicy(Platform):
+class RetentionPolicy(OmBase):
     """How long what a session says is kept (`content_lifetime`) and how long
     its shape is (`shape_lifetime`), both counted from the session's
     creation, None for no end; where its content may live
@@ -60,7 +60,7 @@ class RetentionPolicy(Platform):
         return self
 
 
-class AgentProjectRetention(Platform):
+class AgentProjectRetention(OmBase):
     """What one agent project narrows of its tenant's policy. A field it leaves at
     its default narrows nothing."""
 

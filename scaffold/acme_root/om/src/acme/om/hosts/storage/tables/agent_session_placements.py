@@ -13,8 +13,13 @@ class AgentSessionPlacements(IdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "agent_session_placements"
     __org_id_index__ = False
     __table_args__ = (
-        Index("uq_agent_session_placements_org_id_session_id", "org_id", "session_id", unique=True),
+        Index(
+            "uq_agent_session_placements_org_id_session_id",
+            "org_id",
+            "agent_session_id",
+            unique=True,
+        ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     pool_id: Mapped[UUID | None]
     version: Mapped[int]

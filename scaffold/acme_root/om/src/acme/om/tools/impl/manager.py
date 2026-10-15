@@ -631,7 +631,9 @@ class ToolsManagerImpl(ToolsManagerInterface):
         if not isinstance(tool, JobToolInterface):
             raise ValidationFailed(f"{tool.spec.name} is not a job")
         deadline = job_deadline(self._clock(), tool.spec.timeout, tree_deadline)
-        runtime = self._runtime(ctx, registry, request, tool, workspace, epoch, deadline, None, kept_as=kept_as)
+        runtime = self._runtime(
+            ctx, registry, request, tool, workspace, epoch, deadline, None, kept_as=kept_as
+        )
         try:
             # Starting is quick, and never outlasts the engine's limit or the
             # job's deadline; the work runs by that deadline.

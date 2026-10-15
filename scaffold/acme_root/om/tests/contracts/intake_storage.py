@@ -57,23 +57,25 @@ def make_link(external_id: str = "U024BE7LH", user_id: UUID | None = None) -> Id
     )
 
 
-def make_binding(handle: str = "acme/checkout#12", session_id: UUID | None = None) -> WorkBinding:
+def make_binding(
+    handle: str = "acme/checkout#12", agent_session_id: UUID | None = None
+) -> WorkBinding:
     return WorkBinding(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         kind=HandleKind.PULL_REQUEST,
         handle=handle,
     )
 
 
-def make_act(ref: str = "sha-4f2a", session_id: UUID | None = None) -> PlatformAct:
+def make_act(ref: str = "sha-4f2a", agent_session_id: UUID | None = None) -> PlatformAct:
     return PlatformAct(
         id=new_id(),
         created_at=utcnow(),
         integration="forge",
         ref=ref,
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
     )
 
 
@@ -135,18 +137,18 @@ class IntakeStorageContract:
     async def test_a_sessions_bindings_are_its_own_oldest_first(
         self, storage: IntakeStorageInterface
     ) -> None:
-        org, session_id = new_id(), new_id()
-        branch = make_binding("routes-for-sessions", session_id).model_copy(
+        org, agent_session_id = new_id(), new_id()
+        branch = make_binding("routes-for-sessions", agent_session_id).model_copy(
             update={"kind": HandleKind.BRANCH}
         )
-        pull = make_binding("acme/checkout#12", session_id).model_copy(
+        pull = make_binding("acme/checkout#12", agent_session_id).model_copy(
             update={"created_at": branch.created_at + timedelta(seconds=1)}
         )
         await storage.create_binding(org, pull)
         await storage.create_binding(org, branch)
         await storage.create_binding(org, make_binding("acme/checkout#13"))
-        assert await storage.read_session_bindings(org, session_id, 10) == [branch, pull]
-        assert await storage.read_session_bindings(org, session_id, 1) == [branch]
+        assert await storage.read_session_bindings(org, agent_session_id, 10) == [branch, pull]
+        assert await storage.read_session_bindings(org, agent_session_id, 1) == [branch]
         assert await storage.read_session_bindings(org, new_id(), 10) == []
 
     async def test_create_link_in_another_tenant_is_its_own(
@@ -228,7 +230,7 @@ class IntakeStorageContract:
     ) -> None:
         binding = make_binding()
         await storage.create_binding(new_id(), binding)
-        assert await storage.read_session_bindings(new_id(), binding.session_id, 10) == []
+        assert await storage.read_session_bindings(new_id(), binding.agent_session_id, 10) == []
 
     async def test_create_installation_another_tenant_holds_connects_nothing(
         self, storage: IntakeStorageInterface

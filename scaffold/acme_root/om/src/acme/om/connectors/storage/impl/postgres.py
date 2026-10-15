@@ -77,9 +77,9 @@ class ConnectorStoragePostgresImpl(PgStorageBase, ConnectorStorageInterface):
             raise TenantMismatch(f"session {pin.id} is not in {org_id}")
         return held
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None:
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> AgentSessionConnectors | None:
         stmt = select(SessionConnectorRows).where(
-            SessionConnectorRows.org_id == org_id, SessionConnectorRows.id == session_id
+            SessionConnectorRows.org_id == org_id, SessionConnectorRows.id == agent_session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()

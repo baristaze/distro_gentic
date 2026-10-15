@@ -3,13 +3,13 @@
 from acme.om.exceptions import (
     Conflict,
     NotAuthorized,
-    PlatformException,
+    OmException,
     PreconditionFailed,
     Unavailable,
 )
 
 
-class ExecRelayException(PlatformException): ...
+class ExecRelayException(OmException): ...
 
 
 class StaleExec(ExecRelayException, PreconditionFailed):

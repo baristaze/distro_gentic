@@ -30,6 +30,7 @@ from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.content import Attachment, Children, DocumentBlock
 from acme.om.agent_steps.types.content import TextBlock as KeptText
 from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason, ToolResponseHeader
+from acme.om.agent_steps.types.step import AgentStepType
 from acme.om.agents import LoopManagerInterface
 from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
@@ -45,17 +46,12 @@ from acme.om.context import (
     TenantContext,
 )
 from acme.om.exceptions import NotFound, UnknownAgentKind
-from acme.om.root import KINDS
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.agent_steps.rules import message_step
-from acme.om.agent_steps.types.content import Attachment, Children, DocumentBlock
-from acme.om.agent_steps.types.content import TextBlock as KeptText
-from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason, ToolResponseHeader
-from acme.om.agent_steps.types.step import AgentStepType
+from acme.om.root import KINDS
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import ROLE_PERMISSIONS
 from acme.om.tools.attachments import AttachmentReaderInterface, AttachmentText
@@ -69,21 +65,17 @@ from acme.om.work.types.work_item import (
     WorkStatus,
 )
 from acme.services.api.seed import seed_platform
-from acme.workers.maintenance.container import WorkerContainer
-from acme.workers.maintenance.main import build_loop
-from acme.workers.maintenance.main import loop_options as maintenance_options
-from acme.workers.maintenance.settings import MaintenanceSettings
 from acme.workers.agent_session_runner import container as runner_container
 from acme.workers.agent_session_runner import main as runner_main
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.main import build_runner, loop_options
 from acme.workers.agent_session_runner.runs import LoopHandlerImpl
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 from acme.workers.maintenance.main import loop_options as maintenance_options
 from acme.workers.maintenance.settings import MaintenanceSettings
-from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
 COLLECTOR = ENV_EXAMPLE.parent / "deployment" / "local" / "otel-collector" / "collector.yml"

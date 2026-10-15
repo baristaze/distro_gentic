@@ -49,18 +49,22 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, switch_to
-from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
+from acme.infra.agent_workspaces.container import (
+    CA_PATH,
+    DEFAULT_IMAGE,
+    AgentWorkspaceContainerImpl,
+)
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.agent_workspaces.network import CA_VARIABLES, HOST_NETWORK_VARIABLES, HostNetwork
 from acme.infra.agent_workspaces.vm import AgentWorkspaceVmImpl
 from acme.infra.base import new_id, utcnow
 from acme.infra.docker import DOCKER_VARIABLES
 from acme.infra.docker import docker as docker_cli
 from acme.infra.exceptions import InfraNotFound, InfraValidationFailed
 from acme.infra.impl.settings import InfraSettings
-from acme.infra.vms.lima import VmsLimaImpl, hypervisor
-from acme.infra.vms.twin import VmsTwinImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import (
     CapabilityMissing,
@@ -81,20 +85,6 @@ from acme.infra.transports.twin import RecordSealTwin, TransportNullImpl
 from acme.infra.transports.vm import TransportVmImpl
 from acme.infra.vms.lima import VmsLimaImpl, hypervisor
 from acme.infra.vms.twin import VmsTwinImpl
-from acme.infra.agent_workspaces import (
-    EgressMode,
-    EgressPolicy,
-    IsolationMode,
-    IsolationRefused,
-    IsolationSpec,
-    Workspace,
-    AgentWorkspaceProviderInterface,
-)
-from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, switch_to
-from acme.infra.agent_workspaces.container import CA_PATH, DEFAULT_IMAGE, AgentWorkspaceContainerImpl
-from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
-from acme.infra.agent_workspaces.network import CA_VARIABLES, HOST_NETWORK_VARIABLES, HostNetwork
-from acme.infra.agent_workspaces.vm import AgentWorkspaceVmImpl
 
 SECRET = 'tok-3f9A/b+c="q"\\9z-0123456789'
 TOKEN = SecretUse(name="api_token", via=SecretVia.INJECTED, env="API_TOKEN")
@@ -184,7 +174,7 @@ def what_the_host_hands(ca_path: str) -> dict[str, str]:
 
 async def seen_by(
     transport: TransportInterface,
-    workspace: Workspace,
+    workspace: AgentWorkspace,
     python: str,
     env: tuple[tuple[str, str], ...] = (),
 ) -> tuple[dict[str, str], str | None]:
@@ -308,7 +298,7 @@ class TransportContract:
         assert broker.attached == {} and broker.detached == [result.key]
 
     async def test_no_secret_lands_where_the_hosts_network_does(
-        self, transport: TransportInterface, workspace: Workspace
+        self, transport: TransportInterface, workspace: AgentWorkspace
     ) -> None:
         """A secret's value is never seen, so one in a proxy or CA variable
         would send a command's traffic, or its trust, where no one sees: the
@@ -571,7 +561,7 @@ class TestTransportLocal(LocalContract):
     async def test_under_open_egress_a_command_sees_the_hosts_proxy_and_ca_and_nothing_else(
         self,
         records: Path,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         broker: BrokerTwinImpl,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -595,7 +585,7 @@ class TestTransportLocal(LocalContract):
     async def test_under_no_egress_a_command_sees_nothing_of_the_hosts_network(
         self,
         records: Path,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         broker: BrokerTwinImpl,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -758,8 +748,12 @@ def docker_runs() -> bool:
 @pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
 class TestTransportContainer(TransportContract):
     @pytest.fixture
-    async def provided(self) -> AsyncIterator[tuple[AgentWorkspaceProviderInterface, AgentWorkspace]]:
-        provider = AgentWorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=300), "transports")
+    async def provided(
+        self,
+    ) -> AsyncIterator[tuple[AgentWorkspaceProviderInterface, AgentWorkspace]]:
+        provider = AgentWorkspaceContainerImpl(
+            "python:3.14-slim", timedelta(seconds=300), "transports"
+        )
         spec = IsolationSpec(
             mode=IsolationMode.CONTAINER,
             egress=EgressPolicy(mode=EgressMode.NONE),
@@ -1099,7 +1093,7 @@ async def test_a_container_command_takes_the_hosts_network_under_open_egress_alo
 
     monkeypatch.setattr("acme.infra.transports.container.spawn", spawned)
     network, _ = host_network(tmp_path, monkeypatch)
-    workspace = Workspace(
+    workspace = AgentWorkspace(
         id=new_id(),
         org_id=new_id(),
         spec=IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=egress)),

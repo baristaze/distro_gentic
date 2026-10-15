@@ -9,7 +9,7 @@ latest snapshot, which is the machine's whole disk."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.infra.workspaces import IsolationSpec, Workspace
+from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.cloud_pool.types.machine import MachineSnapshot
 from acme.om.context import RequestContext, TenantContext
@@ -30,10 +30,10 @@ class CloudPoolManagerInterface(ABC):
     async def prepare(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         restore: KeptSnapshot | None = None,
-    ) -> Workspace:
+    ) -> AgentWorkspace:
         """The session's workspace on its machine, once the machine's host
         holds it. The machine is the one that serves the session, else a
         warm one it claims, else one started from the pool's image; with
@@ -41,12 +41,12 @@ class CloudPoolManagerInterface(ABC):
         held to its digest first. `IsolationRefused` that clears while the
         machine starts or its host has not prepared it in time, and the loop
         waits on the resource; one that never clears for a spec the pool's
-        machines cannot hold. `WorkspaceLost` when the snapshot is gone, was
+        machines cannot hold. `AgentWorkspaceLost` when the snapshot is gone, was
         not taken by the pool, or does not match its digest."""
         ...
 
     @abstractmethod
-    async def snapshot(self, ctx: TenantContext, session_id: UUID) -> MachineSnapshot:
+    async def snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> MachineSnapshot:
         """Keeps the session's machine whole: its host's credential is ended
         first, so the disk holds no credential that answers, then the
         machine is stopped and its disk kept as a snapshot under the
@@ -57,25 +57,25 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def holds(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def holds(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         """Whether a machine of the pool serves the session."""
         ...
 
     @abstractmethod
-    async def release(self, ctx: TenantContext, session_id: UUID) -> None:
+    async def release(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         """Lets go of the machine that serves the session: its host's
         credential ends and the machine goes, its disk with it."""
         ...
 
     @abstractmethod
-    async def purge(self, org_id: UUID, session_id: UUID) -> None:
+    async def purge(self, org_id: UUID, agent_session_id: UUID) -> None:
         """Platform-internal: the session's purge, which runs for no
         principal: its machine and every snapshot kept under its names
         go."""
         ...
 
     @abstractmethod
-    async def erase(self, org_id: UUID, session_id: UUID) -> None:
+    async def erase(self, org_id: UUID, agent_session_id: UUID) -> None:
         """Platform-internal: the revocation of the session's key, named with
         its tenant: every snapshot kept under its names goes. Its machine, a
         cache, stays. The erasure is asked first, and done at once where this

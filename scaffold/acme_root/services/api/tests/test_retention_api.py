@@ -18,12 +18,6 @@ from api_support import (
     sign_in,
     sign_in_as,
 )
-from contracts.step_storage import (
-    make_request,
-    make_response,
-    make_tool_request,
-    make_tool_response,
-)
 from tenant_support import Headers, person, refused, tenant
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -32,6 +26,13 @@ from acme.om.base import new_id
 from acme.om.context import Role
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import first_agent_project
+
+from contracts.agent_step_storage import (
+    make_request,
+    make_response,
+    make_tool_request,
+    make_tool_response,
+)
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -73,9 +74,9 @@ async def session_saying(
         },
     )
     assert started.status_code == 201, started.text
-    session_id = started.json()["id"]
+    agent_session_id = started.json()["id"]
     said = await client.post(
-        f"/v1/agent-sessions/{session_id}/messages",
+        f"/v1/agent-sessions/{agent_session_id}/messages",
         headers={**owner, "Idempotency-Key": str(uuid4())},
         json={"text": SAID},
     )
@@ -84,18 +85,18 @@ async def session_saying(
     ctx = await managers.tenancy.authenticate(
         seed_request(), owner["Authorization"].removeprefix("Bearer ")
     )
-    sid, loop_id = UUID(session_id), UUID(said.json()["loop_id"])
+    sid, loop_id = UUID(agent_session_id), UUID(said.json()["loop_id"])
     request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
     response = make_response(sid, loop_id, request.id)
     call = make_tool_request(sid, loop_id, response.id)
     answer = make_tool_response(sid, loop_id, call.id)
     epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_steps(ctx, sid, epoch, [request, response, call, answer])
-    return session_id
+    await managers.steps.append_agent_steps(ctx, sid, epoch, [request, response, call, answer])
+    return agent_session_id
 
 
-async def steps_of(client: httpx.AsyncClient, owner: Headers, session_id: str) -> list[Any]:
-    read = await client.get(f"/v1/agent-sessions/{session_id}/steps", headers=owner)
+async def steps_of(client: httpx.AsyncClient, owner: Headers, agent_session_id: str) -> list[Any]:
+    read = await client.get(f"/v1/agent-sessions/{agent_session_id}/steps", headers=owner)
     assert read.status_code == 200, read.text
     return read.json()["items"]
 
@@ -125,26 +126,26 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
     and says nothing; the key is revoked and every version of it destroyed;
     a second call answers as the first left it."""
     admin = await person(client, container, await org_of(container), Role.ADMIN)
-    session_id = await session_saying(client, container, owner)
-    before = await steps_of(client, owner, session_id)
+    agent_session_id = await session_saying(client, container, owner)
+    before = await steps_of(client, owner, agent_session_id)
     assert [step["type"] for step in before] == SHAPE
     assert before[0]["text"] == SAID
     assert before[2]["thinking"] and before[2]["tool_uses"] and before[4]["tool_use_id"]
 
-    erased = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=admin)
+    erased = await client.post(f"/v1/retention/sessions/{agent_session_id}/erase", headers=admin)
 
     assert erased.status_code == 200, erased.text
-    assert erased.json()["session_id"] == session_id
+    assert erased.json()["agent_session_id"] == agent_session_id
     assert erased.json()["content_expired_at"] is not None
-    after = await steps_of(client, owner, session_id)
+    after = await steps_of(client, owner, agent_session_id)
     assert shape_of(after) == shape_of(before)
     assert says_nothing(after)
     assert SAID not in str(after) and before[2]["thinking"] not in str(after)
     ring = await container.storage.get_privacy_storage().read_keys(
-        await org_of(container), UUID(session_id)
+        await org_of(container), UUID(agent_session_id)
     )
     assert ring.keys and ring.revoked and all(key.is_destroyed() for key in ring.keys)
-    again = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=owner)
+    again = await client.post(f"/v1/retention/sessions/{agent_session_id}/erase", headers=owner)
     assert again.status_code == 200, again.text
     assert again.json() == erased.json()
 
@@ -157,13 +158,15 @@ async def test_an_erasure_answers_with_the_report_of_a_service_that_holds_each_k
     container = build_container(tmp_path, agent_kinds=(ASSISTANT,), environment="local")
     async with client_over(container) as client:
         owner = await sign_in(client, container)
-        session_id = await session_saying(client, container, owner)
+        agent_session_id = await session_saying(client, container, owner)
 
-        erased = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=owner)
+        erased = await client.post(
+            f"/v1/retention/sessions/{agent_session_id}/erase", headers=owner
+        )
 
         assert erased.status_code == 200, erased.text
         report = erased.json()["destruction"]
-        assert report is not None and report["key_name"].endswith(session_id)
+        assert report is not None and report["key_name"].endswith(agent_session_id)
         assert set(report) == {"service", "key_name", "destroyed_at", "receipt"}
 
 
@@ -174,7 +177,7 @@ async def test_an_admin_writes_the_policy_and_the_sweep_holds_sessions_to_it(
     tightening to keep nothing at rest reaches a session created before it
     at the next sweep: its content goes, and its shape stays."""
     admin = await person(client, container, await org_of(container), Role.ADMIN)
-    session_id = await session_saying(client, container, owner)
+    agent_session_id = await session_saying(client, container, owner)
     loosest = await client.get("/v1/retention/policy", headers=admin)
     assert loosest.status_code == 200, loosest.text
     assert loosest.json()["version"] == 0
@@ -203,11 +206,11 @@ async def test_an_admin_writes_the_policy_and_the_sweep_holds_sessions_to_it(
     )
     assert tightened.status_code == 200, tightened.text
     assert tightened.json()["version"] == 2
-    assert (await steps_of(client, owner, session_id))[0]["text"] == SAID
+    assert (await steps_of(client, owner, agent_session_id))[0]["text"] == SAID
 
     await container.managers.retention.sweep(seed_request())
 
-    after = await steps_of(client, owner, session_id)
+    after = await steps_of(client, owner, agent_session_id)
     assert [step["type"] for step in after] == SHAPE
     assert says_nothing(after)
     read = await client.get("/v1/retention/policy", headers=owner)
@@ -217,17 +220,19 @@ async def test_an_admin_writes_the_policy_and_the_sweep_holds_sessions_to_it(
 async def test_a_member_erases_and_writes_nothing(
     client: httpx.AsyncClient, owner: Headers, container: AppContainer
 ) -> None:
-    session_id = await session_saying(client, container, owner)
+    agent_session_id = await session_saying(client, container, owner)
     for role in (Role.MEMBER, Role.VIEWER):
         headers = await person(client, container, await org_of(container), role)
-        erased = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=headers)
+        erased = await client.post(
+            f"/v1/retention/sessions/{agent_session_id}/erase", headers=headers
+        )
         refused(erased, 403, "not_authorized")
         written = await client.put(
             "/v1/retention/policy", headers=headers, json={"policy": {"content_lifetime": "P1D"}}
         )
         refused(written, 403, "not_authorized")
         assert (await client.get("/v1/retention/policy", headers=headers)).status_code == 200
-    assert (await steps_of(client, owner, session_id))[0]["text"] == SAID
+    assert (await steps_of(client, owner, agent_session_id))[0]["text"] == SAID
     assert (await client.get("/v1/retention/policy", headers=owner)).json()["version"] == 0
 
 
@@ -236,10 +241,12 @@ async def test_another_tenant_reaches_neither_the_session_nor_the_policy(
 ) -> None:
     """Another tenant's owner erasing a session that exists gets the 404 an
     unknown id gets, and its policy write is its own tenant's alone."""
-    session_id = await session_saying(client, container, owner)
+    agent_session_id = await session_saying(client, container, owner)
     bravo = await tenant(client, container, "bravo")
 
-    crossed = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=bravo.owner)
+    crossed = await client.post(
+        f"/v1/retention/sessions/{agent_session_id}/erase", headers=bravo.owner
+    )
     missing = await client.post(f"/v1/retention/sessions/{UUID(int=7)}/erase", headers=bravo.owner)
     refused(crossed, 404, "not_found")
     refused(missing, 404, "not_found")
@@ -251,7 +258,7 @@ async def test_another_tenant_reaches_neither_the_session_nor_the_policy(
     assert written.status_code == 200, written.text
     await container.managers.retention.sweep(seed_request())
 
-    assert (await steps_of(client, owner, session_id))[0]["text"] == SAID
+    assert (await steps_of(client, owner, agent_session_id))[0]["text"] == SAID
     ours = await client.get("/v1/retention/policy", headers=owner)
     assert ours.json()["version"] == 0 and ours.json()["policy"]["storage_mode"] == "sealed"
 

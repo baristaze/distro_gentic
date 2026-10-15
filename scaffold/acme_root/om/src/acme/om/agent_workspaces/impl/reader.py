@@ -53,7 +53,7 @@ from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.git import RepositoryReaderInterface
 from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.agent_workspaces.types.source import Delivered, Incoming, RepositoryBinding
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.evidence.rules import protected_paths
 from acme.om.exceptions import Unavailable
 
@@ -82,7 +82,7 @@ GITLINK = "160000"
 """A submodule's commit, which a tree holds no file of."""
 
 
-class ReaderOptions(Platform):
+class ReaderOptions(OmBase):
     # How long one git command of a read may take, a fetch included.
     timeout: timedelta = timedelta(minutes=2)
     # The most paths a work product lists.

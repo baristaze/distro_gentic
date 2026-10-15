@@ -12,10 +12,10 @@ from typing import Annotated, Self
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, WorkspaceBase
+from acme.infra.agent_workspaces import AgentWorkspaceBase, EgressMode, EgressPolicy
+from acme.om.agent_steps.types.content import Stored
 from acme.om.agent_workspaces.types.egress import Destination
-from acme.om.base import Identifiable, Platform, Trackable
-from acme.om.steps.types.content import Stored
+from acme.om.base import Identifiable, OmBase, Trackable
 
 MAX_AGENT_PROJECT_NAME = 200
 
@@ -27,7 +27,7 @@ REPOSITORY_PATH = r"^[a-z0-9_][a-z0-9_.-]*(/[a-z0-9_][a-z0-9_.-]*)+$"
 as `octo/reports`. No segment starts with a dot, so none is `.` or `..`."""
 
 
-class Repository(Platform):
+class Repository(OmBase):
     """A repository on a source-control host. Hosts compare names without
     case, so both parts are kept in lower case, and two spellings of one
     repository are one value."""
@@ -54,7 +54,7 @@ MAX_SETUP = 50
 MAX_REGISTRIES = 20
 
 
-class AgentWorkspaceBase(Platform):
+class AgentWorkspaceBase(OmBase):
     """What an agent project's sessions work in: the image their workspace starts
     on, and the commands that set it up, run once, in order, then kept as
     the base every workspace of a kind that takes it starts from.
@@ -75,10 +75,12 @@ class AgentWorkspaceBase(Platform):
             raise ValueError("a workspace base names each registry once")
         return self
 
-    def base(self) -> WorkspaceBase:
+    def base(self) -> AgentWorkspaceBase:
         """The engine's base: the image, its setup, and the setup's egress."""
         egress = EgressMode.OPEN if self.registries else EgressMode.NONE
-        return WorkspaceBase(image=self.image, setup=self.setup, egress=EgressPolicy(mode=egress))
+        return AgentWorkspaceBase(
+            image=self.image, setup=self.setup, egress=EgressPolicy(mode=egress)
+        )
 
 
 class AgentProject(Identifiable, Trackable):
@@ -91,4 +93,4 @@ class AgentProject(Identifiable, Trackable):
     name: Stored = Field(min_length=1, max_length=MAX_AGENT_PROJECT_NAME)
     repository: Repository
     workspace_snapshots: bool = True
-    workspace_base: AgentWorkspaceBase | None = None
+    agent_workspace_base: AgentWorkspaceBase | None = None

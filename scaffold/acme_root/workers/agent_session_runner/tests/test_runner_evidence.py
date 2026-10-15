@@ -7,12 +7,9 @@ import re
 from pathlib import Path
 
 import pytest
-from contracts.doubles import context
-from contracts.factories import make_org
-from contracts.ports import open_ports
 
+from acme.infra.agent_workspaces import AgentWorkspaceBase, EgressMode, IsolationMode
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import EgressMode, IsolationMode, WorkspaceBase
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
@@ -30,8 +27,12 @@ from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.platform_root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.ports import open_ports
 
 
 def runner(
@@ -42,8 +43,8 @@ def runner(
     ports: PlatformPorts | None = None,
     image: str | None = None,
 ) -> RunnerContainer:
-    named = {} if image is None else {"workspace_image": image}
-    settings = SessionRunnerSettings.model_validate(
+    named = {} if image is None else {"agent_workspace_image": image}
+    settings = AgentSessionRunnerSettings.model_validate(
         {"_env_file": None, "environment": "staging", "runner_id": "runner-test", **named}
     )
     return RunnerContainer.over(
@@ -112,7 +113,7 @@ async def test_the_runners_executor_reads_the_base_a_session_of_the_cloud_pinned
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",
-        base=WorkspaceBase(image="registry.example/toolchain:3", setup=("make deps",)),
+        base=AgentWorkspaceBase(image="registry.example/toolchain:3", setup=("make deps",)),
         branch="sessions/one",
     )
     await storage.get_agent_workspace_storage().create_workspace(ctx.org_id, pinned)

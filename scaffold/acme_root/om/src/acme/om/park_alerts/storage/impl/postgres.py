@@ -51,11 +51,11 @@ class ParkAlertStoragePostgresImpl(PgStorageBase, ParkAlertStorageInterface):
         held = await self.read_park_alert(org_id, park_alert_id)
         return held if held is not None and held.recipient == recipient else None
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         stmt = delete_batch(
             ParkAlerts,
             ParkAlerts.org_id == org_id,
-            ParkAlerts.session_id == session_id,
+            ParkAlerts.agent_session_id == agent_session_id,
             limit=limit,
         )
         async with self._session_for(stmt, org_id=org_id) as session:

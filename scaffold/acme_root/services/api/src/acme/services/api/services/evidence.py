@@ -12,17 +12,19 @@ from acme.services.api.types.evidence import ExecutionPageView, ValidationView, 
 class EvidenceServiceInterface(ABC):
     @abstractmethod
     async def get_executions(
-        self, ctx: TenantContext, session_id: UUID, cursor: str | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, cursor: str | None, limit: int
     ) -> ExecutionPageView:
         """One page of the session's runs, oldest first."""
         ...
 
     @abstractmethod
     async def get_validations(
-        self, ctx: TenantContext, session_id: UUID, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, limit: int
     ) -> list[ValidationView]:
         """The session's validations and baselines, oldest first."""
         ...
 
     @abstractmethod
-    async def get_work_product(self, ctx: TenantContext, session_id: UUID) -> WorkProductView: ...
+    async def get_work_product(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> WorkProductView: ...

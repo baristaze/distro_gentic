@@ -15,7 +15,12 @@ from acme.om.context import TenantContext
 class AgentKnowledgeManagerInterface(ABC):
     @abstractmethod
     async def suggest(
-        self, ctx: TenantContext, session_id: UUID, title: str, trigger: tuple[str, ...], text: str
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
     ) -> AgentKnowledge:
         """An entry an agent suggests from its session, as its call's context
         may, for the session's agent project, or for the whole tenant when the
@@ -79,7 +84,7 @@ class AgentKnowledgeManagerInterface(ABC):
 
     @abstractmethod
     async def recall(
-        self, ctx: TenantContext, session_id: UUID, about: str
+        self, ctx: TenantContext, agent_session_id: UUID, about: str
     ) -> tuple[AgentKnowledge, ...]:
         """Brings the reviewed entries the session reaches whose trigger
         `about` matches into the session, each as an event it reads as data
@@ -88,14 +93,14 @@ class AgentKnowledgeManagerInterface(ABC):
 
     @abstractmethod
     async def search(
-        self, ctx: TenantContext, session_id: UUID, query: str, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, query: str, limit: int
     ) -> tuple[AgentKnowledge, ...]:
         """The reviewed entries the session reaches that share the most of
         the query's words, best first, at most `limit`."""
         ...
 
     @abstractmethod
-    async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> AgentKnowledge:
+    async def read(self, ctx: TenantContext, agent_session_id: UUID, slug: str) -> AgentKnowledge:
         """The reviewed entry of `slug` the session reaches, its version
         recorded as one the session reached, as a recall's is. One waiting
         for its review, rejected, of another agent project, or of another tenant

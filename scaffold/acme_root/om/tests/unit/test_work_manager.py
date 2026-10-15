@@ -27,15 +27,18 @@ from acme.om.exceptions import (
     ValidationFailed,
     WorkNotFailed,
 )
-from acme.om.root import KINDS, Managers, build_managers
-from acme.om.placement.kinds import platform_work_kinds
 from acme.om.platform_root import PlatformManagers, build_platform_managers
+from acme.om.root import KINDS, Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.impl.manager import DEAD_LETTER_KIND, WorkOptions
 from acme.om.work.impl.operator import REQUEUED_KIND
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import (
+    WorkItem,
+    WorkKind,
+    WorkStatus,
+)
 
 from contracts.work_cap import (
     a_burst_drains_as_fast_as_the_worker_runs_at_a_cap_of_two,
@@ -43,10 +46,6 @@ from contracts.work_cap import (
     a_tenants_own_cap_holds_in_place_of_the_lanes,
     a_tenants_own_cap_holds_on_a_lane_with_no_cap,
     an_operator,
-from acme.om.work.types.work_item import (
-    WorkItem,
-    WorkKind,
-    WorkStatus,
 )
 from contracts.work_storage import make_item
 

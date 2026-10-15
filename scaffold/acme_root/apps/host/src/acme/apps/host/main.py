@@ -32,16 +32,16 @@ from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import IsolationMode as HostIsolation
+from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface, IsolationMode
+from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
+from acme.infra.agent_workspaces.machine import WorkspaceMachineImpl
+from acme.infra.agent_workspaces.network import HostNetwork
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.transports.machine import TransportMachineImpl
-from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
-from acme.infra.workspaces.container import WorkspaceContainerImpl
-from acme.infra.workspaces.machine import WorkspaceMachineImpl
-from acme.infra.workspaces.network import HostNetwork
 
 log = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ def host_transports(
     return {IsolationMode.CONTAINER: container}
 
 
-def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProviderInterface]:
+def host_workspaces(settings: Settings) -> dict[IsolationMode, AgentWorkspaceProviderInterface]:
     """What makes a workspace its pool asks this host to prepare, by the
     mode its transport runs: a container per session, of the image its
     owner names, holding a copy of the host's CA file under open egress. A
@@ -192,8 +192,8 @@ def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProvider
     if settings.machine:
         return {IsolationMode.VM: WorkspaceMachineImpl(settings.machine_workspace)}
     return {
-        IsolationMode.CONTAINER: WorkspaceContainerImpl(
-            settings.workspace_image,
+        IsolationMode.CONTAINER: AgentWorkspaceContainerImpl(
+            settings.agent_workspace_image,
             timedelta(seconds=30),
             f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
@@ -209,7 +209,7 @@ ENGINE_MODES: dict[HostIsolation, IsolationMode] = {
 
 
 def host_snapshots(
-    workspaces: Mapping[IsolationMode, WorkspaceProviderInterface], store: HostSnapshots
+    workspaces: Mapping[IsolationMode, AgentWorkspaceProviderInterface], store: HostSnapshots
 ) -> dict[HostIsolation, Callable[[], bool]]:
     """The modes whose snapshots this host keeps: each one a provider of its
     own snapshots, once its store takes one and gives it back. The

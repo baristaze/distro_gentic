@@ -13,7 +13,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.exceptions import ValidationFailed
 
 SHA256 = r"^[0-9a-f]{64}$"
@@ -33,7 +33,7 @@ class CrossingRefused(ValidationFailed):
     code = "crossing_refused"
 
 
-class Crossing(Platform):
+class Crossing(OmBase):
     """What a sender declares of a payload it sends across the wall: what it
     is, its SHA-256 in hex, and its size in bytes."""
 

@@ -10,7 +10,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
 from unit.test_placement import exec_on
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -41,6 +40,8 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkKind
+
+from contracts.agent_session_storage import make_session
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 HOST_APP = AppContext(type=AppType.API, version="host@test")
@@ -448,7 +449,7 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     session = await managers.agent_sessions.create_session(owner, make_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
-    assert pool.session_id == session.id
+    assert pool.agent_session_id == session.id
     assert await hosts.session_pool(service, session.id, "cloud") == pool, "the same one"
     assert await hosts.get_pools(owner) == (), "hidden from the tenant's pools"
     with pytest.raises(ValidationFailed, match="platform's"):
@@ -456,7 +457,7 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.issue_enrollment_token(owner, pool.id)
     with pytest.raises(ValidationFailed, match="platform's"):
-        await hosts.create_pool(owner, a_pool().model_copy(update={"session_id": session.id}))
+        await hosts.create_pool(owner, a_pool().model_copy(update={"agent_session_id": session.id}))
     # Its work runs there once it has one; its placement stays the cloud.
     state = await hosts.work_placement(owner, session.id)
     assert state.pool == pool
@@ -492,7 +493,7 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
         Enrollment(name="machine", advertisement=PROBED, exec_version=1),
     )
     identity = await hosts.authenticate(request(), issued.credential)
-    assert (identity.pool_id, identity.session_id) == (pool.id, mine.id)
+    assert (identity.pool_id, identity.agent_session_id) == (pool.id, mine.id)
 
     host_id = issued.claimant_id
     stray = await managers.work.enqueue(
@@ -535,7 +536,7 @@ async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ende
         await hosts.revoke_claimant(owner, host_id)
     await hosts.authenticate(request(), issued.credential)
     read = await hosts.machine_host(request(), owner.org_id, host_id)
-    assert read is not None and read.revoked_at is None and read.session_id == session.id
+    assert read is not None and read.revoked_at is None and read.agent_session_id == session.id
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
     ended = await hosts.machine_host(request(), owner.org_id, host_id)
     assert ended is not None and ended.revoked_at is not None
@@ -704,7 +705,7 @@ async def test_a_sub_agent_runs_where_its_root_runs(
         with pytest.raises(PinnedToHosts):
             await placement.executor_of(owner.org_id, sub.id)
         state = await hosts.placement_of(owner, sub.id)
-        assert state.session_id == sub.id and state.pool == pool and state.waiting
+        assert state.agent_session_id == sub.id and state.pool == pool and state.waiting
     # A sub-agent is never placed apart from its root.
     with pytest.raises(ValidationFailed):
         await hosts.place_session(owner, child.id, None)

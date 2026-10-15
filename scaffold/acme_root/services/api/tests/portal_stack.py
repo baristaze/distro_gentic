@@ -37,19 +37,19 @@ def scene_kinds() -> ProductKinds:
     """The product's kinds, and the scene's software engineer and analysis, each as
     its latest version: the shipped kind whole, its tree and its share
     included, on this host."""
-    from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+    from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
     from acme.om.platform_agents.kinds import ANALYSIS_KIND, SOFTWARE_ENGINEER_KIND
     from acme.om.platform_root import ProductKinds
     from acme.om.product_kinds import PRODUCT_KINDS
     from acme.om.tools.native.ask_person import ASK_PERSON
-    from acme.om.tools.native.write_plan import WRITE_PLAN
+    from acme.om.tools.native.write_agent_plan import WRITE_AGENT_PLAN
 
     host = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
     software_engineer = SOFTWARE_ENGINEER_KIND.model_copy(
         update={
             "version": SOFTWARE_ENGINEER_KIND.version + 1,
             "isolation": host,
-            "tools": (*SOFTWARE_ENGINEER_KIND.tools, WRITE_PLAN, ASK_PERSON),
+            "tools": (*SOFTWARE_ENGINEER_KIND.tools, WRITE_AGENT_PLAN, ASK_PERSON),
         }
     )
     analysis = ANALYSIS_KIND.model_copy(
@@ -99,9 +99,7 @@ def runner() -> int:
 
     install_trust_store()
     sys.path.insert(0, str(REPO / "om" / "tests"))
-    from contracts.evidence import ScriptedExecutor
-
-    from acme.infra.workspaces import WorkspaceBase
+    from acme.infra.agent_workspaces import AgentWorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
     from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
     from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
@@ -109,8 +107,10 @@ def runner() -> int:
     from acme.om.context import TenantContext
     from acme.om.platform_root import PlatformPorts
     from acme.om.storage.impl.postgres import StoragePostgresImpl
-    from acme.workers.session_runner.main import main as run
-    from acme.workers.session_runner.settings import SessionRunnerSettings
+    from acme.workers.agent_session_runner.main import main as run
+    from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+
+    from contracts.evidence import ScriptedExecutor
 
     class RepositoriesOnDisk(WorkspaceAgentProjectsInterface):
         """The agent projects' answers, each bound repository cloned from
@@ -137,12 +137,12 @@ def runner() -> int:
 
         async def workspace_base_of(
             self, ctx: TenantContext, agent_project_id: UUID
-        ) -> WorkspaceBase | None:
+        ) -> AgentWorkspaceBase | None:
             return await self._inner.workspace_base_of(ctx, agent_project_id)
 
     # One loop at a time: the script is one queue for every session.
     os.environ["ACME_RUNNER_CAPACITY"] = "1"
-    settings = SessionRunnerSettings()
+    settings = AgentSessionRunnerSettings()
     rows = StoragePostgresImpl(
         settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
     )

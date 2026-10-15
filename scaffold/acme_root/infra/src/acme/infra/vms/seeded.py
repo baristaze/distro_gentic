@@ -13,14 +13,14 @@ machine's image reads at each boot, closed once read (the EC2 backend's
 from datetime import timedelta
 
 from acme.infra.exceptions import BackendFailed, InfraValidationFailed
-from acme.infra.machines import (
+from acme.infra.vms import (
     SEED_FILE,
     SEED_FOLDER,
     SEED_OWNER,
-    MachinesInterface,
-    MachineSpec,
-    MachineState,
     SeedsInterface,
+    VmsInterface,
+    VmSpec,
+    VmState,
 )
 
 GUEST_WRITE = (
@@ -48,26 +48,26 @@ class SeedsChannelImpl(SeedsInterface):
     by `write`: a shell script that reads it from standard input."""
 
     def __init__(
-        self, machines: MachinesInterface, timeout: timedelta, write: str = GUEST_WRITE
+        self, machines: VmsInterface, timeout: timedelta, write: str = GUEST_WRITE
     ) -> None:
-        self._machines = machines
+        self._vms = machines
         self._timeout = timeout
         self._write = write
 
     async def launch_seeded(
-        self, name: str, spec: MachineSpec, snapshot: str | None, seed: bytes
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
     ) -> None:
-        new = await self._machines.state(name) is MachineState.ABSENT
-        await self._machines.launch(name, spec, snapshot)
+        new = await self._vms.state(name) is VmState.ABSENT
+        await self._vms.launch(name, spec, snapshot)
         try:
-            reply = await self._machines.run(
+            reply = await self._vms.run(
                 name, ("sh", "-c", self._write), bound=self._timeout, stdin=seed
             )
             if not reply.ok:
                 raise BackendFailed("machine", "seed", reply.reason())
         except BaseException:
             if new:
-                await self._machines.destroy(name)
+                await self._vms.destroy(name)
             raise
 
     async def seal(self, name: str) -> None:
@@ -83,7 +83,7 @@ class SeedsNullImpl(SeedsInterface):
     """A process that starts no machine."""
 
     async def launch_seeded(
-        self, name: str, spec: MachineSpec, snapshot: str | None, seed: bytes
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
     ) -> None:
         raise InfraValidationFailed("this process starts no machine")
 

@@ -21,9 +21,9 @@ from acme.infra.agent_workspaces import (
     SnapshotRefused,
     refusal,
 )
+from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 from acme.infra.docker import docker, docker_stream
 from acme.infra.exceptions import BackendFailed
-from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 MOUNT = "/workspace"
 """Where a workspace's files sit inside its container."""

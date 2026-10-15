@@ -19,14 +19,16 @@ from fastapi import APIRouter
 
 from acme.services.api.realtime import socket
 from acme.services.api.routers import (
+    admin,
     agent_sessions,
     change_events,
+    events,
+    flags,
     leases,
     media,
     tenancy,
     work,
 )
-from acme.services.api.routers import admin, agent_sessions, events, flags, leases, media, tenancy
 from acme.services.api.routers.platform import with_platform
 
 HOSTED: dict[str, tuple[APIRouter, ...]] = {

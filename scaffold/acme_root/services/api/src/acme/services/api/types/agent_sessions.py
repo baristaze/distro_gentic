@@ -15,13 +15,10 @@ from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin
 from acme.om.agent_steps.types.content import MAX_NAME
 from acme.om.agent_steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
+from acme.om.agent_steps.types.step import Actor, AgentStepType, Origin
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.authority import Visibility
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.tools.types.call import MAX_REPORT
-from acme.om.agent_steps.types.content import MAX_NAME
-from acme.om.agent_steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
-from acme.om.agent_steps.types.step import Actor, Origin, AgentStepType
 from acme.om.tools.types.call import MAX_REPORT, Verdict
 from acme.services.api.types.common import RequestBody, View
 

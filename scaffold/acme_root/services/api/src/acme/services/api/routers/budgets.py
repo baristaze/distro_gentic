@@ -18,12 +18,14 @@ router = APIRouter(prefix="/budgets", tags=["budgets"])
 
 
 @router.post("", response_model=BudgetView, status_code=201)
-async def create_budget(
+async def create_spend_budget(
     ctx: Ctx, budgets: BudgetsService, body: CreateBudgetRequest, idem: Idem
 ) -> Response:
     """A budget every model call charged to its scope is held to, from the
     next call on."""
-    return await idem.run(201, lambda attempt: budgets.create_budget(ctx, body, attempt.target_id))
+    return await idem.run(
+        201, lambda attempt: budgets.create_spend_budget(ctx, body, attempt.target_id)
+    )
 
 
 @router.get("", response_model=list[BudgetView])
@@ -34,14 +36,14 @@ async def list_budgets(
     return await budgets.list_budgets(ctx, after, limit)
 
 
-@router.get("/{budget_id}", response_model=BudgetView)
-async def get_budget(ctx: Ctx, budgets: BudgetsService, budget_id: UUID) -> BudgetView:
-    return await budgets.get_budget(ctx, budget_id)
+@router.get("/{spend_budget_id}", response_model=BudgetView)
+async def get_spend_budget(ctx: Ctx, budgets: BudgetsService, spend_budget_id: UUID) -> BudgetView:
+    return await budgets.get_spend_budget(ctx, spend_budget_id)
 
 
-@router.put("/{budget_id}/amount", response_model=BudgetView)
+@router.put("/{spend_budget_id}/amount", response_model=BudgetView)
 async def change_amount(
-    ctx: Ctx, budgets: BudgetsService, budget_id: UUID, body: AmountRequest, version: IfMatch
+    ctx: Ctx, budgets: BudgetsService, spend_budget_id: UUID, body: AmountRequest, version: IfMatch
 ) -> BudgetView:
     """The budget at its new amount, on the version `If-Match` names."""
-    return await budgets.change_amount(ctx, budget_id, body, version)
+    return await budgets.change_amount(ctx, spend_budget_id, body, version)

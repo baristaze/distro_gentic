@@ -8,7 +8,8 @@ from pathlib import PurePosixPath
 
 from pydantic import Field, field_validator
 
-from acme.om.base import Platform
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.exceptions import (
     ToolFailed,
@@ -22,7 +23,6 @@ from acme.om.platform_agents.tools.base import (
     NativeToolImpl,
     Text,
 )
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 
@@ -37,13 +37,13 @@ class PathInput(ToolInput):
     path: str = Field(default=".", min_length=1, max_length=MAX_PATH)
 
 
-class Entry(Platform):
+class Entry(OmBase):
     path: str
     is_dir: bool
     size: int
 
 
-class Entries(Platform):
+class Entries(OmBase):
     entries: tuple[Entry, ...]
 
 
@@ -62,7 +62,7 @@ class ListFilesImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, PathInput)
         found = await runtime.list_files(call_input.path, 500)
         return Entries(
@@ -85,7 +85,7 @@ class ReadFileImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, PathInput)
         data = await runtime.read_file(call_input.path, MAX_READ)
         return Text(text=data.decode(errors="replace"))
@@ -105,13 +105,13 @@ class SearchCodeInput(ToolInput):
         return path
 
 
-class Match(Platform):
+class Match(OmBase):
     path: str
     line: int
     text: str
 
 
-class Matches(Platform):
+class Matches(OmBase):
     matches: tuple[Match, ...]
     more: bool  # matches past the bound were left out
 
@@ -145,7 +145,7 @@ class SearchCodeImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SearchCodeInput)
         argv = (
             "grep",

@@ -29,7 +29,7 @@ def make_machine(
     *,
     egress_open: bool = True,
     tenant_id: UUID | None = None,
-    session_id: UUID | None = None,
+    agent_session_id: UUID | None = None,
     started: bool = True,
 ) -> PoolVm:
     now = utcnow()
@@ -39,9 +39,9 @@ def make_machine(
         name=f"acme-vm-p{secrets.token_hex(8)}",
         egress_open=egress_open,
         tenant_id=tenant_id,
-        session_id=session_id,
-        pool_id=None if session_id is None else new_id(),
-        bound_by=None if session_id is None else new_id(),
+        agent_session_id=agent_session_id,
+        pool_id=None if agent_session_id is None else new_id(),
+        bound_by=None if agent_session_id is None else new_id(),
         key_digest=new_id().hex,
         started_at=now if started else None,
     )
@@ -96,7 +96,7 @@ class CloudPoolStorageContract:
         assert await storage.claim_warm(tenant, session, pool, person, True, at) is None
         claimed = await storage.claim_warm(tenant, session, pool, person, False, at)
         assert claimed is not None and claimed.id == closed.id
-        assert (claimed.tenant_id, claimed.session_id, claimed.pool_id, claimed.bound_by) == (
+        assert (claimed.tenant_id, claimed.agent_session_id, claimed.pool_id, claimed.bound_by) == (
             tenant,
             session,
             pool,
@@ -113,7 +113,7 @@ class CloudPoolStorageContract:
         self, storage: CloudPoolStorageInterface
     ) -> None:
         await storage.create_machine(make_machine())
-        await storage.create_machine(make_machine(tenant_id=new_id(), session_id=new_id()))
+        await storage.create_machine(make_machine(tenant_id=new_id(), agent_session_id=new_id()))
         made = [make_machine(started=False) for _ in range(3)]
         assert await storage.reserve_warm(2, made) == 1, "one stands warm already"
         assert await storage.read_machine(made[0].id) == made[0]
@@ -124,7 +124,7 @@ class CloudPoolStorageContract:
     async def test_a_machine_started_again_takes_a_new_key_and_its_host_anew(
         self, storage: CloudPoolStorageInterface
     ) -> None:
-        machine = make_machine(tenant_id=new_id(), session_id=new_id())
+        machine = make_machine(tenant_id=new_id(), agent_session_id=new_id())
         await storage.create_machine(machine)
         host, at = new_id(), utcnow()
         await storage.mark_enrolled(machine.id, host)
@@ -150,7 +150,7 @@ class CloudPoolStorageContract:
         self, storage: CloudPoolStorageInterface
     ) -> None:
         tenant, session = new_id(), new_id()
-        await storage.create_machine(make_machine(tenant_id=tenant, session_id=session))
+        await storage.create_machine(make_machine(tenant_id=tenant, agent_session_id=session))
         assert await storage.read_of_session(new_id(), session) is None
         assert await storage.read_of_tenant(new_id(), 10) == []
         assert len(await storage.read_of_tenant(tenant, 10)) == 1
@@ -184,14 +184,14 @@ class CloudPoolStorageContract:
     ) -> None:
         tenant, session = new_id(), new_id()
         now = utcnow()
-        first = PoolErasure(id=new_id(), created_at=now, tenant_id=tenant, session_id=session)
+        first = PoolErasure(id=new_id(), created_at=now, tenant_id=tenant, agent_session_id=session)
         assert await storage.ask_erase(first) == first
         assert await storage.ask_erase(first.model_copy(update={"id": new_id()})) == first
         other = PoolErasure(
             id=new_id(),
             created_at=now + timedelta(seconds=1),
             tenant_id=tenant,
-            session_id=new_id(),
+            agent_session_id=new_id(),
         )
         await storage.ask_erase(other)
         assert await storage.read_erasures(10) == [first, other]

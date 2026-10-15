@@ -25,11 +25,7 @@ from acme.om.context import (
     OperatorRole,
     TenantContext,
 )
-from acme.om.matrix.impl.resolver import MatrixOptions, Workload
-from acme.om.matrix.root import MatrixLayer, MatrixManagers
-from acme.om.matrix.types.matrix import MatrixKey, MatrixRow, MatrixVersion
-from acme.om.matrix.types.record import BenchmarkRun
-from acme.om.models.types.fill import (
+from acme.om.language_models.types.fill import (
     MAIN,
     SUMMARIZER,
     Eligibility,
@@ -37,6 +33,10 @@ from acme.om.models.types.fill import (
     ModelRole,
     ModelSize,
 )
+from acme.om.matrix.impl.resolver import MatrixOptions, Workload
+from acme.om.matrix.root import MatrixLayer, MatrixManagers
+from acme.om.matrix.types.matrix import MatrixKey, MatrixRow, MatrixVersion
+from acme.om.matrix.types.record import BenchmarkRun
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import operator_permissions_of
@@ -44,6 +44,7 @@ from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer, TrustManagers
 from acme.om.trust.types.identities import Executor, ExecutorKind
+
 from contracts.loops import ASSISTANT, DELIVERY
 from contracts.money import Money, money_over
 from contracts.platform_loops import PlatformLoop
@@ -222,7 +223,7 @@ async def agent_fleet_over(
         storage=storage,
         owner=owner,
         loop_options=loop_options,
-        models_layer=layer.layer,
+        language_models_layer=layer.layer,
         tools_layer=trust.tools,
         kinds=kinds,
     )

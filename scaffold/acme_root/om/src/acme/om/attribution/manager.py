@@ -87,7 +87,9 @@ class AttributionManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def follow_parent(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+    async def follow_parent(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionAuthority:
         """A child takes the principal its parent's calls run under now, as a
         take-over of the parent carries down to it: a child's principal is
         its parent's, chosen by nobody, so no child holds more than its

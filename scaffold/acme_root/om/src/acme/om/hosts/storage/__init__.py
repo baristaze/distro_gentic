@@ -157,7 +157,9 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None: ...
+    async def read_placement(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionPlacement | None: ...
 
     @abstractmethod
     async def write_placement(

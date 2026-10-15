@@ -92,7 +92,7 @@ minutes, then builds again.
 
 ## Consequences
 
-- One migration: the agent project's `workspace_base`.
+- One migration: the agent project's `agent_workspace_base`.
 - A host whose owner closed egress serves no workspace base whose setup
   reaches a registry, even one its store already holds.
 - A rebuild on a schedule is a later step, not an agent automation

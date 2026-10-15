@@ -14,10 +14,10 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.context import OperatorContext, TenantContext
+from acme.om.language_models.types.fill import Fill, ModelRole
 from acme.om.matrix.types.matrix import MatrixRow, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, BenchmarkRun, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOptions, FillOverride, MatrixPin
-from acme.om.models.types.fill import Fill, ModelRole
 
 
 class MatrixOperatorManagerInterface(ABC):
@@ -66,7 +66,7 @@ class MatrixOperatorManagerInterface(ABC):
 
 class MatrixManagerInterface(ABC):
     @abstractmethod
-    async def get_pin(self, ctx: TenantContext, session_id: UUID) -> MatrixPin:
+    async def get_pin(self, ctx: TenantContext, agent_session_id: UUID) -> MatrixPin:
         """The version of the matrix the session's fills came from last;
         `NotFound` before its fills are resolved."""
         ...

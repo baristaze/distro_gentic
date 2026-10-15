@@ -11,9 +11,12 @@ from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import Park, ParkReason, ToolRequestHeader
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.run import LoopRun, RunEnd
-from acme.om.base import Platform, utcnow
+from acme.om.base import OmBase, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotFound
@@ -25,7 +28,7 @@ from acme.om.park_alerts.rules import (
     FIXES_AT_PROVIDER,
     NO_ROUTE,
     SAVES_KEYS,
-    SETS_BUDGETS,
+    SETS_SPEND_BUDGETS,
     answer_link,
     approval_link,
     as_budget,
@@ -48,9 +51,6 @@ from acme.om.park_alerts.rules import (
 )
 from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.park_alerts.types.park_alert import PORTAL, Ask, ParkAlert
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import Park, ParkReason, ToolRequestHeader
-from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tools.manager import ToolsManagerInterface
@@ -59,7 +59,7 @@ from acme.om.tools.rules import approver_roles
 log = logging.getLogger(__name__)
 
 
-class ParkAlertsOptions(Platform):
+class ParkAlertsOptions(OmBase):
     page: int = Field(default=200, gt=0)
     max_page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
@@ -70,7 +70,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
         self,
         storage: ParkAlertStorageInterface,
         sessions: AgentSessionsManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         tools: ToolsManagerInterface,
         tenancy: TenancyManagerInterface,
         intake: IntakeManagerInterface,
@@ -93,7 +93,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
         park = run.park
         if run.end is not RunEnd.PARKED or park is None or not needs_person(park):
             return ()
-        session = await self._sessions.get_session(ctx, run.session_id)
+        session = await self._sessions.get_agent_session(ctx, run.agent_session_id)
         history = await self._history(ctx, session.id)
         parked = parked_step(history, park)
         if parked is None:
@@ -139,7 +139,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
         ctx: TenantContext,
         session: AgentSession,
         park: Park,
-        history: Sequence[Step],
+        history: Sequence[AgentStep],
         members: Sequence[Membership],
     ) -> list[Ask]:
         title = session.title
@@ -166,7 +166,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                     action="raise_budget",
                     link=budget_link(budget),
                     text=f"{title} waits for a raise of budget {budget}.",
-                    recipients=holding_permission(members, SETS_BUDGETS),
+                    recipients=holding_permission(members, SETS_SPEND_BUDGETS),
                 )
             ]
         if park.reason is ParkReason.BUDGET and park.unlock == FUNDS_UNLOCK:
@@ -175,7 +175,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                     action="top_up",
                     link=NO_ROUTE,
                     text=f"{title} waits for funds: the account is spent.",
-                    recipients=holding_permission(members, SETS_BUDGETS),
+                    recipients=holding_permission(members, SETS_SPEND_BUDGETS),
                 )
             ]
         if park.reason is ParkReason.PERSON and park.unlock == ANOMALY_UNLOCK:
@@ -247,7 +247,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
         ctx: TenantContext,
         session: AgentSession,
         park: Park,
-        parked: Step,
+        parked: AgentStep,
         ask: Ask,
         recipient: UUID,
     ) -> list[ParkAlert]:
@@ -282,7 +282,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                 id=park_alert_id_,
                 created_at=self._clock(),
                 recipient=recipient,
-                session_id=session.id,
+                agent_session_id=session.id,
                 park_step=parked.id,
                 reason=park.reason,
                 unlock=park.unlock,
@@ -297,11 +297,13 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
             told.append(park_alert)
         return told
 
-    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def _history(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self._steps.get_steps(ctx, session_id, after, self._options.page)
+            page = await self._steps.get_agent_steps(
+                ctx, agent_session_id, after, self._options.page
+            )
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps

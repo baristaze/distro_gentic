@@ -27,7 +27,7 @@ from acme.services.api.types.agent_fleet import (
     ShapePageView,
     ShareView,
 )
-from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.agent_sessions import AgentStepPageView
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.levers import LeverReadingView
 
@@ -46,13 +46,15 @@ async def set_share(
     return await service.set_share(admin, org_id, body)
 
 
-@router.get("/orgs/{org_id}/sessions/{session_id}/standing", response_model=SessionStandingView)
+@router.get(
+    "/orgs/{org_id}/sessions/{agent_session_id}/standing", response_model=SessionStandingView
+)
 async def session_standing(
-    admin: OperatorCtx, service: AgentFleetService, org_id: UUID, session_id: UUID
+    admin: OperatorCtx, service: AgentFleetService, org_id: UUID, agent_session_id: UUID
 ) -> SessionStandingView:
     """Why the session is or is not moving: its park, its loop's lease and
     lane, its place in line, its tenant's share, and where it runs."""
-    return await service.get_session_standing(admin, org_id, session_id)
+    return await service.get_session_standing(admin, org_id, agent_session_id)
 
 
 @router.get("/orgs/{org_id}/hosts/{host_id}/standing", response_model=HostStandingView)
@@ -64,33 +66,33 @@ async def host_standing(
     return await service.get_host_standing(admin, org_id, host_id)
 
 
-@router.get("/orgs/{org_id}/sessions/{session_id}/shape", response_model=ShapePageView)
+@router.get("/orgs/{org_id}/sessions/{agent_session_id}/shape", response_model=ShapePageView)
 async def session_shape(
     admin: OperatorCtx,
     service: AgentFleetService,
     org_id: UUID,
-    session_id: UUID,
+    agent_session_id: UUID,
     after_seq: Annotated[int, Query(ge=0)] = 0,
     limit: int = LIMIT_DEFAULT,
 ) -> ShapePageView:
     """The session's steps past `after_seq` as `read` sees them: what each
     is and who wrote it, never what it says."""
-    return await service.get_session_shape(admin, org_id, session_id, after_seq, limit)
+    return await service.get_session_shape(admin, org_id, agent_session_id, after_seq, limit)
 
 
-@router.get("/orgs/{org_id}/sessions/{session_id}/content", response_model=StepPageView)
+@router.get("/orgs/{org_id}/sessions/{agent_session_id}/content", response_model=AgentStepPageView)
 async def session_content(
     admin: OperatorCtx,
     service: AgentFleetService,
     org_id: UUID,
-    session_id: UUID,
+    agent_session_id: UUID,
     after_seq: Annotated[int, Query(ge=0)] = 0,
     limit: int = LIMIT_DEFAULT,
-) -> StepPageView:
+) -> AgentStepPageView:
     """The session's steps past `after_seq`, opened: only under a live
     content grant of the operator in that tenant, and each opening is an
     entry in the tenant's stream."""
-    return await service.get_session_content(admin, org_id, session_id, after_seq, limit)
+    return await service.get_session_content(admin, org_id, agent_session_id, after_seq, limit)
 
 
 @router.get("/orgs/{org_id}/levers", response_model=LeverReadingView)

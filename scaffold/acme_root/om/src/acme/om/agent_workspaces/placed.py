@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
 from acme.infra.transports import TransportInterface
-from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.context import TenantContext
 from acme.om.hosts.types.placement import PlacementState
@@ -21,7 +21,7 @@ from acme.om.hosts.types.placement import PlacementState
 
 class PlacedWorkspacesInterface(ABC):
     @abstractmethod
-    async def pool_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+    async def pool_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
         """The host pool the session is pinned to; None for a session of the
         cloud."""
         ...
@@ -30,12 +30,12 @@ class PlacedWorkspacesInterface(ABC):
     async def held_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot | None = None,
         *,
         pooled: PlacementState | None = None,
-    ) -> Workspace | None:
+    ) -> AgentWorkspace | None:
         """The session's workspace, at its pinned `spec`, on the host of its
         pool that holds it; None for a session of the cloud, which this
         process prepares itself. With `pooled`, the session's pool of one in
@@ -54,7 +54,7 @@ class PlacedWorkspacesInterface(ABC):
         is not revoked, or, with none, by a host of the pool whose store
         keeps it, which then holds it. The restore is asked before anything
         else and travels with the ask; the call waits for it a while, then
-        the loop waits on the resource. `WorkspaceLost` when the host that
+        the loop waits on the resource. `AgentWorkspaceLost` when the host that
         holds the workspace lost it, or when no live host keeps it."""
         ...
 
@@ -62,7 +62,7 @@ class PlacedWorkspacesInterface(ABC):
     async def snapshot_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         snapshot_id: UUID,
         *,
@@ -84,7 +84,9 @@ class PlacedWorkspacesInterface(ABC):
         ...
 
     @abstractmethod
-    async def erase_on_host(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
+    async def erase_on_host(
+        self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID
+    ) -> None:
         """Asks the host whose store keeps snapshots of the session to let
         every one go."""
         ...
@@ -95,11 +97,11 @@ class PlacedInstancesInterface(ABC):
     async def make(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         instance_id: UUID,
         spec: IsolationSpec,
         by: datetime,
-    ) -> tuple[Workspace, TransportInterface]:
+    ) -> tuple[AgentWorkspace, TransportInterface]:
         """A new instance under `instance_id`, made to `spec` for one run by a
         host of the pool the session is pinned to, and the transport that
         reaches it, under the run's context. The instance is never the

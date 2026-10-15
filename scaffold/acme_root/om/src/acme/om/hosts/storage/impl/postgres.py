@@ -41,7 +41,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
     async def read_pools(self, org_id: UUID, limit: int) -> list[HostPool]:
         stmt = (
             select(HostPools)
-            .where(HostPools.org_id == org_id, HostPools.session_id.is_(None))
+            .where(HostPools.org_id == org_id, HostPools.agent_session_id.is_(None))
             .order_by(HostPools.id)
             .limit(limit)
         )
@@ -292,9 +292,10 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             await session.commit()
             return claimant
 
-    async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None:
+    async def read_placement(self, org_id: UUID, agent_session_id: UUID) -> SessionPlacement | None:
         stmt = select(AgentSessionPlacements).where(
-            AgentSessionPlacements.org_id == org_id, AgentSessionPlacements.session_id == session_id
+            AgentSessionPlacements.org_id == org_id,
+            AgentSessionPlacements.agent_session_id == agent_session_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -308,7 +309,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         stale = PreconditionFailed(
-            f"the placement of session {placement.session_id} is no longer at "
+            f"the placement of session {placement.agent_session_id} is no longer at "
             f"version {expected_version}"
         )
         if expected_version == 0:
@@ -329,7 +330,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             .where(
                 AgentSessionPlacements.org_id == org_id,
                 AgentSessionPlacements.id == placement.id,
-                AgentSessionPlacements.session_id == placement.session_id,
+                AgentSessionPlacements.agent_session_id == placement.agent_session_id,
                 AgentSessionPlacements.version == expected_version,
             )
             .values(**values)

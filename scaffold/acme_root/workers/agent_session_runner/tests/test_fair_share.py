@@ -18,6 +18,7 @@ from acme.infra.topics import TopicPayload, Topics, WorkAvailablePayload
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
+from acme.om.agent_steps.rules import message_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -33,16 +34,15 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.rules import tier_lane
 from acme.om.placement.types.share import TierShare
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.steps.rules import message_step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.main import build_runner
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.main import build_runner
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 LEASE = timedelta(seconds=60)
@@ -105,7 +105,7 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
     # share of one loop a tenant.
     tier = f"t{new_id().hex[-8:]}"
     container = RunnerContainer.over(
-        SessionRunnerSettings.model_validate(
+        AgentSessionRunnerSettings.model_validate(
             {"_env_file": None, "environment": "test", "runner_id": "runner-test"}
         ),
         storage,
@@ -130,7 +130,7 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
         enqueued = Enqueued(owner.org_id)
         container.infra.get_topics().subscribe(Topics.WORK_AVAILABLE, name, enqueued.record)
         for question in questions:
-            session = await managers.agents.start_session(
+            session = await managers.agents.start_agent_session(
                 owner, Start(id=new_id(), kind="assistant", title=question)
             )
             said = message_step(new_id(), utcnow(), session.id, owner, question)

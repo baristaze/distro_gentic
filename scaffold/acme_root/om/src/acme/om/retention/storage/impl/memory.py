@@ -46,28 +46,33 @@ class RetentionStorageMemoryImpl(MemoryStorageBase, RetentionStorageInterface):
                 )
             self._put(self._policies, org_id, policy, outbox_rows)
 
-    def _snapshot(self, org_id: UUID, session_id: UUID) -> SessionRetention | None:
+    def _snapshot(self, org_id: UUID, agent_session_id: UUID) -> SessionRetention | None:
         return next(
-            (s for s in self._rows(self._snapshots, org_id) if s.session_id == session_id), None
+            (
+                s
+                for s in self._rows(self._snapshots, org_id)
+                if s.agent_session_id == agent_session_id
+            ),
+            None,
         )
 
     async def create_snapshot(self, org_id: UUID, snapshot: SessionRetention) -> SessionRetention:
         async with self._lock:
-            stored = self._snapshot(org_id, snapshot.session_id)
+            stored = self._snapshot(org_id, snapshot.agent_session_id)
             if stored is not None:
                 return stored
             if not self._insert(self._snapshots, org_id, snapshot):
                 raise TenantMismatch(f"session retention {snapshot.id} is not in {org_id}")
             return snapshot
 
-    async def read_snapshot(self, org_id: UUID, session_id: UUID) -> SessionRetention | None:
-        return self._snapshot(org_id, session_id)
+    async def read_snapshot(self, org_id: UUID, agent_session_id: UUID) -> SessionRetention | None:
+        return self._snapshot(org_id, agent_session_id)
 
     async def write_snapshot(
         self, org_id: UUID, snapshot: SessionRetention, expected_version: int
     ) -> bool:
         async with self._lock:
-            stored = self._snapshot(org_id, snapshot.session_id)
+            stored = self._snapshot(org_id, snapshot.agent_session_id)
             if stored is None or stored.id != snapshot.id or stored.version != expected_version:
                 return False
             self._put(self._snapshots, org_id, snapshot)

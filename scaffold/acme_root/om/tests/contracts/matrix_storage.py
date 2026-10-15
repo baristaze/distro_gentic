@@ -13,11 +13,11 @@ import pytest
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow, MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOverride, MatrixPin
-from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset()
 """`MatrixStorageInterface` takes no tenant: its rows are the platform's."""
@@ -89,12 +89,12 @@ def make_retirement(model: ModelRef) -> Retirement:
 
 
 def make_pin(
-    session_id: UUID | None = None, fill_set_version: int = 1, matrix_version: int = 1
+    agent_session_id: UUID | None = None, fill_set_version: int = 1, matrix_version: int = 1
 ) -> MatrixPin:
     return MatrixPin(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         fill_set_version=fill_set_version,
         matrix_version=matrix_version,
     )
@@ -203,11 +203,11 @@ class MatrixTenantStorageContract:
         org = new_id()
         first = make_pin()
         assert await storage.write_pin(org, first) == first
-        again = make_pin(first.session_id, matrix_version=9)
+        again = make_pin(first.agent_session_id, matrix_version=9)
         assert await storage.write_pin(org, again) == first
-        later = make_pin(first.session_id, fill_set_version=3, matrix_version=2)
+        later = make_pin(first.agent_session_id, fill_set_version=3, matrix_version=2)
         assert await storage.write_pin(org, later) == later
-        assert await storage.read_pin(org, first.session_id) == later
+        assert await storage.read_pin(org, first.agent_session_id) == later
         assert await storage.read_pin(org, new_id()) is None
 
     async def test_write_pin_of_another_tenant_lands_nothing_here(
@@ -218,15 +218,15 @@ class MatrixTenantStorageContract:
         await storage.write_pin(org_a, pin)
         with pytest.raises(PreconditionFailed):
             await storage.write_pin(org_b, pin)
-        assert await storage.read_pin(org_b, pin.session_id) is None
-        assert await storage.read_pin(org_a, pin.session_id) == pin
+        assert await storage.read_pin(org_b, pin.agent_session_id) is None
+        assert await storage.read_pin(org_a, pin.agent_session_id) == pin
 
     async def test_read_pin_of_another_tenant_finds_nothing(
         self, storage: MatrixTenantStorageInterface
     ) -> None:
         pin = make_pin()
         await storage.write_pin(new_id(), pin)
-        assert await storage.read_pin(new_id(), pin.session_id) is None
+        assert await storage.read_pin(new_id(), pin.agent_session_id) is None
 
     async def test_a_choice_replaces_the_last_for_its_role(
         self, storage: MatrixTenantStorageInterface
@@ -284,5 +284,5 @@ class MatrixTenantStorageContract:
         assert await storage.purge_tenant(gone, 2) == 1
         assert await storage.purge_tenant(gone, 2) == 0
         assert await storage.read_overrides(gone, 10) == []
-        assert await storage.read_pin(kept, stays.session_id) == stays
+        assert await storage.read_pin(kept, stays.agent_session_id) == stays
         assert await storage.read_overrides(kept, 10) == [choice]

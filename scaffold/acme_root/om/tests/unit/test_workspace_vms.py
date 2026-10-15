@@ -35,12 +35,11 @@ from acme.infra.vms.twin import VmsTwinImpl
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHeader
+from acme.om.agent_steps.types.step import AgentStep
 from acme.om.base import new_id
 from acme.om.context import Role
-from acme.om.root import build_managers
 from acme.om.platform_root import build_platform_managers
-from acme.om.agent_steps.types.header import SnapshotHeader, AgentWorkspaceSnapshot
-from acme.om.agent_steps.types.step import AgentStep
+from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.bases import base_agent_workspace_id, base_key
 from acme.om.tools.tool import TakenSnapshot
@@ -228,9 +227,9 @@ async def test_a_revoked_key_destroys_the_disks_kept_for_its_snapshots_and_no_ot
     await managers.privacy.revoke_key(ctx, parent)
 
     assert await infra.vm_twin.names(f"{vm_name(PREFIX, parent)}-") == []
-    assert await infra.vm_twin.names(vm_name(PREFIX, parent)) == [
-        vm_name(PREFIX, parent)
-    ], "the workspace stays"
+    assert await infra.vm_twin.names(vm_name(PREFIX, parent)) == [vm_name(PREFIX, parent)], (
+        "the workspace stays"
+    )
     assert await infra.vm_twin.names(f"{vm_name(PREFIX, child)}-") == kept_for[child]
     await managers.tools.prepare_agent_workspace(ctx, child, cache, restore=copy)
     forked = infra.vm_twin.vms[vm_name(PREFIX, child)].folder / WORKSPACE

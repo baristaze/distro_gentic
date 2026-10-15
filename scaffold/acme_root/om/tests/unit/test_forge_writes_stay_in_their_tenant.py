@@ -11,10 +11,10 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from contracts.intake import APP, Wired, wired
 
 from acme.integrations.events import OpenedPullRequest, PostedMessage
 from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.base import new_id, utcnow
@@ -22,9 +22,10 @@ from acme.om.context import CredentialKind, RequestContext, Role, TenantContext,
 from acme.om.exceptions import NotAuthorized, ToolFailed
 from acme.om.intake.tools import FORGE, CommentImpl, CommentInput
 from acme.om.intake.types.link import Installation
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolRuntime
+
+from contracts.intake import APP, Wired, wired
 
 REPOSITORY = "https://forge.example/beta/widgets.git"
 """The repository the forge's installation of its owner, `beta`, holds."""
@@ -75,7 +76,7 @@ def member_of(org_id: UUID) -> TenantContext:
         org_id=org_id,
         role=Role.MEMBER,
         permissions=permissions_of(Role.MEMBER),
-        credential_kind=CredentialKind.SESSION_TOKEN,
+        credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
     )
 
 
@@ -131,8 +132,8 @@ async def test_a_comment_on_another_tenants_repository_is_refused_before_anythin
     await connected_by_another(platform)
     forge = Recording()
     tool = CommentImpl(lambda: platform.intake, lambda name: forge)
-    session_id, key = new_id(), new_id()
-    runtime = cast(ToolRuntime, SimpleNamespace(session_id=session_id, key=key))
+    agent_session_id, key = new_id(), new_id()
+    runtime = cast(ToolRuntime, SimpleNamespace(agent_session_id=agent_session_id, key=key))
 
     with pytest.raises(ToolFailed) as refused:
         await tool.run(platform.owner, CommentInput(on=ADDRESS, text="Fixed."), runtime)

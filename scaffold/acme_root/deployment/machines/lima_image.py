@@ -1,5 +1,5 @@
 """Builds the cloud pool's image on Lima: a machine from the Lima template
-`ACME_MACHINE_IMAGE` names, Docker inside it, the host program installed in
+`ACME_VM_IMAGE` names, Docker inside it, the host program installed in
 it from this checkout by `install.sh`, then stopped and kept under the name
 given, from which every machine of the pool starts
 (`ACME_CLOUD_POOL_IMAGE`). The image holds no secret: the pool hands each
@@ -20,8 +20,8 @@ from datetime import timedelta
 from pathlib import Path
 
 from acme.infra.impl.settings import InfraSettings
-from acme.infra.machines import MachineSpec, MachineState
-from acme.infra.machines.lima import MachinesLimaImpl
+from acme.infra.vms import VmSpec, VmState
+from acme.infra.vms.lima import VmsLimaImpl
 
 LEFT_OUT = frozenset(
     {
@@ -58,16 +58,16 @@ def source_tarball(root: Path) -> bytes:
 
 
 async def build(name: str, root: Path, settings: InfraSettings) -> None:
-    timeout = timedelta(seconds=settings.machine_timeout_seconds)
-    boot = timedelta(seconds=settings.machine_boot_timeout_seconds)
-    machines = MachinesLimaImpl(timeout, boot, encrypted=settings.machine_store_encrypted)
+    timeout = timedelta(seconds=settings.vm_timeout_seconds)
+    boot = timedelta(seconds=settings.vm_boot_timeout_seconds)
+    machines = VmsLimaImpl(timeout, boot, encrypted=settings.vm_store_encrypted)
     missing = await machines.probe(name)
     if missing is not None:
         raise SystemExit(f"no machine runs here: {missing}")
-    if await machines.state(name) is not MachineState.ABSENT:
+    if await machines.state(name) is not VmState.ABSENT:
         print(f"{name} stands already")
         return
-    await machines.launch(name, MachineSpec(image=settings.machine_image, egress_open=True))
+    await machines.launch(name, VmSpec(image=settings.vm_image, egress_open=True))
     try:
         steps = (
             (("sh", "-c", f"rm -rf {SOURCE} && mkdir -p {SOURCE} && tar -xz -C {SOURCE}"), True),

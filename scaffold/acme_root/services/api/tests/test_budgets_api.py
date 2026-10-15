@@ -17,10 +17,10 @@ from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
-from acme.om.budgets.types.amount import AmountUnit, Spend
-from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import Billed, Hold, HoldRequest
 from acme.om.context import Role, TenantContext
+from acme.om.spend_budgets.types.amount import AmountUnit, Spend
+from acme.om.spend_budgets.types.spend_breach import Refusal
+from acme.om.spend_budgets.types.spend_hold import Billed, SpendHold, SpendHoldRequest
 from acme.om.windows.impl.gate import scopes_of
 from acme.services.api.container import AppContainer
 
@@ -48,11 +48,11 @@ async def funded(container: AppContainer, headers: Headers) -> TenantContext:
 
 async def asked(
     container: AppContainer, ctx: TenantContext, tokens: int, agent_project_id: UUID | None
-) -> Hold | Refusal:
+) -> SpendHold | Refusal:
     """A model call of a session of the caller's, charged to the scopes the
     session runner charges it to, whose worst case is `tokens`."""
     spender = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
-    request = HoldRequest(
+    request = SpendHoldRequest(
         spender_id=ctx.user_id,
         scopes=scopes_of(
             ctx.org_id, new_id(), new_id(), spender, agent_project_id=agent_project_id
@@ -61,12 +61,12 @@ async def asked(
         own=None,
         purpose="main",
     )
-    return await container.managers.budget_gate.authorize(ctx, request)
+    return await container.managers.spend_budget_gate.authorize(ctx, request)
 
 
-def breached(answer: Hold | Refusal, budget_id: str) -> set[AmountUnit]:
+def breached(answer: SpendHold | Refusal, spend_budget_id: str) -> set[AmountUnit]:
     assert isinstance(answer, Refusal), answer
-    return {b.unit for b in answer.breaches if str(b.budget_id) == budget_id}
+    return {b.unit for b in answer.breaches if str(b.spend_budget_id) == spend_budget_id}
 
 
 @pytest.mark.parametrize("kind", ["person", "project", "tenant"])
@@ -93,8 +93,10 @@ async def test_an_owner_sets_a_token_budget_lists_it_and_the_gate_holds_calls_to
     past = await asked(container, ctx, 4_000, agent_project_id)
     assert breached(past, budget["id"]) == {AmountUnit.TOKENS}, "a call past it is refused"
     within = await asked(container, ctx, 2_000, agent_project_id)
-    assert isinstance(within, Hold), within
-    assert budget["id"] in {str(line.budget_id) for line in within.lines}, "a fit is held on it"
+    assert isinstance(within, SpendHold), within
+    assert budget["id"] in {str(line.spend_budget_id) for line in within.lines}, (
+        "a fit is held on it"
+    )
 
 
 async def test_a_budget_in_reference_cost_over_a_span_reads_back_as_set(
@@ -154,10 +156,10 @@ async def test_the_usage_page_reads_what_the_money_gate_holds_and_settles(
     ctx = await funded(container, ajax.owner)
 
     hold = await asked(container, ctx, 2_000, None)
-    assert isinstance(hold, Hold), hold
+    assert isinstance(hold, SpendHold), hold
     held = (await client.get("/v1/usage", headers=ajax.owner)).json()["items"]
     assert [(i["held_tokens"], i["spent_tokens"]) for i in held] == [(2_000, 0)]
-    await container.managers.budget_gate.settle(
+    await container.managers.spend_budget_gate.settle(
         ctx, hold.id, Billed(usage=Spend(cost_micros=700, tokens=1_500))
     )
     spent = (await client.get("/v1/usage", headers=ajax.owner)).json()["items"]
@@ -218,6 +220,6 @@ async def test_another_tenant_reads_nothing_and_its_budgets_bind_nothing_here(
     keyed = {"scope_kind": "person", "scope_key": str(owner.user_id), "window_kind": "day"}
     zero = await client.post("/v1/budgets", headers=bolt.owner, json={**keyed, "tokens": 0})
     assert zero.status_code == 201, zero.text
-    assert isinstance(await asked(container, owner, 1_000, None), Hold)
+    assert isinstance(await asked(container, owner, 1_000, None), SpendHold)
     listed = await client.get("/v1/budgets", headers=ajax.owner)
     assert [b["id"] for b in listed.json()] == [made.json()["id"]]

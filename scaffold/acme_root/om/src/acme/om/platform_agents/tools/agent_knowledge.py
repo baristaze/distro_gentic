@@ -10,12 +10,12 @@ from pydantic import Field
 
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledge
-from acme.om.base import Platform
+from acme.om.agent_steps.types.content import MAX_NAME
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools.base import MAX_PATH, NativeToolImpl
 from acme.om.platform_agents.types.corpus import Corpus, Passage
-from acme.om.steps.types.content import MAX_NAME
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 
@@ -35,7 +35,7 @@ class AgentKnowledgeQuery(ToolInput):
     limit: int = Field(default=5, ge=1, le=10)
 
 
-class AgentKnowledgeHit(Platform):
+class AgentKnowledgeHit(OmBase):
     scope: str
     slug: str | None  # what read_agent_knowledge takes
     title: str
@@ -43,7 +43,7 @@ class AgentKnowledgeHit(Platform):
     excerpt: str
 
 
-class AgentKnowledgeHits(Platform):
+class AgentKnowledgeHits(OmBase):
     hits: tuple[AgentKnowledgeHit, ...]
 
 
@@ -79,10 +79,10 @@ class SearchAgentKnowledgeImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, AgentKnowledgeQuery)
         entries = await self._agent_knowledge().search(
-            ctx, runtime.session_id, call_input.query, call_input.limit
+            ctx, runtime.agent_session_id, call_input.query, call_input.limit
         )
         passages = rules.search(self._corpus, call_input.query, call_input.limit)
         hits = [
@@ -111,7 +111,7 @@ class AgentKnowledgeSlug(ToolInput):
     slug: str = Field(min_length=1, max_length=MAX_PATH)
 
 
-class AgentKnowledgeRead(Platform):
+class AgentKnowledgeRead(OmBase):
     scope: str
     slug: str
     title: str
@@ -146,7 +146,7 @@ class ReadAgentKnowledgeImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, AgentKnowledgeSlug)
         slug = call_input.slug
         for document in self._corpus.documents:
@@ -154,7 +154,7 @@ class ReadAgentKnowledgeImpl(NativeToolImpl):
                 return AgentKnowledgeRead(
                     scope=PLATFORM, slug=slug, title=document.title, text=document.text
                 )
-        entry = await self._agent_knowledge().read(ctx, runtime.session_id, slug)
+        entry = await self._agent_knowledge().read(ctx, runtime.agent_session_id, slug)
         return AgentKnowledgeRead(
             scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text
         )
@@ -166,7 +166,7 @@ class SuggestionInput(ToolInput):
     text: str = Field(min_length=1, max_length=MAX_TEXT)
 
 
-class Suggested(Platform):
+class Suggested(OmBase):
     slug: str | None
     note: str
 
@@ -199,10 +199,10 @@ class SuggestAgentKnowledgeImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SuggestionInput)
         entry = await self._agent_knowledge().suggest(
-            ctx, runtime.session_id, call_input.title, call_input.trigger, call_input.text
+            ctx, runtime.agent_session_id, call_input.title, call_input.trigger, call_input.text
         )
         return Suggested(slug=entry.slug, note="It waits for a person's review.")
 
@@ -212,7 +212,7 @@ class SearchInput(ToolInput):
     limit: int = Field(default=5, ge=1, le=10)
 
 
-class Found(Platform):
+class Found(OmBase):
     passages: tuple[Passage, ...]
 
 
@@ -240,6 +240,6 @@ class SearchCorpusImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, SearchInput)
         return Found(passages=rules.search(self._corpus, call_input.query, call_input.limit))

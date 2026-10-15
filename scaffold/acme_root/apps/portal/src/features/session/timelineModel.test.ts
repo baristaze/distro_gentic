@@ -1,7 +1,7 @@
 // A session's history as a chat: each kind of step reads as its row, from
 // steps as the API answers them.
 import { describe, expect, it } from "vitest";
-import type { StepView } from "@acme/client";
+import type { AgentStepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
 import { childGroups } from "./paneModel";
@@ -11,7 +11,7 @@ const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
 
 let seq = 0;
-function step(fields: Partial<StepView> & Pick<StepView, "type">, second = seq): StepView {
+function step(fields: Partial<AgentStepView> & Pick<AgentStepView, "type">, second = seq): AgentStepView {
   seq += 1;
   return {
     id: `step-${seq}`,
@@ -45,21 +45,21 @@ function step(fields: Partial<StepView> & Pick<StepView, "type">, second = seq):
   };
 }
 
-const said = (text: string, actor: StepView["actor"] = "person", origin: StepView["origin"] = "portal") =>
+const said = (text: string, actor: AgentStepView["actor"] = "person", origin: AgentStepView["origin"] = "portal") =>
   step({ type: "message", actor, origin, text });
 const request = (second: number) => step({ type: "model_request", actor: "engine" }, second);
-function response(asked: StepView, second: number, fields: Partial<StepView>): StepView {
+function response(asked: AgentStepView, second: number, fields: Partial<AgentStepView>): AgentStepView {
   return step({ type: "model_response", actor: "model", responds_to: asked.id, ...fields }, second);
 }
 const toolUse = (id: string, name: string, input: Record<string, unknown>) => ({ id, name, input });
-function call(by: StepView, id: string, tool: string, second: number): StepView {
+function call(by: AgentStepView, id: string, tool: string, second: number): AgentStepView {
   return step({ type: "tool_request", actor: "agent", refs: [by.id], tool, tool_use_id: id }, second);
 }
-function answer(asked: StepView, text: string, second: number, failure: StepView["failure"] = null): StepView {
+function answer(asked: AgentStepView, text: string, second: number, failure: AgentStepView["failure"] = null): AgentStepView {
   return step({ type: "tool_response", responds_to: asked.id, tool: asked.tool, tool_use_id: asked.tool_use_id, text, failure }, second);
 }
 
-function read(steps: StepView[], over: Partial<TimelineInput> = {}) {
+function read(steps: AgentStepView[], over: Partial<TimelineInput> = {}) {
   return timeline({
     steps,
     live: [],
@@ -211,7 +211,7 @@ describe("timeline", () => {
     const asked = request(0);
     const asks = response(asked, 1, {
       tool_uses: [
-        toolUse("p1", "write_plan", { plan: "1. Reproduce\n2. Fix the parser" }),
+        toolUse("p1", "write_agent_plan", { plan: "1. Reproduce\n2. Fix the parser" }),
         toolUse("p2", "open_pull_request", { title: "Parse dates in UTC", body: "Fixes the failing test." }),
         toolUse("p3", "validate", {}),
         toolUse("p4", "submit_result", { claim: "succeeded", evidence: ["r1", "r2"] }),
@@ -238,7 +238,7 @@ describe("timeline", () => {
     const asked = request(0);
     const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_software_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
     const made = call(asks, "h1", "hand_off_to_software_engineer", 2);
-    const done = answer(made, JSON.stringify({ session_id: "child-1", note: "started" }), 3);
+    const done = answer(made, JSON.stringify({ agent_session_id: "child-1", note: "started" }), 3);
     const card = only(read([asked, asks, made, done]).entries, "subagents");
     expect(card.title).toBe("Handed the work to another agent");
     expect(card.rows).toMatchObject([{ title: "Fix the parser", agent: "software engineer", childId: "child-1", words: "Started" }]);
@@ -347,16 +347,16 @@ function twoSpawns(tool = "spawn") {
     ],
   });
   const first = call(asks, "s1", tool, 2);
-  const firstMade = answer(first, JSON.stringify({ session_id: C1 }), 3);
+  const firstMade = answer(first, JSON.stringify({ agent_session_id: C1 }), 3);
   const second = call(asks, "s2", tool, 4);
-  const secondMade = answer(second, JSON.stringify({ session_id: C2 }), 5);
+  const secondMade = answer(second, JSON.stringify({ agent_session_id: C2 }), 5);
   return [asked, asks, first, firstMade, second, secondMade];
 }
 
 /** A report a child writes into its parent, as the engine words it. */
 function report(id: string, title: string, standing: string, said: string | null, second: number) {
   const text = `Sub-agent ${id} ("${title}", analysis v1) ${standing}${said === null ? " It said nothing." : ` Its last answer:\n\n${said}`}`;
-  return step({ type: "message", actor: "agent", origin: "engine", agent: { kind: "analysis", session_id: id }, text }, second);
+  return step({ type: "message", actor: "agent", origin: "engine", agent: { kind: "analysis", agent_session_id: id }, text }, second);
 }
 
 const onChildren = { status: "parked" as const, park: { reason: "children" as const, unlock: "children", retry_at: null, cause: null }, archived_at: null };
@@ -396,7 +396,7 @@ describe("sub-agents", () => {
     const asked = request(0);
     const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_software_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
     const made = call(asks, "h1", "hand_off_to_software_engineer", 2);
-    const steps = [asked, asks, made, answer(made, JSON.stringify({ session_id: H }), 3)];
+    const steps = [asked, asks, made, answer(made, JSON.stringify({ agent_session_id: H }), 3)];
     expect(handedTo(steps)).toEqual([H]);
     expect(handedTo(twoSpawns())).toEqual([]);
     const handed = child(H, "Fix the parser", { kind: "software_engineer", created_at: at(3) });
@@ -415,7 +415,7 @@ describe("sub-agents", () => {
     const running = { status: "running" as const, park: null, archived_at: null };
     const dayLater = new Date(T0 + 86_400_000);
     expect(only(read([asked, asks, made], { session: running, now: new Date(T0 + 10_000) }).entries, "subagents").rows[0]).toMatchObject({ words: "Starting", seconds: 8 });
-    const started = read([asked, asks, made, answer(made, JSON.stringify({ session_id: H }), 3)], { now: dayLater });
+    const started = read([asked, asks, made, answer(made, JSON.stringify({ agent_session_id: H }), 3)], { now: dayLater });
     expect(only(started.entries, "subagents").rows[0]).toMatchObject({ words: "Started", seconds: null });
     // A spawn that did not start, was denied, or was stopped reads so, with no time.
     const spawnAsks = response(asked, 1, { tool_uses: [toolUse("s1", "spawn_sub_agent", { title: "Read the parsers" })] });
@@ -449,7 +449,7 @@ describe("sub-agents", () => {
   });
 
   it("draws a child's first message as From its parent, linking back", () => {
-    const objective = step({ type: "message", actor: "agent", origin: "parent", agent: { kind: "software_engineer", session_id: PARENT }, text: "Check every caller of parse." }, 0);
+    const objective = step({ type: "message", actor: "agent", origin: "parent", agent: { kind: "software_engineer", agent_session_id: PARENT }, text: "Check every caller of parse." }, 0);
     expect(only(read([objective], { parent: { id: PARENT, title: "Fix the dates" } }).entries, "from")).toMatchObject({ sessionId: PARENT, title: "Fix the dates", text: "Check every caller of parse." });
     expect(only(read([objective]).entries, "from")).toMatchObject({ sessionId: PARENT, title: "its parent" });
   });
@@ -600,9 +600,9 @@ describe("what the view cut short", () => {
   it("reads a plan from its answer, which keeps it whole, and marks a pull request's body cut", () => {
     const asked = request(0);
     const asks = response(asked, 1, {
-      tool_uses: [toolUse("p1", "write_plan", { plan: shown }), toolUse("p2", "open_pull_request", { title: "Add values", body: shown })],
+      tool_uses: [toolUse("p1", "write_agent_plan", { plan: shown }), toolUse("p2", "open_pull_request", { title: "Add values", body: shown })],
     });
-    const planned = call(asks, "p1", "write_plan", 2);
+    const planned = call(asks, "p1", "write_agent_plan", 2);
     const opened = call(asks, "p2", "open_pull_request", 3);
     const steps = [asked, asks, planned, answer(planned, JSON.stringify({ plan: whole }), 3), opened, answer(opened, JSON.stringify({ id: "pr-1", url: "twin://ajax/first/pull/1", branch: "session/abc", head: "f00d" }), 4)];
     const cards = read(steps).entries.flatMap((entry) => (entry.kind === "card" ? [[entry.card, entry.body === whole, entry.cut]] : []));
@@ -619,12 +619,12 @@ describe("the calls a product reads", () => {
   it("hands every call the entries hold, in order, a card's and a block's alike", () => {
     const steps = turn();
     const asked = request(10);
-    const plans = response(asked, 11, { tool_uses: [toolUse("p1", "write_plan", { plan: "1. Fix it." })] });
-    const made = call(plans, "p1", "write_plan", 12);
+    const plans = response(asked, 11, { tool_uses: [toolUse("p1", "write_agent_plan", { plan: "1. Fix it." })] });
+    const made = call(plans, "p1", "write_agent_plan", 12);
     const { entries } = read([...steps, asked, plans, made, answer(made, JSON.stringify({ plan: "1. Fix it." }), 12)]);
     expect(callsOf(entries).map((each) => [each.id, each.tool])).toEqual([
       ["u1", "run_command"],
-      ["p1", "write_plan"],
+      ["p1", "write_agent_plan"],
     ]);
   });
 });

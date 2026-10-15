@@ -12,7 +12,7 @@ COPY om/pyproject.toml om/
 COPY infra/pyproject.toml infra/
 COPY integrations/pyproject.toml integrations/
 COPY workers/maintenance/pyproject.toml workers/maintenance/
-COPY workers/session_runner/pyproject.toml workers/session_runner/
+COPY workers/agent_session_runner/pyproject.toml workers/agent_session_runner/
 # Every workspace member's manifest, so the frozen lock resolves; only the
 # members this image runs are copied whole below.
 COPY clients/python/pyproject.toml clients/python/
@@ -22,7 +22,7 @@ COPY om om
 COPY infra infra
 COPY integrations integrations
 COPY workers/maintenance workers/maintenance
-COPY workers/session_runner workers/session_runner
+COPY workers/agent_session_runner workers/agent_session_runner
 RUN uv sync --frozen --no-dev --package acme-session-runner
 # The knowledge map and the documents it lists for tenant users, outside the
 # packages above: the runner ships the platform's agents over them, as the

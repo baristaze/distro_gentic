@@ -8,8 +8,8 @@ import json
 import secrets
 from uuid import UUID
 
-from acme.infra.workspaces import EgressMode, IsolationMode, IsolationSpec
-from acme.infra.workspaces import refusal as infra_refusal
+from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import refusal as infra_refusal
 from acme.om.base import EMPTY_UUID
 
 KEY_PREFIX = "hmk_"
@@ -34,7 +34,7 @@ TAG = 8
 """Hex digits that tell a session's snapshots apart."""
 
 
-def machine_name(prefix: str) -> str:
+def vm_name(prefix: str) -> str:
     """A new machine's name: random, since a machine is started before the
     session it serves is known, and a session's next machine is another."""
     return f"{prefix}{MARK}{secrets.token_hex(HASHED // 2)}"
@@ -46,15 +46,15 @@ def tenant_snapshots(prefix: str, org_id: UUID) -> str:
     return f"{prefix}{MARK}{_hashed(org_id)}"
 
 
-def snapshots_of(prefix: str, org_id: UUID, session_id: UUID) -> str:
+def snapshots_of(prefix: str, org_id: UUID, agent_session_id: UUID) -> str:
     """What every snapshot of a session's machines is named from: the
     session's purge and its key's revocation find them all by it."""
-    return f"{tenant_snapshots(prefix, org_id)}{_hashed(session_id)}-"
+    return f"{tenant_snapshots(prefix, org_id)}{_hashed(agent_session_id)}-"
 
 
-def snapshot_name(prefix: str, org_id: UUID, session_id: UUID) -> str:
+def snapshot_name(prefix: str, org_id: UUID, agent_session_id: UUID) -> str:
     """A new snapshot of a session's machine, under the session's names."""
-    return snapshots_of(prefix, org_id, session_id) + secrets.token_hex(TAG // 2)
+    return snapshots_of(prefix, org_id, agent_session_id) + secrets.token_hex(TAG // 2)
 
 
 def is_snapshot(prefix: str, name: str) -> bool:

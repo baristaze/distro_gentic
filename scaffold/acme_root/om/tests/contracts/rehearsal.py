@@ -14,6 +14,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.root import StorageInterface
+
 from contracts.acceptance import DefectExecutor, EvidenceParts
 from contracts.evidence import CHECKOUT, checkout_policy
 from contracts.platform_doubles import SessionAgentProjectsMemory

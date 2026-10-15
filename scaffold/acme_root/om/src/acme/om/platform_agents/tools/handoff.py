@@ -9,7 +9,7 @@ from pydantic import Field
 
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import MAX_TITLE, Handoff
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.tools.base import NativeToolImpl
@@ -22,8 +22,8 @@ class HandOffInput(ToolInput):
     objective: str = Field(min_length=1, max_length=20_000)
 
 
-class HandedOff(Platform):
-    session_id: UUID
+class HandedOff(OmBase):
+    agent_session_id: UUID
     note: str
 
 
@@ -54,7 +54,7 @@ class HandOffToSoftwareEngineerImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, HandOffInput)
         handoff = Handoff(
             id=runtime.key,
@@ -62,7 +62,7 @@ class HandOffToSoftwareEngineerImpl(NativeToolImpl):
             title=call_input.title,
             objective=call_input.objective,
         )
-        session = await self._agents().hand_off(ctx, runtime.session_id, handoff)
+        session = await self._agents().hand_off(ctx, runtime.agent_session_id, handoff)
         return HandedOff(
-            session_id=session.id, note="It starts when its person confirms the objective."
+            agent_session_id=session.id, note="It starts when its person confirms the objective."
         )

@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.observability import OUTCOMES
-from acme.om.base import EMPTY_UUID, Platform, derived_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, derived_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
@@ -24,7 +24,7 @@ from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 log = logging.getLogger(__name__)
 
 
-class PlacementOptions(Platform):
+class PlacementOptions(OmBase):
     default_tier: str = DEFAULT_TIER  # the plan tier of a tenant with no share
     # Each plan tier's share: the most loops one tenant holds claimed on the
     # tier's lane, the cap its runners pass to the claim. A tier it does not
@@ -90,7 +90,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
                     ctx.org_id,
                     claimant.worker_id,
                     claimant.org_id,
-                    claimant.session_id,
+                    claimant.agent_session_id,
                 )
                 whose = "another tenant" if foreign else "another session"
                 await self._work.fail_for_good(

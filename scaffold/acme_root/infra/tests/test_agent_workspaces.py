@@ -36,20 +36,25 @@ from acme.infra.agent_workspaces import (
     AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     ResourceLimits,
+    AgentWorkspace,
 )
 from acme.infra.agent_workspaces import account as accounts
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, Switch, switch_to
 from acme.infra.agent_workspaces.container import (
+    CA_PATH,
+    DOCKER_PROXIES,
     ICC,
     OPEN_NETWORK,
     AgentWorkspaceContainerImpl,
     container_name,
 )
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.agent_workspaces.network import CAFileUnreadable, HostNetwork
 from acme.infra.agent_workspaces.twin import AgentWorkspaceNullImpl, AgentWorkspaceTwinImpl
 from acme.infra.base import new_id, utcnow
 from acme.infra.docker import DockerReply
@@ -62,30 +67,6 @@ from acme.infra.transports import CommandResult, CommandSpec
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.transports.twin import RecordSealTwin
-from acme.infra.agent_workspaces import (
-    EgressMode,
-    EgressPolicy,
-    HeldInstance,
-    IsolationMode,
-    IsolationRefused,
-    IsolationSpec,
-    ResourceLimits,
-    Workspace,
-    AgentWorkspaceProviderInterface,
-)
-from acme.infra.agent_workspaces import account as accounts
-from acme.infra.agent_workspaces.account import Switch, AgentWorkspaceAccountImpl, switch_to
-from acme.infra.agent_workspaces.container import (
-    CA_PATH,
-    DOCKER_PROXIES,
-    ICC,
-    OPEN_NETWORK,
-    AgentWorkspaceContainerImpl,
-    container_name,
-)
-from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
-from acme.infra.agent_workspaces.network import CAFileUnreadable, HostNetwork
-from acme.infra.agent_workspaces.twin import AgentWorkspaceNullImpl, AgentWorkspaceTwinImpl
 
 DEPLOYMENT = "acme-test"
 """The deployment the providers of these cases start their containers for."""
@@ -372,7 +353,7 @@ async def test_a_container_holds_a_copy_of_the_hosts_ca_under_open_egress_alone(
     ca = tmp_path / "linked-ca.pem"
     ca.symlink_to(real)
     docker = LocalDocker()
-    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", docker)
     bare = AgentWorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     networked = AgentWorkspaceContainerImpl(
         "python:3.14-slim",
@@ -423,7 +404,7 @@ async def test_a_container_is_started_with_every_proxy_dockers_config_fills_left
     into every container it starts, credentials included, unless each is
     named: each is, with no value, so each is left unset."""
     docker = LocalDocker()
-    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", docker)
     provider = AgentWorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, egress))
     (created,) = (call for call in docker.calls if call[0] == "create")
@@ -448,7 +429,7 @@ async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
     a limit of its own, and only when it is absent."""
     docker = LocalDocker()
     docker.image_present = False
-    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", docker)
     provider = AgentWorkspaceContainerImpl(
         "python:3.14-slim", timedelta(seconds=5), DEPLOYMENT, timedelta(seconds=900)
     )
@@ -579,7 +560,7 @@ async def test_a_container_provider_holds_the_running_containers_it_started_alon
         calls.append(args)
         return DockerReply(0, f"{listing}\n".encode(), b"")
 
-    monkeypatch.setattr("acme.infra.workspaces.container.docker", listed)
+    monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", listed)
     provider = AgentWorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     assert await provider.held_instances() == [
         HeldInstance(id=ours, org_id=org, location=container_name(ours))
@@ -592,7 +573,7 @@ async def test_a_container_provider_holds_the_running_containers_it_started_alon
     async def unreachable(*args: str, **_: object) -> DockerReply:
         return DockerReply(1, b"", b"Cannot connect to the Docker daemon")
 
-    monkeypatch.setattr("acme.infra.workspaces.container.docker", unreachable)
+    monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", unreachable)
     with pytest.raises(BackendFailed):
         await provider.held_instances()
 

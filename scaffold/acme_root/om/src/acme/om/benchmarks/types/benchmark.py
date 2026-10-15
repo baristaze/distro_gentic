@@ -11,10 +11,10 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.base import Created, Identifiable, OmBase
 from acme.om.evidence.types.acceptance import AcceptanceVerdict
 from acme.om.evidence.types.record import NAME
-from acme.om.models.types.fill import RoleFill
+from acme.om.language_models.types.fill import RoleFill
 
 
 class Contender(StrEnum):
@@ -22,7 +22,7 @@ class Contender(StrEnum):
     BASELINE = "baseline"  # what it is measured against: what runs today
 
 
-class ContenderPin(Platform):
+class ContenderPin(OmBase):
     """What a contender's sessions run: the agent kind, its version, and the fill
     set, each model role's fill."""
 
@@ -31,7 +31,7 @@ class ContenderPin(Platform):
     fills: tuple[RoleFill, ...] = Field(min_length=1, max_length=50)
 
 
-class Trial(Platform):
+class Trial(OmBase):
     """One preserved run of the scenario: the contender it ran for, its session,
     the executor it ran on and when it started, the acceptance verdict that
     judged it, kept whole with the hidden suite's runs, and its cost in
@@ -39,7 +39,7 @@ class Trial(Platform):
     verdict's, never a caller's."""
 
     contender: Contender
-    session_id: UUID
+    agent_session_id: UUID
     executor: str = Field(min_length=1, max_length=200)
     started_at: datetime
     verdict: AcceptanceVerdict
@@ -47,7 +47,7 @@ class Trial(Platform):
 
     @model_validator(mode="after")
     def _its_sessions_verdict(self) -> Self:
-        if self.verdict.session_id != self.session_id:
+        if self.verdict.agent_session_id != self.agent_session_id:
             raise ValueError("a trial keeps the verdict of its own session")
         return self
 
@@ -60,7 +60,7 @@ class Trial(Platform):
         return self.verdict.score
 
 
-class BenchmarkTrials(Platform):
+class BenchmarkTrials(OmBase):
     """What a benchmark run hands in: the scenario, both contenders, and every
     trial of both, in any order."""
 
@@ -70,7 +70,7 @@ class BenchmarkTrials(Platform):
     trials: tuple[Trial, ...] = Field(min_length=2, max_length=10_000)
 
 
-class ContenderResult(Platform):
+class ContenderResult(OmBase):
     """What one contender's trials showed: their mean score, how many passed, and
     what they cost together."""
 

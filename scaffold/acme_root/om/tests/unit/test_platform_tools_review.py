@@ -10,20 +10,21 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.loops import reply, said
-from contracts.platform_agents import Later, Platform, calls, platform_over
 from unit.platform_tools import CART, RECORDED, REVIEWED, REVIEWED_HEAD, reviewing
 
 from acme.integrations.events import ChangedFile
 from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
+from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock
+from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
 from acme.om.agents.types.result import Claim
 from acme.om.base import new_id
 from acme.om.intake.tools import FORGE
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.tools.review import MAX_VIEW
-from acme.om.steps.types.content import TextBlock, ToolResultBlock
-from acme.om.steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
+
+from contracts.loops import reply, said
+from contracts.platform_agents import Later, Platform, calls, platform_over
 
 
 def submitting(claim: Claim) -> Later:
@@ -76,8 +77,8 @@ async def test_a_reviewer_answers_its_findings_with_file_and_line_through_its_re
     tmp_path: Path,
 ) -> None:
     platform, forge = await reviewing(tmp_path)
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Review {REVIEWED}.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Review {REVIEWED}.")
     platform.anthropic.add(
         reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=REVIEWED)),
         reply(
@@ -102,20 +103,20 @@ async def test_a_reviewer_answers_its_findings_with_file_and_line_through_its_re
         submitting(Claim.SUCCEEDED),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
     # It asks XL of its main role: the size's model reviews.
     assert platform.anthropic.calls[0].model == "claude-opus-5-5"
-    failure, text = await platform.answer(session_id, "use_read")
+    failure, text = await platform.answer(agent_session_id, "use_read")
     read = json.loads(text)
     assert failure is None
     assert (read["on"], read["head"]) == (REVIEWED, REVIEWED_HEAD)
     assert [(f["path"], f["patch"] is not None) for f in read["files"]] == [("src/cart.py", True)]
     assert read["checks"] == [{"name": "unit", "status": "completed", "conclusion": "failure"}]
-    _, text = await platform.answer(session_id, "use_file")
+    _, text = await platform.answer(agent_session_id, "use_file")
     assert json.loads(text)["text"] == CART
-    failure, text = await platform.answer(session_id, "use_finding")
+    failure, text = await platform.answer(agent_session_id, "use_finding")
     finding = json.loads(text)
     assert failure is None
     assert (finding["path"], finding["line"], finding["head"], finding["grade"]) == (
@@ -126,7 +127,7 @@ async def test_a_reviewer_answers_its_findings_with_file_and_line_through_its_re
     )
     # The review is accepted, verified: the gate read the read and the
     # finding it cites in the session's own history.
-    failure, text = await platform.answer(session_id, "use_review")
+    failure, text = await platform.answer(agent_session_id, "use_review")
     assert failure is None and "accepted, verified" in text
     assert UUID(finding["id"]) != UUID(read["id"])
     # The forge was read, and nothing was written to it.
@@ -137,8 +138,8 @@ async def test_a_finding_off_the_file_and_a_review_citing_no_read_are_refused(
     tmp_path: Path,
 ) -> None:
     platform, _ = await reviewing(tmp_path)
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Review {REVIEWED}.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Review {REVIEWED}.")
     at = {"on": REVIEWED, "head": REVIEWED_HEAD, "grade": "low", "text": "Name it."}
     platform.anthropic.add(
         reply(
@@ -159,17 +160,17 @@ async def test_a_finding_off_the_file_and_a_review_citing_no_read_are_refused(
         reply(said("I could not review it.")),
     )
 
-    await platform.managers.loop.run(platform.owner, session_id)
+    await platform.managers.loop.run(platform.owner, agent_session_id)
 
-    failure, text = await platform.answer(session_id, "use_past")
+    failure, text = await platform.answer(agent_session_id, "use_past")
     assert failure is ToolFailure.INVALID_INPUT and "holds 3 lines" in text
-    failure, _ = await platform.answer(session_id, "use_out")
+    failure, _ = await platform.answer(agent_session_id, "use_out")
     assert failure is ToolFailure.INVALID_INPUT
-    failure, _ = await platform.answer(session_id, "use_kept")
+    failure, _ = await platform.answer(agent_session_id, "use_kept")
     assert failure is None
-    failure, text = await platform.answer(session_id, "use_review")
+    failure, text = await platform.answer(agent_session_id, "use_review")
     assert failure is ToolFailure.DENIED and "its read of the pull request" in text
-    failure, text = await platform.answer(session_id, "use_made_up")
+    failure, text = await platform.answer(agent_session_id, "use_made_up")
     assert failure is ToolFailure.DENIED and "names no read or finding of this session" in text
 
 
@@ -177,8 +178,8 @@ async def test_a_reviewers_malformed_input_is_refused_before_anything_is_read(
     tmp_path: Path,
 ) -> None:
     platform, _ = await reviewing(tmp_path)
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Review {REVIEWED}.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Review {REVIEWED}.")
     at = {"on": REVIEWED, "head": REVIEWED_HEAD, "grade": "low", "text": "Name it."}
     platform.anthropic.add(
         reply(
@@ -202,10 +203,10 @@ async def test_a_reviewers_malformed_input_is_refused_before_anything_is_read(
         reply(said("I could not read it.")),
     )
 
-    await platform.managers.loop.run(platform.owner, session_id)
+    await platform.managers.loop.run(platform.owner, agent_session_id)
 
     for malformed in ("use_ref", "use_zero", "use_grade", "use_lines"):
-        failure, _ = await platform.answer(session_id, malformed)
+        failure, _ = await platform.answer(agent_session_id, malformed)
         assert failure is ToolFailure.INVALID_INPUT, malformed
 
 
@@ -226,36 +227,36 @@ async def test_a_reviewer_that_cannot_read_its_pull_request_fails_citing_that_re
     platform = platform_over(tmp_path, forge=forge)
     if connects:
         await platform.connect(FORGE, twin_installation("acme"))
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Review {on}.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Review {on}.")
     reason = f"I could not review {on}: the forge would not read it to me."
     platform.anthropic.add(
         reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=on)),
         giving_up(reason),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
-    read_failure, text = await platform.answer(session_id, "use_read")
+    read_failure, text = await platform.answer(agent_session_id, "use_read")
     assert read_failure is failure and why in text
     # The failed read names its id, the review cites it, and the gate finds
     # it among the session's own reads: the run ends failed at once, with
     # its reason, after no more calls than the read and the review.
     (named,) = NAMED_ID.findall(text)
-    review_failure, verdict = await platform.answer(session_id, "use_review")
+    review_failure, verdict = await platform.answer(agent_session_id, "use_review")
     assert review_failure is None and "accepted, verified" in verdict
     assert run.outcome is LoopOutcome.FAILED
     assert len(platform.anthropic.calls) == 2
-    history = await platform.history(session_id)
+    history = await platform.history(agent_session_id)
     assert reason in [step.as_text() for step in history]
     assert UUID(named) in {step.id for step in history}
     assert forge.posted == []
 
 
-async def kept_whole(platform: Platform, session_id: UUID, use_id: str) -> tuple[str, str]:
+async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) -> tuple[str, str]:
     """What the window shows at once of a long answer to the call `use_id`,
     its head, and the whole answer it keeps as an artifact."""
-    for step in await platform.history(session_id):
+    for step in await platform.history(agent_session_id):
         header = step.header
         if not isinstance(header, ToolResponseHeader) or header.artifact is None:
             continue
@@ -267,8 +268,8 @@ async def kept_whole(platform: Platform, session_id: UUID, use_id: str) -> tuple
         assert isinstance(head, TextBlock)
         pages: list[str] = []
         while True:
-            page = await platform.managers.windows.get_artifact(
-                platform.owner, session_id, header.artifact.id, len("".join(pages)), 100_000
+            page = await platform.managers.windows.get_tool_output(
+                platform.owner, agent_session_id, header.artifact.id, len("".join(pages)), 100_000
             )
             pages.append(page.text)
             if not page.has_more:
@@ -296,20 +297,20 @@ async def test_a_pull_request_too_large_for_one_answer_keeps_its_id_and_head_who
     )
     platform = platform_over(tmp_path, forge=forge)
     await platform.connect(FORGE, twin_installation("acme"))
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Review {REVIEWED}.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Review {REVIEWED}.")
     platform.anthropic.add(
         reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=REVIEWED)),
         reply(said("It renames 1,500 files.")),
     )
 
-    await platform.managers.loop.run(platform.owner, session_id)
+    await platform.managers.loop.run(platform.owner, agent_session_id)
 
-    failure, _ = await platform.answer(session_id, "use_read")
-    shown, whole = await kept_whole(platform, session_id, "use_read")
+    failure, _ = await platform.answer(agent_session_id, "use_read")
+    shown, whole = await kept_whole(platform, agent_session_id, "use_read")
     assert failure is None and len(whole) <= MAX_VIEW
     read = json.loads(whole)
-    assert UUID(read["id"]) in {step.id for step in await platform.history(session_id)}
+    assert UUID(read["id"]) in {step.id for step in await platform.history(agent_session_id)}
     assert read["head"] == REVIEWED_HEAD
     listed = len(read["files"])
     assert 0 < listed < len(renamed)

@@ -9,21 +9,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.evidence import (
-    CHECKOUT_KEY,
-    Evidence,
-    ScriptedExecutor,
-    checkout_policy,
-    delivered,
-    evidence_over,
-)
-from contracts.evidence_storage import make_record, make_validation
-from contracts.factories import make_org
-from contracts.loops import DELIVERY
-from contracts.tools import stand_ins
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.manager import AgentsManagerImpl
 from acme.om.agents.types.request import Start
@@ -39,8 +27,21 @@ from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest
 from acme.om.exceptions import PreconditionFailed, UnsafeConfiguration
 from acme.om.platform_root import build_platform_managers
-from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
+
+from contracts.doubles import context
+from contracts.evidence import (
+    CHECKOUT_KEY,
+    Evidence,
+    ScriptedExecutor,
+    checkout_policy,
+    delivered,
+    evidence_over,
+)
+from contracts.evidence_storage import make_record, make_validation
+from contracts.factories import make_org
+from contracts.loops import DELIVERY
+from contracts.tools import stand_ins
 
 
 class Case:
@@ -54,7 +55,7 @@ class Case:
         self.ctx = ctx
         self.owner = owner
         self.session = new_id()
-        self.run = make_record(self.session, step_id=new_id())
+        self.run = make_record(self.session, agent_step_id=new_id())
 
     @classmethod
     async def start(
@@ -127,16 +128,16 @@ async def test_a_delivery_is_judged_by_its_sessions_agent_project_whatever_it_na
     )
     ours, theirs = new_id(), new_id()  # a session of `checkout`, and one of the other
     evidence.agent_projects.sessions[theirs] = other
-    for session_id, named in ((ours, str(other)), (theirs, CHECKOUT_KEY)):
+    for agent_session_id, named in ((ours, str(other)), (theirs, CHECKOUT_KEY)):
         delivery = delivered().model_copy(update={"agent_project": named})
-        evidence.work.deliver(org.id, session_id, delivery)
-    runs = {s: make_record(s, step_id=new_id()) for s in (ours, theirs)}
+        evidence.work.deliver(org.id, agent_session_id, delivery)
+    runs = {s: make_record(s, agent_step_id=new_id()) for s in (ours, theirs)}
     for run in runs.values():
         await evidence.manager.record_run(ctx, run)
 
-    async def submit(session_id: UUID) -> Verdict:
-        result = Result(claim=Claim.SUCCEEDED, evidence=(runs[session_id].id,))
-        return await evidence.gate.check(ctx, session_id, result)
+    async def submit(agent_session_id: UUID) -> Verdict:
+        result = Result(claim=Claim.SUCCEEDED, evidence=(runs[agent_session_id].id,))
+        return await evidence.gate.check(ctx, agent_session_id, result)
 
     assert refused(await submit(ours), "no baseline ran at the base base0")
     await evidence.manager.validate(ctx, ours, RunPurpose.BASELINE)
@@ -155,7 +156,7 @@ async def test_a_success_the_policy_passed_at_the_head_counts() -> None:
     await case.validate()
     assert succeeded(await case.submit())
     # A citation by the agent's step, or by the validation, finds its runs too.
-    assert succeeded(await case.submit(Claim.SUCCEEDED, case.run.step_id or new_id()))
+    assert succeeded(await case.submit(Claim.SUCCEEDED, case.run.agent_step_id or new_id()))
 
 
 async def test_a_success_with_no_validation_at_its_head_is_refused() -> None:
@@ -619,7 +620,7 @@ async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate
         environment="staging",
     )
     ctx = context(Role.MEMBER)
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         ctx, Start(id=new_id(), kind="delivery", title="fix the cart")
     )
     run = make_record(session.id)

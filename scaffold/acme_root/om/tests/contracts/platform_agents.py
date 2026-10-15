@@ -13,8 +13,8 @@ from uuid import UUID
 
 from pydantic import SecretStr
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.integrations.events import IntegrationInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
@@ -24,16 +24,18 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import build_agent_automations
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.rules import CHILDREN_PARK
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
@@ -54,21 +56,24 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
-from acme.om.steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
-from acme.om.steps.types.step import Step, StepType
+from acme.om.spend_budgets.types.spend_budget import (
+    SpendBudgetScope,
+    SpendBudgetScopeKind,
+    WindowKind,
+)
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
+
 from contracts.agent_project_storage import in_agent_project, make_binding
-from contracts.budget_storage import make_budget
+from contracts.agent_step_storage import make_message
 from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.factories import make_org
 from contracts.loops import live, reply, said
-from contracts.step_storage import make_message
+from contracts.spend_budget_storage import make_spend_budget
 
 SESSIONS_GUIDE = Document(
     title="Sessions",
@@ -133,30 +138,32 @@ class Platform:
         )
 
     async def start(self, kind: str) -> UUID:
-        session = await self.managers.agents.start_session(
+        session = await self.managers.agents.start_agent_session(
             self.owner, Start(id=new_id(), kind=kind, title="a question")
         )
         return session.id
 
-    async def say(self, session_id: UUID, text: str) -> None:
+    async def say(self, agent_session_id: UUID, text: str) -> None:
         person = Principal(kind=PrincipalKind.PERSON, id=self.owner.user_id)
-        message = make_message(session_id, text, principal=person)
-        await self.managers.steps.append_inputs(self.owner, session_id, [message])
+        message = make_message(agent_session_id, text, principal=person)
+        await self.managers.steps.append_inputs(self.owner, agent_session_id, [message])
 
-    async def history(self, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def history(self, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_steps(self.owner, session_id, after, 200)
+            page = await self.managers.steps.get_agent_steps(
+                self.owner, agent_session_id, after, 200
+            )
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
 
-    async def answer(self, session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
+    async def answer(self, agent_session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
         """What the call `use_id` was answered: its failure, if any, and its
         text."""
-        for step in await self.history(session_id):
-            if step.type is not StepType.TOOL_RESPONSE:
+        for step in await self.history(agent_session_id):
+            if step.type is not AgentStepType.TOOL_RESPONSE:
                 continue
             for block in step.content.blocks:
                 if isinstance(block, ToolResultBlock) and block.tool_use_id == use_id:
@@ -267,15 +274,15 @@ async def a_software_engineer(
 ) -> UUID:
     """A software engineer session of the agent project, whose work product changed `src/`
     and is committed, and whose policy requires its unit check there."""
-    session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
-    binding = make_binding(session_id, agent_project_id)
+    agent_session_id = await platform.start(kinds.SOFTWARE_ENGINEER)
+    binding = make_binding(agent_session_id, agent_project_id)
     await platform.storage.get_agent_project_storage().bind_session(platform.owner.org_id, binding)
     work_product = WorkProduct(
         agent_project="reports", base="b1", head="c2", changed=("src/report.py",)
     )
-    work.deliver(platform.owner.org_id, session_id, work_product)
-    await platform.say(session_id, "The weekly report misses its total. Fix it.")
-    return session_id
+    work.deliver(platform.owner.org_id, agent_session_id, work_product)
+    await platform.say(agent_session_id, "The weekly report misses its total. Fix it.")
+    return agent_session_id
 
 
 # The software engineer starts sub-agents.
@@ -290,7 +297,7 @@ def sub_agents_over(
     executor = ScriptedExecutor(capabilities=frozenset())
     work = WorkProductMemoryImpl()
     reader = ANALYSIS_KIND.model_copy(
-        update={"version": ANALYSIS_KIND.version + 1, "isolation": NO_WORKSPACE}
+        update={"version": ANALYSIS_KIND.version + 1, "isolation": NO_AGENT_WORKSPACE}
     )
     platform = platform_over(
         tmp_path,
@@ -318,14 +325,14 @@ def read_by(call: ModelCall) -> str:
 
 
 async def a_parked_root(platform: Platform, root: UUID) -> AgentSession:
-    session = await platform.managers.agent_sessions.get_session(platform.owner, root)
-    assert (session.status, session.park) == (SessionStatus.PARKED, CHILDREN_PARK)
+    session = await platform.managers.agent_sessions.get_agent_session(platform.owner, root)
+    assert (session.status, session.park) == (AgentSessionStatus.PARKED, CHILDREN_PARK)
     return session
 
 
 async def a_woken_root(platform: Platform, root: UUID) -> None:
-    session = await platform.managers.agent_sessions.get_session(platform.owner, root)
-    assert (session.status, session.park) == (SessionStatus.PENDING, None), "a report wakes it"
+    session = await platform.managers.agent_sessions.get_agent_session(platform.owner, root)
+    assert (session.status, session.park) == (AgentSessionStatus.PENDING, None), "a report wakes it"
 
 
 async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
@@ -344,9 +351,11 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     )
     executor.outcome = lambda check, trial: "passed"
     root = await a_software_engineer(platform, work, agent_project_id)
-    budget = await platform.managers.budgets.create_budget(
+    budget = await platform.managers.budgets.create_spend_budget(
         platform.owner,
-        make_budget(BudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP),
+        make_spend_budget(
+            SpendBudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP
+        ),
     )
     assert TREE_CAP < 2 * (ANALYSIS_SHARE.cost_micros or 0)
     split = (
@@ -383,9 +392,9 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     assert [(child.kind, child.depth) for child in (first, second)] == [(kinds.ANALYSIS, 2)] * 2
     failure, text = await platform.answer(root, "use_wait_1")
     assert failure is None and str(first.id) in text and str(second.id) in text
-    budgets = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
+    budgets = await platform.managers.budgets.get_spend_budgets(platform.owner, None, 50)
     for child in (first, second):
-        scope = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
         assert [b.amount for b in budgets.items if b.scope == scope] == [ANALYSIS_SHARE]
         agent_project = await platform.managers.agent_projects.agent_project_of(
             platform.owner, child.id
@@ -434,7 +443,7 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     assert 0 < tally.spent_cost_micros <= TREE_CAP
     spent = []
     for child in (first, second):
-        scope = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
         (share,) = [b for b in budgets.items if b.scope == scope]
         spent.append(
             (await platform.managers.budgets.get_spend(platform.owner, share.id)).spent_cost_micros

@@ -13,23 +13,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.loops import ALLOWED, Lookup, Loop, call, loop_over, reply, said, tools, use
 
 from acme.integrations.model_providers.anthropic import request_body
 from acme.integrations.model_providers.calls import ModelCall
-from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
-from acme.om.agent_steps.types.content import TextBlock
-from acme.om.agent_steps.types.header import (
-from acme.integrations.model_providers.anthropic import request_body
-from acme.integrations.model_providers.calls import ModelCall
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agents.attached import NOTHING, Attached, AttachedToolsetsInterface, with_attached
-from acme.om.agents.loop_rules import kind_prompts
-from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule
-from acme.om.agents.types.run import RunEnd
-from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.context import TenantContext
-from acme.om.language_models.types.fill import MAIN
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock
 from acme.om.agent_steps.types.header import (
     LoopOutcome,
@@ -40,6 +28,7 @@ from acme.om.agent_steps.types.header import (
     ToolResponseHeader,
     ToolsetSwitch,
 )
+from acme.om.agents.attached import NOTHING, Attached, AttachedToolsetsInterface, with_attached
 from acme.om.agents.loop_rules import kind_prompts
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule
 from acme.om.agents.types.run import RunEnd
@@ -53,10 +42,8 @@ from acme.om.tools.types.toolset import LOAD_TOOLSET, Toolset
 from acme.om.windows.rules import render_main
 from acme.om.windows.types.policy import CompactionPolicy
 
-from contracts.loops import ALLOWED, Loop, call, loop_over, reply, said, tools, use
+from contracts.loops import ALLOWED, Lookup, Loop, call, loop_over, reply, said, tools, use
 
-# `slow` sorts after the tools a load of `writes` adds, so a load that
-# sorted them in among the rest would move it.
 READS = Toolset(name="reads", version=1, summary="Look the records up.", tools=("lookup", "slow"))
 WRITES = Toolset(
     name="writes", version=1, summary="Write a note, and send it out.", tools=("send", "note")

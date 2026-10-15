@@ -46,7 +46,7 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolVm | None:
+    async def read_of_session(self, tenant_id: UUID, agent_session_id: UUID) -> PoolVm | None:
         """Global: the machine that serves the tenant's session;
         None when none does."""
         ...
@@ -68,7 +68,7 @@ class CloudPoolStorageInterface(ABC):
     async def claim_warm(
         self,
         tenant_id: UUID,
-        session_id: UUID,
+        agent_session_id: UUID,
         pool_id: UUID,
         bound_by: UUID,
         egress_open: bool,

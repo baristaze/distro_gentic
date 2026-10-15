@@ -11,6 +11,17 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+
+from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
+from acme.om.base import new_id
+from acme.om.context import AppContext, AppType, RequestContext
+from acme.om.evidence.rules import policy_key
+from acme.om.platform_agents import kinds
+from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
+from acme.om.storage.impl.postgres import StoragePostgresImpl
+from acme.om.storage.settings import MigrationSettings
+from acme.om.work.types.work_item import WorkKind
+
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.loops import reply, said
@@ -20,16 +31,6 @@ from contracts.platform_agents import (
     platform_over,
     sub_agents_over,
 )
-
-from acme.om.base import new_id
-from acme.om.context import AppContext, AppType, RequestContext
-from acme.om.evidence.rules import policy_key
-from acme.om.platform_agents import kinds
-from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.steps.types.header import LoopOutcome, ToolFailure
-from acme.om.storage.impl.postgres import StoragePostgresImpl
-from acme.om.storage.settings import MigrationSettings
-from acme.om.work.types.work_item import WorkKind
 
 pytestmark = pytest.mark.integration
 
@@ -58,8 +59,8 @@ async def test_the_assistant_over_postgres_cites_its_corpus_and_reaches_no_shell
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
     )
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "Why is my session waiting? Run the queue report.")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "Why is my session waiting? Run the queue report.")
     platform.anthropic.add(
         reply(
             said("Let me look."),
@@ -74,16 +75,16 @@ async def test_the_assistant_over_postgres_cites_its_corpus_and_reaches_no_shell
         reply(said("It waits for its tenant's share (om/README.md, Why a session waits).")),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    failure, text = await platform.answer(session_id, "use_search")
+    failure, text = await platform.answer(agent_session_id, "use_search")
     best = json.loads(text)["passages"][0]
     assert failure is None
     assert (best["path"], best["heading"]) == ("om/README.md", "Why a session waits")
-    failure, text = await platform.answer(session_id, "use_shell")
+    failure, text = await platform.answer(agent_session_id, "use_shell")
     assert failure is ToolFailure.INVALID_INPUT and "no tool named 'run_command'" in text
-    failure, text = await platform.answer(session_id, "use_draft")
+    failure, text = await platform.answer(agent_session_id, "use_draft")
     assert failure is None and json.loads(text)["valid"] is True
     assert (await platform.managers.tools.get_policy(platform.owner)).rules == ()
 

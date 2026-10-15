@@ -53,13 +53,16 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceProviderInterface,
     Durability,
     HeldInstance,
-    Workspace,
-    WorkspaceProviderInterface,
+    AgentWorkspace,
 )
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.rules import snapshot_at
 from acme.om.agents.loop_rules import kept_snapshot
@@ -71,9 +74,6 @@ from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.types.exec import AgentWorkspaceBinding
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ParkReason
-from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
@@ -104,11 +104,11 @@ class HeldWorkspacesSweep:
 
     def __init__(
         self,
-        provider: WorkspaceProviderInterface,
+        provider: AgentWorkspaceProviderInterface,
         tools: ToolsManagerInterface,
         agent_workspaces: AgentWorkspacesManagerInterface,
         sessions: AgentSessionsManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
         graces: Graces,
@@ -146,7 +146,7 @@ class HeldWorkspacesSweep:
         held = await self._provider.held_instances()
         hosted = await self._hosted()
         now = self._clock()
-        ids = {instance.id for instance in held} | {b.session_id for _, b in hosted}
+        ids = {instance.id for instance in held} | {b.agent_session_id for _, b in hosted}
         self._unaccounted = {id_: at for id_, at in self._unaccounted.items() if id_ in ids}
         self._logged &= ids
         self._failed = {id_: item for id_, item in self._failed.items() if id_ in ids}
@@ -170,7 +170,7 @@ class HeldWorkspacesSweep:
             except Exception:
                 log.exception(
                     "the instance of session %s of org %s on host %s waits for the next pass",
-                    binding.session_id,
+                    binding.agent_session_id,
                     org_id,
                     binding.host_name,
                 )
@@ -205,7 +205,7 @@ class HeldWorkspacesSweep:
         if now < await self._until(ctx, instance.id, now):
             return False
         if ctx is None:
-            await self._tools.purge_workspace(instance.org_id, instance.id)
+            await self._tools.purge_agent_workspace(instance.org_id, instance.id)
             log.info(
                 "session %s of org %s: its tenant is deleted, and its instance is purged",
                 instance.id,
@@ -222,14 +222,14 @@ class HeldWorkspacesSweep:
             pinned = await self._agent_workspaces.get_workspace(ctx, instance.id)
             if await self._unsnapshotted(ctx, instance.id, pinned.durability, cursor.head):
                 return False
-            workspace = Workspace(
+            workspace = AgentWorkspace(
                 id=instance.id,
                 org_id=instance.org_id,
                 spec=pinned.spec(),
                 location=instance.location,
             )
             try:
-                await self._tools.release_workspace(ctx, workspace)
+                await self._tools.release_agent_workspace(ctx, workspace)
             except REFUSED as refused:
                 self._refuse(ctx, instance.id, cursor.head, refused)
                 return False
@@ -249,94 +249,99 @@ class HeldWorkspacesSweep:
         work is pushed; False when it stays. A failed push raises, and it
         stays."""
         assert self._exec_relay is not None
-        session_id = binding.session_id
+        agent_session_id = binding.agent_session_id
         deleted = await self._tenancy.tenant_deleted(rctx, org_id)
         if deleted is None:
             self._unknown(
-                HeldInstance(id=session_id, org_id=org_id, location=binding.location), "its tenant"
+                HeldInstance(id=agent_session_id, org_id=org_id, location=binding.location),
+                "its tenant",
             )
             return False
         if deleted:
-            self._unaccounted.pop(session_id, None)
+            self._unaccounted.pop(agent_session_id, None)
             return False
         ctx = await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
         if (
-            await self._work.has_open(ctx, WorkKind.LOOP, session_id)
-            or await self._released(ctx, session_id)
-            or await self._handed_over(ctx, session_id)
+            await self._work.has_open(ctx, WorkKind.LOOP, agent_session_id)
+            or await self._released(ctx, agent_session_id)
+            or await self._handed_over(ctx, agent_session_id)
         ):
-            self._unaccounted.pop(session_id, None)
+            self._unaccounted.pop(agent_session_id, None)
             return False
-        if now < await self._until(ctx, session_id, now):
+        if now < await self._until(ctx, agent_session_id, now):
             return False
-        cursor = await self._steps.get_cursor(ctx, session_id)
+        cursor = await self._steps.get_cursor(ctx, agent_session_id)
         if cursor.epoch == 0:
             self._unknown(
-                HeldInstance(id=session_id, org_id=org_id, location=binding.location),
+                HeldInstance(id=agent_session_id, org_id=org_id, location=binding.location),
                 "its session",
             )
             return False
-        if cursor.head in (self._refused.get(session_id), self._unkept.get(session_id)):
+        if cursor.head in (self._refused.get(agent_session_id), self._unkept.get(agent_session_id)):
             return False
-        holder = await self._exec_relay.holder(ctx, session_id)
+        holder = await self._exec_relay.holder(ctx, agent_session_id)
         if holder is None:
             # Nothing reaches its host now, the snapshot included: a later
             # pass finds it online.
             return False
-        pinned = await self._agent_workspaces.get_workspace(ctx, session_id)
-        if await self._unsnapshotted(ctx, session_id, pinned.durability, cursor.head):
+        pinned = await self._agent_workspaces.get_workspace(ctx, agent_session_id)
+        if await self._unsnapshotted(ctx, agent_session_id, pinned.durability, cursor.head):
             return False
-        workspace = Workspace(
-            id=session_id, org_id=org_id, spec=pinned.spec(), location=holder.location
+        workspace = AgentWorkspace(
+            id=agent_session_id, org_id=org_id, spec=pinned.spec(), location=holder.location
         )
-        if not await self._kept(ctx, session_id, cursor.head, pinned.snapshot_ref):
+        if not await self._kept(ctx, agent_session_id, cursor.head, pinned.snapshot_ref):
             # Kept first, through the exec relay: a push that does not land
             # raises, and the instance and its work stay.
             try:
                 await self._agent_workspaces.detach(ctx, workspace, cursor.epoch)
             except REFUSED as refused:
-                self._refuse(ctx, session_id, cursor.head, refused)
+                self._refuse(ctx, agent_session_id, cursor.head, refused)
                 return False
-        if self._cloud is not None and await self._cloud.holds(ctx, session_id):
+        if self._cloud is not None and await self._cloud.holds(ctx, agent_session_id):
             # A machine of the cloud pool is the instance: it goes, its disk
             # with it, and the session's next loop starts another.
-            await self._cloud.release(ctx, session_id)
+            await self._cloud.release(ctx, agent_session_id)
         else:
-            await self._exec_relay.ask_release(ctx, session_id, workspace.spec)
+            await self._exec_relay.ask_release(ctx, agent_session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",
-            session_id,
+            agent_session_id,
             org_id,
             holder.host_name,
         )
-        self._unaccounted.pop(session_id, None)
+        self._unaccounted.pop(agent_session_id, None)
         return True
 
-    async def _until(self, ctx: TenantContext | None, session_id: UUID, now: datetime) -> datetime:
+    async def _until(
+        self, ctx: TenantContext | None, agent_session_id: UUID, now: datetime
+    ) -> datetime:
         """When the instance of a session no run accounts for may go: its
         grace past the pass that first found it so, read at that pass."""
-        until = self._unaccounted.get(session_id)
+        until = self._unaccounted.get(agent_session_id)
         if until is None:
-            until = self._unaccounted[session_id] = now + await self._grace(ctx, session_id)
+            until = self._unaccounted[agent_session_id] = now + await self._grace(
+                ctx, agent_session_id
+            )
         return until
 
-    async def _grace(self, ctx: TenantContext | None, session_id: UUID) -> timedelta:
+    async def _grace(self, ctx: TenantContext | None, agent_session_id: UUID) -> timedelta:
         """The warm grace of the session's kind, or the default for a session
         of a deleted tenant, or one marked deleted."""
         if ctx is None:
             return WARM_GRACE
         try:
-            session = await self._sessions.get_session(ctx, session_id)
+            session = await self._sessions.get_agent_session(ctx, agent_session_id)
         except NotFound:
             return WARM_GRACE
         return self._graces(session.kind)
 
-    async def _released(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def _released(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         """Whether a release of the session's instance was asked after its
         last loop moved, answered or failed: nothing has run on it since,
         and a host that fails it would fail it again. A failed one is
         logged, once a process."""
-        asked = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        asked = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
         if asked is None:
             return False
         try:
@@ -345,33 +350,33 @@ class HeldWorkspacesSweep:
             return False
         if operation is not WorkspaceOperation.RELEASE:
             return False
-        loop = await self._work.latest_for_target(ctx, WorkKind.LOOP, session_id)
+        loop = await self._work.latest_for_target(ctx, WorkKind.LOOP, agent_session_id)
         if loop is not None and loop.updated_at > asked.created_at:
             return False
-        if asked.status is WorkStatus.FAILED and self._failed.get(session_id) != asked.id:
-            self._failed[session_id] = asked.id
+        if asked.status is WorkStatus.FAILED and self._failed.get(agent_session_id) != asked.id:
+            self._failed[agent_session_id] = asked.id
             log.warning(
                 "session %s of org %s: its host did not let its instance go (%s); "
                 "it is asked again after the session's next loop",
-                session_id,
+                agent_session_id,
                 ctx.org_id,
                 asked.last_error,
             )
         return True
 
-    async def _handed_over(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def _handed_over(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         """Whether a person holds the session's workspace: its loop is parked
         on a hand-over, which only their giving back clears, and their
         commands run in it meanwhile."""
         try:
-            session = await self._sessions.get_session(ctx, session_id)
+            session = await self._sessions.get_agent_session(ctx, agent_session_id)
         except NotFound:
             # One marked deleted is let go like any other.
             return False
         return session.park is not None and session.park.reason is ParkReason.HANDOVER
 
     async def _kept(
-        self, ctx: TenantContext, session_id: UUID, head: int, snapshot_ref: str | None
+        self, ctx: TenantContext, agent_session_id: UUID, head: int, snapshot_ref: str | None
     ) -> bool:
         """Whether the session's last snapshot was taken after its last step,
         as a loop's end takes it: no call has run in its checkout since, so a
@@ -381,11 +386,11 @@ class HeldWorkspacesSweep:
             return False
         if head == 0:
             return True
-        page = await self._steps.get_steps(ctx, session_id, head - 1, 1)
+        page = await self._steps.get_agent_steps(ctx, agent_session_id, head - 1, 1)
         return all(step.created_at <= taken for step in page.items)
 
     async def _unsnapshotted(
-        self, ctx: TenantContext, session_id: UUID, durability: Durability, head: int
+        self, ctx: TenantContext, agent_session_id: UUID, durability: Durability, head: int
     ) -> bool:
         """Whether the session keeps its workspace by snapshots and no snapshot
         holds its instance as it stands: one is recorded, and logged, at the
@@ -393,36 +398,38 @@ class HeldWorkspacesSweep:
         moves it."""
         if durability is not Durability.SNAPSHOT:
             return False
-        if kept_snapshot(await self._history(ctx, session_id)) is not None:
+        if kept_snapshot(await self._history(ctx, agent_session_id)) is not None:
             return False
-        self._unkept[session_id] = head
+        self._unkept[agent_session_id] = head
         log.warning(
             "session %s of org %s: no snapshot holds its workspace's instance, which stays "
             "until a run's end snapshots it",
-            session_id,
+            agent_session_id,
             ctx.org_id,
         )
         return True
 
-    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def _history(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         after = 0
         while True:
-            page = await self._steps.get_steps(ctx, session_id, after, HISTORY_PAGE)
+            page = await self._steps.get_agent_steps(ctx, agent_session_id, after, HISTORY_PAGE)
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
             after = page.items[-1].seq
 
-    def _refuse(self, ctx: TenantContext, session_id: UUID, head: int, refused: Exception) -> None:
+    def _refuse(
+        self, ctx: TenantContext, agent_session_id: UUID, head: int, refused: Exception
+    ) -> None:
         """Records a snapshot push the forge refused at the session's head,
         and logs it: the instance and its work stay, and no pass pushes
         again until the session's next loop moves its head."""
-        self._refused[session_id] = head
+        self._refused[agent_session_id] = head
         log.warning(
             "session %s of org %s: its snapshot push was refused (%s); its instance "
             "stays, and it is pushed again after the session's next loop",
-            session_id,
+            agent_session_id,
             ctx.org_id,
             refused,
         )

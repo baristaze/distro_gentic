@@ -1,13 +1,13 @@
 from datetime import timedelta
 from pathlib import Path
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.base import new_id
 from acme.infra.buckets import Buckets
 from acme.infra.cache import CacheScope
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.queues import Queues
 from acme.infra.streams import StreamBounds
-from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 
 
 async def test_every_capability_works_over_the_local_root(tmp_path: Path) -> None:

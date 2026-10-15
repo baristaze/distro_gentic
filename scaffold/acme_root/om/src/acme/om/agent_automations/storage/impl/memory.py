@@ -128,11 +128,13 @@ class AgentAutomationStorageMemoryImpl(MemoryStorageBase, AgentAutomationStorage
         ]
         return sorted(rows, key=lambda r: (r.created_at, r.id))[:limit]
 
-    async def read_session_run(self, org_id: UUID, session_id: UUID) -> AgentAutomationRun | None:
+    async def read_session_run(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentAutomationRun | None:
         rows = [
             r
             for r in self._rows(self._runs, org_id)
-            if r.session_id == session_id and r.status is RunStatus.STARTED
+            if r.agent_session_id == agent_session_id and r.status is RunStatus.STARTED
         ]
         return max(rows, key=lambda r: (r.created_at, r.id), default=None)
 

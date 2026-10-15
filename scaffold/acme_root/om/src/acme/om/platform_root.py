@@ -33,6 +33,8 @@ from acme.om.agent_projects.impl.sessions import AgentSessionsInAgentProjectImpl
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.impl.manager import AgentStepsOptions
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces import rules as workspace_rules
 from acme.om.agent_workspaces.agent_projects import (
@@ -65,14 +67,11 @@ from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
-from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
-from acme.om.budgets.impl.manager import BudgetsOptions
-from acme.om.budgets.pricing import PricingInterface
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.impl.manager import ChangeEventsOptions
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
 from acme.om.context import RequestContext, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.impl.manager import EventsOptions
 from acme.om.evidence import (
     EvidenceManagerInterface,
     ExecutorInterface,
@@ -96,14 +95,14 @@ from acme.om.hosts.impl.placement import inside_wall
 from acme.om.hosts.rules import ENROLLMENT_PREFIX
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
-from acme.om.leases.hooks import ResourceKindInterface
+from acme.om.language_models.impl.manager import LanguageModelsOptions
+from acme.om.language_models.layer import LanguageModelsLayer
+from acme.om.language_models.prices import ModelPricesInterface
+from acme.om.leases.hooks import LeasableResourceKindInterface
 from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
 from acme.om.leases.types.request import ASK_PAYLOADS
 from acme.om.media.impl.manager import MediaOptions
-from acme.om.models.impl.manager import ModelsOptions
-from acme.om.models.layer import ModelsLayer
-from acme.om.models.prices import ModelPricesInterface
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.park_alerts.impl.manager import ParkAlertsOptions
@@ -137,7 +136,7 @@ from acme.om.platform_agents.kinds import (
     WORKSPACE_BASE_KINDS,
 )
 from acme.om.privacy import PrivacyManagerInterface
-from acme.om.privacy.impl.keys import SessionKeysImpl
+from acme.om.privacy.impl.keys import AgentSessionKeysImpl
 from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.agent_projects import SessionAgentProjectInterface
@@ -151,8 +150,9 @@ from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
 from acme.om.retention.keys import TenantKeysInterface
 from acme.om.root import LOCAL, Managers, build_managers, refuse_quiet_spend
 from acme.om.root_hooks import RootHooksInterface, SessionPurge
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.impl.manager import StepsOptions
+from acme.om.spend_budgets import SpendBudgetGateInterface, SpendBudgetsManagerInterface
+from acme.om.spend_budgets.impl.manager import SpendBudgetsOptions
+from acme.om.spend_budgets.pricing import PricingInterface
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
@@ -160,20 +160,20 @@ from acme.om.tenancy.impl.operator import TenancyOperatorOptions
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
-from acme.om.tools.impl.bases import WorkspaceBases
+from acme.om.tools.impl.bases import AgentWorkspaceBases
 from acme.om.tools.impl.manager import ForkPoints, ToolsOptions
 from acme.om.tools.impl.snapshots import SnapshotStore
 from acme.om.tools.seal import RecordSealInterface, SnapshotSealInterface
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
 from acme.om.trust.owners import SecretOwnerInterface
 from acme.om.watch.kinds import StreamKind
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
-from acme.om.windows.seal import ArtifactSealInterface
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
+from acme.om.windows.seal import ToolOutputSealInterface
 from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work.impl.manager import Lanes, WorkOptions
 from acme.om.work.kinds import WorkKinds, WorkKindSpec
@@ -447,7 +447,7 @@ class PlatformPorts:
     process's entry point hands its root `PRODUCT_KINDS`
     (`acme.om.product_kinds`), where a product declares them once."""
 
-    budget_gate: BudgetGateInterface | None = None
+    spend_budget_gate: SpendBudgetGateInterface | None = None
     result_gate: ResultGateInterface | None = None
     executor: ExecutorInterface | None = None
     work_product: WorkProductInterface | None = None
@@ -471,14 +471,14 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
     refuse_quiet_spend(environment, *capabilities)
 
 
-def product_ceilings(platform: PolicyLayer, product: ProductKinds) -> PolicyLayer:
+def product_ceilings(platform: ToolPolicyLayer, product: ProductKinds) -> ToolPolicyLayer:
     """The platform's ceilings with the product's beside them, one rule per
     class the product declares a ceiling for. A ceiling of a class the
     platform's engine knows, of a class the product does not declare, or of
     a class a platform ceiling already names is refused at boot, so a
     product caps its own classes and never touches the platform's."""
     platform_classes = {rule.authorization_class for rule in platform.rules}
-    rules: list[PolicyRule] = []
+    rules: list[ToolPolicyRule] = []
     for name, decision in product.ceilings.items():
         if name in {known.value for known in ToolClass}:
             raise ValueError(f"{name} is a platform class, and its ceiling is the platform's")
@@ -486,8 +486,8 @@ def product_ceilings(platform: PolicyLayer, product: ProductKinds) -> PolicyLaye
             raise ValueError(f"a ceiling names {name}, which is no class of the product's")
         if name in platform_classes:
             raise ValueError(f"the platform already holds a ceiling for {name}")
-        rules.append(PolicyRule(authorization_class=name, decision=decision))
-    return PolicyLayer(rules=(*platform.rules, *rules))
+        rules.append(ToolPolicyRule(authorization_class=name, decision=decision))
+    return ToolPolicyLayer(rules=(*platform.rules, *rules))
 
 
 def intake_absent() -> IntakeManagerInterface:
@@ -565,7 +565,7 @@ class PlatformRootOptions:
     product is refused at boot (`UnsafeConfiguration`). Whatever the
     engine's `tools_options` names, the tools take the platform's ceiling
     on a protected path beside its ceilings, and the product's on its own
-    classes. The engine's `budget_gate` as agent billing's money gate puts
+    classes. The engine's `spend_budget_gate` as agent billing's money gate puts
     agent billing's call gate behind every model call, priced from the
     price book by version.
 
@@ -660,19 +660,19 @@ class EngineOptions(TypedDict, total=False):
 
     media_options: MediaOptions | None
     idempotency_options: IdempotencyOptions | None
-    events_options: EventsOptions | None
+    change_events_options: ChangeEventsOptions | None
     work_options: WorkOptions | None
     orchestrations_options: OrchestrationsOptions | None
     leases_options: LeasesOptions | None
-    steps_options: StepsOptions | None
+    steps_options: AgentStepsOptions | None
     agent_sessions_options: AgentSessionsOptions | None
-    budgets_options: BudgetsOptions | None
-    models_options: ModelsOptions | None
+    budgets_options: SpendBudgetsOptions | None
+    language_models_options: LanguageModelsOptions | None
     model_prices: ModelPricesInterface | None
-    models_layer: ModelsLayer | None
+    language_models_layer: LanguageModelsLayer | None
     call_gate: CallGateInterface | None
     prompt_hash: PromptHashInterface | None
-    artifact_seal: ArtifactSealInterface | None
+    tool_output_seal: ToolOutputSealInterface | None
     record_seal: RecordSealInterface | None
     snapshot_seal: SnapshotSealInterface | None
     compaction_policy: CompactionPolicy | None
@@ -682,7 +682,7 @@ class EngineOptions(TypedDict, total=False):
     principal_context: PrincipalContext | None
     result_gate: ResultGateInterface | None
     tools_options: ToolsOptions | None
-    budget_gate: BudgetGateInterface | None
+    spend_budget_gate: SpendBudgetGateInterface | None
     stream_sink: StreamSinkInterface | None
     tool_catalog: tuple[ToolInterface, ...]
     attachment_reader: AttachmentReaderInterface | None
@@ -759,7 +759,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
         tool_options = engine.get("tools_options") or ToolsOptions()
         ceilings = tool_options.ceilings
         if PROTECTED_CEILING not in ceilings.rules:
-            ceilings = PolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
+            ceilings = ToolPolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
         ceilings = product_ceilings(ceilings, product)
         self._tool_options = tool_options.model_copy(update={"ceilings": ceilings})
         # Each tenant's keys in its own key service: the platform's, or the one
@@ -771,7 +771,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             else infra.get_keys()
         )
         self._records = engine.get("record_seal") or RecordSealKeysImpl(
-            SessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(self._keys)),
+            AgentSessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(self._keys)),
             storage.get_privacy_storage(),
         )
         # The transport infra chose, and the one the tools and the checkout
@@ -817,7 +817,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
         # is built after it and the edge is bound at call time.
         return lambda org_id, item: self.managers.placement.lane_for(org_id, item)
 
-    def resource_kinds(self, own: Mapping[str, ResourceKindInterface]) -> ResourceKinds:
+    def resource_kinds(self, own: Mapping[str, LeasableResourceKindInterface]) -> ResourceKinds:
         # The mechanism's own, and the product's beside them, each with its
         # ask's shape, its hooks, and its check of an ask if it has one; a
         # name registered twice is refused. A product's kinds read the
@@ -835,7 +835,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
     def purged(self, purge: SessionPurge) -> SessionPurge:
         park_alerts = self._storage.get_park_alert_storage()
 
-        async def purged(org_id: UUID, session_id: UUID, tree_id: UUID | None) -> None:
+        async def purged(org_id: UUID, agent_session_id: UUID, tree_id: UUID | None) -> None:
             # What the windows, the tools, attribution, and the agents hold of
             # the session, then what the exec relay, the evidence, the agent
             # projects, and the park alerts hold: its relayed exec items with
@@ -843,12 +843,12 @@ class RootHooksPlatformImpl(RootHooksInterface):
             # told it waits. The park alerts are built over these managers by
             # the processes that tell, so their rows are reached through
             # their storage.
-            await purge(org_id, session_id, tree_id)
-            await self.managers.exec_relay.purge_session(org_id, session_id)
-            await self.managers.evidence.purge_session(org_id, session_id)
-            await self.managers.agent_projects.purge_session(org_id, session_id)
+            await purge(org_id, agent_session_id, tree_id)
+            await self.managers.exec_relay.purge_agent_session(org_id, agent_session_id)
+            await self.managers.evidence.purge_agent_session(org_id, agent_session_id)
+            await self.managers.agent_projects.purge_agent_session(org_id, agent_session_id)
             batch = ParkAlertsOptions().purge_batch
-            while await park_alerts.purge_session(org_id, session_id, batch):
+            while await park_alerts.purge_agent_session(org_id, agent_session_id, batch):
                 pass
 
         return purged
@@ -857,10 +857,10 @@ class RootHooksPlatformImpl(RootHooksInterface):
         self,
         sessions: AgentSessionsManagerInterface,
         *,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         privacy: PrivacyManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         outbox: OutboxRelayInterface,
     ) -> AgentSessionsManagerInterface:
         storage = self._storage
@@ -953,7 +953,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
         )
         return self._sessions
 
-    def pricing(self, gate: BudgetGateInterface) -> PricingInterface | None:
+    def pricing(self, gate: SpendBudgetGateInterface) -> PricingInterface | None:
         refuse_quiet_nulls(self._environment, self._storage.get_spend_ledger_storage())
         # Behind agent billing's gate, the one source of prices is the price
         # book, read by version, so a call held at one is billed at it.
@@ -963,18 +963,18 @@ class RootHooksPlatformImpl(RootHooksInterface):
 
     def call_gate(
         self,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
-        models_layer: ModelsLayer | None,
+        budgets: SpendBudgetsManagerInterface,
+        language_models_layer: LanguageModelsLayer | None,
     ) -> CallGateInterface:
         # The place each call's tokens and spend are counted and its usage
         # recorded, by the version and the tier the layer reads.
-        version = None if models_layer is None else models_layer.version
-        tier = None if models_layer is None else models_layer.tier
+        version = None if language_models_layer is None else language_models_layer.version
+        tier = None if language_models_layer is None else language_models_layer.tier
         if self._book is None or not isinstance(gate, MoneyGateInterface):
-            return CallGateBudgetImpl(
+            return CallGateSpendBudgetImpl(
                 gate,
                 pricing,
                 sessions,
@@ -1033,18 +1033,18 @@ class RootHooksPlatformImpl(RootHooksInterface):
         sessions_rows = storage.get_agent_session_storage()
         orgs_rows = storage.get_tenancy_storage()
 
-        async def session_gone(org_id: UUID, session_id: UUID) -> bool:
+        async def session_gone(org_id: UUID, agent_session_id: UUID) -> bool:
             # A deleted tenant's machines go at the next sweep, never at its
             # purge alone: a machine bills while it runs.
             org = await orgs_rows.read_org(org_id)
             if org is None or org.deleted_at is not None:
                 return True
-            session = await sessions_rows.read_session(org_id, session_id)
+            session = await sessions_rows.read_session(org_id, agent_session_id)
             return session is None or session.deleted_at is not None
 
         self._cloud_pool = CloudPoolManagerImpl(
             storage.get_cloud_pool_storage(),
-            infra.get_machines(),
+            infra.get_vms(),
             infra.get_seeds(),
             lambda: self.managers.hosts,
             lambda: placed_workspaces,
@@ -1069,12 +1069,12 @@ class RootHooksPlatformImpl(RootHooksInterface):
             # A snapshot a host keeps is named by the digest it declared, keyed
             # by the session; its revoked key asks the host to let it go.
             keyed_hash=self._privacy.keyed_hash,
-            erase_on_host=lambda ctx, session_id, host_id: self.managers.exec_relay.ask_erase(
-                ctx, session_id, host_id
+            erase_on_host=lambda ctx, agent_session_id, host_id: self.managers.exec_relay.ask_erase(
+                ctx, agent_session_id, host_id
             ),
             # So does the session's purge, which runs for no principal.
-            erase_purged=lambda org_id, session_id, host_id: self.managers.exec_relay.erase_purged(
-                org_id, session_id, host_id
+            erase_purged=lambda org_id, agent_session_id, host_id: (
+                self.managers.exec_relay.erase_purged(org_id, agent_session_id, host_id)
             ),
             cloud=self._cloud_pool,
         )
@@ -1090,31 +1090,31 @@ class RootHooksPlatformImpl(RootHooksInterface):
         executor = options.executor
         if executor is None and environment != LOCAL:
             hosts_storage = storage.get_hosts_storage()
-            bases = WorkspaceBases(
+            bases = AgentWorkspaceBases(
                 infra.get_buckets(),
-                infra.get_workspaces(),
+                infra.get_agent_workspaces(),
                 infra.get_transport(),
-                infra.get_cache(CacheScope.WORKSPACE_BASE),
+                infra.get_cache(CacheScope.AGENT_WORKSPACE_BASE),
                 snapshots.scan,
                 self._tool_options.base_build_limit,
                 self._tool_options.purge_batch,
                 utcnow,
             )
 
-            async def pinned(ctx: TenantContext, session_id: UUID) -> Pin | None:
-                if await inside_wall(hosts_storage, sessions_rows, ctx.org_id, session_id):
+            async def pinned(ctx: TenantContext, agent_session_id: UUID) -> Pin | None:
+                if await inside_wall(hosts_storage, sessions_rows, ctx.org_id, agent_session_id):
                     return Pin(
-                        (await agent_workspaces.get_workspace(ctx, session_id)).spec(),
+                        (await agent_workspaces.get_workspace(ctx, agent_session_id)).spec(),
                         walled=True,
                     )
                 try:
-                    kept = await agent_workspaces.get_workspace(ctx, session_id)
+                    kept = await agent_workspaces.get_workspace(ctx, agent_session_id)
                 except NotFound:
                     return None
                 return Pin(kept.spec(), walled=False)
 
             executor = ExecutorAgentWorkspacesImpl(
-                infra.get_workspaces(),
+                infra.get_agent_workspaces(),
                 infra.get_transport(),
                 agent_workspaces.checks_tree,
                 pinned,
@@ -1212,7 +1212,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             placement_operator=PlacementOperatorManagerImpl(
                 storage.get_placement_storage(),
                 storage.get_tenancy_storage(),
-                storage.get_event_storage(),
+                storage.get_change_event_storage(),
                 infra.get_topics(),
                 storage.get_agent_session_storage(),
                 storage.get_work_storage(),

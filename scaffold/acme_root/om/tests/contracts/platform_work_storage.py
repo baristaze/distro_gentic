@@ -10,6 +10,7 @@ import pytest
 from acme.om.base import new_id, utcnow
 from acme.om.work.storage import InsertOutcome, WorkStorageInterface
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+
 from contracts.work_storage import LEASE, make_item
 
 

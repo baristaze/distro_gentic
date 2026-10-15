@@ -78,12 +78,12 @@ export function triggerLine(trigger: AgentAutomationView["trigger"]): string {
 /** Whether an action is one of the platform's two, which the form edits; any
  * other kind is a product's own, which its product writes. */
 export function platformAction(kind: string): kind is AgentAutomationDraft["actionKind"] {
-  return kind === "start_session" || kind === "message_session";
+  return kind === "start_agent_session" || kind === "message_session";
 }
 
 export function actionLine(action: AgentAutomationView["action"], agentProjects: readonly Pick<AgentProjectView, "id" | "name">[]): string {
   if (!platformAction(action.kind)) return `run the product's action ${action.kind}`;
-  if (action.kind === "message_session") return `message the session ${action.session_id ?? ""}`.trim();
+  if (action.kind === "message_session") return `message the session ${action.agent_session_id ?? ""}`.trim();
   const agentProject = action.agent_project_id ? (agentProjects.find((each) => each.id === action.agent_project_id)?.name ?? "an agent project") : null;
   return `start a session of the kind ${action.agent_kind ?? ""}${agentProject ? ` in ${agentProject}` : ""}${action.agent_playbook ? `, invoking ${action.agent_playbook}` : ""}`;
 }
@@ -150,7 +150,7 @@ export interface AgentAutomationDraft {
   integrations: string;
   arrivals: string;
   effects: string;
-  actionKind: "start_session" | "message_session";
+  actionKind: "start_agent_session" | "message_session";
   agentKind: string;
   title: string;
   agentProjectId: string;
@@ -179,7 +179,7 @@ export const EMPTY_DRAFT: AgentAutomationDraft = {
   integrations: "",
   arrivals: "",
   effects: "",
-  actionKind: "start_session",
+  actionKind: "start_agent_session",
   agentKind: "",
   title: "",
   agentProjectId: "",
@@ -232,7 +232,7 @@ export function draftOf(agentAutomation: AgentAutomationView): AgentAutomationDr
     agentKind: action.agent_kind ?? "",
     title: action.title ?? "",
     agentProjectId: action.agent_project_id ?? "",
-    sessionId: action.session_id ?? "",
+    sessionId: action.agent_session_id ?? "",
     agentPlaybook: action.agent_playbook ?? "",
     brief: action.brief ?? "",
     costCap: String(limits.cost_cap_micros / 1_000_000),
@@ -294,7 +294,7 @@ export function agentAutomationRequest(
   if (!brief) return { problem: "Write the brief the session is given." };
   if (brief.length > BRIEF_MAX) return { problem: `A brief is at most ${BRIEF_MAX} characters.` };
   let action: AgentAutomationRequest["action"];
-  if (draft.actionKind === "start_session") {
+  if (draft.actionKind === "start_agent_session") {
     const agentKind = draft.agentKind.trim();
     const title = draft.title.trim();
     if (!agentKind) return { problem: "Choose the agent it starts." };
@@ -304,11 +304,11 @@ export function agentAutomationRequest(
     if (agentProjectRequired && !draft.agentProjectId) return { problem: "Choose the agent project its sessions work in." };
     const agentPlaybook = draft.agentPlaybook.trim();
     if (agentPlaybook && !AGENT_PLAYBOOK_NAME.test(agentPlaybook)) return { problem: "An agent playbook's name is lowercase words joined by hyphens, as it was published." };
-    action = { kind: "start_session", brief, agent_kind: agentKind, title, agent_project_id: draft.agentProjectId || null, session_id: null, ...(agentPlaybook ? { agent_playbook: agentPlaybook } : {}) };
+    action = { kind: "start_agent_session", brief, agent_kind: agentKind, title, agent_project_id: draft.agentProjectId || null, agent_session_id: null, ...(agentPlaybook ? { agent_playbook: agentPlaybook } : {}) };
   } else {
     const sessionId = draft.sessionId.trim();
     if (!UUID.test(sessionId)) return { problem: "Name the standing session by its id." };
-    action = { kind: "message_session", brief, agent_kind: null, title: null, agent_project_id: null, session_id: sessionId };
+    action = { kind: "message_session", brief, agent_kind: null, title: null, agent_project_id: null, agent_session_id: sessionId };
   }
   const costCap = microsOf(draft.costCap);
   if (costCap === null) return { problem: "Set the most its runs spend in a period, as an amount above zero." };

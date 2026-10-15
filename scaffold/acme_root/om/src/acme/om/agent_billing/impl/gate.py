@@ -31,32 +31,37 @@ from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalo
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal
-from acme.om.base import Platform, new_id, utcnow
-from acme.om.budgets import BudgetsManagerInterface
-from acme.om.budgets.rules import call_exposure, job_exposure, settlement_of, usage_spend
-from acme.om.budgets.storage import BudgetStorageInterface
-from acme.om.budgets.types.amount import Spend
-from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import (
-    Bill,
-    Billed,
-    BillUnknown,
-    Hold,
-    HoldRequest,
-    NotBilled,
-    NotBilledProof,
-    Settlement,
-)
-from acme.om.budgets.types.usage import CallLabels, CallSite
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
-    BudgetRefused,
     GateParked,
     NotFound,
+    SpendBudgetRefused,
     SpenderUnknown,
     ValidationFailed,
 )
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.language_models.types.fill import Fill, ModelRole
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
+from acme.om.spend_budgets.rules import (
+    call_exposure,
+    job_exposure,
+    spend_settlement_of,
+    usage_spend,
+)
+from acme.om.spend_budgets.storage import SpendBudgetStorageInterface
+from acme.om.spend_budgets.types.amount import Spend
+from acme.om.spend_budgets.types.spend_breach import Refusal
+from acme.om.spend_budgets.types.spend_hold import (
+    Bill,
+    Billed,
+    BillUnknown,
+    NotBilled,
+    NotBilledProof,
+    SpendHold,
+    SpendHoldRequest,
+    SpendSettlement,
+)
+from acme.om.spend_budgets.types.usage import CallLabels, CallSite
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import (
     UNLABELLED,
@@ -73,7 +78,7 @@ from acme.om.windows.rules import call_shape
 log = logging.getLogger(__name__)
 
 
-class MoneyGateOptions(Platform):
+class MoneyGateOptions(OmBase):
     max_lines: int = 32  # budgets one call may be charged to, at most
     guard: AnomalyGuard = AnomalyGuard()
 
@@ -87,7 +92,7 @@ class MoneyGateImpl(MoneyGateInterface):
 
     def __init__(
         self,
-        budgets: BudgetStorageInterface,
+        budgets: SpendBudgetStorageInterface,
         spend_accounts: SpendAccountStorageInterface,
         ledger: SpendLedgerStorageInterface,
         pager: OperatorPagerInterface,
@@ -105,14 +110,14 @@ class MoneyGateImpl(MoneyGateInterface):
         self._options = options
         self._clock = clock
 
-    async def authorize(self, ctx: TenantContext, request: HoldRequest) -> Hold | Refusal:
+    async def authorize(self, ctx: TenantContext, request: SpendHoldRequest) -> SpendHold | Refusal:
         answer = await self.authorize_priced(ctx, request, None)
         return answer if isinstance(answer, Refusal) else answer.hold
 
     async def authorize_priced(
         self,
         ctx: TenantContext,
-        request: HoldRequest,
+        request: SpendHoldRequest,
         priced: PricedAt | None,
         *,
         credential: str | None = None,
@@ -128,7 +133,7 @@ class MoneyGateImpl(MoneyGateInterface):
         )
         assert spend_account is not None
         bound = self._options.max_lines
-        found = await self._budgets.read_budgets_for(ctx.org_id, request.scopes, bound + 1)
+        found = await self._budgets.read_spend_budgets_for(ctx.org_id, request.scopes, bound + 1)
         if len(found) > bound:
             # A line the gate does not read is spend outside it: refuse.
             raise ValidationFailed(f"more than {bound} budgets bind this call")
@@ -136,11 +141,11 @@ class MoneyGateImpl(MoneyGateInterface):
         # budgets bound: no model call's norm judges it.
         approval = None if deadline is not None else await self._guard(ctx, request)
         hold = FundedHold(
-            hold=Hold(
+            hold=SpendHold(
                 id=new_id(),
                 created_at=now,
                 spender_id=request.spender_id,
-                session_id=request.session_id,
+                agent_session_id=request.agent_session_id,
                 purpose=request.purpose,
                 exposure=request.exposure,
                 own=request.own,
@@ -152,19 +157,19 @@ class MoneyGateImpl(MoneyGateInterface):
             approval_id=approval,
             deadline=deadline,
         )
-        answer = await self._ledger.open_hold(ctx.org_id, hold)
+        answer = await self._ledger.open_spend_hold(ctx.org_id, hold)
         if isinstance(answer, Turned):
             return self._turned(ctx, request, answer)
         OUTCOMES.labels(subsystem="agent_billing", outcome="held").inc()
         return answer
 
-    async def settle(self, ctx: TenantContext, hold_id: UUID, bill: Bill) -> Settlement:
+    async def settle(self, ctx: TenantContext, spend_hold_id: UUID, bill: Bill) -> SpendSettlement:
         ctx.require(Permission.WRITE)
-        hold = await self.read_hold(ctx, hold_id)
+        hold = await self.read_hold(ctx, spend_hold_id)
         now = self._clock()
-        settlement = settlement_of(hold.hold, bill, new_id(), now)
+        settlement = spend_settlement_of(hold.hold, bill, new_id(), now)
         charge = charge_of(hold, settlement, new_id(), now)
-        stored, _ = await self._ledger.close_hold(ctx.org_id, settlement, charge)
+        stored, _ = await self._ledger.close_spend_hold(ctx.org_id, settlement, charge)
         if stored.id != settlement.id:
             return stored  # closed already: the first settlement counts
         if stored.overshoot is not None:
@@ -180,10 +185,10 @@ class MoneyGateImpl(MoneyGateInterface):
         OUTCOMES.labels(subsystem="agent_billing", outcome=f"settled_{stored.bill.kind}").inc()
         return stored
 
-    async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
-        hold = await self._ledger.read_hold(ctx.org_id, hold_id)
+    async def read_hold(self, ctx: TenantContext, spend_hold_id: UUID) -> FundedHold:
+        hold = await self._ledger.read_hold(ctx.org_id, spend_hold_id)
         if hold is None:
-            raise NotFound(f"hold {hold_id} not found")
+            raise NotFound(f"hold {spend_hold_id} not found")
         return hold
 
     async def _spend_account(self, ctx: TenantContext) -> SpendAccount | None:
@@ -198,17 +203,17 @@ class MoneyGateImpl(MoneyGateInterface):
                 "the tenant's spend account cannot be read; nothing is spent"
             ) from unread
 
-    async def _guard(self, ctx: TenantContext, request: HoldRequest) -> UUID | None:
+    async def _guard(self, ctx: TenantContext, request: SpendHoldRequest) -> UUID | None:
         """The anomaly guard, before anything is held: a call whose expected
         cost is far above its session's norm pages the operator and parks
         for a person, unless a person approved it. Returns the approval it
         rides on, if any. The norm is the session's model calls': a job's
         hold is no call, and counts in it not at all."""
-        if request.session_id is None:
+        if request.agent_session_id is None:
             return None
         guard = self._options.guard
         entries = await self._ledger.read_entries(
-            ctx.org_id, session_id=request.session_id, limit=guard.recent + 1
+            ctx.org_id, agent_session_id=request.agent_session_id, limit=guard.recent + 1
         )
         recent: list[int] = []
         used: set[UUID] = set()
@@ -233,7 +238,7 @@ class MoneyGateImpl(MoneyGateInterface):
             return approval.id
         page = AnomalyPage(
             org_id=ctx.org_id,
-            session_id=request.session_id,
+            agent_session_id=request.agent_session_id,
             expected_micros=cost,
             norm_micros=norm_of(recent),
         )
@@ -244,7 +249,7 @@ class MoneyGateImpl(MoneyGateInterface):
             f"the call's expected cost, {cost} micros, is far above its session's norm",
         )
 
-    def _turned(self, ctx: TenantContext, request: HoldRequest, turned: Turned) -> Refusal:
+    def _turned(self, ctx: TenantContext, request: SpendHoldRequest, turned: Turned) -> Refusal:
         """A limit's breaches are the engine's refusal, which parks on the
         budget. Units no bucket covers park on the budget too, as a spend
         limit, naming the funds; the limits come first, since a top-up
@@ -290,7 +295,7 @@ class MoneyCallGateImpl(CallGateInterface):
         gate: MoneyGateInterface,
         prices: PriceBookInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
+        budgets: SpendBudgetsManagerInterface,
         agent_projects: SessionAgentProjectsInterface,
         *,
         version: PinnedVersion | None = None,
@@ -310,7 +315,7 @@ class MoneyCallGateImpl(CallGateInterface):
     async def authorize(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spender: Principal,
         role: ModelRole,
         fill: Fill,
@@ -318,29 +323,33 @@ class MoneyCallGateImpl(CallGateInterface):
         *,
         credential: str,
     ) -> UUID:
-        session = await self._sessions.get_session(ctx, session_id)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
-        spend = await spend_labels(self._version, self._tier, ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
+        spend = await spend_labels(self._version, self._tier, ctx, agent_session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
         )
         price = self._prices.price_at(priced.version, priced.provider, priced.model)
-        request = HoldRequest(
+        request = SpendHoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
+                ctx.org_id,
+                agent_session_id,
+                session.root_id,
+                spender,
+                agent_project_id=agent_project_id,
             ),
             exposure=call_exposure(call_shape(call, fill), price),
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             purpose=role,
         )
         answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
         if isinstance(answer, Refusal):
-            raise BudgetRefused(answer)
+            raise SpendBudgetRefused(answer)
         self._labels[answer.id] = (
             spend,
             CallLabels(
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 tree_id=session.root_id,
                 agent_kind=session.kind,
                 kind_version=session.kind_version,
@@ -354,7 +363,7 @@ class MoneyCallGateImpl(CallGateInterface):
     async def settle(
         self,
         ctx: TenantContext,
-        hold_id: UUID,
+        spend_hold_id: UUID,
         usage: Usage | None,
         *,
         billed: bool,
@@ -367,7 +376,7 @@ class MoneyCallGateImpl(CallGateInterface):
         elif usage is None:
             bill = BillUnknown()
         else:
-            hold = await self._gate.read_hold(ctx, hold_id)
+            hold = await self._gate.read_hold(ctx, spend_hold_id)
             price = None
             if hold.priced is not None:
                 version, provider, model = (
@@ -377,13 +386,13 @@ class MoneyCallGateImpl(CallGateInterface):
                 )
                 price = self._prices.price_at(version, provider, model)
             bill = Billed(usage=usage_spend(usage, price))
-        spend, labels = self._labels.pop(hold_id, (UNLABELLED, None))
-        settlement = await self._gate.settle(ctx, hold_id, bill)
+        spend, labels = self._labels.pop(spend_hold_id, (UNLABELLED, None))
+        settlement = await self._gate.settle(ctx, spend_hold_id, bill)
         count_settled(spend, usage if billed else None, settlement)
         await record_settled(
             self._budgets,
             ctx,
-            hold_id,
+            spend_hold_id,
             labels,
             bill,
             settlement,
@@ -396,30 +405,34 @@ class MoneyCallGateImpl(CallGateInterface):
     async def authorize_job(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spender: Principal,
         tool: str,
         rate_micros_per_hour: int,
         deadline: datetime,
     ) -> UUID:
-        session = await self._sessions.get_session(ctx, session_id)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
-        request = HoldRequest(
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
+        request = SpendHoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, session_id, session.root_id, spender, agent_project_id=agent_project_id
+                ctx.org_id,
+                agent_session_id,
+                session.root_id,
+                spender,
+                agent_project_id=agent_project_id,
             ),
             exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             purpose=tool,
         )
         answer = await self._gate.authorize_priced(ctx, request, None, deadline=deadline)
         if isinstance(answer, Refusal):
-            raise BudgetRefused(answer)
+            raise SpendBudgetRefused(answer)
         return answer.id
 
     async def settle_job(
-        self, ctx: TenantContext, hold_id: UUID, cost_micros: int | None, *, started: bool
+        self, ctx: TenantContext, spend_hold_id: UUID, cost_micros: int | None, *, started: bool
     ) -> None:
         bill: Bill
         if not started:
@@ -428,4 +441,4 @@ class MoneyCallGateImpl(CallGateInterface):
             bill = BillUnknown()
         else:
             bill = Billed(usage=Spend(cost_micros=cost_micros, tokens=0))
-        await self._gate.settle(ctx, hold_id, bill)
+        await self._gate.settle(ctx, spend_hold_id, bill)

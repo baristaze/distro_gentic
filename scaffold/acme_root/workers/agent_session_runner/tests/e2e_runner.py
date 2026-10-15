@@ -29,11 +29,10 @@ def main() -> int:
 
     install_trust_store()
     sys.path.insert(0, str(REPO / "om" / "tests"))
-    from contracts.evidence import ScriptedExecutor
     from platform_runner_support import E2E_KINDS
     from runner_support import KINDS
 
-    from acme.infra.workspaces import AgentWorkspaceBase
+    from acme.infra.agent_workspaces import AgentWorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
     from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
     from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
@@ -43,6 +42,8 @@ def main() -> int:
     from acme.om.storage.impl.postgres import StoragePostgresImpl
     from acme.workers.agent_session_runner.main import main as run
     from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+
+    from contracts.evidence import ScriptedExecutor
 
     class RepositoriesOnDisk(WorkspaceAgentProjectsInterface):
         """The agent projects' answers, each bound repository cloned from

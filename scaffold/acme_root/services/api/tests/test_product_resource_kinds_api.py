@@ -13,14 +13,14 @@ import httpx
 from api_support import add_member, build_container, client_over, seed_request, sign_in, sign_in_as
 from pydantic import Field
 
-from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
-from acme.om.leases.hooks import AskCheckInterface, ResourceKindInterface
+from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
 from acme.om.leases.kinds import ResourceKindSpec
+from acme.om.leases.types.leasable_resource import LeasableResource
 from acme.om.leases.types.lease import Lease
 from acme.om.leases.types.request import LeaseRequest
-from acme.om.leases.types.resource import Resource
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
 from acme.services.api.container import AppContainer
@@ -28,13 +28,13 @@ from acme.services.api.container import AppContainer
 DOCK = "dock"
 
 
-class DockAsk(Platform):
+class DockAsk(OmBase):
     """What an ask for a dock carries: the bay it backs into."""
 
     bay: int = Field(ge=1)
 
 
-class DockHooks(ResourceKindInterface):
+class DockHooks(LeasableResourceKindInterface):
     """The product's hooks, built over the managers as its tools are. They
     keep what each grant asked of them."""
 
@@ -44,13 +44,13 @@ class DockHooks(ResourceKindInterface):
         self.started: list[tuple[UUID, int]] = []
 
     async def may_grant(
-        self, ctx: TenantContext, resource: Resource, request: LeaseRequest
+        self, ctx: TenantContext, resource: LeasableResource, request: LeaseRequest
     ) -> bool:
         self.asked.append(request.id)
         return True
 
     def grant_rows(
-        self, ctx: TenantContext, resource: Resource, request: LeaseRequest, lease: Lease
+        self, ctx: TenantContext, resource: LeasableResource, request: LeaseRequest, lease: Lease
     ) -> tuple[OutboxRow, ...]:
         self.started.append((request.id, lease.token))
         return ()
@@ -60,7 +60,7 @@ class OwnersAlone(AskCheckInterface):
     """The product's check: only the owner asks for a dock."""
 
     async def check_ask(
-        self, ctx: TenantContext, request: LeaseRequest, resource: Resource | None
+        self, ctx: TenantContext, request: LeaseRequest, resource: LeasableResource | None
     ) -> None:
         if ctx.role is not Role.OWNER:
             raise NotAuthorized(f"a {ctx.role.value} asks for no {request.kind}")
@@ -88,13 +88,13 @@ async def org_of(client: httpx.AsyncClient, headers: dict[str, str]) -> UUID:
     return UUID((await client.get("/v1/me", headers=headers)).json()["org"]["id"])
 
 
-async def a_dock(container: AppContainer, org_id: UUID) -> Resource:
+async def a_dock(container: AppContainer, org_id: UUID) -> LeasableResource:
     """A dock its owner namespace registers, as no route does."""
     ctx = await container.managers.tenancy.service_context(seed_request(), org_id, EMPTY_UUID)
     now = utcnow()
     return await container.managers.leases.register(
         ctx,
-        Resource(
+        LeasableResource(
             id=new_id(), created_at=now, updated_at=now, created_by=EMPTY_UUID,
             updated_by=EMPTY_UUID, kind=DOCK, ref_id=new_id(),
         ),

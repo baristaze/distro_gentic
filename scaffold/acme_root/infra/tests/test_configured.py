@@ -4,6 +4,7 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.infra.base import new_id
 from acme.infra.cache import CacheScope
 from acme.infra.cache.breaker import CacheBreakerImpl
@@ -11,7 +12,6 @@ from acme.infra.flags import code_defaults
 from acme.infra.impl.configured import InfraConfiguredImpl, UnsafeConfiguration
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.topics.breaker import TopicsBreakerImpl
-from acme.infra.workspaces.container import DEFAULT_IMAGE
 
 CLOUD_BACKENDS = {
     "secrets_backend": "aws",

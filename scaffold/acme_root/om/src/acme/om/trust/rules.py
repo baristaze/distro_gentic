@@ -10,16 +10,16 @@ from uuid import UUID
 
 from acme.infra.transports import SecretUse, SecretVia
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import ModelRequestHeader, ToolRequestHeader
 from acme.om.attribution.types.principal import Principal
-from acme.om.steps.types.header import ModelRequestHeader, ToolRequestHeader
-from acme.om.steps.types.step import Step
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.identities import ActorRef, CallAudit, Executor
 from acme.om.trust.types.secret import SecretDeclaration, SecretStore
 
 
 def call_audit(
-    request: Step, model_request: Step, principal: Principal, executor: Executor
+    request: AgentStep, model_request: AgentStep, principal: Principal, executor: Executor
 ) -> CallAudit:
     """The audit entry of a tool call, each answer from its own source: the
     actor from the tool request (the agent that asked), the principal from
@@ -36,7 +36,7 @@ def call_audit(
         raise ValueError(f"step {model_request.id} is not a model request")
     return CallAudit(
         request_id=request.id,
-        session_id=request.session_id,
+        agent_session_id=request.agent_session_id,
         tool=header.tool,
         executor=executor,
         principal=principal,

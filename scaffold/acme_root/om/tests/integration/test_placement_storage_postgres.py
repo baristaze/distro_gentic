@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.placement_storage import PlacementStorageContract, WrittenBefore, make_share
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -31,6 +30,8 @@ from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.types.work_item import WorkItem, WorkKind
+
+from contracts.placement_storage import PlacementStorageContract, WrittenBefore, make_share
 
 pytestmark = pytest.mark.integration
 

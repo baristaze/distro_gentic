@@ -25,4 +25,4 @@ class Hosts(IdentifiableMixin, TrackableMixin, Base):
     last_seen_at: Mapped[datetime]
     revoked_at: Mapped[datetime | None]
     revoked_by: Mapped[UUID | None]
-    session_id: Mapped[UUID | None]
+    agent_session_id: Mapped[UUID | None]

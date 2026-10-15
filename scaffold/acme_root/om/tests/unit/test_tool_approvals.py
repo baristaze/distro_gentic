@@ -309,8 +309,12 @@ async def test_a_decision_sent_on_an_api_key_is_refused_and_the_call_stays_held(
     )
 
     with pytest.raises(NotAuthorized):
-        await tools.manager.decide_call(program, found.agent_session_id, found.request.seq, approve=True)
-    written = await tools.steps.get_agent_steps(owner, found.agent_session_id, found.request.seq, 10)
+        await tools.manager.decide_call(
+            program, found.agent_session_id, found.request.seq, approve=True
+        )
+    written = await tools.steps.get_agent_steps(
+        owner, found.agent_session_id, found.request.seq, 10
+    )
     gate = await tools.manager.gate(
         agent, registry, KIND_DEFAULTS, found.request, found.call_input, workspace
     )

@@ -12,11 +12,11 @@ this release writes holds nothing to carry."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.placement.types.share import FairShare
 
 
-class ShareToCarry(Platform):
+class ShareToCarry(OmBase):
     """A share the release before wrote, with the concurrency it held."""
 
     org_id: UUID

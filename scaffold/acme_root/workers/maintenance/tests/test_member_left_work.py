@@ -11,8 +11,8 @@ from uuid import UUID
 import pytest
 from worker_support import build_container, request, sign_in, signing
 
+from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import Role, TenantContext
-from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound
 from acme.om.intake.impl.manager import UNLINKED
 from acme.om.tenancy.types.user import User
@@ -135,13 +135,13 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     assert claimed is not None
     ctx, item = claimed
     handler = build_loop(container)._handlers[item.kind]  # pyright: ignore[reportPrivateUsage]
-    append = events.append_event
+    append = events.append_change_event
 
-    async def appended_then_stopped(ctx: TenantContext, entry: Event) -> Event:
+    async def appended_then_stopped(ctx: TenantContext, entry: ChangeEvent) -> ChangeEvent:
         await append(ctx, entry)
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(events, "append_event", appended_then_stopped)
+    monkeypatch.setattr(events, "append_change_event", appended_then_stopped)
     with pytest.raises(asyncio.CancelledError):
         await handler.handle(ctx, item)
     monkeypatch.undo()
@@ -150,6 +150,6 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     await handler.handle(ctx, item)
     await work.complete(ctx, item)
     assert await intake.get_links(ann, bob.id) == ()
-    entries = await events.get_events(ann, 0, 100)
+    entries = await events.get_change_events(ann, 0, 100)
     audited = [e.target_id for e in entries if e.kind == UNLINKED]
     assert sorted(audited) == sorted(link.id for link in linked)

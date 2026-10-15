@@ -30,15 +30,20 @@ async def get_ledger(
     service: SpendLedgersService,
     org_id: UUID,
     kind: EntryKind | None = None,
-    hold_id: UUID | None = None,
-    session_id: UUID | None = None,
+    spend_hold_id: UUID | None = None,
+    agent_session_id: UUID | None = None,
     limit: int = LIMIT_DEFAULT,
 ) -> SpendLedgerPageView:
     """The tenant's entries, the newest first, narrowed to one kind, one
     hold (its hold, settlement, and charge), or one session (its holds and
     approvals) when named. `has_more` says the read was cut at its limit."""
     return await service.get_entries(
-        admin, org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=limit
+        admin,
+        org_id,
+        kind=kind,
+        spend_hold_id=spend_hold_id,
+        agent_session_id=agent_session_id,
+        limit=limit,
     )
 
 

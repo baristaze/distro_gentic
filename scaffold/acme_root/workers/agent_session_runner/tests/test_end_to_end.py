@@ -52,11 +52,9 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import seed_request, sign_in_as
-from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import KINDS, TOOLS, answers, calls, runs
 from platform_runner_support import E2E_KINDS, submits, validates
-from runner_support import KINDS, answers, runs
+from runner_support import KINDS, TOOLS, answers, calls, runs
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -64,9 +62,6 @@ from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.transports import StaleCommand
 from acme.infra.transports.records import RecordBook
 from acme.integrations.impl.configured import absent_integrations
-from acme.integrations.model_providers.scripted import SCRIPT, Turn
-from acme.integrations.model_providers.types import ProviderName
-from acme.om.agent_steps.types.header import LoopOutcome
 from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
@@ -74,36 +69,38 @@ from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
+from acme.om.agent_steps.types.content import ContentState, TextBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.loop_rules import ended_step
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
-from acme.om.spend_budgets.types.budget import Budget, SpendBudgetScopeKind, WindowKind
-from acme.om.spend_budgets.types.hold import SpendSettlement
 from acme.om.context import TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import StaleWriter
-from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.impl.sealed_agent_steps import says_something
-from acme.om.agent_steps.types.content import ContentState, TextBlock, ToolUseBlock
-from acme.om.agent_steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
+from acme.om.spend_budgets.types.budget import Budget, SpendBudgetScopeKind, WindowKind
+from acme.om.spend_budgets.types.hold import SpendSettlement
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.om.storage.migrate import VERSION_TABLE
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
-from acme.om.tools.native.write_agent_plan import WRITE_AGENT_PLAN
-from acme.om.windows.rules import READ_TOOL_OUTPUT
 from acme.om.tools.impl.bases import base_key
+from acme.om.tools.native.write_agent_plan import WRITE_AGENT_PLAN
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
+from acme.om.windows.rules import READ_TOOL_OUTPUT
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
 from acme.services.api.seed import CONTENT_LIFETIME, first_repository, seed_platform
 from acme.services.api.settings import ApiSettings
+
+from contracts.evidence_storage import make_policy
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
@@ -839,7 +836,8 @@ async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_
     lifetime = snapshot.policy.content_lifetime
     assert lifetime is not None and lifetime == CONTENT_LIFETIME and snapshot.at_rest
     raw = {
-        step.id: step for step in await storage.get_agent_step_storage().read_agent_steps(org_id, sid, 0, 200)
+        step.id: step
+        for step in await storage.get_agent_step_storage().read_agent_steps(org_id, sid, 0, 200)
     }
     saying = [step for step in opened if says_something(step)]
     assert saying and all(raw[step.id].content.state is ContentState.SEALED for step in saying)

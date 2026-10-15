@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.base import Created, Identifiable, OmBase
 
 
 class InferenceKind(StrEnum):
@@ -24,12 +24,12 @@ class Stance(StrEnum):
 
 
 class Inference(Identifiable, Created):
-    """A hypothesis or a finding of one session. `step_id` is the agent's
+    """A hypothesis or a finding of one session. `agent_step_id` is the agent's
     step that states it. A finding cites at least one run, and one that
     resolves a hypothesis says whether the runs support or refute it."""
 
-    session_id: UUID
-    step_id: UUID
+    agent_session_id: UUID
+    agent_step_id: UUID
     kind: InferenceKind
     resolves: UUID | None = None
     stance: Stance | None = None
@@ -51,6 +51,6 @@ class Inference(Identifiable, Created):
         return (*self.supports, *self.refutes)
 
 
-class InferencePage(Platform):
+class InferencePage(OmBase):
     items: tuple[Inference, ...]
     has_more: bool

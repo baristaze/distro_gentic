@@ -28,32 +28,39 @@ router = APIRouter(tags=["agent_billing"])
 
 
 @router.post(
-    "/agent-sessions/{session_id}/cost-approval",
+    "/agent-sessions/{agent_session_id}/cost-approval",
     response_model=SpendLedgerEntryView,
     status_code=201,
 )
 async def approve_call(
     ctx: Ctx,
     agent_billing: AgentBillingService,
-    session_id: UUID,
+    agent_session_id: UUID,
     body: CostApprovalRequest,
     idem: Idem,
 ) -> Response:
     """The session's next call past its norm, let through up to the cost
     named; the session parked on it runs again."""
     return await idem.run(
-        201, lambda attempt: agent_billing.approve_call(ctx, session_id, body, attempt.target_id)
+        201,
+        lambda attempt: agent_billing.approve_call(ctx, agent_session_id, body, attempt.target_id),
     )
 
 
-@router.post("/budgets/{budget_id}/raises", response_model=SpendLedgerEntryView, status_code=201)
+@router.post(
+    "/budgets/{spend_budget_id}/raises", response_model=SpendLedgerEntryView, status_code=201
+)
 async def raise_once(
-    ctx: Ctx, agent_billing: AgentBillingService, budget_id: UUID, body: RaiseRequest, idem: Idem
+    ctx: Ctx,
+    agent_billing: AgentBillingService,
+    spend_budget_id: UUID,
+    body: RaiseRequest,
+    idem: Idem,
 ) -> Response:
     """The budget raised for the window open now; its own amount is
     unchanged. The sessions parked on a budget run again."""
     return await idem.run(
-        201, lambda attempt: agent_billing.raise_once(ctx, budget_id, body, attempt.target_id)
+        201, lambda attempt: agent_billing.raise_once(ctx, spend_budget_id, body, attempt.target_id)
     )
 
 

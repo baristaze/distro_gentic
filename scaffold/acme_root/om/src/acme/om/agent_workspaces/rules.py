@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
 from uuid import UUID
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_workspaces.types.egress import (
     READ_ONLY,
     EgressAllowlist,
@@ -87,9 +87,9 @@ def networks(cidrs: Sequence[str]) -> tuple[Network, ...]:
     return tuple(ip_network(cidr) for cidr in cidrs)
 
 
-def session_branch(session_id: UUID) -> str:
+def session_branch(agent_session_id: UUID) -> str:
     """The session's branch on its agent project's repository."""
-    return f"{BRANCH_PREFIX}/{session_id}"
+    return f"{BRANCH_PREFIX}/{agent_session_id}"
 
 
 def snapshot_ref(branch: str, at: datetime) -> str:

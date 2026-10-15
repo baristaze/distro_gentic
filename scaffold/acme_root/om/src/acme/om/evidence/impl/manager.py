@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface, Executors
@@ -42,7 +42,7 @@ CREATED = "evidence.validation_policy.created"
 UPDATED = "evidence.validation_policy.updated"
 
 
-class EvidenceOptions(Platform):
+class EvidenceOptions(OmBase):
     max_limit: int = 200  # rows one page holds
     purge_batch: int = 1000  # rows of each table one purge statement deletes at most
     # The most of a results stream one validation reads; a longer one keeps nothing.
@@ -129,10 +129,10 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         return updated
 
     async def protection(
-        self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
+        self, ctx: TenantContext, agent_session_id: UUID, paths: Sequence[str]
     ) -> Target:
         ctx.require(Permission.READ)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         policy = (
             None
             if agent_project_id is None
@@ -150,18 +150,18 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         return record
 
     async def get_runs(
-        self, ctx: TenantContext, session_id: UUID, after: UUID | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> ExecutionRecordPage:
         ctx.require(Permission.READ)
         limit = self._clamp(limit)
-        rows = await self._storage.read_records(ctx.org_id, session_id, after, limit + 1)
+        rows = await self._storage.read_records(ctx.org_id, agent_session_id, after, limit + 1)
         return ExecutionRecordPage(items=tuple(rows[:limit]), has_more=len(rows) > limit)
 
     async def record_inference(self, ctx: TenantContext, inference: Inference) -> Inference:
         ctx.require(Permission.WRITE)
         runs = set(inference.runs)
         found = await self._storage.read_cited(
-            ctx.org_id, inference.session_id, sorted(runs), len(runs) + 1
+            ctx.org_id, inference.agent_session_id, sorted(runs), len(runs) + 1
         )
         missing = runs - {record.id for record in found}
         if missing:
@@ -172,43 +172,45 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             hypothesis = await self._storage.read_inference(ctx.org_id, inference.resolves)
             if (
                 hypothesis is None
-                or hypothesis.session_id != inference.session_id
+                or hypothesis.agent_session_id != inference.agent_session_id
                 or hypothesis.kind is not InferenceKind.HYPOTHESIS
             ):
                 raise ValidationFailed(
-                    f"{inference.resolves} is no hypothesis of session {inference.session_id}"
+                    f"{inference.resolves} is no hypothesis of session {inference.agent_session_id}"
                 )
         await self._storage.create_inference(ctx.org_id, inference)
         return inference
 
     async def get_inferences(
-        self, ctx: TenantContext, session_id: UUID, after: UUID | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> InferencePage:
         ctx.require(Permission.READ)
         limit = self._clamp(limit)
-        rows = await self._storage.read_inferences(ctx.org_id, session_id, after, limit + 1)
+        rows = await self._storage.read_inferences(ctx.org_id, agent_session_id, after, limit + 1)
         return InferencePage(items=tuple(rows[:limit]), has_more=len(rows) > limit)
 
     # Validation.
 
     async def validate(
-        self, ctx: TenantContext, session_id: UUID, purpose: RunPurpose
+        self, ctx: TenantContext, agent_session_id: UUID, purpose: RunPurpose
     ) -> tuple[Validation, ...]:
         ctx.require(Permission.WRITE)
-        delivery = await self._work_product.delivered(ctx, session_id)
+        delivery = await self._work_product.delivered(ctx, agent_session_id)
         if delivery is None:
-            raise PreconditionFailed(f"session {session_id} holds no work product to validate")
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+            raise PreconditionFailed(
+                f"session {agent_session_id} holds no work product to validate"
+            )
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         if agent_project_id is None:
             raise PreconditionFailed(
-                f"session {session_id} belongs to no agent project, so no validation policy applies"
+                f"session {agent_session_id} belongs to no agent project, so no validation policy applies"
             )
         policy = await self._storage.read_policy(ctx.org_id, policy_key(agent_project_id))
         if policy is None:
             raise PreconditionFailed(
                 f"the agent project {agent_project_id} declares no validation policy"
             )
-        request = execution_request(session_id, policy, delivery, purpose)
+        request = execution_request(agent_session_id, policy, delivery, purpose)
         if isinstance(request, str):
             raise PreconditionFailed(request)
         planned = await self._planned(ctx, request)
@@ -217,14 +219,14 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
     async def run_check(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         agent_project_id: UUID,
         check: str,
         version: str,
         source: str,
     ) -> Validation:
         ctx.require(Permission.WRITE)
-        kept = await self._storage.read_validations(ctx.org_id, session_id, None, 1)
+        kept = await self._storage.read_validations(ctx.org_id, agent_session_id, None, 1)
         if kept:
             return kept[0]
         policy = await self._storage.read_policy(ctx.org_id, policy_key(agent_project_id))
@@ -243,7 +245,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         naming = [each for each in policy.requirements if each.check == check]
         rule = stopping_rules(naming).get(check)
         request = ExecutionRequest(
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             agent_project=policy.agent_project,
             purpose=RunPurpose.VALIDATION,
             version=version,
@@ -298,7 +300,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         records = collect(
             report.results,
             executor=report.executor,
-            session_id=request.session_id,
+            agent_session_id=request.agent_session_id,
             agent_project=request.agent_project,
             purpose=request.purpose,
             validation_id=validation_id,
@@ -309,7 +311,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         validation = Validation(
             id=validation_id,
             created_at=now,
-            session_id=request.session_id,
+            agent_session_id=request.agent_session_id,
             agent_project=request.agent_project,
             purpose=request.purpose,
             version=request.version,
@@ -322,20 +324,22 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         return validation
 
     async def get_validations(
-        self, ctx: TenantContext, session_id: UUID, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, limit: int
     ) -> tuple[Validation, ...]:
         ctx.require(Permission.READ)
         found = await self._storage.read_validations(
-            ctx.org_id, session_id, None, self._clamp(limit)
+            ctx.org_id, agent_session_id, None, self._clamp(limit)
         )
         return tuple(found)
 
     # The purges.
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> int:
         purged = 0
         while True:
-            gone = await self._storage.purge_session(org_id, session_id, self._options.purge_batch)
+            gone = await self._storage.purge_agent_session(
+                org_id, agent_session_id, self._options.purge_batch
+            )
             purged += gone
             if gone == 0:
                 return purged

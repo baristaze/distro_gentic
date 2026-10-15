@@ -9,7 +9,6 @@ from uuid import UUID
 
 import httpx
 from api_support import enrol_operator
-from contracts.benchmark_storage import make_trials, operator
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.impl.manager import MAX_ENTRIES
@@ -18,6 +17,8 @@ from acme.om.agent_billing.types.spend_ledger import Approval, Grant
 from acme.om.base import new_id
 from acme.om.context import OperatorRole
 from acme.services.api.container import AppContainer
+
+from contracts.benchmark_storage import make_trials, operator
 
 
 async def test_a_read_operator_reads_a_scenarios_trend_and_one_run(
@@ -88,7 +89,7 @@ async def test_an_operator_reads_one_sessions_entries_among_more_than_a_read_hol
     org_id = UUID((await client.get("/v1/orgs/current", headers=owner)).json()["id"])
     ledger = container.storage.get_spend_ledger_storage()
     by = operator().identity_id
-    session_id = new_id()
+    agent_session_id = new_id()
     start = datetime(2026, 1, 5, tzinfo=UTC)
     approvals = [
         await ledger.post_approval(
@@ -96,7 +97,7 @@ async def test_an_operator_reads_one_sessions_entries_among_more_than_a_read_hol
             Approval(
                 id=new_id(),
                 created_at=start + timedelta(seconds=n),
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 up_to_micros=1_000,
                 approved_by=by,
             ),
@@ -122,12 +123,12 @@ async def test_an_operator_reads_one_sessions_entries_among_more_than_a_read_hol
     assert len(newest.json()["items"]) == MAX_ENTRIES and newest.json()["has_more"] is True
     assert {item["kind"] for item in newest.json()["items"]} == {"grant"}, "the session's are cut"
 
-    session = await client.get(f"{path}?session_id={session_id}", headers=reader)
+    session = await client.get(f"{path}?agent_session_id={agent_session_id}", headers=reader)
     assert session.status_code == 200, session.text
     assert session.json()["has_more"] is False
     assert [item["id"] for item in session.json()["items"]] == [
         str(approval.id) for approval in reversed(approvals)
     ]
-    first = await client.get(f"{path}?session_id={session_id}&limit=1", headers=reader)
+    first = await client.get(f"{path}?agent_session_id={agent_session_id}&limit=1", headers=reader)
     assert [item["id"] for item in first.json()["items"]] == [str(approvals[-1].id)]
     assert first.json()["has_more"] is True

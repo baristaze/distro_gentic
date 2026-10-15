@@ -31,9 +31,6 @@ from uuid import UUID
 
 import aioboto3
 import pytest
-from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, Loop
-from contracts.platform_loops import platform_loop_over
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -44,6 +41,7 @@ from acme.infra.agent_workspaces import (
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
+    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
 from acme.infra.buckets import Buckets, BucketsInterface
@@ -53,22 +51,13 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.agent_workspaces import (
-    BaseSetupFailed,
-    EgressMode,
-    EgressPolicy,
-    IsolationMode,
-    IsolationSpec,
-    Workspace,
-    AgentWorkspaceBase,
-    AgentWorkspaceProviderInterface,
-)
-from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
+from contracts.agent_workspaces import AgentProjectsTwin
 from contracts.loops import ASSISTANT, Loop, loop_over
+from contracts.platform_loops import platform_loop_over
 
 IMAGE = "python:3.14-slim"
 TOKEN = "SERVICE_TOKEN"
@@ -270,7 +259,9 @@ class OnDocker:
 
     async def prepare(self, spec: IsolationSpec) -> AgentWorkspace:
         agent_session_id = await self.start(spec)
-        return await self.loop.managers.tools.prepare_agent_workspace(self.loop.owner, agent_session_id, spec)
+        return await self.loop.managers.tools.prepare_agent_workspace(
+            self.loop.owner, agent_session_id, spec
+        )
 
     async def kept(self) -> list[str]:
         return await self.infra.buckets.list(self.loop.owner.org_id, BUCKET, PREFIX, 100)
@@ -364,7 +355,9 @@ async def test_the_setups_environment_holds_no_credential_and_no_session_content
     agent_session_id = await on_docker.start(spec)
     await loop.say(agent_session_id, content)
 
-    workspace = await loop.managers.tools.prepare_agent_workspace(loop.owner, agent_session_id, spec)
+    workspace = await loop.managers.tools.prepare_agent_workspace(
+        loop.owner, agent_session_id, spec
+    )
 
     code, environment = await inside(workspace, "cat", "/opt/setup-env")
     assert code == 0 and "PATH=" in environment, "the image's own environment"

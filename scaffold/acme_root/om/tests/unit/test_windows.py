@@ -35,6 +35,7 @@ from acme.om.agent_steps.types.header import (
     ToolOutputRef,
     ToolResponseHeader,
 )
+from acme.om.agent_steps.types.step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.attribution.types.authority import AuthorityMode, RequestAttribution
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -68,18 +69,6 @@ from acme.om.privacy.impl.keys import AgentSessionKeysImpl
 from acme.om.privacy.impl.tool_outputs import ToolOutputSealKeysImpl
 from acme.om.root import Managers, build_managers
 from acme.om.spend_budgets.types.usage import CallSite
-from acme.om.agent_steps import AgentStepsManagerInterface
-from acme.om.agent_steps.impl.manager import no_session
-from acme.om.agent_steps.types.content import Content, TextBlock, ToolResultBlock
-from acme.om.agent_steps.types.header import (
-    ToolOutputRef,
-    ControlCommand,
-    ModelRequestHeader,
-    ModelResponseHeader,
-    SummaryHeader,
-    ToolResponseHeader,
-)
-from acme.om.agent_steps.types.step import Actor, Origin, AgentStep, AgentStepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.windows import rules
 from acme.om.windows.gate import CallGateInterface
@@ -943,7 +932,9 @@ def test_a_step_that_names_an_tool_output_holds_its_head_and_tail() -> None:
 # The root's own wiring.
 
 
-async def authorized(managers: PlatformManagers, ctx: TenantContext, agent_session_id: UUID) -> None:
+async def authorized(
+    managers: PlatformManagers, ctx: TenantContext, agent_session_id: UUID
+) -> None:
     """A session of the caller's, with its authority: a render reads who
     spoke and who pays from it."""
     now = utcnow()

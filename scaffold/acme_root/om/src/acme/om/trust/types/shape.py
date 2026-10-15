@@ -6,18 +6,18 @@ children are not here at all, only whether the content is kept."""
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.base import Platform
-from acme.om.steps.types.content import ContentState
-from acme.om.steps.types.header import StepHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.content import ContentState
+from acme.om.agent_steps.types.header import StepHeader
+from acme.om.base import OmBase
 
 
-class StepShape(Platform):
+class StepShape(OmBase):
     id: UUID
-    session_id: UUID
+    agent_session_id: UUID
     seq: int
     loop_id: UUID
-    type: StepType
+    type: AgentStepType
     actor: Actor
     origin: Origin
     responds_to: UUID | None
@@ -27,18 +27,18 @@ class StepShape(Platform):
     content: ContentState
 
 
-class ShapePage(Platform):
+class ShapePage(OmBase):
     """Shapes in `seq` order, and whether more follow."""
 
     items: tuple[StepShape, ...]
     has_more: bool
 
 
-def shape_of(step: Step) -> StepShape:
+def shape_of(step: AgentStep) -> StepShape:
     """What an operator's `read` sees of a step."""
     return StepShape(
         id=step.id,
-        session_id=step.session_id,
+        agent_session_id=step.agent_session_id,
         seq=step.seq,
         loop_id=step.loop_id,
         type=step.type,

@@ -188,15 +188,15 @@ class HostsServiceImpl(HostsServiceInterface):
         return claimant_view(await self._hosts.revoke_claimant(ctx, claimant_id))
 
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceSessionRequest
     ) -> PlacementView:
-        await self._hosts.place_session(ctx, session_id, body.pool_id)
-        return await self.placement_of(ctx, session_id)
+        await self._hosts.place_session(ctx, agent_session_id, body.pool_id)
+        return await self.placement_of(ctx, agent_session_id)
 
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementView:
-        state = await self._hosts.placement_of(ctx, session_id)
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementView:
+        state = await self._hosts.placement_of(ctx, agent_session_id)
         return PlacementView(
-            session_id=state.session_id,
+            agent_session_id=state.agent_session_id,
             pool=None if state.pool is None else pool_view(state.pool),
             hosts_online=state.hosts_online,
             waiting=state.waiting,

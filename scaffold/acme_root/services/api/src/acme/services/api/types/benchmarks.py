@@ -40,7 +40,7 @@ class TrialView(View):
     what its acceptance verdict found."""
 
     contender: Contender
-    session_id: UUID
+    agent_session_id: UUID
     executor: str
     started_at: datetime
     cost_micros: int

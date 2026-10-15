@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import AGENT_PROJECT_ID, build_container, enrol_operator
-from contracts.agent_session_storage import parked
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
@@ -31,6 +30,8 @@ from acme.om.work.types.work_item import WorkItem, WorkKind
 from acme.services.api.container import AppContainer
 from acme.services.api.main import granted
 from acme.services.api.types.levers import LeverReadingView
+
+from contracts.agent_session_storage import parked
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -77,14 +78,14 @@ async def a_session_that_was_told(client: httpx.AsyncClient, owner: dict[str, st
         },
     )
     assert started.status_code == 201, started.text
-    session_id = started.json()["id"]
+    agent_session_id = started.json()["id"]
     said = await client.post(
-        f"/v1/agent-sessions/{session_id}/messages",
+        f"/v1/agent-sessions/{agent_session_id}/messages",
         headers={**owner, "Idempotency-Key": str(uuid4())},
         json={"text": SAID},
     )
     assert said.status_code in (200, 201), said.text
-    return session_id
+    return agent_session_id
 
 
 async def stream(client: httpx.AsyncClient, reader: dict[str, str], org_id: str) -> list[Any]:
@@ -201,8 +202,8 @@ async def test_content_opens_only_under_a_grant_the_grant_job_writes_and_ends(
     reader: dict[str, str],
 ) -> None:
     org_id = await org_of(client, owner)
-    session_id = await a_session_that_was_told(client, owner)
-    base = f"/v1/admin/orgs/{org_id}/sessions/{session_id}"
+    agent_session_id = await a_session_that_was_told(client, owner)
+    base = f"/v1/admin/orgs/{org_id}/sessions/{agent_session_id}"
 
     shape = await client.get(f"{base}/shape", headers=reader)
     assert shape.status_code == 200, shape.text
@@ -224,7 +225,7 @@ async def test_content_opens_only_under_a_grant_the_grant_job_writes_and_ends(
     me = (await client.get("/v1/admin/me", headers=reader)).json()
     trail = [e for e in await stream(client, reader, org_id) if e["kind"].startswith("trust.")]
     assert [e["kind"] for e in trail] == [GRANTED, CONTENT_OPENED, REVOKED]
-    assert trail[1]["actor_id"] == me["identity_id"] and trail[1]["target_id"] == session_id
+    assert trail[1]["actor_id"] == me["identity_id"] and trail[1]["target_id"] == agent_session_id
 
 
 async def test_the_grant_job_names_an_operator_on_the_allowlist_alone(
@@ -254,8 +255,8 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     writer: dict[str, str],
 ) -> None:
     org_id = await org_of(client, owner)
-    session_id = await a_session_that_was_told(client, owner)
-    path = f"/v1/admin/orgs/{org_id}/sessions/{session_id}/standing"
+    agent_session_id = await a_session_that_was_told(client, owner)
+    path = f"/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/standing"
 
     waiting = await client.get(path, headers=reader)
     assert waiting.status_code == 200, waiting.text
@@ -274,7 +275,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
 
     # The session's loop parks on the gate; the standing reads the park.
     sessions = container.storage.get_agent_session_storage()
-    stored = await sessions.read_session(UUID(org_id), UUID(session_id))
+    stored = await sessions.read_session(UUID(org_id), UUID(agent_session_id))
     assert stored is not None
     await sessions.write_session(
         UUID(org_id), parked(stored, stored.version + 1), stored.version, ()
@@ -297,7 +298,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     ) == ("pro", True, "loop:standard", 8, False)
 
     elsewhere = await client.get(
-        f"/v1/admin/orgs/{new_id()}/sessions/{session_id}/standing", headers=reader
+        f"/v1/admin/orgs/{new_id()}/sessions/{agent_session_id}/standing", headers=reader
     )
     assert elsewhere.status_code == 404
     assert (await client.get(path, headers=owner)).status_code == 401

@@ -19,7 +19,7 @@ class LiveReadView(View):
     """A handle to one session's open streams until `expires_at`. Read it
     at `GET /v1/live?handle=`; a viewer asks for a new one when it ends."""
 
-    session_id: UUID
+    agent_session_id: UUID
     handle: str
     expires_at: datetime
 
@@ -53,14 +53,14 @@ class LiveStreamView(View):
     still holds, the parts after the last one read, and whether parts never
     read were let go. The step holds them once it is stored."""
 
-    step_id: UUID
+    agent_step_id: UUID
     first: int
     dropped: bool
     parts: list[LivePartView]
 
 
 class LivePageView(View):
-    session_id: UUID
+    agent_session_id: UUID
     streams: list[LiveStreamView]
 
 
@@ -80,7 +80,7 @@ class HandRunView(View):
     person it is attributed to, and the writer epoch it runs under."""
 
     item_id: UUID
-    session_id: UUID
+    agent_session_id: UUID
     command_key: UUID
     user_id: UUID
     epoch: int

@@ -13,27 +13,19 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
-from contracts.agent_step_storage import (
-    make_request,
-    make_response,
-    make_tool_request,
-    make_tool_response,
-)
-from contracts.tools import Command
 
 from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.content import Content, TextBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.report import Report
 from acme.om.agents.types.request import Spawn
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.budgets.types.amount import Amount
 from acme.om.context import Role
 from acme.om.intake.tools import COMMENT
-from acme.om.steps.types.content import Content, TextBlock, ToolUseBlock
-from acme.om.steps.types.header import LoopOutcome
-from acme.om.steps.types.step import Step
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.services.api.container import AppContainer
@@ -123,13 +115,13 @@ async def said_whole_turn(
     await managers.steps.append_agent_steps(ctx, sid, epoch, [request, response, call, answer])
 
 
-def asked_with(response: Step, given: dict[str, Any]) -> Step:
+def asked_with(response: AgentStep, given: dict[str, Any]) -> AgentStep:
     """The response, its one tool use asking for `given`."""
     blocks = (
         TextBlock(text="reading the import log"),
         ToolUseBlock(id="call_1", name="read_log", input=given),
     )
-    return Step.model_validate({**response.model_dump(), "content": Content(blocks=blocks)})
+    return AgentStep.model_validate({**response.model_dump(), "content": Content(blocks=blocks)})
 
 
 def runs_of(container: AppContainer, agent_session_id: str) -> int:

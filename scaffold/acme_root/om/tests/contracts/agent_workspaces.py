@@ -5,7 +5,7 @@ checkout in a workspace, kept in memory."""
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from acme.infra.workspaces import Workspace, WorkspaceBase
+from acme.infra.agent_workspaces import AgentWorkspaceBase, AgentWorkspace
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import (
     PullRequestsInterface,
@@ -33,13 +33,13 @@ BASE = "b" * 40
 
 class AgentProjectsTwin(WorkspaceAgentProjectsInterface):
     """Every session belongs to one agent project, which binds `repository`, or
-    none when `repository` is None, and names `workspace_base` for its
+    none when `repository` is None, and names `agent_workspace_base` for its
     sessions' workspaces, or none."""
 
     def __init__(self, repository: str | None = REPOSITORY) -> None:
         self.agent_project_id = new_id()
         self.repository = repository
-        self.workspace_base: WorkspaceBase | None = None
+        self.agent_workspace_base: AgentWorkspaceBase | None = None
 
     async def agent_project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return self.agent_project_id
@@ -56,8 +56,8 @@ class AgentProjectsTwin(WorkspaceAgentProjectsInterface):
 
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
-        return self.workspace_base if agent_project_id == self.agent_project_id else None
+    ) -> AgentWorkspaceBase | None:
+        return self.agent_workspace_base if agent_project_id == self.agent_project_id else None
 
 
 class PullRequestsTwin(PullRequestsInterface):
@@ -90,7 +90,7 @@ class GitTwin(WorkspaceGitInterface):
     async def sync(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
@@ -104,7 +104,7 @@ class GitTwin(WorkspaceGitInterface):
     async def cut(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         *,
@@ -118,14 +118,14 @@ class GitTwin(WorkspaceGitInterface):
         self.local.add(branch)
         self.dirty = False  # what the checkout held is gone with the cut
 
-    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
+    async def checkout(self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int) -> Checkout:
         self.epochs.append(epoch)
         return Checkout(head=self.head, dirty=self.dirty)
 
     async def snapshot(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         ref: str,
@@ -143,14 +143,14 @@ class GitTwin(WorkspaceGitInterface):
         return Snapshot(ref=ref, commit=commit, remote_branch=branch in self.remote)
 
     async def outgoing(
-        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, head: str, *, epoch: int
     ) -> bytes:
         self.epochs.append(epoch)
         self.calls.append("outgoing")
         return f"bundle of {head}".encode()
 
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, branch: str, head: str, *, epoch: int
     ) -> None:
         self.epochs.append(epoch)
         self.calls.append("landed")

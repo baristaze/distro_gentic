@@ -11,11 +11,11 @@ from uuid import UUID
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from acme.om.agent_playbooks.types.agent_playbook import MAX_SKILL_NAME, SKILL_NAME
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
+from acme.om.base import Created, FrozenMapping, Identifiable, OmBase, Trackable
 from acme.om.context import Role
-from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
 
@@ -34,7 +34,7 @@ class TriggerKind(StrEnum):
     SCHEDULE = "schedule"  # a time, every `every`
 
 
-class Trigger(Platform):
+class Trigger(OmBase):
     """What fires an agent automation: an event that passes every filter it sets,
     or a schedule, at most once a `MIN_EVERY`. A filter left empty matches
     any event."""
@@ -61,14 +61,14 @@ class ActionKind(StrEnum):
     """The platform's own actions. A product adds its own beside them
     (`agent_automations.actions`), under a name none of these holds."""
 
-    START_SESSION = "start_session"
+    START_SESSION = "start_agent_session"
     MESSAGE_SESSION = "message_session"  # a standing session, such as a CI triage one
 
 
 PLATFORM_ACTIONS = frozenset(kind.value for kind in ActionKind)
 
 
-class Action(Platform):
+class Action(OmBase):
     """What a firing does: start a session of `agent_kind` with the brief, in
     the tenant's agent project `agent_project_id`; send the brief to a standing
     session, which keeps the agent project it has, and which is refused while
@@ -86,7 +86,7 @@ class Action(Platform):
     agent_kind: Stored | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     agent_project_id: UUID | None = None
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     params: FrozenMapping = Field(default_factory=dict, validate_default=True)
     agent_playbook: Stored | None = Field(
         default=None, min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME
@@ -103,7 +103,7 @@ class Action(Platform):
             raise ValueError("a session's action carries no params")
         if starts != (self.agent_kind is not None and self.title is not None):
             raise ValueError("a start names its agent kind and title, and a message does not")
-        if starts == (self.session_id is not None):
+        if starts == (self.agent_session_id is not None):
             raise ValueError("a message names its standing session, and a start does not")
         if not starts and self.agent_project_id is not None:
             raise ValueError("a message names no agent project: its session keeps its own")
@@ -136,7 +136,7 @@ class Action(Platform):
             self.agent_kind,
             self.title,
             self.agent_project_id,
-            self.session_id,
+            self.agent_session_id,
             self.agent_playbook,
         )
         if any(name is not None for name in names):
@@ -146,7 +146,7 @@ class Action(Platform):
         return self
 
 
-class Limits(Platform):
+class Limits(OmBase):
     """An agent automation's own bounds. `cost_cap_micros` is the most its runs may
     spend in one `period`, at list price; each run it starts is held to
     `run_cap_micros` of it by a budget on the run's tree. `rate` is the most
@@ -240,8 +240,8 @@ class Refusal(StrEnum):
 class AgentAutomationRun(Identifiable, Created):
     """One firing, recorded whatever became of it. `hop` is its place in a
     chain: one for a firing on a person's event or a schedule, one more
-    than the run whose session caused the event otherwise. `session_id` is
-    the session it started or messaged; `budget_id` holds a started tree
+    than the run whose session caused the event otherwise. `agent_session_id` is
+    the session it started or messaged; `spend_budget_id` holds a started tree
     to `reserved_micros`, its share of the cost cap. `work_id` is what a
     product's action started, as its kind named it; the run is at work
     until the kind's check says it ended, and `outcome` is what the check
@@ -256,9 +256,9 @@ class AgentAutomationRun(Identifiable, Created):
     status: RunStatus
     refusal: Refusal | None = None
     hop: int = Field(ge=1)
-    session_id: UUID | None = None
-    opened: bool = False  # it started `session_id`, rather than messaged it
-    budget_id: UUID | None = None
+    agent_session_id: UUID | None = None
+    opened: bool = False  # it started `agent_session_id`, rather than messaged it
+    spend_budget_id: UUID | None = None
     reserved_micros: int = Field(default=0, ge=0)
     work_id: UUID | None = None
     outcome: RunOutcome | None = None
@@ -273,7 +273,7 @@ class AgentAutomationRun(Identifiable, Created):
         return self
 
 
-class Firing(Platform):
+class Firing(OmBase):
     """What fires an agent automation, as the router placed it: the event, the
     routing table's effect, the session whose recorded act it is or follows
     from, whether the platform's account wrote it, and its text
@@ -298,7 +298,7 @@ class Firing(Platform):
         return self
 
 
-class Tally(Platform):
+class Tally(OmBase):
     """What an agent automation's runs hold when a firing asks to run: how many
     started in the period, what the runs of the period and the runs still
     at work reserve of the cap, how many are at work, and how many others

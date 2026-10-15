@@ -4,8 +4,8 @@ one channel, with the link to the one action that clears it."""
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.steps.types.header import ParkReason
 from acme.services.api.types.common import View
 
 
@@ -16,7 +16,7 @@ class ParkAlertView(View):
 
     id: UUID
     created_at: datetime
-    session_id: UUID
+    agent_session_id: UUID
     reason: ParkReason
     unlock: str
     action: str

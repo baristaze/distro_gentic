@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type StepView } from "@acme/client";
+import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type AgentStepView } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
 import { PLATFORM } from "../../app/platform";
 import { PaneSplitContext, ShellContext, type ShellActions } from "../../app/shell/shellContext";
@@ -51,7 +51,7 @@ const sessionOf = (id: string, title: string): AgentSessionView => ({
 });
 const HELD = { a: sessionOf("sa", "Ajax's own session"), b: sessionOf("sb", "Beta's own session") };
 
-const step = (seq: number, fields: Partial<StepView>): StepView => ({
+const step = (seq: number, fields: Partial<AgentStepView>): AgentStepView => ({
   id: `st${seq}`,
   seq,
   loop_id: "l1",
@@ -85,7 +85,7 @@ const step = (seq: number, fields: Partial<StepView>): StepView => ({
 
 const RUN: ExecutionView = {
   id: "r1",
-  step_id: "st3",
+  agent_step_id: "st3",
   validation_id: null,
   purpose: "work",
   check: "unit",
@@ -118,7 +118,7 @@ function answer(path: string): unknown {
     const query = new URLSearchParams(path.split("?")[1]);
     const after = Number(query.get("after_seq"));
     const limit = Number(query.get("limit"));
-    const rest = (net.history as StepView[]).filter((each) => each.seq > after);
+    const rest = (net.history as AgentStepView[]).filter((each) => each.seq > after);
     return { has_more: rest.length > limit, items: rest.slice(0, limit) };
   }
   if (part === "steps")
@@ -154,8 +154,8 @@ vi.mock("../../app/api", () => ({
     post: (path: string, body?: unknown) => {
       net.posts.push({ path, body });
       if (path.endsWith("/invocations"))
-        return Promise.resolve({ id: "i1", session_id: "sa", agent_playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
-      if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: StepView["command"] }).command }));
+        return Promise.resolve({ id: "i1", agent_session_id: "sa", agent_playbook_id: "p1", name: "release-check", version: 2, invoked_by: "u1", pinned: false, created_at: at });
+      if (path.endsWith("/controls")) return Promise.resolve(step(9, { type: "control", actor: "person", origin: "portal", command: (body as { command: AgentStepView["command"] }).command }));
       return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
     },
   },
@@ -168,7 +168,7 @@ document.body.append(container);
 let root: ReturnType<typeof createRoot> | null = null;
 let router: ReturnType<typeof createMemoryRouter> | null = null;
 
-async function open(org: "a" | "b", address: string, history: StepView[] | null = null, page: ComponentType = SessionPage) {
+async function open(org: "a" | "b", address: string, history: AgentStepView[] | null = null, page: ComponentType = SessionPage) {
   net.org = org;
   net.calls = [];
   net.history = history;
@@ -230,7 +230,7 @@ describe("the org's own session", () => {
   });
 
   it("folds a 3,000-step history into one work block, and draws a call's answer only once its chevron opens it", async () => {
-    const long: StepView[] = [];
+    const long: AgentStepView[] = [];
     for (let n = 1; n <= 1000; n += 1) {
       const asked = step(long.length + 1, { type: "model_response", actor: "model", tool_uses: [{ id: `u${n}`, name: "run_command", input: { argv: ["make", `t${n}`] } }] });
       const made = step(long.length + 2, { type: "tool_request", actor: "agent", refs: [asked.id], tool: "run_command", tool_use_id: `u${n}` });
@@ -264,7 +264,7 @@ describe("the org's own session", () => {
 
   it("draws a held call as an action card whose Approve sends the decision on that call", async () => {
     net.over = { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } };
-    net.held = [{ seq: 3, session_id: "sa", tool: "run_command", authorization_class: "execute", principal_id: "u1", requested_at: at }];
+    net.held = [{ seq: 3, agent_session_id: "sa", tool: "run_command", authorization_class: "execute", principal_id: "u1", requested_at: at }];
     await open("a", "/sessions/sa", [
       step(1, { type: "message", actor: "person", origin: "portal", text: "Run the tests." }),
       step(2, { type: "model_response", actor: "model", tool_uses: [{ id: "u1", name: "run_command", input: { argv: ["pytest", "-q"] } }] }),
@@ -345,7 +345,7 @@ describe("the org's own session", () => {
     expect(invoke.disabled).toBe(false);
     await act(async () => invoke.click());
     await settle();
-    expect(net.posts).toContainEqual({ path: "/v1/agent-playbooks/release-check/invocations", body: { session_id: "sa" } });
+    expect(net.posts).toContainEqual({ path: "/v1/agent-playbooks/release-check/invocations", body: { agent_session_id: "sa" } });
     expect(document.querySelector("form[aria-label='Invoke an agent playbook']")).toBeNull();
   });
 

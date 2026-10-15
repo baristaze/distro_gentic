@@ -27,4 +27,4 @@ class HostPool(Identifiable, Trackable):
     name: PoolName
     region: Region
     labels: tuple[Label, ...] = ()
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None

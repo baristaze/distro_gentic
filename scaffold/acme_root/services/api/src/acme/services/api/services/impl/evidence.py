@@ -2,6 +2,9 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import ToolResponseHeader
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
@@ -9,9 +12,6 @@ from acme.om.evidence.types.record import ExecutionRecord
 from acme.om.evidence.types.validation import Validation
 from acme.om.exceptions import NotFound
 from acme.om.intake import IntakeManagerInterface
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ToolResponseHeader
-from acme.om.steps.types.step import Step
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.common import LIMIT_MAX, clamp_limit
@@ -32,7 +32,7 @@ def execution_view(record: ExecutionRecord) -> ExecutionView:
     return ExecutionView(
         id=record.id,
         purpose=record.purpose,
-        step_id=record.step_id,
+        agent_step_id=record.agent_step_id,
         validation_id=record.validation_id,
         agent_project=record.agent_project,
         version=record.version,
@@ -66,7 +66,7 @@ def validation_view(validation: Validation) -> ValidationView:
     )
 
 
-def report_of(history: Sequence[Step]) -> ReportView | None:
+def report_of(history: Sequence[AgentStep]) -> ReportView | None:
     """The latest result the gate accepted, read off its tool response's
     header, so a session whose content is revoked still shows it."""
     for step in reversed(history):
@@ -87,7 +87,7 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
         sessions: AgentSessionsManagerInterface,
         evidence: EvidenceManagerInterface,
         agent_workspaces: AgentWorkspacesManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         intake: IntakeManagerInterface,
     ) -> None:
         self._sessions = sessions
@@ -97,12 +97,12 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
         self._intake = intake
 
     async def get_executions(
-        self, ctx: TenantContext, session_id: UUID, cursor: str | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, cursor: str | None, limit: int
     ) -> ExecutionPageView:
         after = decode_cursor(EXECUTIONS, cursor) if cursor else None
         # The session first: the evidence reads by its id alone.
-        await self._sessions.get_session(ctx, session_id)
-        page = await self._evidence.get_runs(ctx, session_id, after, clamp_limit(limit))
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        page = await self._evidence.get_runs(ctx, agent_session_id, after, clamp_limit(limit))
         last = page.items[-1].id if page.items and page.has_more else None
         return ExecutionPageView(
             items=[execution_view(record) for record in page.items],
@@ -110,20 +110,20 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
         )
 
     async def get_validations(
-        self, ctx: TenantContext, session_id: UUID, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, limit: int
     ) -> list[ValidationView]:
-        await self._sessions.get_session(ctx, session_id)
-        found = await self._evidence.get_validations(ctx, session_id, clamp_limit(limit))
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        found = await self._evidence.get_validations(ctx, agent_session_id, clamp_limit(limit))
         return [validation_view(validation) for validation in found]
 
-    async def get_work_product(self, ctx: TenantContext, session_id: UUID) -> WorkProductView:
-        await self._sessions.get_session(ctx, session_id)
+    async def get_work_product(self, ctx: TenantContext, agent_session_id: UUID) -> WorkProductView:
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         try:
-            workspace = await self._agent_workspaces.get_workspace(ctx, session_id)
+            workspace = await self._agent_workspaces.get_workspace(ctx, agent_session_id)
         except NotFound:
             # A session that was never pinned to a workspace has no branch.
             workspace = None
-        work = await self._intake.get_work(ctx, session_id)
+        work = await self._intake.get_work(ctx, agent_session_id)
         return WorkProductView(
             agent_project_id=None if workspace is None else workspace.agent_project_id,
             branch=None if workspace is None else workspace.branch,
@@ -132,14 +132,14 @@ class EvidenceServiceImpl(EvidenceServiceInterface):
                 WorkHandleView(kind=bound.kind, handle=bound.handle, bound_at=bound.created_at)
                 for bound in work
             ],
-            report=report_of(await self._history(ctx, session_id)),
+            report=report_of(await self._history(ctx, agent_session_id)),
         )
 
-    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def _history(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self._steps.get_steps(ctx, session_id, after, LIMIT_MAX)
+            page = await self._steps.get_agent_steps(ctx, agent_session_id, after, LIMIT_MAX)
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps

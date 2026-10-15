@@ -212,7 +212,7 @@ class ModelResolverTableImpl(ModelResolverInterface):
     async def resolve(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
         asks: Sequence[ModelAsk] = (),

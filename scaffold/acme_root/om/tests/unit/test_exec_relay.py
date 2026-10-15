@@ -19,12 +19,14 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import in_agent_project
-from contracts.agent_session_storage import make_session
-from contracts.hosts_storage import make_credential, make_host
-from contracts.loops import DELIVERY, reply, said
-from contracts.platform_loops import platform_loop_over
 
+from acme.infra.agent_workspaces import (
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+    AgentWorkspace,
+)
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import (
@@ -35,7 +37,7 @@ from acme.infra.transports import (
     RecordSeal,
     StaleCommand,
 )
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
+from acme.om.agent_steps.types.header import ParkReason, ToolFailure
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -75,10 +77,15 @@ from acme.om.placement.types.work import (
 )
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
-from acme.om.steps.types.header import ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.agent_session_storage import make_session
+from contracts.hosts_storage import make_credential, make_host
+from contracts.loops import DELIVERY, reply, said
+from contracts.platform_loops import platform_loop_over
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
@@ -104,7 +111,7 @@ class Wall:
     pool: HostPool
     holder: HostIdentity
     other: HostIdentity
-    workspace: Workspace
+    workspace: AgentWorkspace
     epoch: int
 
 
@@ -157,7 +164,7 @@ async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
     epoch = await managers.steps.begin_run(owner, session.id)
-    workspace = Workspace(id=session.id, org_id=owner.org_id, spec=CONTAINER, location="")
+    workspace = AgentWorkspace(id=session.id, org_id=owner.org_id, spec=CONTAINER, location="")
     return Wall(managers, storage, owner, pool, holder, other, workspace, epoch)
 
 
@@ -492,10 +499,10 @@ async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
             wall.owner.org_id, gone, make_credential(gone.id), ()
         )
     newest = await enrolled(wall.managers, wall.owner, wall.pool, "host-3")
-    relay, owner, session_id = wall.managers.exec_relay, wall.owner, wall.workspace.id
-    bound = await relay.bind_workspace(owner, session_id, newest.host_id, WHERE)
+    relay, owner, agent_session_id = wall.managers.exec_relay, wall.owner, wall.workspace.id
+    bound = await relay.bind_workspace(owner, agent_session_id, newest.host_id, WHERE)
     assert bound.host_id == newest.host_id
-    assert await relay.holder(owner, session_id) == bound
+    assert await relay.holder(owner, agent_session_id) == bound
     listed = {status.host.id for status in await wall.managers.hosts.get_hosts(owner, wall.pool.id)}
     assert listed == {wall.holder.host_id, wall.other.host_id, newest.host_id}
 
@@ -526,7 +533,7 @@ async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) 
     relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
     queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
 
-    await relay.purge_session(org, wall.workspace.id)
+    await relay.purge_agent_session(org, wall.workspace.id)
 
     row = await work.get_item(wall.owner, queued.row_id)
     assert (row.status, row.last_error) == (WorkStatus.DONE, "its session was purged")
@@ -885,7 +892,7 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
         await wall.managers.exec_relay.send(
             request(),
             wall.owner.org_id,
-            _call(wall, command(0)).model_copy(update={"session_id": unheld.id}),
+            _call(wall, command(0)).model_copy(update={"agent_session_id": unheld.id}),
             0,
         )
 
@@ -908,12 +915,12 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
     )
     owner, hosts = loop.owner, loop.platform.hosts
     pool = await pool_of(loop.platform, owner, "build")
-    session_id = await loop.start("contained")
-    await hosts.place_session(owner, session_id, pool.id)
-    await loop.say(session_id, "Build it.")
+    agent_session_id = await loop.start("contained")
+    await hosts.place_session(owner, agent_session_id, pool.id)
+    await loop.say(agent_session_id, "Build it.")
     loop.anthropic.add(reply(said("Never asked.")))
 
-    waiting = await loop.loops.run(owner, session_id)
+    waiting = await loop.loops.run(owner, agent_session_id)
     first = loop.clock()
     # The host that holds it went silent since it prepared it.
     silent = make_host(pool.id).model_copy(
@@ -922,15 +929,15 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
     await loop.storage.get_hosts_storage().enroll(
         owner.org_id, silent, make_credential(silent.id), ()
     )
-    await loop.platform.exec_relay.bind_workspace(owner, session_id, silent.id, WHERE)
+    await loop.platform.exec_relay.bind_workspace(owner, agent_session_id, silent.id, WHERE)
     assert waiting.park is not None and waiting.park.retry_at is not None
     loop.clock.now = waiting.park.retry_at
-    await loop.managers.agent_sessions.wake_session(owner, session_id, waiting.park)
-    offline = await loop.loops.run(owner, session_id)
+    await loop.managers.agent_sessions.wake_agent_session(owner, agent_session_id, waiting.park)
+    offline = await loop.loops.run(owner, agent_session_id)
 
     for run, parked_at in ((waiting, first), (offline, loop.clock())):
         assert run.end is RunEnd.PARKED and run.park is not None, "never ended errored"
-        assert (run.park.reason, run.park.unlock) == (ParkReason.RESOURCE, "workspace")
+        assert (run.park.reason, run.park.unlock) == (ParkReason.LEASABLE_RESOURCE, "workspace")
         assert run.park.retry_at is not None and run.park.retry_at > parked_at, "it asks again"
     assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
 
@@ -941,25 +948,30 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
 async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     wall: Wall,
 ) -> None:
-    managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
-    binding = await managers.exec_relay.holder(owner, session_id)
+    managers, owner, agent_session_id = wall.managers, wall.owner, wall.workspace.id
+    binding = await managers.exec_relay.holder(owner, agent_session_id)
     assert binding is not None and binding.host_id == wall.holder.host_id
-    assert await managers.exec_relay.ask_release(owner, session_id, CONTAINER)
-    assert not await managers.exec_relay.ask_release(owner, session_id, CONTAINER), "one at a time"
+    assert await managers.exec_relay.ask_release(owner, agent_session_id, CONTAINER)
+    assert not await managers.exec_relay.ask_release(owner, agent_session_id, CONTAINER), (
+        "one at a time"
+    )
     assert await Host(managers, wall.other).claim() is None, "no other host of the pool takes it"
     row = await Host(managers, wall.holder).claim_soon()
     payload = WorkspacePayload.model_validate(row.payload)
-    assert (payload.operation, payload.session_id) == (WorkspaceOperation.RELEASE, session_id)
+    assert (payload.operation, payload.agent_session_id) == (
+        WorkspaceOperation.RELEASE,
+        agent_session_id,
+    )
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.other, row.id)
     await managers.exec_relay.released(request(), wall.holder, row.id)
-    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, session_id)
+    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, agent_session_id)
     assert done is not None and done.status is WorkStatus.DONE
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.holder, row.id)
     # A revoked host is reached by nothing, a release included.
     await managers.hosts.revoke_host(owner, wall.holder.host_id)
-    assert await managers.exec_relay.holder(owner, session_id) is None
+    assert await managers.exec_relay.holder(owner, agent_session_id) is None
 
 
 # An instance a run makes for a session: made by a host of the session's
@@ -986,9 +998,9 @@ async def pool_of(managers: PlatformManagers, owner: TenantContext, name: str) -
 async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_host(
     wall: Wall,
 ) -> None:
-    managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
+    managers, owner, agent_session_id = wall.managers, wall.owner, wall.workspace.id
     agent_project_id = await in_agent_project(
-        wall.storage.get_agent_project_storage(), owner.org_id, session_id
+        wall.storage.get_agent_project_storage(), owner.org_id, agent_session_id
     )
     elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "nightly"), "host-3")
     stranger, _ = await managers.tenancy.bootstrap(
@@ -997,52 +1009,55 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     foreign = await enrolled(managers, stranger, await pool_of(managers, stranger, "build"), "h")
     instance = new_id()
 
-    await managers.exec_relay.ask_instance(owner, session_id, instance, CONTAINER)
+    await managers.exec_relay.ask_instance(owner, agent_session_id, instance, CONTAINER)
 
     for outside in (elsewhere, foreign):
         assert await Host(managers, outside).claim() is None, "no host outside the pool"
     row = await Host(managers, wall.other).claim_soon()
     payload = WorkspacePayload.model_validate(row.payload)
-    assert (payload.operation, payload.session_id, payload.instance_of) == (
+    assert (payload.operation, payload.agent_session_id, payload.instance_of) == (
         WorkspaceOperation.PREPARE,
         instance,
-        session_id,
+        agent_session_id,
     )
     assert payload.agent_project_id == agent_project_id, "held to the session's agent project"
     binding = await managers.exec_relay.prepared(
         request(), wall.other, row.id, PrepareAnswer(location="/srv/work/instance")
     )
     assert binding is not None
-    assert (binding.session_id, binding.host_id, binding.instance_of) == (
+    assert (binding.agent_session_id, binding.host_id, binding.instance_of) == (
         instance,
         wall.other.host_id,
-        session_id,
+        agent_session_id,
     )
-    own = await managers.exec_relay.binding_of(owner, session_id)
+    own = await managers.exec_relay.binding_of(owner, agent_session_id)
     assert own is not None and own.host_id == wall.holder.host_id, "the session's own stays"
 
     # Its command goes to the host that made it, held to the session's
     # agent project, and to no other.
-    workspace = Workspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
+    workspace = AgentWorkspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
     sent = asyncio.ensure_future(transport(managers).run(workspace, command(1), seal=NO_SEAL))
     for outside in (wall.holder, elsewhere, foreign):
         assert await Host(managers, outside).claim() is None
     ran = await Host(managers, wall.other).claim_soon()
     exec_payload = ExecPayload.model_validate(ran.payload)
-    assert (exec_payload.session_id, exec_payload.agent_project_id) == (instance, agent_project_id)
+    assert (exec_payload.agent_session_id, exec_payload.agent_project_id) == (
+        instance,
+        agent_project_id,
+    )
     await Host(managers, wall.other).finish(ran, stdout="ok")
     assert (await sent).stdout == "ok"
 
     # Its run ends: the host that holds it is asked to purge it, and only it
     # answers; the exec relay's rows of it go at once.
     assert await managers.exec_relay.ask_purge(owner, instance, CONTAINER)
-    await managers.exec_relay.purge_session(owner.org_id, instance)
+    await managers.exec_relay.purge_agent_session(owner.org_id, instance)
     assert await managers.exec_relay.binding_of(owner, instance) is None
     for outside in (wall.holder, elsewhere, foreign):
         assert await Host(managers, outside).claim() is None
     purge = await Host(managers, wall.other).claim_soon()
     purged = WorkspacePayload.model_validate(purge.payload)
-    assert (purged.operation, purged.session_id) == (WorkspaceOperation.PURGE, instance)
+    assert (purged.operation, purged.agent_session_id) == (WorkspaceOperation.PURGE, instance)
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.holder, purge.id)
     await managers.exec_relay.released(request(), wall.other, purge.id)
@@ -1064,7 +1079,7 @@ async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall:
 
 def _call(wall: Wall, spec: CommandSpec) -> ExecCall:
     return ExecCall(
-        session_id=wall.workspace.id,
+        agent_session_id=wall.workspace.id,
         key=spec.key,
         request=RunRequest(argv=spec.argv),
         effect=spec.effect,

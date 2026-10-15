@@ -41,16 +41,16 @@ from acme.om.agent_billing.types.spend_ledger import (
     WindowRaise,
 )
 from acme.om.base import EMPTY_UUID
-from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch, ValidationFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendSettlement
 from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 ENTRY_TYPES: Mapping[EntryKind, type[Entry]] = {
     EntryKind.HOLD: FundedHold,
-    EntryKind.SETTLEMENT: Settlement,
+    EntryKind.SETTLEMENT: SpendSettlement,
     EntryKind.CHARGE: Charge,
     EntryKind.CREDIT: Credit,
     EntryKind.GRANT: Grant,
@@ -129,8 +129,8 @@ def _row(
     kind: EntryKind,
     entry: Entry,
     *,
-    hold_id: UUID | None = None,
-    session_id: UUID | None = None,
+    spend_hold_id: UUID | None = None,
+    agent_session_id: UUID | None = None,
     reference: str | None = None,
     deadline: datetime | None = None,
 ) -> SpendLedgerEntries:
@@ -139,8 +139,8 @@ def _row(
         org_id=org_id,
         created_at=entry.created_at,
         kind=kind.value,
-        hold_id=hold_id,
-        session_id=session_id,
+        spend_hold_id=spend_hold_id,
+        agent_session_id=agent_session_id,
         reference=reference,
         body=entry.model_dump(mode="json"),
         deadline=deadline,
@@ -152,7 +152,7 @@ def _entry(row: SpendLedgerEntries) -> Entry:
 
 
 class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface):
-    async def open_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
+    async def open_spend_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
         async with self._session_for(SpendLedgerEntries, org_id=org_id) as db:
             try:
                 counts = await _lock_counts(db, org_id, hold_keys(hold))
@@ -174,8 +174,8 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
                         org_id,
                         EntryKind.HOLD,
                         written,
-                        hold_id=written.id,
-                        session_id=written.session_id,
+                        spend_hold_id=written.id,
+                        agent_session_id=written.agent_session_id,
                         deadline=written.deadline,
                     )
                 )
@@ -191,10 +191,10 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
                     raise TenantMismatch(f"hold {hold.id} is not in {org_id}") from error
                 return stored
 
-    async def read_hold(self, org_id: UUID, hold_id: UUID) -> FundedHold | None:
+    async def read_hold(self, org_id: UUID, spend_hold_id: UUID) -> FundedHold | None:
         stmt = select(SpendLedgerEntries).where(
             SpendLedgerEntries.org_id == org_id,
-            SpendLedgerEntries.id == hold_id,
+            SpendLedgerEntries.id == spend_hold_id,
             SpendLedgerEntries.kind == EntryKind.HOLD.value,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
@@ -205,15 +205,15 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
             assert isinstance(found, FundedHold)
             return found
 
-    async def close_hold(
-        self, org_id: UUID, settlement: Settlement, charge: Charge
-    ) -> tuple[Settlement, Charge]:
+    async def close_spend_hold(
+        self, org_id: UUID, settlement: SpendSettlement, charge: Charge
+    ) -> tuple[SpendSettlement, Charge]:
         async with self._session_for(SpendLedgerEntries, org_id=org_id) as db:
             try:
-                row = await _entry_row(db, org_id, settlement.hold_id, EntryKind.HOLD)
+                row = await _entry_row(db, org_id, settlement.spend_hold_id, EntryKind.HOLD)
                 if row is None:
                     await db.rollback()
-                    raise NotFound(f"hold {settlement.hold_id} not found")
+                    raise NotFound(f"hold {settlement.spend_hold_id} not found")
                 hold = _entry(row)
                 assert isinstance(hold, FundedHold)
                 await _lock_counts(db, org_id, hold_keys(hold))
@@ -224,8 +224,8 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
                     await db.rollback()
                     return first
                 await _move_all(db, org_id, closed(hold, settlement, charge))
-                db.add(_row(org_id, EntryKind.SETTLEMENT, settlement, hold_id=hold.id))
-                db.add(_row(org_id, EntryKind.CHARGE, charge, hold_id=hold.id))
+                db.add(_row(org_id, EntryKind.SETTLEMENT, settlement, spend_hold_id=hold.id))
+                db.add(_row(org_id, EntryKind.CHARGE, charge, spend_hold_id=hold.id))
                 await db.commit()
                 return settlement, charge
             except IntegrityError:
@@ -233,7 +233,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
                 # to queue on: the rollback takes the counts back.
                 await db.rollback()
                 async with self._session_for(SpendLedgerEntries, org_id=org_id) as again:
-                    found = await _closing(again, org_id, settlement.hold_id)
+                    found = await _closing(again, org_id, settlement.spend_hold_id)
                 if found is None:
                     raise
                 return found
@@ -268,7 +268,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
         return stored
 
     async def post_raise(self, org_id: UUID, raised: WindowRaise) -> WindowRaise:
-        cost_key, tokens_key = raise_keys(raised.budget_id, raised.window_start)
+        cost_key, tokens_key = raise_keys(raised.spend_budget_id, raised.window_start)
         adds = {cost_key: raised.cost_micros, tokens_key: raised.tokens}
         stored = await self._post_once(org_id, EntryKind.RAISE, raised, adds)
         assert isinstance(stored, WindowRaise)
@@ -276,14 +276,14 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
 
     async def post_approval(self, org_id: UUID, approval: Approval) -> Approval:
         stored = await self._post_once(
-            org_id, EntryKind.APPROVAL, approval, {}, session_id=approval.session_id
+            org_id, EntryKind.APPROVAL, approval, {}, agent_session_id=approval.agent_session_id
         )
         assert isinstance(stored, Approval)
         return stored
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold, datetime]]:
+    ) -> list[tuple[UUID, SpendHold, datetime]]:
         # The holds that fall due in the slice, each kept while no settlement
         # names it: a model call's by its opening time, through the index by
         # kind and that time, and a job's by its deadline, through the index
@@ -292,7 +292,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
         settled = select(settlement.id).where(
             settlement.org_id == SpendLedgerEntries.org_id,
             settlement.kind == EntryKind.SETTLEMENT.value,
-            settlement.hold_id == SpendLedgerEntries.hold_id,
+            settlement.spend_hold_id == SpendLedgerEntries.spend_hold_id,
         )
         stmt = (
             select(SpendLedgerEntries)
@@ -318,7 +318,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
         )
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(PLAN_WITH_VALUES)
-            found: list[tuple[UUID, Hold, datetime]] = []
+            found: list[tuple[UUID, SpendHold, datetime]] = []
             for row in (await session.execute(stmt)).scalars():
                 entry = _entry(row)
                 assert isinstance(entry, FundedHold)
@@ -330,17 +330,17 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
         org_id: UUID,
         *,
         kind: EntryKind | None = None,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         limit: int,
     ) -> list[Entry]:
         stmt = select(SpendLedgerEntries).where(SpendLedgerEntries.org_id == org_id)
         if kind is not None:
             stmt = stmt.where(SpendLedgerEntries.kind == kind.value)
-        if hold_id is not None:
-            stmt = stmt.where(SpendLedgerEntries.hold_id == hold_id)
-        if session_id is not None:
-            stmt = stmt.where(SpendLedgerEntries.session_id == session_id)
+        if spend_hold_id is not None:
+            stmt = stmt.where(SpendLedgerEntries.spend_hold_id == spend_hold_id)
+        if agent_session_id is not None:
+            stmt = stmt.where(SpendLedgerEntries.agent_session_id == agent_session_id)
         stmt = stmt.order_by(
             SpendLedgerEntries.created_at.desc(), SpendLedgerEntries.id.desc()
         ).limit(limit)
@@ -382,7 +382,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
         entry: Grant | WindowRaise | Approval,
         adds: Mapping[CountKey, int],
         *,
-        session_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
     ) -> Entry:
         """An entry that adds to counts, written once by its id: one posted
         already answers as stored, and nothing moves."""
@@ -396,7 +396,7 @@ class SpendLedgerStoragePostgresImpl(PgStorageBase, SpendLedgerStorageInterface)
                     return stored
                 for key, amount in adds.items():
                     await _add(db, org_id, key, amount)
-                db.add(_row(org_id, kind, entry, session_id=session_id))
+                db.add(_row(org_id, kind, entry, agent_session_id=agent_session_id))
                 await db.commit()
                 return entry
             except IntegrityError as error:
@@ -508,17 +508,17 @@ async def _credit_row(db: AsyncSession, org_id: UUID, reference: str) -> SpendLe
 
 
 async def _closing(
-    db: AsyncSession, org_id: UUID, hold_id: UUID
-) -> tuple[Settlement, Charge] | None:
+    db: AsyncSession, org_id: UUID, spend_hold_id: UUID
+) -> tuple[SpendSettlement, Charge] | None:
     """A hold's settlement and charge, read before any rollback expires them."""
     stmt = select(SpendLedgerEntries).where(
         SpendLedgerEntries.org_id == org_id,
-        SpendLedgerEntries.hold_id == hold_id,
+        SpendLedgerEntries.spend_hold_id == spend_hold_id,
         SpendLedgerEntries.kind.in_((EntryKind.SETTLEMENT.value, EntryKind.CHARGE.value)),
     )
     found = {row.kind: _entry(row) for row in (await db.execute(stmt)).scalars()}
     settlement = found.get(EntryKind.SETTLEMENT.value)
     charge = found.get(EntryKind.CHARGE.value)
-    if not isinstance(settlement, Settlement) or not isinstance(charge, Charge):
+    if not isinstance(settlement, SpendSettlement) or not isinstance(charge, Charge):
         return None
     return settlement, charge

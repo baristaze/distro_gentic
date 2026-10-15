@@ -6,7 +6,8 @@ from pathlib import Path
 from uuid import UUID
 
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode
-from acme.infra.agent_workspaces.container import MOUNT
+from acme.infra.agent_workspaces.container import CA_PATH, MOUNT
+from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 from acme.infra.base import utcnow
 from acme.infra.docker import docker, docker_environment
 from acme.infra.exceptions import BackendFailed, InfraNotFound
@@ -26,9 +27,6 @@ from acme.infra.transports import (
 from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode
-from acme.infra.agent_workspaces.container import CA_PATH, MOUNT
-from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 log = logging.getLogger(__name__)
 

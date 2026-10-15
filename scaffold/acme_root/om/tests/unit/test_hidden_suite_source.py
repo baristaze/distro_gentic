@@ -20,16 +20,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from uuid import UUID
 
-from contracts.acceptance import surfaces
-from contracts.doubles import context
-from contracts.evidence import evidence_over
-from contracts.factories import make_org
-
+from acme.infra.agent_workspaces import AgentWorkspaceBase, IsolationMode, IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceBase
-from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
 from acme.om.agent_workspaces.impl.executor import (
@@ -52,6 +47,11 @@ from acme.om.evidence.types.record import RunOutcome
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
+
+from contracts.acceptance import surfaces
+from contracts.doubles import context
+from contracts.evidence import evidence_over
+from contracts.factories import make_org
 
 AUTHOR = {
     "GIT_AUTHOR_NAME": "Ann",
@@ -219,27 +219,27 @@ class Bound(WorkspaceAgentProjectsInterface):
 
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
+    ) -> AgentWorkspaceBase | None:
         return None
 
 
-class Instances(WorkspaceTwinImpl):
+class Instances(AgentWorkspaceTwinImpl):
     """The twin provider, keeping the last instance it made."""
 
-    made: Workspace | None = None
+    made: AgentWorkspace | None = None
 
     async def prepare(
         self,
         org_id: UUID,
-        workspace_id: UUID,
+        agent_workspace_id: UUID,
         spec: IsolationSpec,
         snapshot: bytes | None = None,
         base: bytes | None = None,
         *,
         building: bool = False,
-    ) -> Workspace:
+    ) -> AgentWorkspace:
         self.made = await super().prepare(
-            org_id, workspace_id, spec, snapshot, base, building=building
+            org_id, agent_workspace_id, spec, snapshot, base, building=building
         )
         return self.made
 
@@ -407,7 +407,7 @@ class Repositories:
         )
 
 
-async def no_wall(ctx: TenantContext, session_id: UUID) -> Pin | None:
+async def no_wall(ctx: TenantContext, agent_session_id: UUID) -> Pin | None:
     """Every session of the case is the cloud's, and pinned no isolation."""
     return None
 

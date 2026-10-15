@@ -13,7 +13,6 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import build_container, client_over, seed_request, sign_in_as
-from contracts.agent_session_storage import make_session
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr
 
@@ -30,6 +29,8 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.types.event import FeedbackEvent
 from acme.om.intake.types.link import HandleKind
 from acme.services.api.container import AppContainer
+
+from contracts.agent_session_storage import make_session
 
 FIXTURES = Path(__file__).parents[3] / "integrations" / "tests" / "fixtures"
 SECRET = "the-apps-webhook-secret"
@@ -168,7 +169,7 @@ async def test_a_delivery_naming_its_repository_in_capitals_routes_to_the_sessio
     delivery = only["delivery"]
     assert isinstance(delivery, dict)
     routed = await intake.route(ctx, FeedbackEvent.model_validate(delivery["event"]))
-    assert routed.session_id == session.id
+    assert routed.agent_session_id == session.id
 
 
 async def test_a_delivery_signed_with_the_wrong_secret_is_refused_and_queues_nothing(

@@ -38,13 +38,13 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
             return None if row is None else to_model(row, ExecItem)
 
     async def read_items_by_key(
-        self, org_id: UUID, session_id: UUID, key: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, key: UUID, limit: int
     ) -> list[ExecItem]:
         stmt = (
             select(ExecItems)
             .where(
                 ExecItems.org_id == org_id,
-                ExecItems.session_id == session_id,
+                ExecItems.agent_session_id == agent_session_id,
                 ExecItems.key == key,
             )
             .order_by(ExecItems.created_at, ExecItems.id)
@@ -54,12 +54,14 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, ExecItem) for row in rows]
 
-    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+    async def read_running(
+        self, org_id: UUID, agent_session_id: UUID, limit: int
+    ) -> list[ExecItem]:
         stmt = (
             select(ExecItems)
             .where(
                 ExecItems.org_id == org_id,
-                ExecItems.session_id == session_id,
+                ExecItems.agent_session_id == agent_session_id,
                 ExecItems.state == ExecState.RUNNING.value,
             )
             .order_by(ExecItems.created_at, ExecItems.id)
@@ -156,7 +158,7 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         stale = PreconditionFailed(
-            f"the workspace binding of session {binding.session_id} is no longer at "
+            f"the workspace binding of session {binding.agent_session_id} is no longer at "
             f"version {expected_version}"
         )
         if expected_version == 0:
@@ -173,7 +175,7 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
             .where(
                 AgentWorkspaceBindings.org_id == org_id,
                 AgentWorkspaceBindings.id == binding.id,
-                AgentWorkspaceBindings.session_id == binding.session_id,
+                AgentWorkspaceBindings.agent_session_id == binding.agent_session_id,
                 AgentWorkspaceBindings.version == expected_version,
             )
             .values(**values)
@@ -187,9 +189,12 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
                 session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await session.commit()
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> AgentWorkspaceBinding | None:
+    async def read_binding(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         stmt = select(AgentWorkspaceBindings).where(
-            AgentWorkspaceBindings.org_id == org_id, AgentWorkspaceBindings.session_id == session_id
+            AgentWorkspaceBindings.org_id == org_id,
+            AgentWorkspaceBindings.agent_session_id == agent_session_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -206,11 +211,14 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [(row.org_id, to_model(row, AgentWorkspaceBinding)) for row in rows]
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         purged = 0
         for table in PURGED_IN_ORDER:
             stmt = delete_batch(
-                table, table.org_id == org_id, table.session_id == session_id, limit=limit
+                table,
+                table.org_id == org_id,
+                table.agent_session_id == agent_session_id,
+                limit=limit,
             )
             async with self._session_for(stmt, org_id=org_id) as session:
                 purged += deleted(await session.execute(stmt))

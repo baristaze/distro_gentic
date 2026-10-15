@@ -23,7 +23,7 @@ from acme.integrations.exceptions import ProviderRefused
 from acme.om.agent_workspaces.agent_projects import SourceControlInterface
 from acme.om.agent_workspaces.types.source import OpenedPullRequest, RepositoryBinding
 from acme.om.context import TenantContext
-from acme.om.exceptions import NotAuthorized, PlatformException, Unavailable, ValidationFailed
+from acme.om.exceptions import NotAuthorized, OmException, Unavailable, ValidationFailed
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class SourceControlForgeImpl(SourceControlInterface):
         return installation
 
 
-def _failure(what: str, failed: InfraException) -> PlatformException:
+def _failure(what: str, failed: InfraException) -> OmException:
     """A refusal is the write's for good; anything else may pass."""
     kind = ValidationFailed if isinstance(failed, ProviderRefused) else Unavailable
     return kind(f"{what}: {failed.message}")

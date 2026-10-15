@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention.types.policy import MAX_AGENT_PROJECTS, MAX_LIFETIME, REGION
 from acme.services.api.types.common import RequestBody, View
 
@@ -84,7 +84,7 @@ class SessionRetentionView(View):
     report of the key it destroyed, none when the service holds the tenant's
     key alone and the platform's revocation is the destruction."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_project_id: UUID | None
     policy: RetentionPolicyView
     content_expires_at: datetime | None

@@ -13,6 +13,7 @@ from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
+
 from contracts.loops import Loop, loop_over
 
 

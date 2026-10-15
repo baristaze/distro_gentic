@@ -11,8 +11,8 @@ from uuid import UUID
 
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.om.base import utcnow
+from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl
 from acme.om.context import TenantContext
-from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.collector import digest
 from acme.om.evidence.executor import ExecutorInterface, Executors
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
@@ -32,6 +32,7 @@ from acme.om.evidence.types.validation import (
 )
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
+
 from contracts.doubles import Members
 from contracts.evidence_storage import make_policy
 from contracts.platform_doubles import SessionAgentProjectsMemory
@@ -174,7 +175,7 @@ def evidence_over(
     outbox = OutboxStorageMemoryImpl()
     storage = EvidenceStorageMemoryImpl(outbox)
     members = Members()  # pyright: ignore[reportAbstractUsage] (a partial double)
-    relay = OutboxRelayImpl(outbox, EventStorageMemoryImpl(), TopicsMemoryImpl())
+    relay = OutboxRelayImpl(outbox, ChangeEventStorageMemoryImpl(), TopicsMemoryImpl())
     work = WorkProductMemoryImpl()
     executor = executor or ScriptedExecutor()
     agent_projects = SessionAgentProjectsMemory(default=CHECKOUT)

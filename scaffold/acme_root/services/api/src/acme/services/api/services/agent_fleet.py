@@ -17,7 +17,7 @@ from acme.services.api.types.agent_fleet import (
     ShapePageView,
     ShareView,
 )
-from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.agent_sessions import AgentStepPageView
 from acme.services.api.types.levers import LeverReadingView
 
 
@@ -29,7 +29,7 @@ class AgentFleetServiceInterface(ABC):
 
     @abstractmethod
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
     ) -> SessionStandingView: ...
 
     @abstractmethod
@@ -39,13 +39,23 @@ class AgentFleetServiceInterface(ABC):
 
     @abstractmethod
     async def get_session_shape(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
     ) -> ShapePageView: ...
 
     @abstractmethod
     async def get_session_content(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPageView: ...
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
+    ) -> AgentStepPageView: ...
 
     @abstractmethod
     async def read_levers(

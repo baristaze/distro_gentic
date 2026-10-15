@@ -20,9 +20,9 @@ from acme.om.agent_billing.types.spend_ledger import (
     Grant,
     WindowRaise,
 )
-from acme.om.budgets.types.amount import Amount
-from acme.om.budgets.types.hold import Tally
 from acme.om.context import OperatorContext, TenantContext
+from acme.om.spend_budgets.types.amount import Amount
+from acme.om.spend_budgets.types.spend_hold import SpendTally
 
 
 class AgentBillingManagerInterface(ABC):
@@ -87,8 +87,8 @@ class AgentBillingManagerInterface(ABC):
         org_id: UUID,
         *,
         kind: EntryKind | None = None,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         limit: int,
     ) -> EntryPage:
         """The tenant's ledger, as an operator reads it naming the tenant:
@@ -103,7 +103,7 @@ class AgentBillingManagerInterface(ABC):
     async def raise_once(
         self,
         ctx: TenantContext,
-        budget_id: UUID,
+        spend_budget_id: UUID,
         amount: Amount,
         *,
         raise_id: UUID | None = None,
@@ -118,7 +118,7 @@ class AgentBillingManagerInterface(ABC):
     async def approve_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         up_to_micros: int,
         *,
         approval_id: UUID | None = None,
@@ -129,7 +129,7 @@ class AgentBillingManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
+    async def get_spend(self, ctx: TenantContext, spend_budget_id: UUID) -> SpendTally:
         """What the budget's current window, as the tenant counts it, spent
         and holds: the one aggregation every view reads, the cap's
         included. A tenant with no spend account has held nothing, in windows

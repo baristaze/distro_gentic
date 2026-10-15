@@ -14,7 +14,7 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.inference import Inference, InferenceKind, Stance
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
-from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance
+from acme.om.evidence.types.provenance import Dependency, Provenance, ToolOutputRef
 from acme.om.evidence.types.record import (
     CaseTally,
     ExecutionRecord,
@@ -31,7 +31,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_policy",
         "create_record",
         "create_validation",
-        "purge_session",
+        "purge_agent_session",
         "purge_tenant",
         "read_cited",
         "read_inference",
@@ -74,11 +74,11 @@ def make_policy(agent_project: str = "checkout") -> ValidationPolicy:
 
 
 def make_record(
-    session_id: UUID,
+    agent_session_id: UUID,
     *,
     purpose: RunPurpose = RunPurpose.WORK,
     validation_id: UUID | None = None,
-    step_id: UUID | None = None,
+    agent_step_id: UUID | None = None,
     check: str = "unit",
     outcome: RunOutcome = RunOutcome.PASSED,
     provenance: Provenance = Provenance.REAL,
@@ -89,10 +89,10 @@ def make_record(
     return ExecutionRecord(
         id=new_id(),
         created_at=now,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         agent_project="checkout",
         purpose=purpose,
-        step_id=step_id,
+        agent_step_id=agent_step_id,
         validation_id=validation_id,
         version=version,
         dirty=False,
@@ -110,14 +110,14 @@ def make_record(
         cases=CaseTally(
             passed=int(outcome is RunOutcome.PASSED), failed=int(outcome is RunOutcome.FAILED)
         ),
-        artifacts=(ArtifactRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
+        artifacts=(ToolOutputRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
         dependencies=(Dependency(name="browser", provenance=provenance),),
         abort="the guard stopped it" if outcome is RunOutcome.ABORTED else None,
     )
 
 
 def make_validation(
-    session_id: UUID,
+    agent_session_id: UUID,
     *runs: int,
     version: str = "c0ffee",
     executor: str = "executor-1",
@@ -127,7 +127,7 @@ def make_validation(
     validation_id = new_id()
     records = tuple(
         make_record(
-            session_id,
+            agent_session_id,
             purpose=purpose,
             validation_id=validation_id,
             executor=executor,
@@ -138,7 +138,7 @@ def make_validation(
     validation = Validation(
         id=validation_id,
         created_at=utcnow(),
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         agent_project=agent_project,
         purpose=purpose,
         version=version,
@@ -150,22 +150,22 @@ def make_validation(
     return validation, records
 
 
-def make_hypothesis(session_id: UUID) -> Inference:
+def make_hypothesis(agent_session_id: UUID) -> Inference:
     return Inference(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id,
-        step_id=new_id(),
+        agent_session_id=agent_session_id,
+        agent_step_id=new_id(),
         kind=InferenceKind.HYPOTHESIS,
     )
 
 
-def make_finding(session_id: UUID, resolves: UUID, run: UUID) -> Inference:
+def make_finding(agent_session_id: UUID, resolves: UUID, run: UUID) -> Inference:
     return Inference(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id,
-        step_id=new_id(),
+        agent_session_id=agent_session_id,
+        agent_step_id=new_id(),
         kind=InferenceKind.FINDING,
         resolves=resolves,
         stance=Stance.SUPPORTED,
@@ -244,7 +244,7 @@ class EvidenceStorageContract:
         self, storage: EvidenceStorageInterface
     ) -> None:
         org, session = new_id(), new_id()
-        run = make_record(session, provenance=Provenance.TWIN, step_id=new_id())
+        run = make_record(session, provenance=Provenance.TWIN, agent_step_id=new_id())
         assert await storage.create_record(org, run)
         assert not await storage.create_record(org, run), "the same id is a retry"
         (found,) = await storage.read_records(org, session, None, 10)
@@ -284,7 +284,7 @@ class EvidenceStorageContract:
     ) -> None:
         org, session = new_id(), new_id()
         step = new_id()
-        by_step = make_record(session, step_id=step)
+        by_step = make_record(session, agent_step_id=step)
         by_id = make_record(session)
         validation, executed = make_validation(session, 2)
         assert await storage.create_record(org, by_step)
@@ -403,8 +403,8 @@ class EvidenceStorageContract:
         assert await storage.create_inference(org, make_hypothesis(gone))
         stays = make_record(kept)
         assert await storage.create_record(org, stays)
-        assert await storage.purge_session(org, gone, 10) == 5
-        assert await storage.purge_session(org, gone, 10) == 0
+        assert await storage.purge_agent_session(org, gone, 10) == 5
+        assert await storage.purge_agent_session(org, gone, 10) == 0
         assert await storage.read_records(org, gone, None, 10) == []
         assert await storage.read_validations(org, gone, None, 10) == []
         assert await storage.read_inferences(org, gone, None, 10) == []
@@ -416,7 +416,7 @@ class EvidenceStorageContract:
         org, session = new_id(), new_id()
         run = make_record(session)
         assert await storage.create_record(org, run)
-        assert await storage.purge_session(new_id(), session, 10) == 0
+        assert await storage.purge_agent_session(new_id(), session, 10) == 0
         assert await storage.read_records(org, session, None, 10) == [run]
 
     async def test_purge_tenant_takes_the_tenants_rows_and_no_other(
@@ -437,4 +437,4 @@ class EvidenceStorageContract:
         assert await storage.read_policy(gone, "checkout") is None
         assert await storage.read_records(gone, session, None, 10) == []
         assert await storage.read_policy(kept, "checkout") == stays
-        assert await storage.read_records(kept, kept_run.session_id, None, 10) == [kept_run]
+        assert await storage.read_records(kept, kept_run.agent_session_id, None, 10) == [kept_run]

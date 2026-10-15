@@ -12,16 +12,14 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.base import SnakeName
-from acme.om.leases.types.leasable_resource import MAX_LABELS, MAX_TERM_SECONDS, Label
-from acme.om.leases.types.lease import LeaseStatus
-from acme.om.leases.types.request import EndReason, RequestStatus
-from acme.om.leases.types.request import EndReason, RequestStatus, WaiterKind
-from acme.om.leases.types.resource import (
+from acme.om.leases.types.leasable_resource import (
     MAX_LABELS,
     MAX_TERM_SECONDS,
     Label,
     ResourceKindName,
 )
+from acme.om.leases.types.lease import LeaseStatus
+from acme.om.leases.types.request import EndReason, RequestStatus, WaiterKind
 from acme.services.api.types.common import RequestBody, View
 
 

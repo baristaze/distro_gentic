@@ -114,7 +114,7 @@ class LedgerStorageInterface(ABC):
     @abstractmethod
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold, datetime]]:
+    ) -> list[tuple[UUID, SpendHold, datetime]]:
         """Cross-tenant, for the sweep, in the system scope: at most `limit`
         holds opened at or after `after` and before `before` that no
         settlement has closed, whatever their tenant, each with its tenant

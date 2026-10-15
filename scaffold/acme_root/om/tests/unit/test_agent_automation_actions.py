@@ -12,7 +12,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import Wired, wired
 from pydantic import Field, ValidationError
 
 from acme.om.agent_automations.actions import AgentAutomationActionInterface
@@ -31,15 +30,17 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized, ValidationFailed
 from acme.om.platform_root import PlatformManagers
 
+from contracts.intake import Wired, wired
+
 JOB = "run_job"
 
 
-class Job(Platform):
+class Job(OmBase):
     steps: int = Field(ge=1, le=10)
 
 
@@ -60,7 +61,7 @@ class JobAction(AgentAutomationActionInterface):
         self.approvers: set[UUID] | None = None
         self.writers: list[tuple[UUID, int]] = []
 
-    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: Platform) -> UUID:
+    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: OmBase) -> UUID:
         assert isinstance(params, Job)
         if self.approvers is not None and ctx.user_id not in self.approvers:
             raise NotAuthorized("only an approver runs the job")
@@ -76,7 +77,7 @@ class JobAction(AgentAutomationActionInterface):
         assert run.work_id is not None
         return self.jobs[run.work_id]
 
-    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
+    async def check_writer(self, ctx: TenantContext, params: OmBase, runs_as: RunsAs) -> None:
         assert isinstance(params, Job)
         self.writers.append((ctx.user_id, params.steps))
         if self.approvers is None:
@@ -152,7 +153,7 @@ async def test_a_products_action_acts_in_the_firing_and_its_run_closes_as_its_ch
     made = await platform.agent_automations.create_agent_automation(creator, job_agent_automation())
     first = await fired(platform)
     # Acted before the firing answered, as its creator, with the event as data.
-    assert first.status is RunStatus.STARTED and first.session_id is None
+    assert first.status is RunStatus.STARTED and first.agent_session_id is None
     assert first.work_id is not None and first.work_id in job.jobs
     assert (job.acted_as, job.texts) == ([creator.user_id], ["Run it again."])
     # Long past the time a session-less run counts as lost, its job still
@@ -198,7 +199,12 @@ async def test_an_action_of_a_kind_no_product_declares_is_refused_when_written(
     with pytest.raises(ValidationError):
         Action(kind=JOB, brief="Run it.")
     with pytest.raises(ValidationError):
-        Action(kind=ActionKind.MESSAGE_SESSION, brief="Look.", session_id=new_id(), params={"a": 1})
+        Action(
+            kind=ActionKind.MESSAGE_SESSION,
+            brief="Look.",
+            agent_session_id=new_id(),
+            params={"a": 1},
+        )
     with pytest.raises(ValidationError):
         Action(kind=JOB, params={"blob": "x" * 20_001})
 
@@ -315,7 +321,7 @@ def test_a_platform_actions_stored_value_carries_no_params() -> None:
     what this one writes for the platform's actions through a roll and
     after a downgrade; a product's action keeps its params."""
     platform = job_agent_automation(
-        action=Action(kind=ActionKind.MESSAGE_SESSION, brief="Look.", session_id=new_id())
+        action=Action(kind=ActionKind.MESSAGE_SESSION, brief="Look.", agent_session_id=new_id())
     )
     stored = platform.model_dump(mode="json")["action"]
     assert "params" not in stored

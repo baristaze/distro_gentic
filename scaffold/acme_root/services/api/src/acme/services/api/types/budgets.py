@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
+from acme.om.spend_budgets.types.spend_budget import SpendBudgetScopeKind, WindowKind
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -18,9 +18,9 @@ class SettableScope(StrEnum):
     charged to and that outlive a session. A session's and a tree's budgets
     are its own bounds, and no call is charged to a team."""
 
-    PERSON = BudgetScopeKind.PERSON.value
-    PROJECT = BudgetScopeKind.PROJECT.value
-    TENANT = BudgetScopeKind.TENANT.value
+    PERSON = SpendBudgetScopeKind.PERSON.value
+    PROJECT = SpendBudgetScopeKind.PROJECT.value
+    TENANT = SpendBudgetScopeKind.TENANT.value
 
 
 class CreateBudgetRequest(RequestBody):
@@ -48,7 +48,7 @@ class BudgetView(View):
     of the amount names in `If-Match`."""
 
     id: UUID
-    scope_kind: BudgetScopeKind
+    scope_kind: SpendBudgetScopeKind
     scope_key: str
     window_kind: WindowKind
     window_seconds: int | None

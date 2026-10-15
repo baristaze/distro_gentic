@@ -2,14 +2,15 @@
 a time back to the floor, a tenant's own stream alone, and only with read."""
 
 import pytest
-from contracts.event_storage import make_event
 from unit.test_events_manager import Retention, append_aged, context, keeping
 
+from acme.om.change_events.impl.manager import ChangeEventsManagerImpl, ChangeEventsOptions
+from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl
+from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import Role
-from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
-from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
-from acme.om.events.types.event import Event
 from acme.om.exceptions import NotAuthorized
+
+from contracts.change_event_storage import make_change_event
 
 
 @pytest.fixture
@@ -18,8 +19,10 @@ def retention() -> Retention:
 
 
 @pytest.fixture
-def manager(retention: Retention) -> EventsManagerImpl:
-    return EventsManagerImpl(EventStorageMemoryImpl(), retention, EventsOptions(max_limit=2))
+def manager(retention: Retention) -> ChangeEventsManagerImpl:
+    return ChangeEventsManagerImpl(
+        ChangeEventStorageMemoryImpl(), retention, ChangeEventsOptions(max_limit=2)
+    )
 
 
 async def test_the_recent_read_pages_back_from_the_head_to_the_floor(
@@ -31,7 +34,7 @@ async def test_the_recent_read_pages_back_from_the_head_to_the_floor(
     await append_aged(manager, other, 1, 1, 1, 1, 1, 1, 1, 1, 1)
     assert await manager.purge_across_tenants() == 2
 
-    def seqs(events: list[Event]) -> list[int]:
+    def seqs(events: list[ChangeEvent]) -> list[int]:
         return [e.seq for e in events]
 
     # Newest first from the head, then each page below the last one's oldest.
@@ -52,9 +55,9 @@ async def test_the_recent_read_pages_back_from_the_head_to_the_floor(
     assert await manager.get_recent_events(context(), None, 10) == []
 
 
-async def test_the_recent_read_needs_read(manager: EventsManagerImpl) -> None:
+async def test_the_recent_read_needs_read(manager: ChangeEventsManagerImpl) -> None:
     member = context(Role.MEMBER)
-    await manager.append_event(member, make_event(member.org_id))
+    await manager.append_change_event(member, make_change_event(member.org_id))
     no_read = member.model_copy(
         update={"security": member.security.model_copy(update={"permissions": ()})}
     )

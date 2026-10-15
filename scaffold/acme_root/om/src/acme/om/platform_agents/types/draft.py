@@ -7,11 +7,11 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
-from acme.om.tools.types.policy import ApproverRule, PolicyRule
+from acme.om.base import OmBase
+from acme.om.tools.types.policy import ApproverRule, ToolPolicyRule
 
 
-class PolicyDraft(Platform):
+class PolicyDraft(OmBase):
     """`based_on` is the live policy's version the draft was drawn from; the
     write that applies it names that version, so a policy changed since is
     refused rather than overwritten. `problems` is empty when the draft is
@@ -20,11 +20,11 @@ class PolicyDraft(Platform):
     based_on: int = Field(ge=1)
     valid: bool
     problems: tuple[str, ...] = ()
-    added: tuple[PolicyRule, ...] = ()
-    removed: tuple[PolicyRule, ...] = ()
+    added: tuple[ToolPolicyRule, ...] = ()
+    removed: tuple[ToolPolicyRule, ...] = ()
     approvers_before: tuple[ApproverRule, ...] = ()
     approvers_after: tuple[ApproverRule, ...] = ()
-    rules: tuple[PolicyRule, ...] = ()
+    rules: tuple[ToolPolicyRule, ...] = ()
 
     @model_validator(mode="after")
     def _valid_has_no_problem(self) -> Self:

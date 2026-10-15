@@ -8,16 +8,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.loops import reply, said
-from contracts.money import money_over
-from contracts.spend_account_storage import SpendAccountStorageContract, make_spend_account
-from contracts.spend_ledger_storage import (
-    SpendLedgerStorageContract,
-    a_credit,
-    a_funded_hold,
-    closing,
-)
 from sqlalchemy import TextClause, text
 from sqlalchemy.exc import DBAPIError
 
@@ -34,19 +24,30 @@ from acme.om.agent_billing.types.spend_ledger import Charge, EntryKind, FundedHo
 from acme.om.agent_billing.types.unit_plan import SPEND_UNITS, UNIT_PLANS
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import EMPTY_UUID, new_id
-from acme.om.budgets.impl.pricing import LIST_PRICES
-from acme.om.budgets.storage.impl.postgres import BudgetStoragePostgresImpl
-from acme.om.budgets.types.amount import Spend
-from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
-from acme.om.budgets.types.hold import HoldRequest
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import SpenderUnknown
 from acme.om.platform_root import build_platform_managers
+from acme.om.spend_budgets.impl.pricing import LIST_PRICES
+from acme.om.spend_budgets.storage.impl.postgres import SpendBudgetStoragePostgresImpl
+from acme.om.spend_budgets.types.amount import Spend
+from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
+from acme.om.spend_budgets.types.spend_hold import SpendHoldRequest
 from acme.om.storage.impl.pg_base import LoginSessions, SessionFactory, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.migrate import ensure_logins_everywhere
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.doubles import context
+from contracts.loops import reply, said
+from contracts.money import money_over
+from contracts.spend_account_storage import SpendAccountStorageContract, make_spend_account
+from contracts.spend_ledger_storage import (
+    SpendLedgerStorageContract,
+    a_credit,
+    a_funded_hold,
+    closing,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -87,9 +88,9 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
     ledger = SpendLedgerStoragePostgresImpl(pg_sessions)
     org = new_id()
     await ledger.post_credit(org, a_credit(9_000))
-    stored = await ledger.open_hold(org, a_funded_hold(units=2))
+    stored = await ledger.open_spend_hold(org, a_funded_hold(units=2))
     assert isinstance(stored, FundedHold)
-    await ledger.close_hold(org, *closing(stored, 2))
+    await ledger.close_spend_hold(org, *closing(stored, 2))
 
     for factory, scope in (
         (pg_sessions[DatabaseRole.ACTIVITY], org),
@@ -107,7 +108,7 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
             assert set((await db.execute(moved)).scalars().all()) == {org}
             await db.rollback()
     kinds = {type(e).__name__ for e in await ledger.read_entries(org, limit=10)}
-    assert kinds == {"Credit", "FundedHold", "Settlement", "Charge"}
+    assert kinds == {"Credit", "FundedHold", "SpendSettlement", "Charge"}
 
 
 async def test_a_funding_mode_this_process_cannot_read_spends_nothing(
@@ -119,7 +120,7 @@ async def test_a_funding_mode_this_process_cannot_read_spends_nothing(
     spend_accounts = SpendAccountStoragePostgresImpl(pg_sessions)
     ledger = SpendLedgerStoragePostgresImpl(pg_sessions)
     gate = MoneyGateImpl(
-        BudgetStoragePostgresImpl(pg_sessions),
+        SpendBudgetStoragePostgresImpl(pg_sessions),
         spend_accounts,
         ledger,
         OperatorPagerMemoryImpl(),
@@ -133,9 +134,9 @@ async def test_a_funding_mode_this_process_cannot_read_spends_nothing(
         await set_scope(db, ctx.org_id, None, None)
         await db.execute(text("UPDATE core.spend_accounts SET funding = 'barter'"))
         await db.commit()
-    request = HoldRequest(
+    request = SpendHoldRequest(
         spender_id=ctx.user_id,
-        scopes=(BudgetScope(kind=BudgetScopeKind.TENANT, key=str(ctx.org_id)),),
+        scopes=(SpendBudgetScope(kind=SpendBudgetScopeKind.TENANT, key=str(ctx.org_id)),),
         exposure=Spend(cost_micros=1_000, tokens=10),
         purpose="main",
     )
@@ -186,18 +187,18 @@ async def test_a_loops_call_is_held_settled_and_charged_in_the_one_ledger_over_p
     money = money_over(tmp_path, storage=storage, owner=owner)
     await money.open(unit_plan="starter")
     await money.top_up(50_000)
-    session_id = await money.loop.start()
-    await money.loop.say(session_id, "What is the total?")
+    agent_session_id = await money.loop.start()
+    await money.loop.say(agent_session_id, "What is the total?")
     money.loop.anthropic.add(reply(said("The total is 12.")))
 
-    ran = await money.loop.loops.run(owner, session_id)
+    ran = await money.loop.loops.run(owner, agent_session_id)
 
     assert ran.end is RunEnd.ENDED, ran
     (hold,) = await money.ledger.read_entries(owner.org_id, kind=EntryKind.HOLD, limit=10)
-    assert isinstance(hold, FundedHold) and hold.session_id == session_id
+    assert isinstance(hold, FundedHold) and hold.agent_session_id == agent_session_id
     assert hold.priced is not None and hold.priced.version == LIST_PRICES.version
-    found = await money.ledger.read_entries(owner.org_id, hold_id=hold.id, limit=10)
-    assert [type(entry).__name__ for entry in found] == ["Charge", "Settlement", "FundedHold"]
+    found = await money.ledger.read_entries(owner.org_id, spend_hold_id=hold.id, limit=10)
+    assert [type(entry).__name__ for entry in found] == ["Charge", "SpendSettlement", "FundedHold"]
     charge = found[0]
     assert isinstance(charge, Charge) and charge.price_version == LIST_PRICES.version
     assert charge.units > 0 and charge.draw.included == charge.units

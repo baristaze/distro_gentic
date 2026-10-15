@@ -4,7 +4,7 @@
 // answers as the API does: each org reads its own, and nothing of
 // another's reaches its screens.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView, BudgetUsageView, EventView } from "@acme/client";
+import type { AgentSessionView, BudgetUsageView, ChangeEventView } from "@acme/client";
 import { AuditPage } from "./audit/AuditPage";
 import { buttons, container, mount, newNet, notFound, PEOPLE, press, unmount, type Call } from "./screenTesting";
 import { UsagePage } from "./usage/UsagePage";
@@ -14,7 +14,7 @@ vi.mock("../app/api", async () => (await import("./screenTesting")).fakeApi(net)
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const at = "2026-10-03T10:00:00Z";
-const EVENTS: Record<"a" | "b", EventView[]> = {
+const EVENTS: Record<"a" | "b", ChangeEventView[]> = {
   a: [{ seq: 1, kind: "agent_projects.agent_project.created", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id }],
   b: [{ seq: 1, kind: "agent_knowledge.entry.created", target_id: "kb", produced_at: at, actor_id: PEOPLE.b.id }],
 };
@@ -70,7 +70,7 @@ describe.each(["a", "b"] as const)("a member of org %s", (org) => {
 describe("the org's audit, past one page and past a trim", () => {
   it("opens the audit on the newest events and pages older ones back to the floor", async () => {
     // Kept: 71 to 250, the floor at 70. Each read answers the newest below `before_seq`.
-    const event = (seq: number): EventView => ({ seq, kind: "agent_projects.agent_project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
+    const event = (seq: number): ChangeEventView => ({ seq, kind: "agent_projects.agent_project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
     net.answer = (call) => {
       if (call.path.startsWith("/v1/events/recent?")) {
         const query = new URLSearchParams(call.path.split("?")[1]);

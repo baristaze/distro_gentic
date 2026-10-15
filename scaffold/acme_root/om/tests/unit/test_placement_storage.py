@@ -1,11 +1,12 @@
 from uuid import UUID
 
 import pytest
-from contracts.placement_storage import PlacementStorageContract, WrittenBefore
 
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.placement.types.share import FairShare
+
+from contracts.placement_storage import PlacementStorageContract, WrittenBefore
 
 
 class TestPlacementStorageMemory(PlacementStorageContract):

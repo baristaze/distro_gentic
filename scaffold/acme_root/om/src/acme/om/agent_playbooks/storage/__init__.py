@@ -44,7 +44,7 @@ class AgentPlaybookStorageInterface(ABC):
 
     @abstractmethod
     async def read_invocations(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentPlaybookInvocation]:
         """The session's invocations, oldest first."""
         ...

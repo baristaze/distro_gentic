@@ -15,7 +15,7 @@ image. The host's environment holds nothing of the platform's.
 Needs a migrated database (`make migrate`), Lima and a hypervisor, and the
 pool's image, which it builds when it is missing
 (`deployment/machines/lima_image.py`). Every machine it starts is named
-under `ACME_MACHINE_PREFIX` and destroyed at the end; the image stays for
+under `ACME_VM_PREFIX` and destroyed at the end; the image stays for
 the next run."""
 
 import asyncio
@@ -32,28 +32,34 @@ import uvicorn
 from host_support import Stack, postgres, stack
 from runner_support import TOOLS, answers, assistant, runs
 
-from acme.infra.machines import MachineState
-from acme.infra.machines.lima import MachinesLimaImpl, hypervisor
-from acme.infra.machines.seeded import SeedsChannelImpl
+from acme.infra.agent_workspaces import (
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+)
 from acme.infra.platform_root import PlatformInfra
-from acme.infra.workspaces import Durability, EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.vms import VmState
+from acme.infra.vms.lima import VmsLimaImpl, hypervisor
+from acme.infra.vms.seeded import SeedsChannelImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.header import LoopOutcome
-from acme.om.steps.types.step import StepType
 from acme.services.api.app import create_app
 from acme.services.api.seed import seed_platform
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 
-PREFIX = os.environ.get("ACME_MACHINE_PREFIX", "acme-test-")
+PREFIX = os.environ.get("ACME_VM_PREFIX", "acme-test-")
 IMAGE = f"{PREFIX}image"
 PORT = int(os.environ.get("ACME_TEST_API_PORT", "8191"))
 KEPT = IsolationSpec(
@@ -146,28 +152,26 @@ async def api(tmp_path: Path) -> AsyncIterator[Stack]:
 
 
 @pytest.fixture
-def machines() -> MachinesLimaImpl:
-    return MachinesLimaImpl(TIMEOUT, BOOT, encrypted=True)
+def machines() -> VmsLimaImpl:
+    return VmsLimaImpl(TIMEOUT, BOOT, encrypted=True)
 
 
 @pytest.fixture
-async def runner(
-    api: Stack, image: str, machines: MachinesLimaImpl
-) -> AsyncIterator[RunnerContainer]:
+async def runner(api: Stack, image: str, machines: VmsLimaImpl) -> AsyncIterator[RunnerContainer]:
     infra = api.container.infra
     # The runner's machines are Lima's: its pool starts them, and hands each
     # its seed through the hypervisor's channel.
-    infra._machines = machines  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    infra._vms = machines  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
     infra._platform_infra = PlatformInfra(  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
         infra.get_streams(), SeedsChannelImpl(machines, TIMEOUT)
     )
-    settings = SessionRunnerSettings.model_validate(
+    settings = AgentSessionRunnerSettings.model_validate(
         {
             "_env_file": None,
             "environment": "test",
             "runner_id": "runner-pool",
-            "machine_prefix": PREFIX,
-            "machine_boot_timeout_seconds": BOOT.total_seconds(),
+            "vm_prefix": PREFIX,
+            "vm_boot_timeout_seconds": BOOT.total_seconds(),
             "cloud_pool_image": image,
             "cloud_pool_api_url": f"http://host.lima.internal:{PORT}",
         }
@@ -190,7 +194,7 @@ def printed(model: ModelProviderScriptedImpl, call: int) -> str:
 
 
 async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
-    api: Stack, runner: RunnerContainer, machines: MachinesLimaImpl
+    api: Stack, runner: RunnerContainer, machines: VmsLimaImpl
 ) -> None:
     owner = api.owner
     managers = runner.managers
@@ -198,7 +202,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
     await seed_platform(runner.storage, managers, owner, (KIND,))
     model = runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(model, ModelProviderScriptedImpl)
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=KIND.name, title="a machine of its own")
     )
     try:
@@ -216,12 +220,12 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
 
         # The loop's end kept the machine whole, and let it go.
-        page = await managers.steps.get_steps(owner, session.id, 0, 200)
-        snapshotted = [s for s in page.items if s.type is StepType.SNAPSHOTTED]
+        page = await managers.steps.get_agent_steps(owner, session.id, 0, 200)
+        snapshotted = [s for s in page.items if s.type is AgentStepType.SNAPSHOTTED]
         assert len(snapshotted) == 1
         (record,) = await managers.agent_workspaces.kept_snapshots(owner, session.id)
         assert record.machine and record.reference.startswith(PREFIX + "p")
-        assert await machines.state(record.reference) is MachineState.STOPPED
+        assert await machines.state(record.reference) is VmState.STOPPED
         assert not await pool.holds(owner, session.id), "the machine went with the release"
         running = [n for n in await machines.names(PREFIX + "p") if "-" not in n[len(PREFIX) :]]
         assert running == [], "no machine of the pool runs between loops"
@@ -237,8 +241,8 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
             # The session read what its first command printed, and its
             # egress is open: a person approves the call, and the loop goes
             # on, on a machine started from the snapshot its park kept.
-            page = await managers.steps.get_steps(owner, session.id, 0, 200)
-            requests = [s for s in page.items if s.type is StepType.TOOL_REQUEST]
+            page = await managers.steps.get_agent_steps(owner, session.id, 0, 200)
+            requests = [s for s in page.items if s.type is AgentStepType.TOOL_REQUEST]
             await managers.tools.decide_call(owner, session.id, requests[-1].seq, approve=True)
             second = await managers.loop.run(owner, session.id)
         assert second.outcome is LoopOutcome.SUCCEEDED, second

@@ -16,7 +16,6 @@ from uuid import UUID
 
 import httpx
 from api_support import build_container, seed_request
-from contracts.tools import stand_ins
 from fastapi import FastAPI
 
 from acme.apps.host.agent import HostAgent
@@ -28,13 +27,13 @@ from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
+from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
+from acme.infra.agent_workspaces import IsolationMode as ProviderMode
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
-from acme.infra.workspaces import IsolationMode as ProviderMode
-from acme.infra.workspaces import WorkspaceProviderInterface
-from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
@@ -43,6 +42,8 @@ from acme.om.storage.root import StorageInterface
 from acme.om.storage.settings import MigrationSettings
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
+
+from contracts.tools import stand_ins
 
 
 class Streamed(httpx.AsyncBaseTransport):
@@ -281,7 +282,7 @@ async def directory_host(
         ),
         IsolationMode.directory,
         {ProviderMode.HOST: transport},
-        {ProviderMode.HOST: WorkspaceHostImpl(root)},
+        {ProviderMode.HOST: AgentWorkspaceHostImpl(root)},
         servers=servers,
     )
     return host, root
@@ -310,7 +311,7 @@ async def started_host(
     ceilings: Ceilings,
     mode: IsolationMode,
     transports: Mapping[ProviderMode, TransportInterface],
-    workspaces: Mapping[ProviderMode, WorkspaceProviderInterface],
+    workspaces: Mapping[ProviderMode, AgentWorkspaceProviderInterface],
     *,
     servers: HostServers | None = None,
 ) -> HostAgent:

@@ -43,13 +43,9 @@ from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from acme.om.agent_billing.rules import FUNDS_UNLOCK
-from acme.om.agent_workspaces.rules import AUTHORITY, FETCHED, SCHEMED, WWW
-from acme.om.agents.loop_rules import fix_cause
-from acme.om.base import derived_id
-from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
-from acme.om.context import Permission, Role
-from acme.om.steps.types.content import TextBlock
-from acme.om.steps.types.header import (
+from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.content import TextBlock
+from acme.om.agent_steps.types.header import (
     ModelResponseHeader,
     Park,
     ParkedHeader,
@@ -57,7 +53,11 @@ from acme.om.steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.steps.types.step import Step, StepType
+from acme.om.agent_workspaces.rules import AUTHORITY, FETCHED, SCHEMED, WWW
+from acme.om.agents.loop_rules import fix_cause
+from acme.om.base import derived_id
+from acme.om.context import Permission, Role
+from acme.om.spend_budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tools.native.ask_person import ASK_PERSON
@@ -65,7 +65,7 @@ from acme.om.tools.native.ask_person import ASK_PERSON
 NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET, ParkReason.PROVIDER})
 """The reasons whose park can wait on a person of the tenant."""
 
-SETS_BUDGETS = Permission.MANAGE_MEMBERS
+SETS_SPEND_BUDGETS = Permission.MANAGE_MEMBERS
 """What raising a budget asks, as the budgets swimlane holds it."""
 
 APPROVES_CALLS = Permission.MANAGE_MEMBERS
@@ -135,10 +135,10 @@ def as_budget(unlock: str) -> UUID | None:
         return None
 
 
-def held_calls(history: Sequence[Step]) -> list[Step]:
+def held_calls(history: Sequence[AgentStep]) -> list[AgentStep]:
     """The calls a session holds for a person's decision: its tool requests
     that no tool response answers yet."""
-    answered = {s.responds_to for s in history if s.type is StepType.TOOL_RESPONSE}
+    answered = {s.responds_to for s in history if s.type is AgentStepType.TOOL_RESPONSE}
     return [
         step
         for step in history
@@ -165,24 +165,24 @@ def requester_or_managers(requester: UUID, members: Sequence[Membership]) -> tup
     return holding_permission(members, Permission.MANAGE_MEMBERS)
 
 
-def decision_link(session_id: UUID, request: Step) -> str:
-    return f"/v1/agent-sessions/{session_id}/calls/{request.seq}/decision"
+def decision_link(agent_session_id: UUID, request: AgentStep) -> str:
+    return f"/v1/agent-sessions/{agent_session_id}/calls/{request.seq}/decision"
 
 
-def answer_link(session_id: UUID) -> str:
-    return f"/v1/agent-sessions/{session_id}/controls"
+def answer_link(agent_session_id: UUID) -> str:
+    return f"/v1/agent-sessions/{agent_session_id}/controls"
 
 
-def message_link(session_id: UUID) -> str:
-    return f"/v1/agent-sessions/{session_id}/messages"
+def message_link(agent_session_id: UUID) -> str:
+    return f"/v1/agent-sessions/{agent_session_id}/messages"
 
 
-def budget_link(budget_id: UUID) -> str:
-    return f"/v1/budgets/{budget_id}/amount"
+def budget_link(spend_budget_id: UUID) -> str:
+    return f"/v1/budgets/{spend_budget_id}/amount"
 
 
-def approval_link(session_id: UUID) -> str:
-    return f"/v1/agent-sessions/{session_id}/cost-approval"
+def approval_link(agent_session_id: UUID) -> str:
+    return f"/v1/agent-sessions/{agent_session_id}/cost-approval"
 
 
 def key_link(provider: str) -> str:
@@ -208,7 +208,7 @@ LINKS = (FETCHED, AUTHORITY, SCHEMED, WWW)
 and a URL's host, as a pull request's body is read for them."""
 
 
-def asked_question(history: Sequence[Step]) -> str | None:
+def asked_question(history: Sequence[AgentStep]) -> str | None:
     """The question a session waits on: the latest `ask_person` call the
     history answers without a failure, as its answer holds it. None when
     that answer holds no question."""
@@ -229,7 +229,7 @@ def asked_question(history: Sequence[Step]) -> str | None:
     return question
 
 
-def _question_of(answer: Step) -> str | None:
+def _question_of(answer: AgentStep) -> str | None:
     parts = answer.as_tool_response().parts
     if not parts or not isinstance(parts[0], TextBlock):
         return None
@@ -265,17 +265,17 @@ def question_text(title: str, question: str | None) -> str:
     return f"{title} asks you: {shown} Answer with a message in the session."
 
 
-def parked_step(history: Sequence[Step], park: Park) -> Step | None:
+def parked_step(history: Sequence[AgentStep], park: Park) -> AgentStep | None:
     """The step that wrote the park the session waits on: the latest
     `parked` step, when it carries that park."""
     for step in reversed(history):
-        if step.type is StepType.PARKED:
+        if step.type is AgentStepType.PARKED:
             header = step.header
             return step if isinstance(header, ParkedHeader) and header.park == park else None
     return None
 
 
-def first_try(history: Sequence[Step], parked: Step) -> Step:
+def first_try(history: Sequence[AgentStep], parked: AgentStep) -> AgentStep:
     """The step that wrote the first try of the park `parked` wrote again: a
     park that tries again by itself is written at each try, and is the same
     park until the session parks on something else, a call is answered, or
@@ -288,7 +288,7 @@ def first_try(history: Sequence[Step], parked: Step) -> Step:
         earlier = step.header
         if step.seq >= parked.seq:
             continue
-        if step.type is StepType.LOOP_ENDED:
+        if step.type is AgentStepType.LOOP_ENDED:
             break
         if isinstance(earlier, ModelResponseHeader) and not earlier.abandoned:
             break  # a call was answered
@@ -299,7 +299,7 @@ def first_try(history: Sequence[Step], parked: Step) -> Step:
     return first
 
 
-def park_alert_id(parked: Step, action: str, link: str, recipient: UUID, channel: str) -> UUID:
+def park_alert_id(parked: AgentStep, action: str, link: str, recipient: UUID, channel: str) -> UUID:
     """One park tells one recipient of one action once on each channel: the
     step that wrote the park is the park, and for a park that tries again
     by itself, the step that wrote its first try (`first_try`)."""

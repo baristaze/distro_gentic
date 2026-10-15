@@ -11,24 +11,25 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_automation_storage import make_agent_automation, make_run
-from contracts.agent_project_storage import in_agent_project
-from contracts.loops import reply, said
-from contracts.platform_agents import Later, Platform, calls, platform_over
 
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
+from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock
+from acme.om.agent_steps.types.header import LoopOutcome, ParkReason, ToolFailure
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.platform_agents import kinds
-from acme.om.steps.types.content import TextBlock, ToolResultBlock
-from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
-from acme.om.tools.types.policy import ApproverRule, PolicyLayer, ToolPolicy
+from acme.om.tools.types.policy import ApproverRule, ToolPolicy, ToolPolicyLayer
 from acme.om.tools.types.tool import ToolClass
+
+from contracts.agent_automation_storage import make_agent_automation, make_run
+from contracts.agent_project_storage import in_agent_project
+from contracts.loops import reply, said
+from contracts.platform_agents import Later, Platform, calls, platform_over
 
 pytestmark = pytest.mark.integration
 
@@ -42,8 +43,8 @@ CLERK = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=("Look it up.",),
-    policy=PolicyLayer(),  # it allows nothing, so its every call waits for a person
-    isolation=NO_WORKSPACE,
+    policy=ToolPolicyLayer(),  # it allows nothing, so its every call waits for a person
+    isolation=NO_AGENT_WORKSPACE,
 )
 
 
@@ -72,7 +73,7 @@ async def a_session(
     platform: Platform, owner: TenantContext, kind: str = kinds.SOFTWARE_ENGINEER
 ) -> UUID:
     start = Start(id=new_id(), kind=kind, title="the weekly report")
-    return (await platform.managers.agents.start_session(owner, start)).id
+    return (await platform.managers.agents.start_agent_session(owner, start)).id
 
 
 async def an_agent_automation(platform: Platform, owner: TenantContext) -> UUID:
@@ -108,14 +109,14 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     our_agent_project = await in_agent_project(agent_projects, platform.owner.org_id, ours)
     our_agent_automation = await an_agent_automation(platform, platform.owner)
     deleted = await a_session(platform, platform.owner)
-    await platform.managers.agent_sessions.delete_session(platform.owner, deleted)
+    await platform.managers.agent_sessions.delete_agent_session(platform.owner, deleted)
     asking = await a_session(platform, platform.owner, kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "What is going on across the board?")
     platform.anthropic.add(
         reply(
             said("Let me read."),
-            calls(kinds.READ_SESSION, "their_session", session_id=str(theirs)),
-            calls(kinds.READ_WAIT, "their_wait", session_id=str(theirs)),
+            calls(kinds.READ_SESSION, "their_session", agent_session_id=str(theirs)),
+            calls(kinds.READ_WAIT, "their_wait", agent_session_id=str(theirs)),
             calls(
                 kinds.READ_AGENT_PROJECT,
                 "their_agent_project",
@@ -126,7 +127,7 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
                 "their_agent_automation",
                 agent_automation_id=str(their_agent_automation),
             ),
-            calls(kinds.READ_SESSION, "deleted", session_id=str(deleted)),
+            calls(kinds.READ_SESSION, "deleted", agent_session_id=str(deleted)),
             calls(kinds.LIST_SESSIONS, "sessions", limit=50),
             calls(
                 kinds.LIST_SESSIONS, "by_agent_project", agent_project_id=str(their_agent_project)
@@ -135,8 +136,8 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
             calls(kinds.LIST_AGENT_AUTOMATIONS, "agent_automations", limit=50),
         ),
         reply(
-            calls(kinds.READ_SESSION, "our_session", session_id=str(ours)),
-            calls(kinds.READ_WAIT, "our_wait", session_id=str(ours)),
+            calls(kinds.READ_SESSION, "our_session", agent_session_id=str(ours)),
+            calls(kinds.READ_WAIT, "our_wait", agent_session_id=str(ours)),
             calls(
                 kinds.READ_AGENT_PROJECT,
                 "our_agent_project",
@@ -164,8 +165,8 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
         assert not_found(await platform.answer(asking, use_id)), use_id
     listed: dict[str, set[str]] = {}
     for use_id, field, key in (
-        ("sessions", "sessions", "session_id"),
-        ("by_agent_project", "sessions", "session_id"),
+        ("sessions", "sessions", "agent_session_id"),
+        ("by_agent_project", "sessions", "agent_session_id"),
         ("agent_projects", "agent_projects", "agent_project_id"),
         ("agent_automations", "agent_automations", "agent_automation_id"),
     ):
@@ -235,13 +236,13 @@ async def test_the_assistant_explains_a_held_call_from_what_it_read(
     await platform.say(held, "Look up why sessions wait.")
     platform.anthropic.add(reply(calls(kinds.SEARCH_CORPUS, "use_lookup", query="wait")))
     await platform.managers.loop.run(platform.owner, held)
-    session = await platform.managers.agent_sessions.get_session(platform.owner, held)
+    session = await platform.managers.agent_sessions.get_agent_session(platform.owner, held)
     assert session.park is not None and session.park.reason is ParkReason.PERSON
 
     asking = await a_session(platform, platform.owner, kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, f"Why is session {held} parked?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_SESSION, "use_read", session_id=str(held))),
+        reply(calls(kinds.READ_SESSION, "use_read", agent_session_id=str(held))),
         from_the_read("use_read"),
     )
 

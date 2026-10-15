@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.base import Created, Identifiable, OmBase, Trackable
 from acme.om.levers.types.lever import LeverFinding
 from acme.om.tools.types.mcp import McpToolDefinition
 from acme.om.tools.types.tool import TOOL_NAME, Effect, ToolClass
@@ -46,7 +46,7 @@ class ConnectorPlace(StrEnum):
     HOST = "host"  # inside the tenant's wall, run by the tenant's host
 
 
-class ConnectorTool(Platform):
+class ConnectorTool(OmBase):
     """One tool of the server a person reviewed: its definition as the server
     listed it, pinned by `definition_hash`; the name a session calls it by;
     the class and the effect the person gave it, since what a server says
@@ -68,7 +68,7 @@ class ConnectorTool(Platform):
         return self
 
 
-class ConnectorAttachment(Platform):
+class ConnectorAttachment(OmBase):
     """A kind a connector is attached to, for one agent project's sessions or, with
     none, for every session of the tenant. A deferred one waits for the
     agent to load it; one that is not is in its registry from the start."""
@@ -127,7 +127,7 @@ class Connector(Identifiable, Trackable):
         return self
 
 
-class PinnedConnector(Platform):
+class PinnedConnector(OmBase):
     """A connector as a session holds it, at the review it pinned: what its
     toolset renders and how its calls reach the server, kept whole so a
     later review or attachment never moves a session's tool definitions."""
@@ -153,7 +153,7 @@ class AgentSessionConnectors(Identifiable, Created):
     connectors: tuple[PinnedConnector, ...] = ()
 
 
-class ConnectorDraft(Platform):
+class ConnectorDraft(OmBase):
     """What a person connects: a cloud server's address, or the name of the
     server the tenant's host runs, never both."""
 
@@ -177,7 +177,7 @@ class ConnectorDraft(Platform):
         return ConnectorPlace.CLOUD if self.url is not None else ConnectorPlace.HOST
 
 
-class ReviewedTool(Platform):
+class ReviewedTool(OmBase):
     """One tool a person binds: the server's tool, the hash of the
     definition they read, and the class and the effect they give it."""
 
@@ -187,7 +187,7 @@ class ReviewedTool(Platform):
     effect: Effect = Effect.UNSAFE
 
 
-class ConnectorReview(Platform):
+class ConnectorReview(OmBase):
     """A person's review: every tool they bind, none to withdraw them all.
     A host connector's review carries the definitions as its host listed
     them, since the platform never reaches into the wall to list them."""
@@ -196,7 +196,7 @@ class ConnectorReview(Platform):
     definitions: tuple[McpToolDefinition, ...] | None = Field(default=None, max_length=1_000)
 
 
-class ListedTool(Platform):
+class ListedTool(OmBase):
     """A tool as the server lists it now, with the hash a review names it
     by and what the lever checks find in its description."""
 

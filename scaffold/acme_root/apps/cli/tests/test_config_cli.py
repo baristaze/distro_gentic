@@ -28,7 +28,7 @@ def agent_automation_file(tmp_path: Path, agent_project_id: str) -> Path:
                 "name": "triage a failed build",
                 "trigger": {"kind": "event", "effects": ["ci_failed"]},
                 "action": {
-                    "kind": "start_session",
+                    "kind": "start_agent_session",
                     "brief": "Find why the build failed.",
                     "agent_kind": "assistant",
                     "title": "a failed build",
@@ -88,7 +88,7 @@ def test_a_member_creates_no_agent_project_and_a_malformed_input_is_usage(
         "create",
         "theirs",
         "github.com/octo/ledger",
-        token=stack.session_token(BOB["email"]),
+        token=stack.auth_session_token(BOB["email"]),
     )
     assert member.exit_code == 1
     assert "not_authorized" in member.output

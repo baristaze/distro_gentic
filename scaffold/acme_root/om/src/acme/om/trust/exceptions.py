@@ -1,9 +1,9 @@
 """The trust swimlane's refusals, each in a shape of the platform's root."""
 
-from acme.om.exceptions import NotAuthorized, PlatformException, ValidationFailed
+from acme.om.exceptions import NotAuthorized, OmException, ValidationFailed
 
 
-class TrustException(PlatformException): ...
+class TrustException(OmException): ...
 
 
 class SecretCrossesWall(TrustException, NotAuthorized):

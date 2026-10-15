@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import Field, StringConstraints, model_validator
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 
 
 class EgressMethod(StrEnum):
@@ -42,7 +42,7 @@ allowlist names services, and the address a name resolves to is checked on
 its own (`rules.egress_decision`)."""
 
 
-class EgressRule(Platform):
+class EgressRule(OmBase):
     """One destination, its port, and the methods it takes."""
 
     destination: Destination
@@ -82,7 +82,7 @@ class EgressAllowlist(Identifiable, Trackable):
         return self
 
 
-class EgressRequest(Platform):
+class EgressRequest(OmBase):
     """One connection a workspace opens, as the egress proxy sees it: the
     name it asked for, the address that name resolved to, the port, and the
     method, None when the proxy cannot read one."""
@@ -93,6 +93,6 @@ class EgressRequest(Platform):
     method: EgressMethod | None = None
 
 
-class EgressDecision(Platform):
+class EgressDecision(OmBase):
     allowed: bool
     reason: str

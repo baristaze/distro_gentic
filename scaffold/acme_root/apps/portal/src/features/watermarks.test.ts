@@ -14,7 +14,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type AgentProjectView } from "@acme/client";
-import { useSessionStore } from "../store/session";
+import { useAuthSessionStore } from "../store/session";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
 import { queryClient } from "../app/queryClient";
@@ -31,7 +31,7 @@ const AGENT_PROJECT: AgentProjectView = {
   name: "Storefront",
   repository: { host: "github.com", path: "your-org/storefront" },
   workspace_snapshots: true,
-  workspace_base: null,
+  agent_workspace_base: null,
   created_at: at,
   created_by: user.id,
   updated_at: at,
@@ -41,7 +41,7 @@ const AGENT_AUTOMATION: AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_agent_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -160,18 +160,18 @@ const SCREENS = [
 
 beforeEach(() => {
   queryClient.clear();
-  useSessionStore.getState().setSession("ses_ajax", "ajax");
+  useAuthSessionStore.getState().setAuthSession("ses_ajax", "ajax");
   root = createRoot(container);
 });
 afterEach(async () => {
   await act(async () => root.render(null));
-  useSessionStore.getState().clear();
+  useAuthSessionStore.getState().clear();
 });
 
 /** The fields a screen draws once its reads settle and its closed forms are opened. */
 async function fieldsOf(address: string): Promise<{ title: string; fields: { name: string; placeholder: string }[] }> {
   // The sign-in is a signed-out person's screen.
-  if (address.startsWith("/login")) useSessionStore.getState().clear();
+  if (address.startsWith("/login")) useAuthSessionStore.getState().clear();
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   await act(async () => root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
   await settle();

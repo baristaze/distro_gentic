@@ -22,6 +22,7 @@ from acme.om.agent_steps.types.header import (
     Park,
     ParkReason,
 )
+from acme.om.agent_steps.types.step import Actor, AgentStepType, Origin
 from acme.om.agents.loop_rules import ended_step
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -36,17 +37,8 @@ from acme.om.context import (
     TenantContext,
 )
 from acme.om.exceptions import NotAuthorized, NotFound
-from acme.om.root import Managers, build_managers
 from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.agent_steps.rules import control_step, message_step
-from acme.om.agent_steps.types.header import (
-    ControlCommand,
-    InputHeader,
-    LoopOutcome,
-    Park,
-    ParkReason,
-)
-from acme.om.agent_steps.types.step import Actor, Origin, AgentStepType
+from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem
@@ -207,7 +199,9 @@ async def test_a_message_to_a_running_loop_asks_for_no_run_until_the_loop_ends(
     session, epoch, loop_id = await running(engine, ctx)
 
     later = await engine.say(ctx, session.id, "And check the cache.")
-    assert session.status is AgentSessionStatus.RUNNING and later.status is AgentSessionStatus.RUNNING
+    assert (
+        session.status is AgentSessionStatus.RUNNING and later.status is AgentSessionStatus.RUNNING
+    )
     assert len(engine.runs(session.id)) == 1, "the run that holds the loop delivers it"
 
     ended = ended_step(new_id(), utcnow(), session.id, loop_id, LoopOutcome.SUCCEEDED)

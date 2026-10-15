@@ -26,15 +26,15 @@ class PlacementRelayedImpl(PlacementInterface):
         self._inner = inner
         self._storage = storage
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        return await self._inner.inside_wall(org_id, session_id)
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        return await self._inner.inside_wall(org_id, agent_session_id)
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
-        if not await self._inner.inside_wall(org_id, session_id):
-            return await self._inner.executor_of(org_id, session_id)
-        binding = await self._storage.read_binding(org_id, session_id)
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
+        if not await self._inner.inside_wall(org_id, agent_session_id):
+            return await self._inner.executor_of(org_id, agent_session_id)
+        binding = await self._storage.read_binding(org_id, agent_session_id)
         if binding is None:
-            return await self._inner.executor_of(org_id, session_id)
+            return await self._inner.executor_of(org_id, agent_session_id)
         # A host is named by itself: its credentials rotate under it.
         return Executor(
             kind=ExecutorKind.HOST, credential_id=binding.host_id, label=binding.host_name

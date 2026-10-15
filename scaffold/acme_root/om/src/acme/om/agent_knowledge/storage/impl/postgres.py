@@ -111,7 +111,7 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
             .on_conflict_do_nothing(
                 index_elements=[
                     AgentKnowledgeRecalls.org_id,
-                    AgentKnowledgeRecalls.session_id,
+                    AgentKnowledgeRecalls.agent_session_id,
                     AgentKnowledgeRecalls.entry_id,
                 ]
             )
@@ -121,13 +121,13 @@ class AgentKnowledgeStoragePostgresImpl(PgStorageBase, AgentKnowledgeStorageInte
             await session.commit()
 
     async def read_recalls(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentKnowledgeRecall]:
         stmt = (
             select(AgentKnowledgeRecalls)
             .where(
                 AgentKnowledgeRecalls.org_id == org_id,
-                AgentKnowledgeRecalls.session_id == session_id,
+                AgentKnowledgeRecalls.agent_session_id == agent_session_id,
             )
             .order_by(AgentKnowledgeRecalls.created_at, AgentKnowledgeRecalls.id)
             .limit(limit)

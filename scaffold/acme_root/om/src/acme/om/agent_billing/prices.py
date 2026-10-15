@@ -6,7 +6,7 @@ and no default row."""
 
 from abc import abstractmethod
 
-from acme.om.budgets.pricing import ModelPrice, PricingInterface
+from acme.om.spend_budgets.pricing import ModelPrice, PricingInterface
 
 
 class PriceBookInterface(PricingInterface):

@@ -5,10 +5,10 @@ the platform never raises it."""
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class HostOffer(Platform):
+class HostOffer(OmBase):
     """The default offers nothing beyond the provider: a host of the
     platform's cloud, with no directory, no egress proxy, and nothing that
     holds open egress off the platform's insides."""

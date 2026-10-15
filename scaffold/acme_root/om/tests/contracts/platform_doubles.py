@@ -14,8 +14,8 @@ class SessionAgentProjectsMemory(SessionAgentProjectsInterface):
         self.default = default
         self.sessions: dict[UUID, UUID | None] = {}
 
-    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return self.sessions.get(session_id, self.default)
+    async def agent_project_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
+        return self.sessions.get(agent_session_id, self.default)
 
     async def holds(self, ctx: TenantContext, agent_project_id: UUID) -> bool:
         return agent_project_id in {self.default, *self.sessions.values()}

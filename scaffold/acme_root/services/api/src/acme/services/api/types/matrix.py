@@ -11,9 +11,9 @@ from pydantic import Field, StringConstraints
 
 from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.attribution.types.principal import MAX_KIND
+from acme.om.language_models.types.fill import ModelRole, ModelSize, OutputShape
 from acme.om.matrix.types.matrix import MAX_FILLS, MAX_ROLES, MAX_ROWS, NAME, MatrixStatus
 from acme.om.matrix.types.record import MAX_MODEL, BenchmarkName
-from acme.om.models.types.fill import ModelRole, ModelSize, OutputShape
 from acme.services.api.types.common import RequestBody, View
 
 Name = Annotated[str, StringConstraints(pattern=NAME)]

@@ -93,13 +93,13 @@ class RoutesHostImpl(RoutesInterface):
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
         if enrollment_token.startswith(MACHINE_KEY):
-            return await self._machine(client, enrollment_token, name)
+            return await self._vm(client, enrollment_token, name)
         issued = await client.enroll_host(
             enrollment_token, name, self._advertisement(), EXEC_VERSION
         )
         return host_issued(issued)
 
-    async def _machine(self, client: ApiClient, key: str, name: str) -> Issued:
+    async def _vm(self, client: ApiClient, key: str, name: str) -> Issued:
         wait = 1.0
         while True:
             try:

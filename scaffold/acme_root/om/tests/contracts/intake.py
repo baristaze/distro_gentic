@@ -29,6 +29,7 @@ from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -50,8 +51,8 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.models.credentials import CallCredentialsInterface
-from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.language_models.credentials import CallCredentialsInterface
+from acme.om.language_models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.park_alerts.manager import ParkAlertsManagerInterface
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_root import (
@@ -62,7 +63,6 @@ from acme.om.platform_root import (
     no_actions,
 )
 from acme.om.root import engine_tools
-from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
@@ -74,11 +74,12 @@ from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.native.ask_person import ASK_PERSON
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.root import TrustLayer
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
+
 from contracts.doubles import APP
 from contracts.factories import make_org
 from contracts.loops import Clock, Lookup
@@ -91,10 +92,10 @@ ACTING = STEADY.model_copy(
     update={
         "name": "acting",
         "tools": (*STEADY.tools, COMMENT),
-        "policy": PolicyLayer(
+        "policy": ToolPolicyLayer(
             rules=(
                 *ALLOWED.rules,
-                PolicyRule(authorization_class=ToolClass.INTEGRATION, decision=Decision.ALLOW),
+                ToolPolicyRule(authorization_class=ToolClass.INTEGRATION, decision=Decision.ALLOW),
             )
         ),
     }
@@ -109,10 +110,10 @@ DELEGATING = STEADY.model_copy(
     update={
         "name": "delegating",
         "tools": (*STEADY.tools, SPAWN_SUB_AGENT),
-        "policy": PolicyLayer(
+        "policy": ToolPolicyLayer(
             rules=(
                 *ALLOWED.rules,
-                PolicyRule(authorization_class=ToolClass.SPAWN, decision=Decision.ALLOW),
+                ToolPolicyRule(authorization_class=ToolClass.SPAWN, decision=Decision.ALLOW),
             )
         ),
     }
@@ -177,7 +178,7 @@ class Wired:
             org_id=self.owner.org_id,
             role=role,
             permissions=permissions_of(role),
-            credential_kind=CredentialKind.SESSION_TOKEN,
+            credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
         )
         self.members.roles[ctx.user_id] = role
         return ctx
@@ -235,16 +236,18 @@ class Wired:
         return await self.members(rctx, ctx.org_id, principal)
 
     async def start(self, ctx: TenantContext | None = None) -> UUID:
-        session = await self.managers.agents.start_session(
+        session = await self.managers.agents.start_agent_session(
             ctx or self.owner, Start(id=new_id(), kind="steady", title="the records")
         )
         return session.id
 
-    async def history(self, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def history(self, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_steps(self.owner, session_id, after, 200)
+            page = await self.managers.steps.get_agent_steps(
+                self.owner, agent_session_id, after, 200
+            )
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
@@ -279,7 +282,7 @@ def wired(
         org_id=make_org().id,
         role=Role.OWNER,
         permissions=permissions_of(Role.OWNER),
-        credential_kind=CredentialKind.SESSION_TOKEN,
+        credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
     )
     members = Members(org_id=owner.org_id)
     members.roles[owner.user_id] = Role.OWNER
@@ -343,8 +346,8 @@ def wired(
         managers.models,
         managers.windows,
         managers.tools,
-        CallGateBudgetImpl(
-            managers.budget_gate,
+        CallGateSpendBudgetImpl(
+            managers.spend_budget_gate,
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,

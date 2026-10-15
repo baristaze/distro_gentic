@@ -18,25 +18,25 @@ from acme.infra.keys import KeyServiceInterface
 from acme.infra.transports import TransportInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsNoneImpl
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
 from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
-from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
-from acme.om.budgets.pricing import PricingInterface
-from acme.om.events import EventsManagerInterface
-from acme.om.leases.hooks import ResourceKindInterface
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.language_models.layer import LanguageModelsLayer
+from acme.om.leases.hooks import LeasableResourceKindInterface
 from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
 from acme.om.leases.types.request import ASK_PAYLOADS
-from acme.om.models.layer import ModelsLayer
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.privacy import PrivacyManagerInterface
-from acme.om.steps import StepsManagerInterface
+from acme.om.spend_budgets import SpendBudgetGateInterface, SpendBudgetsManagerInterface
+from acme.om.spend_budgets.pricing import PricingInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.impl.manager import ForkPoints
 from acme.om.tools.impl.snapshots import SnapshotStore
 from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
 from acme.om.work.impl.manager import Lanes
 from acme.om.work.kinds import WORK_KINDS, WorkKinds
 
@@ -60,7 +60,7 @@ class RootHooksInterface(ABC):
         ...
 
     @abstractmethod
-    def resource_kinds(self, own: Mapping[str, ResourceKindInterface]) -> ResourceKinds:
+    def resource_kinds(self, own: Mapping[str, LeasableResourceKindInterface]) -> ResourceKinds:
         """The resource kinds the leases read: the mechanism's `own`, each with
         the shape of its ask, and the layer's beside them."""
         ...
@@ -82,10 +82,10 @@ class RootHooksInterface(ABC):
         self,
         sessions: AgentSessionsManagerInterface,
         *,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         privacy: PrivacyManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         outbox: OutboxRelayInterface,
     ) -> AgentSessionsManagerInterface:
         """The sessions every manager built after them reaches: `sessions`, or
@@ -94,22 +94,22 @@ class RootHooksInterface(ABC):
         ...
 
     @abstractmethod
-    def pricing(self, gate: BudgetGateInterface) -> PricingInterface | None:
+    def pricing(self, gate: SpendBudgetGateInterface) -> PricingInterface | None:
         """The one source of prices behind `gate`; None is the list table."""
         ...
 
     @abstractmethod
     def call_gate(
         self,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
-        models_layer: ModelsLayer | None,
+        budgets: SpendBudgetsManagerInterface,
+        language_models_layer: LanguageModelsLayer | None,
     ) -> CallGateInterface:
         """The gate every model call passes when the root is handed none,
         priced from `pricing`, counted under the version and the tier
-        `models_layer` reads."""
+        `language_models_layer` reads."""
         ...
 
     @abstractmethod
@@ -172,7 +172,7 @@ class RootHooksNullImpl(RootHooksInterface):
     def lanes(self) -> Lanes | None:
         return None
 
-    def resource_kinds(self, own: Mapping[str, ResourceKindInterface]) -> ResourceKinds:
+    def resource_kinds(self, own: Mapping[str, LeasableResourceKindInterface]) -> ResourceKinds:
         return ResourceKinds(
             ResourceKindSpec(name, ASK_PAYLOADS[name], hooks) for name, hooks in own.items()
         )
@@ -187,33 +187,33 @@ class RootHooksNullImpl(RootHooksInterface):
         self,
         sessions: AgentSessionsManagerInterface,
         *,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         privacy: PrivacyManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         outbox: OutboxRelayInterface,
     ) -> AgentSessionsManagerInterface:
         return sessions
 
-    def pricing(self, gate: BudgetGateInterface) -> PricingInterface | None:
+    def pricing(self, gate: SpendBudgetGateInterface) -> PricingInterface | None:
         return None
 
     def call_gate(
         self,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
-        models_layer: ModelsLayer | None,
+        budgets: SpendBudgetsManagerInterface,
+        language_models_layer: LanguageModelsLayer | None,
     ) -> CallGateInterface:
-        return CallGateBudgetImpl(
+        return CallGateSpendBudgetImpl(
             gate,
             pricing,
             sessions,
             budgets,
             SessionAgentProjectsNoneImpl(),
-            version=None if models_layer is None else models_layer.version,
-            tier=None if models_layer is None else models_layer.tier,
+            version=None if language_models_layer is None else language_models_layer.version,
+            tier=None if language_models_layer is None else language_models_layer.tier,
         )
 
     def catalog(self, catalog: tuple[ToolInterface, ...]) -> None:

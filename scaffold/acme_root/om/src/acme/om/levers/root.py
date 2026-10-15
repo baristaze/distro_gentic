@@ -17,7 +17,7 @@ def build_levers(
 ) -> LeversManagerInterface:
     return LeversManagerImpl(
         storage.get_agent_session_storage(),
-        storage.get_step_storage(),
+        storage.get_agent_step_storage(),
         storage.get_agent_playbook_storage(),
         storage.get_agent_knowledge_storage(),
         options or LeversOptions(),

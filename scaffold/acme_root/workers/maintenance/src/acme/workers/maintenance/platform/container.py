@@ -52,6 +52,7 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.handler import WorkHandlerInterface
 from acme.om.work.types.work_item import WorkKind
+from acme.workers.maintenance.agent_sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.deliveries import DeliveryProviderInterface
 from acme.workers.maintenance.feedback import FeedbackDeliveriesImpl
 from acme.workers.maintenance.loop import (
@@ -62,7 +63,6 @@ from acme.workers.maintenance.loop import (
     WorkerLoop,
 )
 from acme.workers.maintenance.members import MemberLeftHandlerImpl
-from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
 from acme.workers.maintenance.validations import ValidationHandlerImpl
 
@@ -88,12 +88,12 @@ def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
     """The cloud pool as the settings name it, on the machines infra chose:
     the runner starts its machines, and the sweep lets them go."""
     return CloudPoolOptions(
-        prefix=settings.machine_prefix,
+        prefix=settings.vm_prefix,
         image=settings.cloud_pool_image,
-        machine_image=settings.machine_image,
+        vm_image=settings.vm_image,
         warm=settings.cloud_pool_warm,
         api_url=settings.cloud_pool_api_url,
-        boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
+        boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
     )
 
 
@@ -125,7 +125,7 @@ def worker_platform_options(
         cloud_pool_options=cloud_pool_options(settings),
         cloud_pool_stage=stage,
         executor=ports.executor,
-        executor_options=ExecutorOptions(image=settings.workspace_image),
+        executor_options=ExecutorOptions(image=settings.agent_workspace_image),
         work_product=ports.work_product,
         agent_session_projects=ports.agent_session_projects,
         workspace_agent_projects=ports.workspace_agent_projects,
@@ -220,7 +220,7 @@ class WorkerPlatform:
         # no loop has its run asked for again.
         self.holds = HoldSweepImpl(
             storage.get_spend_ledger_storage(),
-            managers.budget_gate,
+            managers.spend_budget_gate,
             managers.tenancy,
             ProviderBillsUnknownImpl(),
             HoldSweepOptions(batch=HOLD_SWEEP_BATCH),

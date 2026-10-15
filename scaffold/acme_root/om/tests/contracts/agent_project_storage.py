@@ -20,7 +20,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "bind_session",
         "create_agent_project",
         "delete_agent_project",
-        "purge_session",
+        "purge_agent_session",
         "purge_tenant",
         "read_binding",
         "read_agent_project",
@@ -45,9 +45,9 @@ def make_agent_project(path: str = "octo/reports") -> AgentProject:
     )
 
 
-def make_binding(session_id: UUID, agent_project_id: UUID) -> SessionAgentProject:
+def make_binding(agent_session_id: UUID, agent_project_id: UUID) -> SessionAgentProject:
     return SessionAgentProject(
-        id=session_id, created_at=utcnow(), agent_project_id=agent_project_id
+        id=agent_session_id, created_at=utcnow(), agent_project_id=agent_project_id
     )
 
 
@@ -59,8 +59,8 @@ async def in_agent_project(
     session it started otherwise. Answers the agent project's id."""
     agent_project = make_agent_project(path)
     assert await storage.create_agent_project(org_id, agent_project, ())
-    for session_id in sessions:
-        await storage.bind_session(org_id, make_binding(session_id, agent_project.id))
+    for agent_session_id in sessions:
+        await storage.bind_session(org_id, make_binding(agent_session_id, agent_project.id))
     return agent_project.id
 
 
@@ -142,7 +142,7 @@ class AgentProjectStorageContract:
         assert await storage.read_binding(org_b, session) is None
         with pytest.raises(TenantMismatch):
             await storage.bind_session(org_b, make_binding(session, new_id()))
-        assert not await storage.purge_session(org_b, session)
+        assert not await storage.purge_agent_session(org_b, session)
         assert await storage.purge_tenant(org_b, 10) == 0
         assert await storage.read_agent_projects(org_b, None, 10) == []
         assert not await storage.write_agent_project(
@@ -163,8 +163,8 @@ class AgentProjectStorageContract:
         await storage.create_agent_project(org, agent_project, ())
         for each in (session, other):
             await storage.bind_session(org, make_binding(each, agent_project.id))
-        assert await storage.purge_session(org, session)
-        assert not await storage.purge_session(org, session)
+        assert await storage.purge_agent_session(org, session)
+        assert not await storage.purge_agent_session(org, session)
         assert await storage.read_binding(org, session) is None
         assert await storage.read_binding(org, other) is not None
         assert await storage.read_agent_project(org, agent_project.id) == agent_project

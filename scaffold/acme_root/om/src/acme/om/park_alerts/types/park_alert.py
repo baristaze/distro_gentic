@@ -7,10 +7,10 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
+from acme.om.agent_steps.types.header import ParkReason
+from acme.om.base import Created, Identifiable, OmBase
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.steps.types.content import MAX_NAME, Stored
-from acme.om.steps.types.header import ParkReason
 
 PORTAL = "portal"
 """The channel every person has: the platform's own list of what waits on
@@ -19,7 +19,7 @@ them. Any other channel is an integration's, at an account linked to them."""
 MAX_TEXT = 2_000
 
 
-class Ask(Platform):
+class Ask(OmBase):
     """What a park asks of people: the one action that clears it, its link
     (empty while no route of the API serves the action), what the
     park alert says, and exactly who may take the action. `posted` is
@@ -46,7 +46,7 @@ class ParkAlert(Identifiable, Created):
     marked it read; the first mark holds."""
 
     recipient: UUID
-    session_id: UUID
+    agent_session_id: UUID
     park_step: UUID
     reason: ParkReason
     unlock: Stored = Field(min_length=1, max_length=MAX_NAME)

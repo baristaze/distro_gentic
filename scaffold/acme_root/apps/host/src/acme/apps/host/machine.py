@@ -5,7 +5,7 @@ seed, rather than a tenant's enrollment token, and it claims its session's
 work alone, which the platform holds it to.
 
 Its workspace is a folder in the machine, at the VM's level
-(`acme.infra.workspaces.machine`). Its commands
+(`acme.infra.agent_workspaces.machine`). Its commands
 run as the host's own user, in Docker's group, so they build and run
 containers of their own: the machine's root is theirs through Docker, as a
 VM workspace's commands hold their guest whole. Its egress is the machine's,

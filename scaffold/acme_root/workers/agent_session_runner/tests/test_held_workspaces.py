@@ -19,24 +19,22 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
-from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, PullRequestsTwin, ReaderTwin
-from contracts.step_storage import make_message
 
-from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.transports import TransportInterface
-from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceProviderInterface,
     Durability,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
+from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.transports import TransportInterface
+from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -51,11 +49,14 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import snapshotted_step
 from acme.om.work.types.work_item import WorkItem, WorkKind
-from acme.workers.session_runner.workspaces import Graces, HeldWorkspacesSweep
+from acme.workers.agent_session_runner.workspaces import Graces, HeldWorkspacesSweep
+
+from contracts.agent_session_storage import make_session
+from contracts.agent_step_storage import make_message
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, PullRequestsTwin, ReaderTwin
 
 GIT = shutil.which("git")
 
@@ -123,7 +124,7 @@ class HostInfra(InfraLocalImpl):
         super().__init__(root)
         assert GIT is not None
         found = f"{Path(GIT).parent}:{Path(sys.executable).parent}"
-        self._host = WorkspaceHostImpl(root / "workspaces")
+        self._host = AgentWorkspaceHostImpl(root / "workspaces")
         self._local = TransportLocalImpl(
             root / "records",
             self.get_secrets(),
@@ -131,7 +132,7 @@ class HostInfra(InfraLocalImpl):
             search_path=f"{found}:{DEFAULT_PATH}",
         )
 
-    def get_workspaces(self) -> WorkspaceProviderInterface:
+    def get_agent_workspaces(self) -> AgentWorkspaceProviderInterface:
         return self._host
 
     def get_transport(self) -> TransportInterface:
@@ -145,7 +146,7 @@ class Host:
     def __init__(
         self,
         managers: PlatformManagers,
-        provider: WorkspaceProviderInterface,
+        provider: AgentWorkspaceProviderInterface,
         graces: Graces = NO_PRODUCT.warm_grace,
     ) -> None:
         self.managers = managers
@@ -199,7 +200,7 @@ class Host:
         )
         assert claimed is not None and claimed[1].target_id == session.id
         await managers.steps.begin_run(owner, session.id)
-        workspace = await managers.tools.prepare_workspace(owner, session.id, spec)
+        workspace = await managers.tools.prepare_agent_workspace(owner, session.id, spec)
         return session.id, claimed[1], Path(workspace.location)
 
     async def passes(self, after: timedelta = timedelta(0)) -> int:
@@ -239,7 +240,7 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
             source_control=forge(connected),
         ),
     )
-    host = Host(managers, infra.get_workspaces())
+    host = Host(managers, infra.get_agent_workspaces())
     await host.start()
     connected.org_id = host.owner.org_id
     killed, item, here = await host.run_left(DIRECTORY)
@@ -283,17 +284,17 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
             workspace_reader=ReaderTwin(),
         ),
     )
-    provider = infra.get_workspaces()
-    assert isinstance(provider, WorkspaceTwinImpl)
+    provider = infra.get_agent_workspaces()
+    assert isinstance(provider, AgentWorkspaceTwinImpl)
     host = Host(managers, provider)
     await host.start()
-    session_id, item, _ = await host.run_left(TWIN)
+    agent_session_id, item, _ = await host.run_left(TWIN)
     await managers.work.complete(host.owner, item)
     source.dirty = True  # the work the run left, uncommitted
 
     assert await host.passes() == 0
     assert await host.passes(GRACE) == 0, "the push failed: nothing is let go"
-    assert await host.held() == {session_id}
+    assert await host.held() == {agent_session_id}
     source.refuses_push = False
     assert await host.passes() == 1, "the next pass pushes it, and lets it go"
     assert await host.held() == set() and len(source.pushed) == 1
@@ -323,7 +324,7 @@ async def test_each_instance_stays_for_its_own_kinds_grace_never_past_the_cache_
             workspace_reader=ReaderTwin(),
         ),
     )
-    host = Host(managers, infra.get_workspaces(), kinds.warm_grace)
+    host = Host(managers, infra.get_agent_workspaces(), kinds.warm_grace)
     await host.start()
     short, short_item, _ = await host.run_left(TWIN, "brief")
     default, default_item, _ = await host.run_left(TWIN)
@@ -355,11 +356,11 @@ async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
             workspace_reader=ReaderTwin(),
         ),
     )
-    provider = infra.get_workspaces()
-    assert isinstance(provider, WorkspaceTwinImpl)
+    provider = infra.get_agent_workspaces()
+    assert isinstance(provider, AgentWorkspaceTwinImpl)
     host = Host(managers, provider)
     await host.start()
-    session_id, item, _ = await host.run_left(TWIN)
+    agent_session_id, item, _ = await host.run_left(TWIN)
     await managers.work.complete(host.owner, item)
     source.dirty = True  # the work the run left, uncommitted
     pushes: list[str] = []
@@ -378,10 +379,12 @@ async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
     for _ in range(3):
         assert await host.passes(timedelta(seconds=30)) == 0
     assert pushes == ["push"], "the refused head is pushed once"
-    assert await host.held() == {session_id}, "its instance and its work stay"
+    assert await host.held() == {agent_session_id}, "its instance and its work stay"
 
     # The session's next loop moves its head: its work is pushed again.
-    await managers.steps.append_inputs(host.owner, session_id, [make_message(session_id)])
+    await managers.steps.append_inputs(
+        host.owner, agent_session_id, [make_message(agent_session_id)]
+    )
     monkeypatch.setattr(source, "snapshot", snapshot)
     assert await host.passes() == 1, "the next pass pushes it, and lets it go"
     assert await host.held() == set() and len(source.pushed) == 1
@@ -402,30 +405,30 @@ async def test_a_kept_sessions_instance_that_no_snapshot_holds_stays_until_one_d
             workspace_reader=ReaderTwin(),
         ),
     )
-    provider = infra.get_workspaces()
-    assert isinstance(provider, WorkspaceTwinImpl)
+    provider = infra.get_agent_workspaces()
+    assert isinstance(provider, AgentWorkspaceTwinImpl)
     host = Host(managers, provider)
     await host.start()
     # A run killed before its end's snapshot: what its commands wrote outside
     # the files lives in the instance alone.
-    session_id, item, _ = await host.run_left(KEPT)
+    agent_session_id, item, _ = await host.run_left(KEPT)
     await managers.work.fail_for_good(host.owner, item, "its runner died")
 
     assert await host.passes() == 0, "the grace begins"
     with caplog.at_level(logging.WARNING):
         assert await host.passes(GRACE) == 0, "no snapshot holds it: it stays"
         assert await host.passes(GRACE) == 0
-    assert await host.held() == {session_id}
+    assert await host.held() == {agent_session_id}
     kept = [r for r in caplog.records if "no snapshot holds" in r.getMessage()]
     assert len(kept) == 1, "logged once for its head"
 
     # A snapshot taken of it as it stands: the next pass lets it go.
-    epoch = (await managers.steps.get_cursor(host.owner, session_id)).epoch
-    taken = WorkspaceSnapshot(
-        id=new_id(), hash=HASH_SCHEME + "0" * 64, size=0, workspace_id=session_id
+    epoch = (await managers.steps.get_cursor(host.owner, agent_session_id)).epoch
+    taken = AgentWorkspaceSnapshot(
+        id=new_id(), hash=HASH_SCHEME + "0" * 64, size=0, agent_workspace_id=agent_session_id
     )
-    step = snapshotted_step(new_id(), utcnow(), session_id, new_id(), taken)
-    await managers.steps.append_steps(host.owner, session_id, epoch, [step])
+    step = snapshotted_step(new_id(), utcnow(), agent_session_id, new_id(), taken)
+    await managers.steps.append_agent_steps(host.owner, agent_session_id, epoch, [step])
     assert await host.passes() == 1
     assert await host.held() == set()
 
@@ -461,16 +464,16 @@ async def test_a_deleted_tenants_instance_is_purged_past_the_grace(
             source_control=forge(connected),
         ),
     )
-    host = Host(managers, infra.get_workspaces())
+    host = Host(managers, infra.get_agent_workspaces())
     await host.start()
     connected.org_id = host.owner.org_id
-    session_id, _, here = await host.run_left(DIRECTORY)
+    agent_session_id, _, here = await host.run_left(DIRECTORY)
     (here / "notes.txt").write_text("half done\n")
     await deleted(managers, host.owner.org_id)
     assert await managers.tenancy.tenant_deleted(request(), host.owner.org_id) is True
 
     assert await host.passes() == 0, "the grace begins"
-    assert await host.held() == {session_id}
+    assert await host.held() == {agent_session_id}
     assert await host.passes(GRACE) == 1
     assert await host.held() == set()
     assert not here.exists(), "its files go with it"
@@ -496,24 +499,24 @@ async def test_an_instance_this_database_holds_no_record_of_is_left_alone(
             workspace_reader=ReaderTwin(),
         ),
     )
-    provider = infra.get_workspaces()
-    assert isinstance(provider, WorkspaceTwinImpl)
+    provider = infra.get_agent_workspaces()
+    assert isinstance(provider, AgentWorkspaceTwinImpl)
     host = Host(managers, provider)
     await host.start()
     stranger = new_id()
     assert await managers.tenancy.tenant_deleted(request(), stranger) is None
     unknown_org = await provider.prepare(stranger, new_id(), TWIN)
     unknown_session = await provider.prepare(host.owner.org_id, new_id(), TWIN)
-    session_id, item, _ = await host.run_left(TWIN)
+    agent_session_id, item, _ = await host.run_left(TWIN)
     await managers.work.complete(host.owner, item)
-    gone = await managers.steps.purge_histories([(host.owner.org_id, session_id)])
-    assert gone == [(host.owner.org_id, session_id)], "its history went with its retention"
+    gone = await managers.steps.purge_histories([(host.owner.org_id, agent_session_id)])
+    assert gone == [(host.owner.org_id, agent_session_id)], "its history went with its retention"
 
     with caplog.at_level(logging.WARNING):
         assert await host.passes() == 0
         assert await host.passes(GRACE) == 0
         assert await host.passes(GRACE) == 0
-    assert await host.held() == {unknown_org.id, unknown_session.id, session_id}
+    assert await host.held() == {unknown_org.id, unknown_session.id, agent_session_id}
     told = [record.getMessage() for record in caplog.records if "no record" in record.getMessage()]
     assert len(told) == 3, "each is logged once"
     assert any(str(stranger) in line and "its tenant" in line for line in told)

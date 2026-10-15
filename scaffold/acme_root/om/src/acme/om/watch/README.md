@@ -101,8 +101,8 @@ the window ends, a new block starts, `completed`, or `join_bytes`. A
 reader resumes after a part's `last`, so its mark and its `dropped` stay
 exact. An emit, `opened`, or `completed` is queued
 (at most `max_queued`, the oldest dropped) and written in order by one
-task: parts of a step in one append to the stream `step_id` of the
-group `session_id`, each entry numbered by its part's `n`; `opened` and
+task: parts of a step in one append to the stream `agent_step_id` of the
+group `agent_session_id`, each entry numbered by its part's `n`; `opened` and
 `completed` as `watch.stream.opened`
 and `watch.stream.completed`, appended under the session with the
 step's id, then published as `ENTITY_CHANGED`; `completed` ends the

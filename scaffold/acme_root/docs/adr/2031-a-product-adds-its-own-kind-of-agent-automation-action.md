@@ -31,7 +31,7 @@ process that writes or fires an agent automation.
 runs, as its creator or its principal, after the limits started the run.
 It answers the id of the work it started, derived from the run's, so a
 run acted on again lands its work once. The run keeps that id, and a
-handler's `PlatformException` refuses the run, as an engine's refusal of
+handler's `OmException` refuses the run, as an engine's refusal of
 a session does.
 
 **Its check says when the run ended.** A run that names a product's work

@@ -18,11 +18,11 @@ class MatrixPins(IdentifiableMixin, CreatedMixin, Base):
         Index(
             "uq_matrix_pins_org_id_session_id_fill_set_version",
             "org_id",
-            "session_id",
+            "agent_session_id",
             "fill_set_version",
             unique=True,
         ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     fill_set_version: Mapped[int]
     matrix_version: Mapped[int]

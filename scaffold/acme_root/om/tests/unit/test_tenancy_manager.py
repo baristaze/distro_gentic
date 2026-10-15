@@ -6,8 +6,6 @@ own, `test_tenancy_<delegate>.py`, and the fixtures they share in
 `conftest.py`."""
 
 import asyncio
-from datetime import timedelta
-from typing import Any
 from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
@@ -69,7 +67,6 @@ from acme.om.tenancy.types.invitation import Invitation
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.org import Org, OrgKind
 from acme.om.tenancy.types.socket_ticket import SocketPrincipal
-from acme.om.tenancy.types.user import User
 from acme.om.tenancy.types.user import PERSONAL_FIELDS, User
 from acme.om.work.manager import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, work_row_kind

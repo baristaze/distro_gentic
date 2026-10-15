@@ -56,14 +56,14 @@ class AgentPlaybookStoragePostgresImpl(PgStorageBase, AgentPlaybookStorageInterf
             .on_conflict_do_nothing(
                 index_elements=[
                     AgentPlaybookInvocations.org_id,
-                    AgentPlaybookInvocations.session_id,
+                    AgentPlaybookInvocations.agent_session_id,
                     AgentPlaybookInvocations.agent_playbook_id,
                 ]
             )
         )
         read = select(AgentPlaybookInvocations).where(
             AgentPlaybookInvocations.org_id == org_id,
-            AgentPlaybookInvocations.session_id == invocation.session_id,
+            AgentPlaybookInvocations.agent_session_id == invocation.agent_session_id,
             AgentPlaybookInvocations.agent_playbook_id == invocation.agent_playbook_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
@@ -74,13 +74,13 @@ class AgentPlaybookStoragePostgresImpl(PgStorageBase, AgentPlaybookStorageInterf
             return to_model((await session.execute(read)).scalar_one(), AgentPlaybookInvocation)
 
     async def read_invocations(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentPlaybookInvocation]:
         stmt = (
             select(AgentPlaybookInvocations)
             .where(
                 AgentPlaybookInvocations.org_id == org_id,
-                AgentPlaybookInvocations.session_id == session_id,
+                AgentPlaybookInvocations.agent_session_id == agent_session_id,
             )
             .order_by(AgentPlaybookInvocations.created_at, AgentPlaybookInvocations.id)
             .limit(limit)

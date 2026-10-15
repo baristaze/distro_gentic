@@ -20,11 +20,11 @@ from acme.om.agent_playbooks.impl.manager import AgentPlaybooksManagerImpl, Agen
 from acme.om.agent_playbooks.impl.tools import ToolsManagerAgentPlaybooksImpl
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.base import utcnow
 from acme.om.levers.rules import reach_of
 from acme.om.platform_root import PlatformManagers
-from acme.om.steps import StepsManagerInterface
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
 
@@ -40,7 +40,7 @@ class AgentPlaybooksLayer:
         self._storage = storage
         self.options = options or AgentPlaybooksOptions()
         self._clock = clock
-        self._built: tuple[AgentPlaybooksManagerInterface, StepsManagerInterface] | None = None
+        self._built: tuple[AgentPlaybooksManagerInterface, AgentStepsManagerInterface] | None = None
 
     def tools(self, inner: ToolsManagerInterface) -> ToolsManagerInterface:
         """The tools manager beneath, held to each session's agent playbook gates."""
@@ -79,7 +79,7 @@ class AgentPlaybooksLayer:
             self._built = (agent_playbooks, managers.steps)
         return self._built[0]
 
-    def _managers(self) -> tuple[AgentPlaybooksManagerInterface, StepsManagerInterface]:
+    def _managers(self) -> tuple[AgentPlaybooksManagerInterface, AgentStepsManagerInterface]:
         if self._built is None:
             raise RuntimeError("the agent playbooks layer is used before its manager is built")
         return self._built

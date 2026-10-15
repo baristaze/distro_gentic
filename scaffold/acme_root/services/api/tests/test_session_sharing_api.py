@@ -16,9 +16,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
-from contracts.histories import History
 
 from acme.om.agent_steps.types.header import ToolResponseHeader
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits

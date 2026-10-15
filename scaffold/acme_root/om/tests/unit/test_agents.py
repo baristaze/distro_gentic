@@ -46,22 +46,13 @@ from acme.om.exceptions import (
     UnknownAgentKind,
     ValidationFailed,
 )
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.spend_budgets.types.amount import Amount, Spend
 from acme.om.spend_budgets.types.spend_breach import Refusal
 from acme.om.spend_budgets.types.spend_budget import (
     SpendBudgetScope,
     SpendBudgetScopeKind,
     WindowKind,
-from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.agent_steps.types.content import Content, TextBlock, ToolUseBlock
-from acme.om.agent_steps.types.header import (
-    ControlCommand,
-    ControlHeader,
-    InputHeader,
-    LoopEndedHeader,
-    LoopOutcome,
-    ModelResponseHeader,
 )
 from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendHoldRequest
 from acme.om.storage.impl.memory import StorageMemoryImpl

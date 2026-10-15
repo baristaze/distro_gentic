@@ -13,8 +13,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
-from acme.om.steps.types.content import Stored
+from acme.om.agent_steps.types.content import Stored
+from acme.om.base import OmBase
 
 MAX_DETAIL = 500
 """The most characters a finding quotes or says: a lever is a person's
@@ -38,7 +38,7 @@ class LeverCheck(StrEnum):
     PAST_SESSION_BOUND = "past_session_bound"  # longer than a session holds whole
 
 
-class LeverFinding(Platform):
+class LeverFinding(OmBase):
     """One finding: the check that found it, what it found in a sentence,
     and the words of the text it stands on, cut to `MAX_DETAIL`."""
 
@@ -47,7 +47,7 @@ class LeverFinding(Platform):
     excerpt: Stored | None = Field(default=None, max_length=MAX_DETAIL)
 
 
-class LeverReach(Platform):
+class LeverReach(OmBase):
     """What the kinds a lever reaches hold: their tools and their names. A
     agent playbook or an agent knowledge entry reaches every kind of its tenant."""
 
@@ -55,7 +55,7 @@ class LeverReach(Platform):
     kinds: frozenset[str] = frozenset()
 
 
-class LeverRef(Platform):
+class LeverRef(OmBase):
     """One version of a lever, as a session reached it: an agent playbook
     version's id, or an agent knowledge entry's id, and its version. Never its
     name or its slug, which are the tenant's words: an operator who reads
@@ -66,7 +66,7 @@ class LeverRef(Platform):
     version: int = Field(ge=1)
 
 
-class SpinTally(Platform):
+class SpinTally(OmBase):
     """What a session's recorded steps say of a stall, read from their
     headers alone, never from what they say.
 
@@ -100,16 +100,16 @@ class SpinTally(Platform):
         )
 
 
-class SessionLevers(Platform):
+class SessionLevers(OmBase):
     """One session of a reading: what its steps say of a stall, and the
     levers it reached."""
 
-    session_id: UUID
+    agent_session_id: UUID
     spin: SpinTally
     levers: tuple[LeverRef, ...] = ()
 
 
-class LeverStanding(Platform):
+class LeverStanding(OmBase):
     """A lever against the window: of the sessions it reached, how many
     spun, against the sessions it did not reach, and the sessions that
     spun with it, the first `most` of them."""
@@ -127,7 +127,7 @@ class LeverStanding(Platform):
         return self.spun / self.sessions - self.spun_without / self.sessions_without
 
 
-class LeverReading(Platform):
+class LeverReading(OmBase):
     """The levers of one tenant's sessions created in a window, best first,
     and how many sessions it read and how many of them stalled.
     `complete` is False when the window held more sessions, or a session

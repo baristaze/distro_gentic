@@ -46,40 +46,40 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.infra.exceptions import InfraException
-from acme.infra.transports import OutputSink
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceLost,
     Durability,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    Workspace,
-    WorkspaceLost,
+    AgentWorkspace,
 )
+from acme.infra.exceptions import InfraException
+from acme.infra.transports import OutputSink
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import host_refusal
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import TenantContext
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
-from acme.om.steps.types.step import Step
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import named_snapshot, snapshotted_step
 from acme.om.tools.tool import TakenSnapshot, TakeSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
-from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
+from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
 
 log = logging.getLogger(__name__)
 
 
-class PinnedToolsOptions(Platform):
+class PinnedToolsOptions(OmBase):
     # How long a run's end waits for the host that holds its workspace to
     # keep a snapshot of it.
     snapshot_wait: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
@@ -111,7 +111,7 @@ LAST_POLL = timedelta(seconds=1)
 first to the last."""
 
 
-def _beyond_isolation(spec: IsolationSpec, restore: WorkspaceSnapshot | None) -> bool:
+def _beyond_isolation(spec: IsolationSpec, restore: AgentWorkspaceSnapshot | None) -> bool:
     """Whether a prepare asks more of its provider than the isolation: to keep
     the workspace by snapshots, to start it from a base, or to start it
     from a snapshot. A provider that refuses any of it for good refuses it
@@ -127,25 +127,25 @@ class HeldWorkspaces:
     holds (`WorkProductAgentWorkspacesImpl`)."""
 
     def __init__(self) -> None:
-        self._held: dict[UUID, tuple[Workspace, int]] = {}
+        self._held: dict[UUID, tuple[AgentWorkspace, int]] = {}
 
-    def get(self, session_id: UUID) -> Workspace | None:
-        held = self._held.get(session_id)
+    def get(self, agent_session_id: UUID) -> AgentWorkspace | None:
+        held = self._held.get(agent_session_id)
         return None if held is None else held[0]
 
-    def epoch_of(self, session_id: UUID) -> int | None:
+    def epoch_of(self, agent_session_id: UUID) -> int | None:
         """The epoch of the run that holds the session's workspace here."""
-        held = self._held.get(session_id)
+        held = self._held.get(agent_session_id)
         return None if held is None else held[1]
 
-    def hold(self, workspace: Workspace, epoch: int) -> None:
+    def hold(self, workspace: AgentWorkspace, epoch: int) -> None:
         self._held[workspace.id] = (workspace, epoch)
 
-    def let_go(self, session_id: UUID, epoch: int | None = None) -> None:
+    def let_go(self, agent_session_id: UUID, epoch: int | None = None) -> None:
         """Lets the session's workspace go: with an epoch, only when the run
         of that epoch still holds it, so a later run's stays."""
-        if epoch is None or self.epoch_of(session_id) == epoch:
-            self._held.pop(session_id, None)
+        if epoch is None or self.epoch_of(agent_session_id) == epoch:
+            self._held.pop(agent_session_id, None)
 
 
 class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
@@ -153,7 +153,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self,
         inner: ToolsManagerInterface,
         agent_workspaces: AgentWorkspacesManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         offer: HostOffer,
         *,
         local: bool,
@@ -192,44 +192,48 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
 
     # The workspace.
 
-    async def prepare_workspace(
+    async def prepare_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: WorkspaceSnapshot | None = None,
-    ) -> Workspace:
+        restore: AgentWorkspaceSnapshot | None = None,
+    ) -> AgentWorkspace:
         # Marked before the first await, and until the workspace is held: a
         # release that lands meanwhile leaves the instance to this run.
-        self._preparing[session_id] = self._preparing.get(session_id, 0) + 1
+        self._preparing[agent_session_id] = self._preparing.get(agent_session_id, 0) + 1
         try:
-            return await self._prepare(ctx, session_id, spec, restore)
+            return await self._prepare(ctx, agent_session_id, spec, restore)
         finally:
-            left = self._preparing.pop(session_id) - 1
+            left = self._preparing.pop(agent_session_id) - 1
             if left:
-                self._preparing[session_id] = left
+                self._preparing[agent_session_id] = left
 
     async def _prepare(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: WorkspaceSnapshot | None,
-    ) -> Workspace:
-        pinned = await self._agent_workspaces.pinned(ctx, session_id, spec)
+        restore: AgentWorkspaceSnapshot | None,
+    ) -> AgentWorkspace:
+        pinned = await self._agent_workspaces.pinned(ctx, agent_session_id, spec)
         if pinned.mode is IsolationMode.NONE:
-            return await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
+            return await self._inner.prepare_agent_workspace(ctx, agent_session_id, pinned, restore)
         # The run that prepares it took its epoch just before: what this
         # host holds for the session is held under it.
-        epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
-        pool = None if self._placed is None else await self._placed.pool_of(ctx, session_id)
+        epoch = (await self._steps.get_cursor(ctx, agent_session_id)).epoch
+        pool = None if self._placed is None else await self._placed.pool_of(ctx, agent_session_id)
         if pool is None and self._cloud is not None and await self._cloud.runs(pinned):
-            return await self._on_machine(ctx, session_id, pinned, restore, epoch)
+            return await self._on_machine(ctx, agent_session_id, pinned, restore, epoch)
         if self._placed is not None and pool is not None:
             # A restore is decided before any host is asked, and travels
             # with the ask: its host starts the workspace from it.
-            kept = None if restore is None else await self._in_store(ctx, session_id, pool, restore)
-            hosted = await self._placed.held_on_host(ctx, session_id, pinned, kept)
+            kept = (
+                None
+                if restore is None
+                else await self._in_store(ctx, agent_session_id, pool, restore)
+            )
+            hosted = await self._placed.held_on_host(ctx, agent_session_id, pinned, kept)
             if hosted is not None:
                 # Its host made it to the pin and holds it; the checkout is
                 # brought up to the session's branch there, unless a
@@ -237,23 +241,25 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 attached = await self._agent_workspaces.attach(
                     ctx, hosted, epoch, restored=restore is not None
                 )
-                self._hosted.add(session_id)
+                self._hosted.add(agent_session_id)
                 self._held.hold(attached, epoch)
                 return attached
         if restore is not None:
-            await self._in_bucket(ctx, session_id, restore)
-        running = len(self._directories.keys() - {session_id})
+            await self._in_bucket(ctx, agent_session_id, restore)
+        running = len(self._directories.keys() - {agent_session_id})
         why = host_refusal(pinned, self._offer, local=self._local, running=running)
         if why is not None:
             raise IsolationRefused(why, clears=True)
         # Held before the first await, so two prepares at once count each
         # other.
         if pinned.mode is IsolationMode.HOST:
-            self._directories[session_id] = epoch
+            self._directories[agent_session_id] = epoch
         try:
-            workspace = await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
+            workspace = await self._inner.prepare_agent_workspace(
+                ctx, agent_session_id, pinned, restore
+            )
         except InfraException as refused:
-            self._directories.pop(session_id, None)
+            self._directories.pop(agent_session_id, None)
             if (
                 isinstance(refused, IsolationRefused)
                 and not refused.clears
@@ -264,7 +270,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 raise IsolationRefused(refused.message, clears=True) from refused
             raise
         except BaseException:
-            self._directories.pop(session_id, None)
+            self._directories.pop(agent_session_id, None)
             raise
         try:
             attached = await self._agent_workspaces.attach(
@@ -274,15 +280,15 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             # Its instance goes, and its files stay as they were: nothing of
             # the loop ran in it.
             try:
-                await self._inner.release_workspace(ctx, workspace)
+                await self._inner.release_agent_workspace(ctx, workspace)
             except Exception:
-                log.exception("session %s: the workspace was not released", session_id)
-            self._directories.pop(session_id, None)
+                log.exception("session %s: the workspace was not released", agent_session_id)
+            self._directories.pop(agent_session_id, None)
             raise
         self._held.hold(attached, epoch)
         return attached
 
-    async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
+    async def release_agent_workspace(self, ctx: TenantContext, workspace: AgentWorkspace) -> None:
         # The run that releases it holds it until here: a later run's
         # prepare cannot land before its first await.
         epoch = self._held.epoch_of(workspace.id)
@@ -316,43 +322,43 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             self._hosted.discard(workspace.id)
             self._pooled.discard(workspace.id)
         else:
-            await self._inner.release_workspace(ctx, workspace)
+            await self._inner.release_agent_workspace(ctx, workspace)
         if epoch is not None:
             # Only what this run holds: a later run's stays held.
             self._held.let_go(workspace.id, epoch)
             if self._directories.get(workspace.id) == epoch:
                 del self._directories[workspace.id]
 
-    async def snapshot_workspace(
+    async def snapshot_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
-        if session_id in self._hosted:
+    ) -> AgentStep:
+        if agent_session_id in self._hosted:
             # Its host holds it: the host takes the snapshot, and its bytes
             # stay in the host's store, inside the wall.
             return await self._snapshot_on_host(
-                ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+                ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
             )
-        if session_id in self._pooled:
+        if agent_session_id in self._pooled:
             # Its machine is the workspace: the pool keeps its whole disk.
             return await self._snapshot_on_machine(
-                ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+                ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
             )
-        step = await self._inner.snapshot_workspace(
-            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+        step = await self._inner.snapshot_agent_workspace(
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
         )
         taken = named_snapshot(step)
         if taken is not None:
-            await self._recorded(ctx, session_id, taken)
+            await self._recorded(ctx, agent_session_id, taken)
         return step
 
     def fork_point(
-        self, ctx: TenantContext, request: Step, workspace: Workspace, epoch: int
+        self, ctx: TenantContext, request: AgentStep, workspace: AgentWorkspace, epoch: int
     ) -> TakeSnapshot | None:
         """The fork point of a workspace a host of the tenant's holds, for the
         engine's tools (`ForkPoints`): that host takes it, before the tree's
@@ -364,7 +370,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
 
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         if isinstance(taken, TakenOnHost):
             return await self._copy_on_host(ctx, child_id, snapshot_id, taken)
         kept = await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
@@ -372,65 +378,65 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         return kept
 
     async def find_snapshot(
-        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
-    ) -> WorkspaceSnapshot:
-        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
+        self, ctx: TenantContext, agent_session_id: UUID, snapshot_id: UUID
+    ) -> AgentWorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, agent_session_id, snapshot_id)
 
-    def _taken_here(self, session_id: UUID, epoch: int) -> bool:
+    def _taken_here(self, agent_session_id: UUID, epoch: int) -> bool:
         """Whether a later run in this process prepares the session's
         workspace or holds it. One on another host, or one that never
         prepares, takes nothing of this host's."""
-        held = self._held.epoch_of(session_id)
-        return session_id in self._preparing or (held is not None and held != epoch)
+        held = self._held.epoch_of(agent_session_id)
+        return agent_session_id in self._preparing or (held is not None and held != epoch)
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> None:
         # The engine's purge takes the files, the instance, and every
         # snapshot in the platform's bucket. Each host whose store keeps one
         # is asked to let them go while the records still name it; the
         # records go last.
-        await self._inner.purge_workspace(org_id, session_id)
-        hosts = await self._agent_workspaces.snapshot_hosts(org_id, session_id)
+        await self._inner.purge_agent_workspace(org_id, agent_session_id)
+        hosts = await self._agent_workspaces.snapshot_hosts(org_id, agent_session_id)
         if hosts and self._erase_purged is None:
-            log.error("session %s: no host is asked to erase its snapshots", session_id)
+            log.error("session %s: no host is asked to erase its snapshots", agent_session_id)
         elif self._erase_purged is not None:
             for host_id in sorted(hosts):
-                await self._erase_purged(org_id, session_id, host_id)
+                await self._erase_purged(org_id, agent_session_id, host_id)
         if self._cloud is not None:
             # Its machine, and every disk the pool kept of it.
-            await self._cloud.purge(org_id, session_id)
-        await self._agent_workspaces.forget_snapshots(org_id, session_id)
-        await self._agent_workspaces.purge_session(org_id, session_id)
-        self._held.let_go(session_id)
-        self._directories.pop(session_id, None)
-        self._hosted.discard(session_id)
-        self._pooled.discard(session_id)
-        self._kept_whole.discard(session_id)
+            await self._cloud.purge(org_id, agent_session_id)
+        await self._agent_workspaces.forget_snapshots(org_id, agent_session_id)
+        await self._agent_workspaces.purge_agent_session(org_id, agent_session_id)
+        self._held.let_go(agent_session_id)
+        self._directories.pop(agent_session_id, None)
+        self._hosted.discard(agent_session_id)
+        self._pooled.discard(agent_session_id)
+        self._kept_whole.discard(agent_session_id)
 
-    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
+    async def erase_snapshots(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         # The session's key is gone, so its archives are noise: they leave
         # the bucket, and what its provider keeps outside them goes with
         # them. A copy kept for another session, a fork's, is that one's.
         # A host's store keeps its bytes unsealed inside the wall: each host
         # that keeps one is asked to let them go.
-        await self._inner.erase_snapshots(ctx, session_id)
+        await self._inner.erase_snapshots(ctx, agent_session_id)
         if self._snapshots is not None:
-            await self._snapshots.purge(ctx.org_id, session_id)
+            await self._snapshots.purge(ctx.org_id, agent_session_id)
         if self._cloud is not None:
             # The disks the pool kept of the session's machines.
-            await self._cloud.erase(ctx.org_id, session_id)
-        kept = await self._agent_workspaces.kept_snapshots(ctx, session_id)
+            await self._cloud.erase(ctx.org_id, agent_session_id)
+        kept = await self._agent_workspaces.kept_snapshots(ctx, agent_session_id)
         hosts = {record.host_id for record in kept if record.host_id is not None}
         if hosts and self._erase_on_host is None:
-            log.error("session %s: no host is asked to erase its snapshots", session_id)
+            log.error("session %s: no host is asked to erase its snapshots", agent_session_id)
         elif self._erase_on_host is not None:
             for host_id in sorted(hosts):
-                await self._erase_on_host(ctx, session_id, host_id)
-        await self._agent_workspaces.forget_snapshots(ctx.org_id, session_id)
+                await self._erase_on_host(ctx, agent_session_id, host_id)
+        await self._agent_workspaces.forget_snapshots(ctx.org_id, agent_session_id)
 
     async def keep_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         snapshot: HostSnapshot,
         pool_id: UUID,
         host_id: UUID,
@@ -443,7 +449,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         assert snapshot.size is not None  # a kept snapshot's answer names all three
         if self._keyed_hash is None:
             raise SnapshotRefused("this process keys no hash, so it records no host's snapshot")
-        keyed = await self._keyed_hash(ctx, session_id, snapshot.digest.encode())
+        keyed = await self._keyed_hash(ctx, agent_session_id, snapshot.digest.encode())
         now = self._clock()
         await self._agent_workspaces.keep_snapshot(
             ctx,
@@ -453,7 +459,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 hash=HASH_SCHEME + keyed,
                 size=snapshot.size,
                 pool_id=pool_id,
@@ -466,29 +472,29 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
     async def _snapshot_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
+    ) -> AgentStep:
         """The snapshot the host that holds the workspace keeps in its own
         store, once it is recorded, and the step that names it. The host
         takes back what its broker attached, scans for its secrets' values,
         and keeps nothing that holds one."""
         snapshot_id = new_id()
-        record = await self._kept_on_host(ctx, session_id, workspace.spec, snapshot_id)
-        taken = WorkspaceSnapshot(
-            id=snapshot_id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        record = await self._kept_on_host(ctx, agent_session_id, workspace.spec, snapshot_id)
+        taken = AgentWorkspaceSnapshot(
+            id=snapshot_id, hash=record.hash, size=record.size, agent_workspace_id=workspace.id
         )
-        step = snapshotted_step(new_id(), self._clock(), session_id, loop_id, taken)
-        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
+        step = snapshotted_step(new_id(), self._clock(), agent_session_id, loop_id, taken)
+        (stored,) = await self._steps.append_agent_steps(ctx, agent_session_id, epoch, [step])
         return stored
 
     async def _kept_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         snapshot_id: UUID,
         *,
@@ -501,7 +507,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         host's reason, or when no answer comes in time."""
         assert self._placed is not None
         item_id = await self._placed.snapshot_on_host(
-            ctx, session_id, spec, snapshot_id, kept_for=kept_for
+            ctx, agent_session_id, spec, snapshot_id, kept_for=kept_for
         )
         by = self._clock() + self._snapshot_wait
         wait = FIRST_POLL
@@ -512,14 +518,14 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             left = (by - self._clock()).total_seconds()
             if left <= 0:
                 raise SnapshotRefused(
-                    f"the host that holds session {session_id}'s workspace kept no snapshot in time"
+                    f"the host that holds session {agent_session_id}'s workspace kept no snapshot in time"
                 )
             await self._sleep(min(wait.total_seconds(), left))
             wait = min(wait * 2, LAST_POLL)
         return record
 
     async def _fork_on_host(
-        self, ctx: TenantContext, request: Step, workspace: Workspace
+        self, ctx: TenantContext, request: AgentStep, workspace: AgentWorkspace
     ) -> TakenOnHost:
         """The workspace a host holds, taken live by that host for a spawn in
         the call `request`, and kept in its own store as the child's: a
@@ -529,18 +535,20 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         Refused, with the host's reason, before anything of the tree is
         spent: a session that keeps no content at rest, no live host that
         holds the workspace, or a host that takes no snapshot of it."""
-        session_id = request.session_id
+        agent_session_id = request.agent_session_id
         if self._snapshots is None:
             raise SnapshotRefused("this process keeps no snapshot store, so it forks no workspace")
-        await self._snapshots.at_rest(ctx, session_id)
+        await self._snapshots.at_rest(ctx, agent_session_id)
         taken = await self._kept_on_host(
-            ctx, session_id, workspace.spec, new_id(), kept_for=request.id
+            ctx, agent_session_id, workspace.spec, new_id(), kept_for=request.id
         )
-        return TakenOnHost(workspace_id=workspace.id, archive=b"", kept_for=request.id, taken=taken)
+        return TakenOnHost(
+            agent_workspace_id=workspace.id, archive=b"", kept_for=request.id, taken=taken
+        )
 
     async def _copy_on_host(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenOnHost
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         """The fork's copy a host keeps as the child's, recorded as the
         child's under `snapshot_id`: where the take lives, and its digest
         keyed by the child, so once the child's key is revoked nothing
@@ -576,7 +584,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                session_id=child_id,
+                agent_session_id=child_id,
                 hash=HASH_SCHEME + keyed,
                 size=kept.size,
                 pool_id=kept.pool_id,
@@ -587,42 +595,45 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         )
         # A spawn asked again finds the copy recorded already: the one
         # stored is the one named.
-        return WorkspaceSnapshot(
-            id=stored.id, hash=stored.hash, size=stored.size, workspace_id=taken.workspace_id
+        return AgentWorkspaceSnapshot(
+            id=stored.id,
+            hash=stored.hash,
+            size=stored.size,
+            agent_workspace_id=taken.agent_workspace_id,
         )
 
     async def _on_machine(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         pinned: IsolationSpec,
-        restore: WorkspaceSnapshot | None,
+        restore: AgentWorkspaceSnapshot | None,
         epoch: int,
-    ) -> Workspace:
+    ) -> AgentWorkspace:
         """The session's workspace on its machine of the cloud pool, which
         the pool starts and the machine's host holds; the checkout is
         brought up to the session's branch there, unless a snapshot started
         the machine."""
         assert self._cloud is not None
-        kept = None if restore is None else await self._on_machines(ctx, session_id, restore)
-        held = await self._cloud.prepare(ctx, session_id, pinned, kept)
+        kept = None if restore is None else await self._on_machines(ctx, agent_session_id, restore)
+        held = await self._cloud.prepare(ctx, agent_session_id, pinned, kept)
         attached = await self._agent_workspaces.attach(
             ctx, held, epoch, restored=restore is not None
         )
-        self._pooled.add(session_id)
-        self._kept_whole.discard(session_id)
+        self._pooled.add(agent_session_id)
+        self._kept_whole.discard(agent_session_id)
         self._held.hold(attached, epoch)
         return attached
 
     async def _snapshot_on_machine(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
+    ) -> AgentStep:
         """The machine's whole disk, kept by the pool once what the workspace
         holds is pushed, while its host still runs, and the step that names
         it. The record holds the snapshot's name and its digest, never the
@@ -632,10 +643,10 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         if self._keyed_hash is None:
             raise SnapshotRefused("this process keys no hash, so it records no machine's snapshot")
         await self._agent_workspaces.detach(ctx, workspace, epoch)
-        taken = await self._cloud.snapshot(ctx, session_id)
+        taken = await self._cloud.snapshot(ctx, agent_session_id)
         # From here the machine is stopped: the release lets it go.
-        self._kept_whole.add(session_id)
-        keyed = await self._keyed_hash(ctx, session_id, taken.digest.encode())
+        self._kept_whole.add(agent_session_id)
+        keyed = await self._keyed_hash(ctx, agent_session_id, taken.digest.encode())
         now = self._clock()
         record = KeptSnapshot(
             id=new_id(),
@@ -643,7 +654,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             hash=HASH_SCHEME + keyed,
             size=0,
             reference=taken.reference,
@@ -651,34 +662,34 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             machine=True,
         )
         await self._agent_workspaces.keep_snapshot(ctx, record)
-        named = WorkspaceSnapshot(
-            id=record.id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        named = AgentWorkspaceSnapshot(
+            id=record.id, hash=record.hash, size=record.size, agent_workspace_id=workspace.id
         )
-        step = snapshotted_step(new_id(), now, session_id, loop_id, named)
-        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
+        step = snapshotted_step(new_id(), now, agent_session_id, loop_id, named)
+        (stored,) = await self._steps.append_agent_steps(ctx, agent_session_id, epoch, [step])
         return stored
 
     async def _on_machines(
-        self, ctx: TenantContext, session_id: UUID, restore: WorkspaceSnapshot
+        self, ctx: TenantContext, agent_session_id: UUID, restore: AgentWorkspaceSnapshot
     ) -> KeptSnapshot:
         """The snapshot a restore of a session of the cloud pool starts its
         machine from, as the pool recorded it. One the pool did not take,
         and one whose record does not match the step that names it, loses
-        the workspace (`WorkspaceLost`)."""
+        the workspace (`AgentWorkspaceLost`)."""
         record = await self._agent_workspaces.kept_snapshot(ctx, restore.id)
-        what = f"snapshot {restore.id} of session {session_id}"
+        what = f"snapshot {restore.id} of session {agent_session_id}"
         if record is None or not record.on_machines:
-            raise WorkspaceLost(f"{what} was not taken of a machine of the cloud pool")
-        if (record.session_id, record.hash, record.size) != (
-            session_id,
+            raise AgentWorkspaceLost(f"{what} was not taken of a machine of the cloud pool")
+        if (record.agent_session_id, record.hash, record.size) != (
+            agent_session_id,
             restore.hash,
             restore.size,
         ):
-            raise WorkspaceLost(f"{what} is not the one its record names")
+            raise AgentWorkspaceLost(f"{what} is not the one its record names")
         return record
 
     async def _recorded(
-        self, ctx: TenantContext, session_id: UUID, taken: WorkspaceSnapshot
+        self, ctx: TenantContext, agent_session_id: UUID, taken: AgentWorkspaceSnapshot
     ) -> None:
         """Records that a snapshot this process kept lives in the platform's
         bucket. The step names it either way, and a snapshot with no record
@@ -691,40 +702,44 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             hash=taken.hash,
             size=taken.size,
-            reference=snapshot_key(session_id, taken.hash),
+            reference=snapshot_key(agent_session_id, taken.hash),
         )
         try:
             await self._agent_workspaces.keep_snapshot(ctx, record)
         except Exception:
             log.exception(
-                "session %s: where snapshot %s lives was not recorded", session_id, taken.id
+                "session %s: where snapshot %s lives was not recorded", agent_session_id, taken.id
             )
 
     async def _in_store(
-        self, ctx: TenantContext, session_id: UUID, pool_id: UUID, restore: WorkspaceSnapshot
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        pool_id: UUID,
+        restore: AgentWorkspaceSnapshot,
     ) -> HostSnapshot:
         """The snapshot a restore of a session inside its tenant's wall starts
         from, as the store of a host of its pool keeps it. One the platform's
         bucket keeps never crosses into the wall, one another pool keeps is
         out of reach, and one whose record does not match the step that names
-        it is not trusted: each loses the workspace (`WorkspaceLost`)."""
+        it is not trusted: each loses the workspace (`AgentWorkspaceLost`)."""
         record = await self._agent_workspaces.kept_snapshot(ctx, restore.id)
-        what = f"snapshot {restore.id} of session {session_id}"
+        what = f"snapshot {restore.id} of session {agent_session_id}"
         if record is None or not record.on_host:
-            raise WorkspaceLost(
+            raise AgentWorkspaceLost(
                 f"{what} is kept in the platform's bucket, which never crosses into the wall"
             )
         if record.pool_id != pool_id:
-            raise WorkspaceLost(f"{what} is kept inside another pool's wall, out of reach")
-        if (record.session_id, record.hash, record.size) != (
-            session_id,
+            raise AgentWorkspaceLost(f"{what} is kept inside another pool's wall, out of reach")
+        if (record.agent_session_id, record.hash, record.size) != (
+            agent_session_id,
             restore.hash,
             restore.size,
         ):
-            raise WorkspaceLost(f"{what} is not the one its record names")
+            raise AgentWorkspaceLost(f"{what} is not the one its record names")
         return HostSnapshot(
             id=record.id,
             reference=record.reference,
@@ -734,21 +749,21 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         )
 
     async def _in_bucket(
-        self, ctx: TenantContext, session_id: UUID, restore: WorkspaceSnapshot
+        self, ctx: TenantContext, agent_session_id: UUID, restore: AgentWorkspaceSnapshot
     ) -> None:
         """Holds a restore this process makes to a snapshot of the platform's
         bucket: one a host keeps inside its tenant's wall never leaves it,
-        so a workspace made here cannot start from it (`WorkspaceLost`)."""
+        so a workspace made here cannot start from it (`AgentWorkspaceLost`)."""
         record = await self._agent_workspaces.kept_snapshot(ctx, restore.id)
         if record is not None and record.on_host:
-            raise WorkspaceLost(
+            raise AgentWorkspaceLost(
                 f"snapshot {restore.id} is kept inside the wall of pool {record.pool_id}, "
-                f"which session {session_id}'s workspace does not run in"
+                f"which session {agent_session_id}'s workspace does not run in"
             )
         if record is not None and record.on_machines:
-            raise WorkspaceLost(
+            raise AgentWorkspaceLost(
                 f"snapshot {restore.id} is a disk the cloud pool's machines keep, which "
-                f"session {session_id}'s workspace does not run on"
+                f"session {agent_session_id}'s workspace does not run on"
             )
 
     # The engine's, unchanged.
@@ -760,22 +775,22 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         return await self._inner.write_policy(ctx, policy)
 
     async def input_hash(
-        self, ctx: TenantContext, session_id: UUID, call_input: Mapping[str, Any]
+        self, ctx: TenantContext, agent_session_id: UUID, call_input: Mapping[str, Any]
     ) -> str:
-        return await self._inner.input_hash(ctx, session_id, call_input)
+        return await self._inner.input_hash(ctx, agent_session_id, call_input)
 
     async def gate(
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        defaults: PolicyLayer,
-        request: Step,
+        defaults: ToolPolicyLayer,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
-        above: Sequence[PolicyLayer] = (),
+        above: Sequence[ToolPolicyLayer] = (),
     ) -> Gate:
         return await self._inner.gate(
             ctx,
@@ -793,15 +808,15 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.execute(
             ctx,
             registry,
@@ -818,15 +833,15 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.recover(
             ctx,
             registry,
@@ -843,14 +858,14 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | JobNotStarted | Step:
+    ) -> JobHandle | JobNotStarted | AgentStep:
         return await self._inner.start_job(
             ctx,
             registry,
@@ -868,14 +883,14 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
     async def decide_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         request_seq: int,
         *,
         approve: bool,
         note: str = "",
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.decide_call(
-            ctx, session_id, request_seq, approve=approve, note=note
+            ctx, agent_session_id, request_seq, approve=approve, note=note
         )
 
     async def purge_tenant(self, ctx: TenantContext) -> int:

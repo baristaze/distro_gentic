@@ -25,8 +25,8 @@ from acme.om.spend_budgets.types.spend_hold import (
     BillUnknown,
     NotBilled,
     NotBilledProof,
-    SpendSettlement,
     SpendHoldRequest,
+    SpendSettlement,
 )
 from acme.om.spend_budgets.types.usage import CallLabels, CallSite, UsageRecord
 from acme.om.windows.gate import CallGateInterface
@@ -54,7 +54,9 @@ UNLABELLED: SpendLabels = (UNPINNED, UNPINNED)
 """The labels of a call no version and no tier was read for."""
 
 
-async def version_label(version: PinnedVersion | None, ctx: TenantContext, agent_session_id: UUID) -> str:
+async def version_label(
+    version: PinnedVersion | None, ctx: TenantContext, agent_session_id: UUID
+) -> str:
     """The label a session's calls count under: its pinned matrix version, a
     published one, so the set is bounded; `none` when nothing pinned it."""
     pinned = None if version is None else await version(ctx, agent_session_id)
@@ -211,7 +213,11 @@ class CallGateSpendBudgetImpl(CallGateInterface):
         request = SpendHoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, agent_session_id, session.root_id, spender, agent_project_id=agent_project_id
+                ctx.org_id,
+                agent_session_id,
+                session.root_id,
+                spender,
+                agent_project_id=agent_project_id,
             ),
             exposure=call_exposure(call_shape(call, fill), price),
             agent_session_id=agent_session_id,
@@ -285,7 +291,11 @@ class CallGateSpendBudgetImpl(CallGateInterface):
         request = SpendHoldRequest(
             spender_id=spender.id,
             scopes=scopes_of(
-                ctx.org_id, agent_session_id, session.root_id, spender, agent_project_id=agent_project_id
+                ctx.org_id,
+                agent_session_id,
+                session.root_id,
+                spender,
+                agent_project_id=agent_project_id,
             ),
             exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
             agent_session_id=agent_session_id,

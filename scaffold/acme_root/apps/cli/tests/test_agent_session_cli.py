@@ -25,7 +25,12 @@ def owner_context(stack: Stack) -> TenantContext:
 
 def started(stack: Stack) -> str:
     result = stack.acme(
-        "agent-session", "start", "assistant", "the dropped object", "--agent-project", AGENT_PROJECT_ID
+        "agent-session",
+        "start",
+        "assistant",
+        "the dropped object",
+        "--agent-project",
+        AGENT_PROJECT_ID,
     )
     assert result.exit_code == 0, result.output
     assert result.output.startswith("started ") and result.output.endswith(" on assistant 1\n")

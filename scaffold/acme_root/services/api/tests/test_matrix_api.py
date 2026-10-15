@@ -17,8 +17,8 @@ from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.context import OperatorRole, TenantContext
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.types.record import ModelRef
-from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import BENCHMARK, seed_matrix

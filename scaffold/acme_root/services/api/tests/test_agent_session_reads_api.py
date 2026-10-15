@@ -18,31 +18,13 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
-from contracts.agent_session_storage import make_session
-from contracts.evidence_storage import make_record, make_validation
-from contracts.intake_storage import make_binding
-from contracts.step_storage import (
-    make_message,
-    make_request,
-    make_response,
-    make_tool_request,
-    make_tool_response,
-)
 
 from acme.integrations.model_providers.types import Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
-from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
-from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import new_id, utcnow
-from acme.om.budgets.types.amount import Spend
-from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
-from acme.om.budgets.types.hold import Hold, HoldRequest
-from acme.om.context import Role, TenantContext
-from acme.om.intake.types.link import HandleKind
-from acme.om.steps.types.header import (
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.header import (
     AcceptedResult,
     ControlCommand,
     ControlHeader,
@@ -54,10 +36,29 @@ from acme.om.steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.base import new_id, utcnow
+from acme.om.context import Role, TenantContext
+from acme.om.intake.types.link import HandleKind
+from acme.om.spend_budgets.types.amount import Spend
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
+from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendHoldRequest
 from acme.om.windows.impl.gate import scopes_of
 from acme.services.api.container import AppContainer
 from acme.services.api.services.impl.session_reads import tool_calls_of
+
+from contracts.agent_session_storage import make_session
+from contracts.agent_step_storage import (
+    make_message,
+    make_request,
+    make_response,
+    make_tool_request,
+    make_tool_response,
+)
+from contracts.evidence_storage import make_record, make_validation
+from contracts.intake_storage import make_binding
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -97,12 +98,12 @@ async def spawn(container: AppContainer, headers: dict[str, str], parent_id: str
     """A sub-agent of the session, as the loop's spawn writes it."""
     ctx = await context_of(container, headers)
     sessions = container.managers.agent_sessions
-    parent = await sessions.get_session(ctx, UUID(parent_id))
+    parent = await sessions.get_agent_session(ctx, UUID(parent_id))
     child = await sessions.create_session(ctx, make_session(parent=parent))
     return str(child.id)
 
 
-def used(response: Step, usage: Usage) -> Step:
+def used(response: AgentStep, usage: Usage) -> AgentStep:
     header = response.header
     assert isinstance(header, ModelResponseHeader)
     return response.model_copy(update={"header": header.model_copy(update={"usage": usage})})
@@ -134,7 +135,7 @@ async def a_loop(
     sid, loop_id = UUID(session["id"]), UUID(said.json()["loop_id"])
     request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
     response = used(make_response(sid, loop_id, request.id), Usage(input=100, output=20))
-    steps: list[Step] = [request, response]
+    steps: list[AgentStep] = [request, response]
     for index in range(calls):
         call = make_tool_request(sid, loop_id, response.id)
         steps.append(call)
@@ -144,7 +145,7 @@ async def a_loop(
                 answer = answer.model_copy(update={"header": ToolResponseHeader(accepted=accepted)})
             steps.append(answer)
     epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_steps(ctx, sid, epoch, steps)
+    await managers.steps.append_agent_steps(ctx, sid, epoch, steps)
     if park is not None:
         await managers.agent_sessions.park(ctx, sid, epoch, loop_id, park)
     return session
@@ -316,7 +317,7 @@ async def test_what_a_session_waits_on_a_person_for_is_read_per_session_and_acro
     assert [(q["seq"], q["unlock"]) for q in questions.json()] == [(4, "step_guard")]
     assert first.status_code == 200, first.text
     across = first.json()["items"] + rest.json()["items"]
-    assert sorted((a["session_id"], a["seq"]) for a in across) == [
+    assert sorted((a["agent_session_id"], a["seq"]) for a in across) == [
         (holding["id"], 4),
         (holding["id"], 5),
     ]
@@ -334,7 +335,7 @@ async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_al
     ctx = await context_of(container, owner)
     sessions, steps = container.managers.agent_sessions, container.managers.steps
     parent = await sessions.create_session(
-        ctx, make_session(parent=await sessions.get_session(ctx, UUID(root["id"])))
+        ctx, make_session(parent=await sessions.get_agent_session(ctx, UUID(root["id"])))
     )
     held = await sessions.create_session(ctx, make_session(parent=parent))
     asker = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
@@ -343,7 +344,7 @@ async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_al
     request = make_request(held.id, message.id, (message.id,))
     response = make_response(held.id, message.id, request.id)
     call = make_tool_request(held.id, message.id, response.id)
-    await steps.append_steps(ctx, held.id, epoch, [request, response, call])
+    await steps.append_agent_steps(ctx, held.id, epoch, [request, response, call])
     await sessions.park(ctx, held.id, epoch, message.id, APPROVAL)
     me = await client.get("/v1/orgs/current", headers=owner)
     await add_member(container, UUID(me.json()["id"]), "mia@example.test", Role.MEMBER)
@@ -356,7 +357,7 @@ async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_al
     async def listed(headers: dict[str, str]) -> set[str]:
         answered = await client.get("/v1/approvals", headers=headers)
         assert answered.status_code == 200, answered.text
-        return {item["session_id"] for item in answered.json()["items"]}
+        return {item["agent_session_id"] for item in answered.json()["items"]}
 
     assert (await client.get(f"/v1/agent-sessions/{root['id']}", headers=owner)).json()[
         "status"
@@ -448,12 +449,12 @@ def test_an_approved_call_that_ran_stays_approved_once_its_approval_lapses() -> 
     header = call.header
     assert isinstance(header, ToolRequestHeader)
     now = utcnow()
-    decision = Step(
+    decision = AgentStep(
         id=new_id(),
         created_at=now,
-        session_id=sid,
+        agent_session_id=sid,
         loop_id=loop_id,
-        type=StepType.CONTROL,
+        type=AgentStepType.CONTROL,
         actor=Actor.PERSON,
         origin=Origin.API,
         refs=(call.id,),
@@ -574,11 +575,14 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         Principal(kind=PrincipalKind.PERSON, id=ctx.user_id),
         agent_project_id=None,
     )
-    keys = {BudgetScopeKind.TENANT: str(ctx.org_id), BudgetScopeKind.PERSON: str(new_id())}
+    keys = {
+        SpendBudgetScopeKind.TENANT: str(ctx.org_id),
+        SpendBudgetScopeKind.PERSON: str(new_id()),
+    }
     budgets = [
-        await container.managers.budgets.create_budget(
+        await container.managers.budgets.create_spend_budget(
             ctx,
-            Budget(
+            SpendBudget(
                 id=new_id(),
                 created_at=now,
                 updated_at=now,
@@ -601,14 +605,14 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
             funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id="starter", zone="UTC"
         ),
     )
-    request = HoldRequest(
+    request = SpendHoldRequest(
         spender_id=ctx.user_id,
         scopes=scopes,
         exposure=Spend(cost_micros=600, tokens=100),
         own=None,
         purpose="main",
     )
-    assert isinstance(await container.managers.budget_gate.authorize(ctx, request), Hold)
+    assert isinstance(await container.managers.spend_budget_gate.authorize(ctx, request), SpendHold)
 
     first = await client.get("/v1/usage", headers=owner, params={"limit": 1})
     rest = await client.get(

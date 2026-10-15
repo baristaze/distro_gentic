@@ -6,8 +6,8 @@ them it found still there."""
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from acme.om.change_events.storage import ChangeEventStorageInterface
 from acme.om.context import TenantContext
-from acme.om.events.storage import EventStorageInterface
 from acme.om.platform_root import (
     PlatformManagers,
     ProductNamespace,
@@ -26,7 +26,7 @@ class Parcels:
     """The namespace's managers: each tenant's parcels, by name, and what
     each purge of a tenant found of the tenant's events."""
 
-    events: EventStorageInterface
+    events: ChangeEventStorageInterface
     held: dict[UUID, list[str]] = field(default_factory=lambda: {})
     found: list[tuple[UUID, int]] = field(default_factory=lambda: [])
 
@@ -48,7 +48,7 @@ built: list[Parcels] = []
 
 
 def build_parcels(storage: StorageInterface, managers: PlatformManagers) -> Parcels:
-    parcels = Parcels(storage.get_event_storage())
+    parcels = Parcels(storage.get_change_event_storage())
     built.append(parcels)
     return parcels
 

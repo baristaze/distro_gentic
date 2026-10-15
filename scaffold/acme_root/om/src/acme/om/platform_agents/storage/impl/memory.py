@@ -13,8 +13,10 @@ class PlatformAgentsStorageMemoryImpl(MemoryStorageBase, PlatformAgentsStorageIn
         super().__init__(outbox)
         self._validations: MemoryTable[ValidationSession] = {}
 
-    async def read_validation(self, org_id: UUID, session_id: UUID) -> ValidationSession | None:
-        return self._get(self._validations, org_id, session_id)
+    async def read_validation(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> ValidationSession | None:
+        return self._get(self._validations, org_id, agent_session_id)
 
     async def create_validation(
         self, org_id: UUID, session: ValidationSession, outbox_rows: tuple[OutboxRow, ...]
@@ -40,6 +42,6 @@ class PlatformAgentsStorageMemoryImpl(MemoryStorageBase, PlatformAgentsStorageIn
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             gone = [session.id for session in self._rows(self._validations, org_id)][:limit]
-            for session_id in gone:
-                del self._validations[session_id]
+            for agent_session_id in gone:
+                del self._validations[agent_session_id]
             return len(gone)

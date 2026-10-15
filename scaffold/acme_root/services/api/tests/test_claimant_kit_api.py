@@ -25,7 +25,7 @@ from acme.client.claimant.enrollment import CredentialRefused
 from acme.client.claimant.settings import ClaimantSettings
 from acme.client.client import ApiClient
 from acme.client.types import ReportOutcome
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant as ClaimantRow
@@ -38,7 +38,7 @@ SCAN = "SCAN"
 SCANNER = "scanner"
 
 
-class ScanPayload(Platform):
+class ScanPayload(OmBase):
     pool_id: UUID
     pages: int
 

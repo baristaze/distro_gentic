@@ -5,6 +5,7 @@ showed, so a run that regressed or failed is kept as well."""
 from collections.abc import Iterator
 
 import pytest
+
 from contracts.benchmark_export import Export
 
 

@@ -16,7 +16,6 @@ from pathlib import Path
 import httpx
 import pytest
 from api_support import TOTP_KEY, seed_request, sign_in_as
-from contracts.product import LEDGER, ReadTitleImpl, ledger_product
 from httpx import ASGITransport
 from runner_support import SONNET, answers
 
@@ -29,7 +28,7 @@ from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.integrations.root import IntegrationsInterface
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -38,13 +37,15 @@ from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import seed_platform
 from acme.services.api.settings import ApiSettings
+from acme.workers.agent_session_runner import container as runner_container
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.main import build_runner
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 from acme.workers.maintenance import container as maintenance_container
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.settings import MaintenanceSettings
-from acme.workers.session_runner import container as runner_container
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.main import build_runner
-from acme.workers.session_runner.settings import SessionRunnerSettings
+
+from contracts.product import LEDGER, ReadTitleImpl, ledger_product
 
 TITLE = "the ledger that will not balance"
 PURGE = "postgresql+asyncpg://acme_purge@127.0.0.1:1/acme"
@@ -91,7 +92,7 @@ def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
             )
         ),
         runner=RunnerContainer.build(
-            SessionRunnerSettings.model_validate({**local, "runner_id": "runner-test"})
+            AgentSessionRunnerSettings.model_validate({**local, "runner_id": "runner-test"})
         ),
         maintenance=WorkerContainer.build(
             MaintenanceSettings.model_validate(
@@ -141,7 +142,7 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
     )
     assert started.status_code == 201, started.text
     assert started.json()["kind"] == LEDGER.name
-    session_id = started.json()["id"]
+    agent_session_id = started.json()["id"]
 
     twin = processes.runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     asks = ToolUseBlock(id=f"use_{new_id().hex[:12]}", name=ReadTitleImpl.SPEC.name, input={})
@@ -155,7 +156,7 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
     )
     twin.add(answers("It is the ledger that will not balance."))  # pyright: ignore[reportAttributeAccessIssue]
     said = await client.post(
-        f"/v1/agent-sessions/{session_id}/messages",
+        f"/v1/agent-sessions/{agent_session_id}/messages",
         headers=created(headers),
         json={"text": "Which ledger is this?"},
     )
@@ -166,9 +167,9 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
     status = ""
     try:
         for _ in range(500):
-            read = await client.get(f"/v1/agent-sessions/{session_id}", headers=headers)
+            read = await client.get(f"/v1/agent-sessions/{agent_session_id}", headers=headers)
             status = read.json()["status"]
-            if status == SessionStatus.IDLE.value and processes.read:
+            if status == AgentSessionStatus.IDLE.value and processes.read:
                 break
             await asyncio.sleep(0.01)
     finally:
@@ -176,11 +177,11 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
         await running
 
     assert processes.read == [TITLE], "the product's tool ran in the runner, reading its manager"
-    assert status == SessionStatus.IDLE.value
+    assert status == AgentSessionStatus.IDLE.value
 
 
 async def run_until_idle(
-    processes: Processes, client: httpx.AsyncClient, headers: dict[str, str], session_id: str
+    processes: Processes, client: httpx.AsyncClient, headers: dict[str, str], agent_session_id: str
 ) -> str:
     """The runner run until the session is idle again, its status then."""
     runner = build_runner(processes.runner)
@@ -188,9 +189,9 @@ async def run_until_idle(
     status = ""
     try:
         for _ in range(500):
-            read = await client.get(f"/v1/agent-sessions/{session_id}", headers=headers)
+            read = await client.get(f"/v1/agent-sessions/{agent_session_id}", headers=headers)
             status = read.json()["status"]
-            if status == SessionStatus.IDLE.value:
+            if status == AgentSessionStatus.IDLE.value:
                 break
             await asyncio.sleep(0.01)
     finally:
@@ -235,7 +236,7 @@ async def test_a_agent_playbook_invoked_through_the_api_reaches_the_model_and_it
         },
     )
     assert started.status_code == 201, started.text
-    session_id = started.json()["id"]
+    agent_session_id = started.json()["id"]
 
     twin = processes.runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(twin, ModelProviderScriptedImpl)
@@ -252,18 +253,18 @@ async def test_a_agent_playbook_invoked_through_the_api_reaches_the_model_and_it
     invoked = await client.post(
         "/v1/agent-playbooks/closed-ledgers/invocations",
         headers=headers,
-        json={"session_id": session_id},
+        json={"agent_session_id": agent_session_id},
     )
     assert invoked.status_code == 201, invoked.text
     assert (invoked.json()["version"], invoked.json()["pinned"]) == (1, False)
 
-    status = await run_until_idle(processes, client, headers, session_id)
-    assert status == SessionStatus.IDLE.value
+    status = await run_until_idle(processes, client, headers, agent_session_id)
+    assert status == AgentSessionStatus.IDLE.value
     first = twin.calls[0]
     said = [b.text for m in first.messages for b in m.blocks if isinstance(b, TextBlock)]
     assert any(brief in text for text in said), "the brief reached the model as a message"
     assert processes.read == [], "the gate refused the product's tool"
-    steps = await client.get(f"/v1/agent-sessions/{session_id}/steps", headers=headers)
+    steps = await client.get(f"/v1/agent-sessions/{agent_session_id}/steps", headers=headers)
     (response,) = [s for s in steps.json()["items"] if s["type"] == "tool_response"]
     assert response["failure"] == "denied"
 
@@ -273,7 +274,7 @@ async def test_the_maintenance_worker_knows_a_products_kind(processes: Processes
     owner, _ = await managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=LEDGER.name, title=TITLE)
     )
     assert (session.kind, session.kind_version) == (LEDGER.name, LEDGER.version)

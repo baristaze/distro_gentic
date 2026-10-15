@@ -2,14 +2,14 @@ import base64
 from collections.abc import Sequence
 from uuid import UUID
 
+from acme.om.agent_steps.types.stream import StreamPart, TextPart, ThinkingPart, ToolInputPart
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
 from acme.om.hosts.types.host import ClaimantIdentity
-from acme.om.steps.types.stream import StreamPart, TextPart, ThinkingPart, ToolInputPart
 from acme.om.watch import WatchManagerInterface
 from acme.om.watch.types.control import HandCommand
 from acme.om.watch.types.live import MAX_SEEN, ItemPage, ItemSeen, Seen
-from acme.services.api.services.impl.agent_sessions import session_view
+from acme.services.api.services.impl.agent_sessions import agent_session_view
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.types.agent_sessions import AgentSessionView
 from acme.services.api.types.claimants import ClaimantAppendRequest
@@ -32,16 +32,16 @@ from acme.services.api.types.watch import (
 
 
 def seen_of(after: Sequence[str]) -> tuple[Seen, ...]:
-    """Each `<step_id>:<last>` a reader names, read; anything else is refused."""
+    """Each `<agent_step_id>:<last>` a reader names, read; anything else is refused."""
     if len(after) > MAX_SEEN:
         raise ValidationFailed(f"a read names at most {MAX_SEEN} streams")
     seen: list[Seen] = []
     for mark in after:
         step, _, n = mark.partition(":")
         try:
-            seen.append(Seen(step_id=UUID(step), n=int(n)))
+            seen.append(Seen(agent_step_id=UUID(step), n=int(n)))
         except ValueError:
-            raise ValidationFailed(f"{mark[:80]!r} is not <step_id>:<last>") from None
+            raise ValidationFailed(f"{mark[:80]!r} is not <agent_step_id>:<last>") from None
     return tuple(seen)
 
 
@@ -94,10 +94,10 @@ class WatchServiceImpl(WatchServiceInterface):
     def __init__(self, watch: WatchManagerInterface) -> None:
         self._watch = watch
 
-    async def open_live(self, ctx: TenantContext, session_id: UUID) -> LiveReadView:
-        live = await self._watch.open_live(ctx, session_id)
+    async def open_live(self, ctx: TenantContext, agent_session_id: UUID) -> LiveReadView:
+        live = await self._watch.open_live(ctx, agent_session_id)
         return LiveReadView(
-            session_id=live.session_id, handle=live.handle, expires_at=live.expires_at
+            agent_session_id=live.agent_session_id, handle=live.handle, expires_at=live.expires_at
         )
 
     async def read_live(
@@ -105,10 +105,10 @@ class WatchServiceImpl(WatchServiceInterface):
     ) -> LivePageView:
         page = await self._watch.read_live(rctx, handle, seen_of(after))
         return LivePageView(
-            session_id=page.session_id,
+            agent_session_id=page.agent_session_id,
             streams=[
                 LiveStreamView(
-                    step_id=stream.step_id,
+                    agent_step_id=stream.agent_step_id,
                     first=stream.first,
                     dropped=stream.dropped,
                     parts=[part_view(part) for part in stream.parts],
@@ -152,19 +152,19 @@ class WatchServiceImpl(WatchServiceInterface):
     ) -> ItemPageView:
         return item_page_view(await self._watch.read_item_live(rctx, handle, item_seen_of(after)))
 
-    async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._watch.take_control(ctx, session_id))
+    async def take_control(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+        return agent_session_view(await self._watch.take_control(ctx, agent_session_id))
 
     async def run_command(
-        self, ctx: TenantContext, session_id: UUID, body: CommandRequest, key: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, body: CommandRequest, key: UUID
     ) -> HandRunView:
         command = HandCommand(
             key=key, argv=tuple(body.argv), cwd=body.cwd, timeout_seconds=body.timeout_seconds
         )
-        run = await self._watch.run_command(ctx, session_id, command)
+        run = await self._watch.run_command(ctx, agent_session_id, command)
         return HandRunView(
             item_id=run.item_id,
-            session_id=run.session_id,
+            agent_session_id=run.agent_session_id,
             command_key=run.key,
             user_id=run.user_id,
             epoch=run.epoch,
@@ -172,9 +172,9 @@ class WatchServiceImpl(WatchServiceInterface):
         )
 
     async def command(
-        self, ctx: TenantContext, session_id: UUID, key: UUID, after_seq: int
+        self, ctx: TenantContext, agent_session_id: UUID, key: UUID, after_seq: int
     ) -> CommandProgressView:
-        progress = await self._watch.command(ctx, session_id, key, after_seq)
+        progress = await self._watch.command(ctx, agent_session_id, key, after_seq)
         view = CommandProgressView(
             state=progress.state,
             parts=[
@@ -200,6 +200,8 @@ class WatchServiceImpl(WatchServiceInterface):
         return view
 
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, body: ControlGiveBackRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: ControlGiveBackRequest
     ) -> AgentSessionView:
-        return session_view(await self._watch.give_back(ctx, session_id, body.summary, body.stop))
+        return agent_session_view(
+            await self._watch.give_back(ctx, agent_session_id, body.summary, body.stop)
+        )

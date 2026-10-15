@@ -54,12 +54,12 @@ class RetentionManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def get_snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         """The session's snapshot; `NotFound` when the tenant holds none."""
         ...
 
     @abstractmethod
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def erase_content(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         """Erases the session's content now, as one who manages the tenant's
         members may, the way the sweep does past its content's life: the
         engine revokes its key, a session marked deleted included, the

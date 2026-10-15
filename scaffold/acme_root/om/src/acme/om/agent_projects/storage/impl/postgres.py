@@ -105,17 +105,19 @@ class AgentProjectStoragePostgresImpl(PgStorageBase, AgentProjectStorageInterfac
                 raise TenantMismatch(f"agent session {binding.id} is not in {org_id}")
             return to_model(row, SessionAgentProject)
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> SessionAgentProject | None:
+    async def read_binding(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionAgentProject | None:
         stmt = select(AgentSessionProjects).where(
-            AgentSessionProjects.org_id == org_id, AgentSessionProjects.id == session_id
+            AgentSessionProjects.org_id == org_id, AgentSessionProjects.id == agent_session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, SessionAgentProject)
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
         stmt = delete(AgentSessionProjects).where(
-            AgentSessionProjects.org_id == org_id, AgentSessionProjects.id == session_id
+            AgentSessionProjects.org_id == org_id, AgentSessionProjects.id == agent_session_id
         )
         async with self._purge_session_for(AgentSessionProjects, org_id=org_id) as session:
             purged = deleted(await session.execute(stmt))

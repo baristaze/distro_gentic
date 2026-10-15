@@ -4,11 +4,11 @@ from uuid import UUID
 
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus, Among
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.attribution.types.authority import Visibility
 from acme.om.exceptions import PreconditionFailed
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.steps.types.header import ParkReason
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 

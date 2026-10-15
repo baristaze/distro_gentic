@@ -11,9 +11,8 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import SettingsConfigDict
 
 from acme.infra.agent_root import AgentInfraSettings
-
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.infra.platform_settings import PlatformInfraSettings
-from acme.infra.workspaces.container import DEFAULT_IMAGE
 
 ENVIRONMENTS = frozenset({"local", "test", "dev", "staging", "production"})
 """The one set of environment names, shared with deployment/terraform."""

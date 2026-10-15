@@ -22,8 +22,6 @@ from uuid import UUID
 
 import httpx
 import pytest
-from contracts.agent_project_storage import make_agent_project, make_binding
-from contracts.agent_session_storage import make_session
 from host_support import (
     DETAIL,
     Pace,
@@ -42,12 +40,19 @@ from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.mcp import HostServers
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode as HostMode
+from acme.infra.agent_workspaces import (
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+    AgentWorkspace,
+)
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE, AgentWorkspaceContainerImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
-from acme.infra.workspaces.container import DEFAULT_IMAGE, WorkspaceContainerImpl
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id
 from acme.om.context import (
     AppContext,
@@ -61,11 +66,13 @@ from acme.om.exceptions import ToolFailed
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
 from acme.om.exec_relay.types.exec import ExecState, StopKind
 from acme.om.placement.types.work import ExecPayload
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
 from acme.services.api.services.impl import exec_relay as exec_relay_service
+
+from contracts.agent_project_storage import make_agent_project, make_binding
+from contracts.agent_session_storage import make_session
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -84,7 +91,7 @@ class Relayed:
     host: HostAgent
     executor: ExecutorRelayImpl
     runner: TransportRelayImpl
-    workspace: Workspace
+    workspace: AgentWorkspace
     epoch: int
     host_id: UUID
 
@@ -157,7 +164,7 @@ async def relay_to(
     host_id = UUID(host.credential.claimant_id)
     await managers.exec_relay.bind_workspace(api.owner, session.id, host_id, str(where))
     epoch = await managers.steps.begin_run(api.owner, session.id)
-    workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
+    workspace = AgentWorkspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
     return Relayed(api, host, executor, runner_of(api), workspace, epoch, host_id)
 
 
@@ -186,12 +193,12 @@ async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UU
 
 
 async def run_on(
-    host: HostAgent, api: Stack, session_id: UUID, spec: IsolationSpec, *argv: str
+    host: HostAgent, api: Stack, agent_session_id: UUID, spec: IsolationSpec, *argv: str
 ) -> CommandResult:
     """A command of the session's next run, relayed to the host that holds
     its workspace, while that host claims."""
-    epoch = await api.container.managers.steps.begin_run(api.owner, session_id)
-    workspace = Workspace(id=session_id, org_id=api.owner.org_id, spec=spec, location="")
+    epoch = await api.container.managers.steps.begin_run(api.owner, agent_session_id)
+    workspace = AgentWorkspace(id=agent_session_id, org_id=api.owner.org_id, spec=spec, location="")
     waiting = asyncio.ensure_future(
         runner_of(api).run(workspace, command(epoch, *argv), seal=NO_SEAL)
     )
@@ -394,9 +401,9 @@ async def test_a_bound_workspace_whose_directory_went_is_made_again_and_its_call
 ) -> None:
     opened = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
     host, _ = await directory_host(api, (await api.pool("pool-a")).id, tmp_path)
-    session_id, location = await bound_on(host, api, opened)
+    agent_session_id, location = await bound_on(host, api, opened)
     shutil.rmtree(location)  # its host's disk lost it
-    ran = await run_on(host, api, session_id, opened, "pwd")
+    ran = await run_on(host, api, agent_session_id, opened, "pwd")
     assert (ran.exit_code, ran.stdout) == (0, f"{real(location)}\n")
 
 
@@ -407,17 +414,17 @@ async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call
 ) -> None:
     sealed = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     host = await container_host(api, (await api.pool("pool-a")).id, tmp_path)
-    session_id, name = await bound_on(host, api, sealed)
+    agent_session_id, name = await bound_on(host, api, sealed)
     try:
-        await run_on(host, api, session_id, sealed, "touch", "kept")
+        await run_on(host, api, agent_session_id, sealed, "touch", "kept")
         # Stopped, as a reboot or a Docker restart leaves it.
         stop = ["docker", "stop", "-t", "0", name]
         await asyncio.to_thread(subprocess.run, stop, check=True, capture_output=True)
-        ran = await run_on(host, api, session_id, sealed, "ls")
+        ran = await run_on(host, api, agent_session_id, sealed, "ls")
         assert (ran.exit_code, ran.stdout) == (0, "kept\n")  # a new instance, over its files
     finally:
-        provider = WorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
-        await provider.purge(api.owner.org_id, session_id)
+        provider = AgentWorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
+        await provider.purge(api.owner.org_id, agent_session_id)
 
 
 @pytest.mark.parametrize("served", [True, False])
@@ -446,13 +453,13 @@ async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_
     relayed: Relayed,
 ) -> None:
     api = relayed.api
-    session_id = relayed.workspace.id
-    await api.container.managers.agent_workspaces.pinned(api.owner, session_id, DIRECTORY)
+    agent_session_id = relayed.workspace.id
+    await api.container.managers.agent_workspaces.pinned(api.owner, agent_session_id, DIRECTORY)
     watch = build_watch(api.container.managers, api.container.stream)
     person = _in_person(api.owner)
-    await watch.take_control(person, session_id)
+    await watch.take_control(person, agent_session_id)
     command = HandCommand(key=new_id(), argv=("echo", "by hand"))
-    await watch.run_command(person, session_id, command)
+    await watch.run_command(person, agent_session_id, command)
     handled = None
     for _ in range(100):
         handled = await relayed.host.claim_once()
@@ -461,7 +468,7 @@ async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_
         await asyncio.sleep(0.01)
     assert handled is not None
     assert handled.refused == ["a person's command, which this host does not accept"]
-    ended = await watch.command(person, session_id, command.key, -1)
+    ended = await watch.command(person, agent_session_id, command.key, -1)
     assert ended.state is ExecState.DONE and ended.outcome is not None
     assert ended.outcome.refused == "refused_by_host" and ended.outcome.exit_code is None
 
@@ -474,7 +481,7 @@ def _in_person(of: TenantContext) -> TenantContext:
         org_id=of.org_id,
         role=of.role,
         permissions=permissions_of(of.role),
-        credential_kind=CredentialKind.SESSION_TOKEN,
+        credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
     )
 
 

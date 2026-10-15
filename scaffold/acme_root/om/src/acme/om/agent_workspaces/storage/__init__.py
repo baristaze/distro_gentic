@@ -17,7 +17,9 @@ from acme.om.outbox.types.row import OutboxRow
 
 class AgentWorkspaceStorageInterface(ABC):
     @abstractmethod
-    async def read_workspace(self, org_id: UUID, session_id: UUID) -> AgentSessionWorkspace | None:
+    async def read_workspace(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionWorkspace | None:
         """The session's workspace, or None when it was never pinned."""
         ...
 
@@ -110,20 +112,20 @@ class AgentWorkspaceStorageInterface(ABC):
 
     @abstractmethod
     async def read_snapshots(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[KeptSnapshot]:
         """At most `limit` records of the snapshots the session keeps, oldest
         first."""
         ...
 
     @abstractmethod
-    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+    async def purge_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
         """The records of every snapshot the session keeps; returns how many
         went."""
         ...
 
     @abstractmethod
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> bool:
         """The workspace row of a session its purge has claimed. False when
         none was left."""
         ...

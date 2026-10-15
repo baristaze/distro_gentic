@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Created, Identifiable, Platform, Trackable
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.base import Created, Identifiable, OmBase, Trackable
+from acme.om.language_models.types.fill import Fill, ModelRole
 
 
 class MatrixPin(Identifiable, Created):
@@ -16,7 +16,7 @@ class MatrixPin(Identifiable, Created):
     since. A fallback a provider's failure forced takes no pin: it is drawn
     from the fallbacks the pinned version declared. Written once."""
 
-    session_id: UUID
+    agent_session_id: UUID
     fill_set_version: int = Field(ge=1)
     matrix_version: int = Field(ge=1)
 
@@ -30,7 +30,7 @@ class FillOverride(Identifiable, Trackable):
     fill: Fill
 
 
-class FillOptions(Platform):
+class FillOptions(OmBase):
     """What a tenant on its own keys may choose for one model role of the
     published matrix: the fills it qualified for the role, from a provider
     the tenant holds a live key for. Never stored: read from the version and

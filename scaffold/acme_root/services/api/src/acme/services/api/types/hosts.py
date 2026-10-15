@@ -154,7 +154,7 @@ class PlacementView(View):
     """Where a session runs. A pinned session with no host of its pool
     online is `waiting`; it never moves to the cloud by itself."""
 
-    session_id: UUID
+    agent_session_id: UUID
     pool: PoolView | None
     hosts_online: int
     waiting: bool

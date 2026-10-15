@@ -15,12 +15,13 @@ from uuid import UUID
 
 from pydantic import Field, model_serializer, model_validator
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.base import FrozenMapping, thaw_mapping
 from acme.infra.secrets import SecretsInterface
-from acme.infra.workspaces import Workspace
 from acme.integrations.mcp import McpAnswer, McpClientInterface
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.agents.attached import Attached, AttachedToolsetsInterface
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import utcnow
@@ -38,7 +39,6 @@ from acme.om.connectors.types.connector import (
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
 from acme.om.exec_relay.types.exec import McpRequest
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.mcp import McpCall, McpServers, secret_use
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.mcp import McpBinding
@@ -61,7 +61,7 @@ class HostCall(Protocol):
 
     def __call__(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: McpRequest,
         *,
         key: UUID,

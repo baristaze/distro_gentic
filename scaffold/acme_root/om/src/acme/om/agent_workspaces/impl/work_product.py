@@ -22,8 +22,8 @@ class WorkProductAgentWorkspacesImpl(WorkProductInterface):
         self._agent_workspaces = agent_workspaces
         self._held = held
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
-        workspace = self._held.get(session_id)
+    async def delivered(self, ctx: TenantContext, agent_session_id: UUID) -> WorkProduct | None:
+        workspace = self._held.get(agent_session_id)
         if workspace is None:
-            raise Unavailable(f"the workspace of session {session_id} is not held here")
+            raise Unavailable(f"the workspace of session {agent_session_id} is not held here")
         return await self._agent_workspaces.work_product(ctx, workspace)

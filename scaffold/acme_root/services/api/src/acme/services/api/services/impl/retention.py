@@ -32,7 +32,9 @@ class RetentionServiceImpl(RetentionServiceInterface):
         )
         return RetentionView.model_validate(await self._retention.write_policy(ctx, policy))
 
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetentionView:
+    async def erase_content(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> SessionRetentionView:
         return SessionRetentionView.model_validate(
-            await self._retention.erase_content(ctx, session_id)
+            await self._retention.erase_content(ctx, agent_session_id)
         )

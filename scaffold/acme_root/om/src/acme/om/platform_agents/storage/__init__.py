@@ -12,7 +12,9 @@ from acme.om.platform_agents.types.validation import ValidationSession
 
 class PlatformAgentsStorageInterface(ABC):
     @abstractmethod
-    async def read_validation(self, org_id: UUID, session_id: UUID) -> ValidationSession | None:
+    async def read_validation(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> ValidationSession | None:
         """The tenant's validation session, or None."""
         ...
 

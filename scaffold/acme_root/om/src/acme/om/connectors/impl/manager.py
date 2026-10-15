@@ -8,7 +8,7 @@ from acme.infra.secrets import SecretsInterface
 from acme.integrations.mcp import McpClientInterface, McpHttp
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agents.types.kind import AgentKindCatalog
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.connectors.impl.addresses import Resolve, refused_now, resolve
 from acme.om.connectors.manager import ConnectorsManagerInterface
 from acme.om.connectors.rules import cloud_server, listed_tools, reach_with, reviewed
@@ -42,7 +42,7 @@ CREATED = "connectors.connector.created"
 UPDATED = "connectors.connector.updated"  # a review, an attachment, or a detachment
 
 
-class ConnectorsOptions(Platform):
+class ConnectorsOptions(OmBase):
     page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
     # A cloud connector's address may be this host or a private network:

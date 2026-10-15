@@ -52,7 +52,7 @@ export const PLATFORM_GISTS: Readonly<Record<string, Gist>> = {
   validate: (_input, output) => `${verb(output, "Validated", "Validate")} the head`,
   open_pull_request: (input, output) => `${verb(output, "Opened", "Open")} a pull request ${quoted(asked(input, "title"))}`.trim(),
   submit_result: (input, output) => `${verb(output, "Submitted", "Submit")} its result: ${asked(input, "claim") ?? "a claim"}`,
-  write_plan: (_input, output) => `${verb(output, "Wrote", "Write")} a plan`,
+  write_agent_plan: (_input, output) => `${verb(output, "Wrote", "Write")} a plan`,
   ask_person: (input, output) => `${verb(output, "Asked", "Ask")} ${quoted(asked(input, "question"))}`.trim(),
   hand_off_to_software_engineer: (input, output) => `${verb(output, "Handed", "Hand")} off ${quoted(asked(input, "title"))}`.trim(),
 };

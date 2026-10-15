@@ -26,7 +26,9 @@ class RetentionServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetentionView:
+    async def erase_content(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> SessionRetentionView:
         """The session's content erased, its shape kept, and its snapshot as
         the erasure left it."""
         ...

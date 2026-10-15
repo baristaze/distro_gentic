@@ -34,12 +34,12 @@ class ParkAlertStorageMemoryImpl(MemoryStorageBase, ParkAlertStorageInterface):
                 self._park_alerts[held.id] = (org_id, held)
             return held
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         async with self._lock:
             ids = [
                 row.id
                 for org, row in self._park_alerts.values()
-                if org == org_id and row.session_id == session_id
+                if org == org_id and row.agent_session_id == agent_session_id
             ][:limit]
             for row_id in ids:
                 del self._park_alerts[row_id]

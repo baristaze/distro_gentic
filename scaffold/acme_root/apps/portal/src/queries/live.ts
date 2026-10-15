@@ -45,10 +45,10 @@ function joined(runs: readonly LiveRun[], parts: readonly LivePartView[]): LiveR
 export function mergeLive(held: readonly LiveStream[], read: readonly LiveStreamView[]): LiveStream[] {
   const before = new Map(held.map((stream) => [stream.stepId, stream]));
   return read.map((stream) => {
-    const known = before.get(stream.step_id);
+    const known = before.get(stream.agent_step_id);
     const last = stream.parts.length > 0 ? stream.parts[stream.parts.length - 1]!.last : (known?.last ?? null);
     return {
-      stepId: stream.step_id,
+      stepId: stream.agent_step_id,
       last,
       dropped: (known?.dropped ?? false) || stream.dropped,
       runs: joined(known?.runs ?? [], stream.parts),

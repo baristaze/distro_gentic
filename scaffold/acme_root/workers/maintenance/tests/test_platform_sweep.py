@@ -5,9 +5,6 @@ purged, and the platform's gauges set whole a pass."""
 from pathlib import Path
 from uuid import UUID
 
-from contracts.matrix_storage import make_choice, make_pin
-from contracts.spend_account_storage import make_spend_account
-from contracts.spend_ledger_storage import a_funded_hold, funding
 from prometheus_client import REGISTRY
 from test_sweep import deleted_org, listed, quiet_outbox, recording, service_contexts
 from worker_support import build_container, fast_options
@@ -25,6 +22,10 @@ from acme.workers.maintenance.loop import (
     WorkerLoop,
 )
 from acme.workers.maintenance.main import build_loop
+
+from contracts.matrix_storage import make_choice, make_pin
+from contracts.spend_account_storage import make_spend_account
+from contracts.spend_ledger_storage import a_funded_hold, funding
 
 
 def sweeping(
@@ -93,7 +94,7 @@ async def test_a_deleted_tenants_matrix_pins_and_choices_go_before_it_is_marked_
 
     for _ in range(3):
         await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
-    assert await matrix.read_pin(org_id, pin.session_id) is None
+    assert await matrix.read_pin(org_id, pin.agent_session_id) is None
     assert await matrix.read_overrides(org_id, 10) == []
     marked = await container.storage.get_tenancy_storage().read_org(org_id)
     assert marked is not None and marked.purged_at is not None, "nothing of it was left"
@@ -112,7 +113,9 @@ async def test_a_deleted_tenants_account_goes_and_it_is_marked_purged_with_its_m
     accounts = container.storage.get_spend_account_storage()
     ledger = container.storage.get_spend_ledger_storage()
     assert await accounts.create_spend_account(org_id, make_spend_account(org_id), ())
-    held = await ledger.open_hold(org_id, a_funded_hold(units=1, paid_by=funding(included=10)))
+    held = await ledger.open_spend_hold(
+        org_id, a_funded_hold(units=1, paid_by=funding(included=10))
+    )
     assert isinstance(held, FundedHold)
     loop = build_loop(container)
     tenancy = container.storage.get_tenancy_storage()

@@ -36,7 +36,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 raise _taken(error, machine.id) from error
 
     async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
-        count = select(func.count()).select_from(PoolVms).where(PoolVms.session_id.is_(None))
+        count = select(func.count()).select_from(PoolVms).where(PoolVms.agent_session_id.is_(None))
         async with self._session_for(PoolVms, org_id=EMPTY_UUID) as session:
             await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": WARM_LOCK})
             warm = (await session.execute(count)).scalar_one()
@@ -68,10 +68,10 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, PoolVm)
 
-    async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolVm | None:
+    async def read_of_session(self, tenant_id: UUID, agent_session_id: UUID) -> PoolVm | None:
         stmt = (
             select(PoolVms)
-            .where(PoolVms.tenant_id == tenant_id, PoolVms.session_id == session_id)
+            .where(PoolVms.tenant_id == tenant_id, PoolVms.agent_session_id == agent_session_id)
             .order_by(PoolVms.created_at, PoolVms.id)
             .limit(1)
         )
@@ -99,7 +99,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
     async def claim_warm(
         self,
         tenant_id: UUID,
-        session_id: UUID,
+        agent_session_id: UUID,
         pool_id: UUID,
         bound_by: UUID,
         egress_open: bool,
@@ -108,7 +108,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
         stmt = (
             select(PoolVms)
             .where(
-                PoolVms.session_id.is_(None),
+                PoolVms.agent_session_id.is_(None),
                 PoolVms.started_at.is_not(None),
                 PoolVms.egress_open == egress_open,
             )
@@ -121,7 +121,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             if row is None:
                 return None
             row.tenant_id = tenant_id
-            row.session_id = session_id
+            row.agent_session_id = agent_session_id
             row.pool_id = pool_id
             row.bound_by = bound_by
             row.bound_at = at
@@ -193,15 +193,15 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 id=erasure.id,
                 created_at=erasure.created_at,
                 tenant_id=erasure.tenant_id,
-                session_id=erasure.session_id,
+                agent_session_id=erasure.agent_session_id,
             )
             .on_conflict_do_nothing(
-                index_elements=[PoolErasures.tenant_id, PoolErasures.session_id]
+                index_elements=[PoolErasures.tenant_id, PoolErasures.agent_session_id]
             )
         )
         standing = select(PoolErasures).where(
             PoolErasures.tenant_id == erasure.tenant_id,
-            PoolErasures.session_id == erasure.session_id,
+            PoolErasures.agent_session_id == erasure.agent_session_id,
         )
         async with self._session_for(PoolErasures, org_id=EMPTY_UUID) as session:
             await session.execute(asked)

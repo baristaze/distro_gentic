@@ -93,7 +93,7 @@ of](../../../../README.md).
 The table is `rules.effect_of`. A principal's message is appended under
 the mapped user's live context (`PrincipalContext`, the engine's
 transition), so `steps` keeps its principal and asks `InstructCheck`;
-any other input is a `StepType.EVENT` with `Actor.EXTERNAL` and
+any other input is a `AgentStepType.EVENT` with `Actor.EXTERNAL` and
 `Origin.INTEGRATION`, under a service principal. Whether a mapped user
 instructs is `AgentsManagerInterface.require_instructor` and
 `AttributionManagerInterface.steers`. A hand-over is a `handover` park

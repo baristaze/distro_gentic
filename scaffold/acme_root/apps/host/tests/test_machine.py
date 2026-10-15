@@ -20,7 +20,6 @@ import botocore.session
 import pytest
 from api_support import seed_request
 from botocore import serialize
-from contracts.agent_session_storage import make_session
 from host_support import Stack, probes
 
 from acme.apps.host.agent import HostAgent, RoutesHostImpl
@@ -33,15 +32,8 @@ from acme.client.claimant.credential import BadSetting
 from acme.client.client import ApiError
 from acme.client.types import AdvertisementBody, IssuedHostCredentialView
 from acme.client.types import IsolationMode as HostMode
-from acme.infra.machines import MachineSpec
-from acme.infra.machines.ec2 import MachinesEc2Impl
-from acme.infra.machines.seeded import GUEST_WRITE
-from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.transports import CommandSpec
-from acme.infra.transports.broker import BrokerNullImpl
-from acme.infra.transports.machine import TransportMachineImpl
-from acme.infra.transports.twin import RecordSealTwin
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceBase,
     Durability,
     EgressMode,
     EgressPolicy,
@@ -49,13 +41,22 @@ from acme.infra.workspaces import (
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    WorkspaceBase,
 )
-from acme.infra.workspaces.machine import WorkspaceMachineImpl
+from acme.infra.agent_workspaces.machine import WorkspaceMachineImpl
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import CommandSpec
+from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.machine import TransportMachineImpl
+from acme.infra.transports.twin import RecordSealTwin
+from acme.infra.vms import VmSpec
+from acme.infra.vms.ec2 import MachinesEc2Impl
+from acme.infra.vms.seeded import GUEST_WRITE
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.rules import new_key, seed
 from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.tenancy.rules import hash_token
+
+from contracts.agent_session_storage import make_session
 
 ROOT = Path(__file__).resolve().parents[3]
 MACHINES = ROOT / "deployment" / "machines"
@@ -192,7 +193,7 @@ async def test_a_new_ec2_machine_reads_its_seed_whole_from_its_first_boot_data(
     key = new_key()
     await machines.start()
     try:
-        spec = MachineSpec(image="ami-0123456789abcdef0", egress_open=False)
+        spec = VmSpec(image="ami-0123456789abcdef0", egress_open=False)
         await machines.launch_seeded("acme-vm-p0", spec, None, seed("http://gateway.test", key))
     finally:
         await machines.close()
@@ -282,7 +283,9 @@ async def test_a_machines_workspace_is_a_folder_at_the_vms_level_kept_by_its_poo
     with pytest.raises(IsolationRefused, match="as its pool started it"):
         await provider.prepare(ORG, SESSION, KEPT, snapshot=b"a snapshot")
     based = KEPT.model_copy(
-        update={"base": WorkspaceBase(image="ubuntu", egress=EgressPolicy(mode=EgressMode.NONE))}
+        update={
+            "base": AgentWorkspaceBase(image="ubuntu", egress=EgressPolicy(mode=EgressMode.NONE))
+        }
     )
     with pytest.raises(IsolationRefused, match="as its pool started it"):
         await provider.prepare(ORG, SESSION, based)
@@ -339,7 +342,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
             name="acme-vm-ptest0000000000",
             egress_open=True,
             tenant_id=api.owner.org_id,
-            session_id=session.id,
+            agent_session_id=session.id,
             pool_id=pool.id,
             bound_by=api.owner.user_id,
             key_digest=hash_token(key),
@@ -371,7 +374,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     await host.start()
     assert UUID(host.credential.pool_id) == pool.id
     identity = await managers.hosts.authenticate(seed_request(), host.credential.token)
-    assert identity.session_id == session.id
+    assert identity.agent_session_id == session.id
 
     kept = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
     assert await managers.exec_relay.ask_prepare(api.owner, session.id, kept)

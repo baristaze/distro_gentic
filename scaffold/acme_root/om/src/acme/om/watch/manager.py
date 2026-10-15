@@ -35,7 +35,7 @@ class WatchManagerInterface(ABC):
     # The live read.
 
     @abstractmethod
-    async def open_live(self, ctx: TenantContext, session_id: UUID) -> LiveRead:
+    async def open_live(self, ctx: TenantContext, agent_session_id: UUID) -> LiveRead:
         """A handle to the session's open streams, for a viewer who may read
         the session, that lasts the options' lifetime. A session the viewer
         cannot see is `NotFound`; a platform with no signing key is
@@ -115,7 +115,7 @@ class WatchManagerInterface(ABC):
     # Take control, give back.
 
     @abstractmethod
-    async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSession:
+    async def take_control(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession:
         """A person, in person, who may instruct the session takes its
         environment: a new writer epoch fences the run that held the loop,
         which parks on a hand-over, and what that run's items still run on the
@@ -125,7 +125,7 @@ class WatchManagerInterface(ABC):
         latest snapshot its history names before it is handed over, as its
         next run's would be, unless something touched it since:
         `IsolationRefused` while the host has not restored it in time, and
-        `WorkspaceLost` when its store lost it, each with nothing handed
+        `AgentWorkspaceLost` when its store lost it, each with nothing handed
         over. Parked on a hand-over already, it stays, and nothing is
         restored over the person's work; one another person holds is
         `Conflict`. Audited as that person."""
@@ -133,7 +133,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def run_command(
-        self, ctx: TenantContext, session_id: UUID, command: HandCommand
+        self, ctx: TenantContext, agent_session_id: UUID, command: HandCommand
     ) -> HandRun:
         """A command the person runs while the agent stands down: audited as
         theirs before it is sent, then sent as unsafe `exec` work marked as
@@ -147,7 +147,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def command(
-        self, ctx: TenantContext, session_id: UUID, key: UUID, after_seq: int
+        self, ctx: TenantContext, agent_session_id: UUID, key: UUID, after_seq: int
     ) -> ExecProgress:
         """How the session's command under `key` stands, for a viewer of the
         session: its state, the parts of its output after `after_seq`, and
@@ -157,7 +157,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
+        self, ctx: TenantContext, agent_session_id: UUID, summary: str, stop: bool = False
     ) -> AgentSession:
         """The person gives the environment back: their summary arrives as
         their message, an `environment_changed` step says a person acted

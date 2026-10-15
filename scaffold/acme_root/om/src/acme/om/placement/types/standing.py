@@ -6,15 +6,15 @@ chose, a count, a time, or a state: never what a tenant wrote."""
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.base import Platform
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.types.header import Park
+from acme.om.base import OmBase
 from acme.om.hosts.rules import HostState
 from acme.om.hosts.types.host import Advertisement
-from acme.om.steps.types.header import Park
 from acme.om.work.types.work_item import WorkStatus
 
 
-class LoopStanding(Platform):
+class LoopStanding(OmBase):
     """The session's loop item made last, as the queue holds it, and its
     place in line: the ready items before it on its lane, any tenant's, and
     the tenant's loops running ahead of it on that lane, which the claim
@@ -32,7 +32,7 @@ class LoopStanding(Platform):
     running_ahead: int
 
 
-class SessionStanding(Platform):
+class SessionStanding(OmBase):
     """Why one session is or is not moving: its status and its park, its
     last change (when it parked, for a parked one), its tenant's share,
     where it runs, and its loop. `concurrency` is the cap the claim holds
@@ -41,8 +41,8 @@ class SessionStanding(Platform):
     `pool_id` None is the cloud, where `hosts_online` is None; `share_set`
     False is the default tier."""
 
-    session_id: UUID
-    status: SessionStatus
+    agent_session_id: UUID
+    status: AgentSessionStatus
     park: Park | None
     changed_at: datetime
     pending_input: bool
@@ -56,7 +56,7 @@ class SessionStanding(Platform):
     loop: LoopStanding | None
 
 
-class LaneLoad(Platform):
+class LaneLoad(OmBase):
     """The ready items of one kind on one lane."""
 
     lane: str
@@ -64,7 +64,7 @@ class LaneLoad(Platform):
     ready: int
 
 
-class HostStanding(Platform):
+class HostStanding(OmBase):
     """Why one host takes no work: what it advertised, the version of work
     it reads against the floor, when it last called, and what is ready on
     the lanes it claims from, its pool's and its own."""
@@ -80,14 +80,14 @@ class HostStanding(Platform):
     lanes: tuple[LaneLoad, ...]
 
 
-class Count(Platform):
+class Count(OmBase):
     """One series of a gauge: its labels, in the gauge's order, and its value."""
 
     labels: tuple[str, ...]
     value: int
 
 
-class AgentFleetCounts(Platform):
+class AgentFleetCounts(OmBase):
     """The platform's signals across every tenant, each by bounded labels
     alone: the parked sessions by reason and age, the ready loops by plan
     tier, and the hosts by state."""

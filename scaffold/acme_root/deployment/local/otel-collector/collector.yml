@@ -40,7 +40,7 @@ receivers:
               labels: {runs_in: host}
         # The runner settles every model call and counts each outage
         # report; it runs only as a host process, so this is its one job.
-        - job_name: session_runner
+        - job_name: agent_session_runner
           static_configs:
             - targets: ["${env:ACME_COLLECTOR_SCRAPE_HOST}:9465"]
               labels: {runs_in: host}

@@ -74,11 +74,11 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceSessionRequest
     ) -> PlacementView: ...
 
     @abstractmethod
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementView: ...
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementView: ...
 
     # A host's calls.
 

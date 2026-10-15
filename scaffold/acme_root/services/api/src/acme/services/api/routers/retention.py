@@ -36,9 +36,9 @@ async def write_policy(
     return await retention.write_policy(ctx, body, version)
 
 
-@router.post("/sessions/{session_id}/erase", response_model=SessionRetentionView)
+@router.post("/sessions/{agent_session_id}/erase", response_model=SessionRetentionView)
 async def erase_content(
-    ctx: Ctx, retention: RetentionService, session_id: UUID
+    ctx: Ctx, retention: RetentionService, agent_session_id: UUID
 ) -> SessionRetentionView:
     """Erases what the session said, for good: its key is revoked and
     destroyed, and the audit holds the destruction. Its steps keep their
@@ -46,4 +46,4 @@ async def erase_content(
     content again. A session marked deleted is erased too. Once: a second
     call answers as the first left it. `404 not_found` for a session the
     tenant does not hold, which is how another tenant's reads."""
-    return await retention.erase_content(ctx, session_id)
+    return await retention.erase_content(ctx, agent_session_id)

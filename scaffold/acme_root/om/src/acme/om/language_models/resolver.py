@@ -18,13 +18,13 @@ class ModelResolverInterface(ABC):
     async def resolve(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
         asks: Sequence[ModelAsk] = (),
     ) -> tuple[RoleFill, ...]:
         """Each role's fill and its declared fallbacks for the session
-        `session_id`, in role order, every one admitted by `eligibility`.
+        `agent_session_id`, in role order, every one admitted by `eligibility`.
         `asks` are the kind's, at most one a role: a resolver that serves
         them keeps each beside its role's fill, and runs a fill at an ask's
         effort only when the fill allows it. A role it does not know, or

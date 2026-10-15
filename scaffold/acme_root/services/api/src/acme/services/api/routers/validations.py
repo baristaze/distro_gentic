@@ -28,11 +28,11 @@ async def start_validation(
     )
 
 
-@router.get("/{session_id}", response_model=ValidationSessionView)
+@router.get("/{agent_session_id}", response_model=ValidationSessionView)
 async def get_validation(
-    ctx: Ctx, validations: ValidationsService, session_id: UUID
+    ctx: Ctx, validations: ValidationsService, agent_session_id: UUID
 ) -> ValidationSessionView:
     """The session: `queued` while its check waits or runs, `finished` with
     its verdict and its run once the run is recorded, and `refused` with its
     reason when its check cannot run here, for good."""
-    return await validations.get_validation(ctx, session_id)
+    return await validations.get_validation(ctx, agent_session_id)

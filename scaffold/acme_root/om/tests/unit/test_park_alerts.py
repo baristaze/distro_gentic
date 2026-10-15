@@ -14,12 +14,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.factories import make_org
-from contracts.intake import STEADY, Wired, wired
-from contracts.loops import Lookup, call, reply, said, use
-from contracts.park_alert_storage import make_park_alert
-from contracts.tools import Command
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers import ModelProvidersInterface
@@ -28,21 +22,28 @@ from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, price_park
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import QUESTION
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import Park, ParkReason
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
-from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.models.credentials import CallClient, CallCredentialsInterface
+from acme.om.language_models.credentials import CallClient, CallCredentialsInterface
 from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
 from acme.om.platform_root import build_platform_managers
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.header import Park, ParkReason
-from acme.om.steps.types.step import StepType
+from acme.om.spend_budgets.rules import OWN_AMOUNT_UNLOCK
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.tools.types.policy import Decision, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyRule
+
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.intake import STEADY, Wired, wired
+from contracts.loops import Lookup, call, reply, said, use
+from contracts.park_alert_storage import make_park_alert
+from contracts.tools import Command
 
 
 @pytest.fixture
@@ -60,11 +61,11 @@ async def people(platform: Wired) -> dict[Role, TenantContext]:
 
 
 async def run_after(
-    platform: Wired, ctx: TenantContext, session_id: UUID, text: str = "What is the total?"
+    platform: Wired, ctx: TenantContext, agent_session_id: UUID, text: str = "What is the total?"
 ) -> LoopRun:
-    message = message_step(new_id(), utcnow(), session_id, ctx, text)
-    await platform.managers.agent_sessions.receive(ctx, session_id, [message])
-    return await platform.loops.run(ctx, session_id)
+    message = message_step(new_id(), utcnow(), agent_session_id, ctx, text)
+    await platform.managers.agent_sessions.receive(ctx, agent_session_id, [message])
+    return await platform.loops.run(ctx, agent_session_id)
 
 
 def told(park_alerts: tuple[ParkAlert, ...]) -> set[tuple[UUID, str]]:
@@ -85,32 +86,36 @@ def routed(park_alerts: Iterable[ParkAlert]) -> bool:
 
 async def parked_on(platform: Wired, requester: TenantContext, park: Park) -> LoopRun:
     """A session of `requester`'s that a run parked on `park`."""
-    session_id = await platform.start(requester)
+    agent_session_id = await platform.start(requester)
     platform.anthropic.add(reply(said("On it.")))
-    ended = await run_after(platform, requester, session_id)
+    ended = await run_after(platform, requester, agent_session_id)
     await platform.managers.agent_sessions.park(
-        platform.service, session_id, ended.epoch, new_id(), park
+        platform.service, agent_session_id, ended.epoch, new_id(), park
     )
-    return LoopRun(session_id=session_id, epoch=ended.epoch, end=RunEnd.PARKED, park=park)
+    return LoopRun(
+        agent_session_id=agent_session_id, epoch=ended.epoch, end=RunEnd.PARKED, park=park
+    )
 
 
 async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: Wired) -> None:
     found = await people(platform)
     policy = await platform.managers.tools.get_policy(platform.owner)
-    rules = (PolicyRule(tool="lookup", decision=Decision.APPROVE),)
+    rules = (ToolPolicyRule(tool="lookup", decision=Decision.APPROVE),)
     await platform.managers.tools.write_policy(
         platform.owner, policy.model_copy(update={"rules": rules})
     )
     requester = found[Role.MEMBER]
-    session_id = await platform.start(requester)
+    agent_session_id = await platform.start(requester)
     platform.anthropic.add(reply(use("lookup")))
-    run = await run_after(platform, requester, session_id)
+    run = await run_after(platform, requester, agent_session_id)
     assert run.end is RunEnd.PARKED and run.park is not None
     notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
-    (request,) = [s for s in await platform.history(session_id) if s.type is StepType.TOOL_REQUEST]
-    link = f"/v1/agent-sessions/{session_id}/calls/{request.seq}/decision"
+    (request,) = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.TOOL_REQUEST
+    ]
+    link = f"/v1/agent-sessions/{agent_session_id}/calls/{request.seq}/decision"
     assert {(n.action, n.link) for n in notified} == {("decide_call", link)}
     assert routed(notified)
     # The chat post is the twin's, and says so on the record and the post.
@@ -133,25 +138,27 @@ async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: W
 async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     found = await people(platform)
     requester = found[Role.MEMBER]
-    session_id = await platform.start(requester)
-    session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    agent_session_id = await platform.start(requester)
+    session = await platform.managers.agent_sessions.get_agent_session(
+        platform.owner, agent_session_id
+    )
     now = utcnow()
-    budget = await platform.managers.budgets.create_budget(
+    budget = await platform.managers.budgets.create_spend_budget(
         found[Role.OWNER],
-        Budget(
+        SpendBudget(
             id=new_id(),
             created_at=now,
             updated_at=now,
             created_by=found[Role.OWNER].user_id,
             updated_by=found[Role.OWNER].user_id,
-            scope_kind=BudgetScopeKind.TREE,
+            scope_kind=SpendBudgetScopeKind.TREE,
             scope_key=str(session.root_id),
             window_kind=WindowKind.LIFE,
             cost_micros=1,
         ),
     )
     platform.anthropic.add(reply(said("On it.")))
-    run = await run_after(platform, requester, session_id)
+    run = await run_after(platform, requester, agent_session_id)
     assert run.park == Park(reason=ParkReason.BUDGET, unlock=str(budget.id))
     notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
@@ -166,7 +173,7 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
 async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> None:
     found = await people(platform)
     requester = found[Role.MEMBER]
-    started = await platform.managers.agents.start_session(
+    started = await platform.managers.agents.start_agent_session(
         requester,
         Start(
             id=new_id(),
@@ -195,7 +202,7 @@ SAYS_A_QUESTION_WAITS = (
 async def asked(platform: Wired, requester: TenantContext, question: str) -> LoopRun:
     """A session of `requester`'s whose agent asked them `question`, and
     then answers once it is answered."""
-    started = await platform.managers.agents.start_session(
+    started = await platform.managers.agents.start_agent_session(
         requester, Start(id=new_id(), kind="asking", title="the records")
     )
     platform.anthropic.add(
@@ -219,7 +226,7 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     notified = await platform.park_alerts.notify_park(platform.service, run)
 
     assert told(notified) == {(requester.user_id, PORTAL), (requester.user_id, "chat")}
-    link = f"/v1/agent-sessions/{run.session_id}/messages"
+    link = f"/v1/agent-sessions/{run.agent_session_id}/messages"
     assert {(n.action, n.link) for n in notified} == {("answer_question", link)}
     assert routed(notified)
     # The post quotes the question, on one line, escaped, and cut short.
@@ -234,7 +241,7 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     for kept in await platform.park_alerts.get_park_alerts(requester, 10):
         assert "week" not in kept.text.lower()
     # The answer is a message, and clears the park: nothing is told again.
-    resumed = await run_after(platform, requester, run.session_id, "Week 12.")
+    resumed = await run_after(platform, requester, run.agent_session_id, "Week 12.")
     assert resumed.end is RunEnd.ENDED
     assert await platform.park_alerts.notify_park(platform.service, resumed) == ()
     mine = await platform.park_alerts.get_park_alerts(requester, 10)
@@ -266,22 +273,24 @@ async def test_a_purged_session_takes_its_park_alerts_and_leaves_the_others(
     member = context(Role.MEMBER, make_org())
     gone, kept = [
         (
-            await managers.agents.start_session(
+            await managers.agents.start_agent_session(
                 member, Start(id=new_id(), kind=STEADY.name, title="the records")
             )
         ).id
         for _ in range(2)
     ]
     park_alerts = storage.get_park_alert_storage()
-    for session_id in (gone, gone, kept):
-        row = make_park_alert(member.user_id).model_copy(update={"session_id": session_id})
+    for agent_session_id in (gone, gone, kept):
+        row = make_park_alert(member.user_id).model_copy(
+            update={"agent_session_id": agent_session_id}
+        )
         await park_alerts.create_park_alert(member.org_id, row)
-    await managers.agent_sessions.delete_session(member, gone)
+    await managers.agent_sessions.delete_agent_session(member, gone)
 
     assert await managers.agent_sessions.purge_across_tenants() == 1
 
     left = await park_alerts.read_park_alerts(member.org_id, member.user_id, 10)
-    assert {n.session_id for n in left} == {kept} and len(left) == 1
+    assert {n.agent_session_id for n in left} == {kept} and len(left) == 1
 
 
 async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_requester(
@@ -294,7 +303,7 @@ async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_request
     notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
-    approval = f"/v1/agent-sessions/{run.session_id}/cost-approval"
+    approval = f"/v1/agent-sessions/{run.agent_session_id}/cost-approval"
     assert {(n.action, n.link) for n in notified} == {("approve_call", approval)}
     (posted,) = platform.chat.posted
     assert posted.text == f"{next(n.text for n in notified if n.channel == 'chat')} {approval}"
@@ -375,17 +384,19 @@ async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries
     platform = wired(tmp_path, credentials=OrgKey)
     found = await people(platform)
     requester = found[Role.MEMBER]
-    session_id = await platform.start(requester)
+    agent_session_id = await platform.start(requester)
     billing = ScriptedFailure(kind=ErrorKind.BILLING, status=402, message="credit balance is low")
     platform.anthropic.add(billing, billing)
-    first = await run_after(platform, requester, session_id)
+    first = await run_after(platform, requester, agent_session_id)
     cause = "anthropic refused the call for its account's billing: an admin of the org settles it"
     assert first.park is not None and first.park.retry_at is not None
     assert (first.park.unlock, first.park.cause) == ("anthropic:billing", cause)
 
     told_first = await platform.park_alerts.notify_park(platform.service, first)
-    await platform.managers.agent_sessions.wake_session(platform.service, session_id, first.park)
-    tried = await platform.loops.run(requester, session_id)
+    await platform.managers.agent_sessions.wake_agent_session(
+        platform.service, agent_session_id, first.park
+    )
+    tried = await platform.loops.run(requester, agent_session_id)
     told_again = await platform.park_alerts.notify_park(platform.service, tried)
 
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
@@ -396,10 +407,12 @@ async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries
     assert {n.id for n in told_again} == {n.id for n in told_first}, "a try tells nobody again"
     assert len(platform.chat.posted) == 1
 
-    await platform.managers.agent_sessions.wake_session(platform.service, session_id, tried.park)
+    await platform.managers.agent_sessions.wake_agent_session(
+        platform.service, agent_session_id, tried.park
+    )
     platform.anthropic.add(reply(said("Settled.")), billing)
-    assert (await platform.loops.run(requester, session_id)).end is RunEnd.ENDED
-    later = await run_after(platform, requester, session_id, "And the next one?")
+    assert (await platform.loops.run(requester, agent_session_id)).end is RunEnd.ENDED
+    later = await run_after(platform, requester, agent_session_id, "And the next one?")
     told_later = await platform.park_alerts.notify_park(platform.service, later)
 
     assert told(told_later) == told(told_first)
@@ -409,9 +422,9 @@ async def test_a_fix_the_org_makes_at_its_provider_is_told_once_across_its_tries
 
 async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> None:
     await people(platform)
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     platform.anthropic.add(reply(said("Done.")))
-    ended = await run_after(platform, platform.owner, session_id)
+    ended = await run_after(platform, platform.owner, agent_session_id)
     assert await platform.park_alerts.notify_park(platform.service, ended) == ()
     retries = (
         Park(reason=ParkReason.BUDGET, unlock="held", retry_at=utcnow()),
@@ -421,5 +434,5 @@ async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> Non
         Park(reason=ParkReason.PROVIDER, unlock="anthropic:credential", retry_at=utcnow()),
     )
     for retry in retries:
-        parked = LoopRun(session_id=session_id, epoch=1, end=RunEnd.PARKED, park=retry)
+        parked = LoopRun(agent_session_id=agent_session_id, epoch=1, end=RunEnd.PARKED, park=retry)
         assert await platform.park_alerts.notify_park(platform.service, parked) == ()

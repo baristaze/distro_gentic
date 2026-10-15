@@ -20,8 +20,6 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import build_container, seed_request, sign_in_as
-from contracts.evidence import ScriptedExecutor
-from contracts.evidence_storage import make_policy
 from tenant_support import Headers, person, refused
 
 from acme.om.base import new_id
@@ -42,6 +40,9 @@ from acme.om.exceptions import PreconditionFailed
 from acme.om.platform_root import PlatformPorts
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
+
+from contracts.evidence import ScriptedExecutor
+from contracts.evidence_storage import make_policy
 
 URL = "/v1/validation-sessions"
 HEAD = "c" * 40
@@ -399,13 +400,13 @@ async def test_a_viewer_starts_none_and_another_tenant_starts_and_reads_nothing(
 
     started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.agent_project_id))
     assert started.status_code == 201, started.text
-    session_id = started.json()["id"]
+    agent_session_id = started.json()["id"]
     assert await worker_runs(container) == 1
 
-    refused(await client.get(f"{URL}/{session_id}", headers=beta.owner), 404, "not_found")
+    refused(await client.get(f"{URL}/{agent_session_id}", headers=beta.owner), 404, "not_found")
     refused(await client.get(f"{URL}/{new_id()}", headers=beta.owner), 404, "not_found")
     # Its own tenant's verdict, the viewer reads, as it reads every record.
-    seen = await client.get(f"{URL}/{session_id}", headers=viewer)
+    seen = await client.get(f"{URL}/{agent_session_id}", headers=viewer)
     assert (seen.status_code, seen.json()["passed"]) == (200, True)
 
 

@@ -11,10 +11,10 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from acme.om.agent_steps.types.agent_step import Actor
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.attribution.types.principal import AgentRef, Principal
-from acme.om.base import Platform
-from acme.om.steps.types.content import MAX_NAME, Stored
-from acme.om.steps.types.step import Actor
+from acme.om.base import OmBase
 
 
 class ExecutorKind(StrEnum):
@@ -24,7 +24,7 @@ class ExecutorKind(StrEnum):
     HOST = "host"  # a workspace host inside a customer's wall
 
 
-class Executor(Platform):
+class Executor(OmBase):
     """A machine's credential: its kind, the id of the credential it ran
     under, and what the machine is called (a host's name, a runner's id). It
     names a machine, never a person and never a key a person speaks
@@ -35,7 +35,7 @@ class Executor(Platform):
     label: Stored = Field(min_length=1, max_length=MAX_NAME)
 
 
-class ActorRef(Platform):
+class ActorRef(OmBase):
     """Who acted, as the step that records the act says: its actor, and the
     agent with its kind and session when the actor is an agent."""
 
@@ -49,7 +49,7 @@ class ActorRef(Platform):
         return self
 
 
-class CallAudit(Platform):
+class CallAudit(OmBase):
     """The audit entry of one tool call: the four answers, apart.
 
     The actor is the agent that asked for the call, never its principal. The
@@ -59,7 +59,7 @@ class CallAudit(Platform):
     refused here, so no entry is written with one answer in two fields."""
 
     request_id: UUID
-    session_id: UUID
+    agent_session_id: UUID
     tool: Stored = Field(min_length=1, max_length=MAX_NAME)
     executor: Executor
     principal: Principal
@@ -70,7 +70,7 @@ class CallAudit(Platform):
     def _four_apart(self) -> Self:
         if self.actor.actor is not Actor.AGENT or self.actor.agent is None:
             raise ValueError("a tool call is the agent's act, never its principal's")
-        if self.actor.agent.session_id != self.session_id:
+        if self.actor.agent.agent_session_id != self.agent_session_id:
             raise ValueError("a tool call is the act of its own session's agent")
         people = {self.principal.id, self.spender.id}
         keys = {key for key in (self.principal.key_id, self.spender.key_id) if key is not None}

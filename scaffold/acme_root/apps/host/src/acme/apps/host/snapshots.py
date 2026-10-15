@@ -2,7 +2,7 @@
 A snapshot's bytes stay here: the platform records the reference the store
 knows it by, the SHA-256 of its bytes, and their size, never the bytes.
 
-A snapshot is kept under `<root>/<org_id>/<session_id>/<snapshot_id>`, owner
+A snapshot is kept under `<root>/<org_id>/<agent_session_id>/<snapshot_id>`, owner
 only, written whole before it is named, so a reader never finds half of
 one. One that holds the value of a secret this host keeps for the tenant, in
 any form redaction matches, is refused before anything of it is kept: the
@@ -67,12 +67,12 @@ class HostSnapshots:
         return kept
 
     async def keep(
-        self, org_id: UUID, session_id: UUID, snapshot_id: UUID, archive: bytes
+        self, org_id: UUID, agent_session_id: UUID, snapshot_id: UUID, archive: bytes
     ) -> tuple[str, str, int]:
         """`archive` kept as the session's snapshot under `snapshot_id`, once
         it is scanned for the host's secrets' values (`values`): the
         reference, the digest, and the size."""
-        reference = f"{org_id}/{session_id}/{snapshot_id}"
+        reference = f"{org_id}/{agent_session_id}/{snapshot_id}"
         await asyncio.to_thread(self._write, reference, archive)
         return reference, DIGEST_SCHEME + hashlib.sha256(archive).hexdigest(), len(archive)
 
@@ -108,9 +108,9 @@ class HostSnapshots:
     def holds(self, reference: str) -> bool:
         return self._path(reference).is_file()
 
-    async def erase(self, org_id: UUID, session_id: UUID) -> None:
+    async def erase(self, org_id: UUID, agent_session_id: UUID) -> None:
         """Every snapshot of the session goes; one gone already is gone."""
-        folder = self._root / str(org_id) / str(session_id)
+        folder = self._root / str(org_id) / str(agent_session_id)
         await asyncio.to_thread(shutil.rmtree, folder, True)
 
     def _path(self, reference: str) -> Path:

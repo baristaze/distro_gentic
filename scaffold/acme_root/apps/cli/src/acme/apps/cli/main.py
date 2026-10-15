@@ -35,25 +35,24 @@ from acme.apps.cli.model import (
     settled,
     step_line,
 )
-from acme.client.client import ApiClient
 from acme.apps.cli.product_commands import PRODUCT_COMMANDS
 from acme.client.client import ApiClient, ApiError
 from acme.client.realtime import ChannelRefused
 from acme.client.transport import ApiError
-from acme.client.types.agent_sessions import AgentSessionControl, AgentSessionView, AgentStepView
-from acme.client.types.tenancy import IssuedAuthSessionView, IssuedLoginView
 from acme.client.types import (
     AgentAutomationRequest,
-    AgentSessionView,
-    ConnectorReviewRequest,
-    ConnectorView,
-    IssuedLoginView,
-    IssuedAuthSessionView,
-    PinView,
     AgentSessionControl,
     AgentSessionStatus,
+    AgentSessionView,
     AgentStepView,
+    ConnectorReviewRequest,
+    ConnectorView,
+    IssuedAuthSessionView,
+    IssuedLoginView,
+    PinView,
 )
+from acme.client.types.agent_sessions import AgentSessionControl, AgentSessionView, AgentStepView
+from acme.client.types.tenancy import IssuedAuthSessionView, IssuedLoginView
 
 EXIT_REFUSED = 1
 EXIT_USAGE = 2
@@ -918,7 +917,10 @@ def pin_line(pin: PinView) -> str:
 
 @agent_playbook_app.command("invoke")
 def invoke_agent_playbook(
-    agent_session_id: AgentSessionId, name: AgentPlaybookName, as_json: Json = False, api: Api = None
+    agent_session_id: AgentSessionId,
+    name: AgentPlaybookName,
+    as_json: Json = False,
+    api: Api = None,
 ) -> None:
     """Bring an agent playbook into a session you may instruct, in person. Its gates
     hold there from now on, and its brief arrives as your message."""

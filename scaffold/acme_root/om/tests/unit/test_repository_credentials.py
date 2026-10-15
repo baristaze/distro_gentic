@@ -13,15 +13,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_workspaces import REPOSITORY, AgentProjectsTwin, GitTwin, ReaderTwin
-from contracts.loops import live, reply, said
-from contracts.platform_agents import CORPUS, calls
-from contracts.platform_loops import PlatformLoop, platform_loop_over
 from pydantic import SecretStr
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.integrations.events import OpenedPullRequest
 from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.om.agent_automations.root import build_agent_automations
@@ -36,6 +32,9 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock
+from acme.om.agent_steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
@@ -62,10 +61,12 @@ from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.platform_root import PlatformRootOptions
-from acme.om.steps.types.content import TextBlock, ToolResultBlock
-from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
-from acme.om.steps.types.step import StepType
 from acme.om.tenancy.rules import permissions_of
+
+from contracts.agent_workspaces import REPOSITORY, AgentProjectsTwin, GitTwin, ReaderTwin
+from contracts.loops import live, reply, said
+from contracts.platform_agents import CORPUS, calls
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
 SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
@@ -131,12 +132,14 @@ class Forged:
     async def software_engineer(self) -> UUID:
         return await self.loop.start(kinds.SOFTWARE_ENGINEER)
 
-    async def held(self, session_id: UUID) -> AgentSessionWorkspace:
-        return await self.loop.platform.agent_workspaces.get_workspace(self.loop.owner, session_id)
+    async def held(self, agent_session_id: UUID) -> AgentSessionWorkspace:
+        return await self.loop.platform.agent_workspaces.get_workspace(
+            self.loop.owner, agent_session_id
+        )
 
-    async def answer(self, session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
-        for step in await self.loop.history(session_id):
-            if step.type is not StepType.TOOL_RESPONSE:
+    async def answer(self, agent_session_id: UUID, use_id: str) -> tuple[ToolFailure | None, str]:
+        for step in await self.loop.history(agent_session_id):
+            if step.type is not AgentStepType.TOOL_RESPONSE:
                 continue
             for block in step.content.blocks:
                 if isinstance(block, ToolResultBlock) and block.tool_use_id == use_id:
@@ -212,24 +215,26 @@ async def test_the_software_engineer_opens_its_branch_and_pull_request_with_a_to
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.software_engineer()
-    await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
+    agent_session_id = await platform.software_engineer()
+    await platform.loop.say(agent_session_id, "The weekly report misses its total. Fix it.")
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total", body="It adds.")),
         reply(calls(kinds.SUBMIT_RESULT, "use_done", claim=Claim.SUCCEEDED.value, evidence=[])),
     )
-    await platform.loop.managers.loop.run(platform.loop.owner, session_id)
+    await platform.loop.managers.loop.run(platform.loop.owner, agent_session_id)
 
-    failure, text = await platform.answer(session_id, "use_pr")
-    branch = rules.session_branch(session_id)
+    failure, text = await platform.answer(agent_session_id, "use_pr")
+    branch = rules.session_branch(agent_session_id)
     assert failure is None, text
     assert platform.forge.refs == {(REPOSITORY, f"refs/heads/{branch}"): HEAD}, "its own branch"
     (opened,) = platform.forge.pull_requests
     assert (opened.repository, opened.head, opened.title) == (REPOSITORY, branch, "Add the total")
     assert opened.url in text and branch in text
-    held = await platform.held(session_id)
+    held = await platform.held(agent_session_id)
     assert held.push_digest is None, "the loop's workspace went, and its token with it"
-    history = "".join(step.model_dump_json() for step in await platform.loop.history(session_id))
+    history = "".join(
+        step.model_dump_json() for step in await platform.loop.history(agent_session_id)
+    )
     assert rules.PUSH_TOKEN_PREFIX not in history, "the token is in no step the model reads"
     assert all(rules.PUSH_TOKEN_PREFIX not in " ".join(argv) for argv in platform.commands)
 
@@ -237,14 +242,14 @@ async def test_the_software_engineer_opens_its_branch_and_pull_request_with_a_to
 async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
     platform = Forged(tmp_path)
     platform.head = "not a commit\nrefs/heads/main"
-    session_id = await platform.software_engineer()
-    await platform.loop.say(session_id, "Fix it.")
+    agent_session_id = await platform.software_engineer()
+    await platform.loop.say(agent_session_id, "Fix it.")
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total")),
         reply(calls(kinds.SUBMIT_RESULT, "use_done", claim=Claim.FAILED.value, evidence=[])),
     )
-    await platform.loop.managers.loop.run(platform.loop.owner, session_id)
-    failure, text = await platform.answer(session_id, "use_pr")
+    await platform.loop.managers.loop.run(platform.loop.owner, agent_session_id)
+    failure, text = await platform.answer(agent_session_id, "use_pr")
     assert failure is ToolFailure.PERMANENT and "commit first" in text
     assert platform.forge.refs == {} and platform.forge.pull_requests == []
 
@@ -254,15 +259,15 @@ async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
 # push names the session as its cause.
 
 
-async def opened(platform: Forged, session_id: UUID) -> OpenedPullRequest:
+async def opened(platform: Forged, agent_session_id: UUID) -> OpenedPullRequest:
     """The software engineer opens its pull request and ends its turn; answers the
     pull request as the forge holds it."""
     platform.loop.anthropic.add(
         reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total")),
         reply(said("Opened.")),
     )
-    await platform.loop.managers.loop.run(platform.loop.owner, session_id)
-    failure, text = await platform.answer(session_id, "use_pr")
+    await platform.loop.managers.loop.run(platform.loop.owner, agent_session_id)
+    failure, text = await platform.answer(agent_session_id, "use_pr")
     assert failure is None, text
     (pull_request,) = platform.forge.pull_requests
     return pull_request
@@ -296,9 +301,9 @@ async def test_a_comment_on_the_software_engineers_pull_request_reaches_its_sess
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.software_engineer()
-    await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
-    pull_request = await opened(platform, session_id)
+    agent_session_id = await platform.software_engineer()
+    await platform.loop.say(agent_session_id, "The weekly report misses its total. Fix it.")
+    pull_request = await opened(platform, agent_session_id)
     comment = from_forge(
         Arrival.COMMENT,
         AuthorKind.PERSON,
@@ -306,8 +311,10 @@ async def test_a_comment_on_the_software_engineers_pull_request_reaches_its_sess
         text="Name the column Total.",
     )
     routed = await platform.intake.route(platform.service, comment)
-    assert (routed.session_id, routed.effect) == (session_id, Effect.WAKE_AS_DATA)
-    landed = [s for s in await platform.loop.history(session_id) if s.id == routed.step_id]
+    assert (routed.agent_session_id, routed.effect) == (agent_session_id, Effect.WAKE_AS_DATA)
+    landed = [
+        s for s in await platform.loop.history(agent_session_id) if s.id == routed.agent_step_id
+    ]
     assert len(landed) == 1 and "Name the column Total." in landed[0].model_dump_json()
 
 
@@ -315,15 +322,17 @@ async def test_a_persons_push_to_the_software_engineers_branch_hands_its_session
     tmp_path: Path,
 ) -> None:
     platform = Forged(tmp_path)
-    session_id = await platform.software_engineer()
-    await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
-    await opened(platform, session_id)
-    branch = WorkNames(branch=rules.session_branch(session_id))
+    agent_session_id = await platform.software_engineer()
+    await platform.loop.say(agent_session_id, "The weekly report misses its total. Fix it.")
+    await opened(platform, agent_session_id)
+    branch = WorkNames(branch=rules.session_branch(agent_session_id))
     routed = await platform.intake.route(
         platform.service, from_forge(Arrival.PUSH, AuthorKind.PERSON, branch)
     )
-    assert (routed.session_id, routed.effect) == (session_id, Effect.HAND_OVER)
-    held = await platform.loop.managers.agent_sessions.get_session(platform.loop.owner, session_id)
+    assert (routed.agent_session_id, routed.effect) == (agent_session_id, Effect.HAND_OVER)
+    held = await platform.loop.managers.agent_sessions.get_agent_session(
+        platform.loop.owner, agent_session_id
+    )
     assert held.park is not None and held.park.reason is ParkReason.HANDOVER
 
 
@@ -379,12 +388,12 @@ async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_
         text="The weekly report misses its total.",
     )
     (first,) = await agent_automations.fire(platform.service, report)
-    assert first.session_id is not None and first.hop == 1
+    assert first.agent_session_id is not None and first.hop == 1
     other = await agent_automations.create_agent_automation(owner, agent_automation_named("other"))
-    await opened(platform, first.session_id)
+    await opened(platform, first.agent_session_id)
 
     if named_by == "its_branch":
-        names, refs = WorkNames(branch=rules.session_branch(first.session_id)), ()
+        names, refs = WorkNames(branch=rules.session_branch(first.agent_session_id)), ()
     else:
         names, refs = WorkNames(), (HEAD,)
     check = from_forge(
@@ -396,7 +405,7 @@ async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_
         text="tests failed",
     )
     routed = await platform.intake.route(platform.service, check)
-    assert routed.caused_by == first.session_id
+    assert routed.caused_by == first.agent_session_id
     firing = Firing(
         event_id=check.id,
         occurred_at=check.occurred_at,
@@ -413,7 +422,7 @@ async def test_a_check_on_the_software_engineers_push_follows_its_session_a_hop_
     }
     assert runs[starter.id].refusal is Refusal.OWN_EVENT
     fed = runs[other.id]
-    assert (fed.status, fed.caused_by, fed.hop) == (RunStatus.STARTED, first.session_id, 2)
+    assert (fed.status, fed.caused_by, fed.hop) == (RunStatus.STARTED, first.agent_session_id, 2)
 
 
 async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_loop(
@@ -440,11 +449,11 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     assert platform.forge.refs == {}, "another session's branch is never written"
 
     # A prepare of the loop's workspace ends the token, and so does a release.
-    workspace = await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
+    workspace = await platform.loop.managers.tools.prepare_agent_workspace(owner, one, TWIN)
     with pytest.raises(NotAuthorized, match="live token"):
         await workspaces.open_pull_request(owner, one, value, HEAD, "t", "")
     again = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
-    await platform.loop.managers.tools.release_workspace(owner, workspace)
+    await platform.loop.managers.tools.release_agent_workspace(owner, workspace)
     assert (await platform.held(one)).push_digest is None
     with pytest.raises(NotAuthorized, match="live token"):
         await workspaces.open_pull_request(owner, one, again, HEAD, "t", "")
@@ -457,7 +466,7 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     # The commits go out of the workspace this host holds, and of no other.
     with pytest.raises(Unavailable, match="not held here"):
         await workspaces.open_pull_request(owner, one, replaced, HEAD, "t", "")
-    await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
+    await platform.loop.managers.tools.prepare_agent_workspace(owner, one, TWIN)
     newest = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
     opened = await workspaces.open_pull_request(owner, one, newest, HEAD, "t", "")
     assert platform.forge.pull_requests[0].id == opened.id, "the newest token alone"
@@ -488,7 +497,7 @@ async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refus
     platform = Forged(tmp_path)
     workspaces, owner = platform.loop.platform.agent_workspaces, platform.loop.owner
     one = await platform.software_engineer()
-    await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
+    await platform.loop.managers.tools.prepare_agent_workspace(owner, one, TWIN)
     token = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
 
     with pytest.raises(ValidationFailed, match="pull request's body"):
@@ -527,11 +536,13 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     rotated = FetchCredential(username="reader", password=SecretStr("rotated"))
     assert (await workspaces.put_fetch_credential(owner, agent_project_id, rotated)).version == 2
 
-    session_id = await platform.software_engineer()
-    workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
+    agent_session_id = await platform.software_engineer()
+    workspace = await platform.loop.managers.tools.prepare_agent_workspace(
+        owner, agent_session_id, TWIN
+    )
     await workspaces.work_product(owner, workspace)
     assert platform.reader.credentials == [rotated], "handed to the read of the work product"
-    held = await platform.held(session_id)
+    held = await platform.held(agent_session_id)
     assert "rotated" not in held.model_dump_json(), "never on the session's workspace"
 
     async def expired(ctx: object) -> bool:
@@ -542,7 +553,7 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     assert not await secrets.has(owner.org_id, rules.fetch_secret_name(agent_project_id))
     platform.reader.credentials.clear()
     with pytest.raises(NotFound):
-        await workspaces.get_workspace(owner, session_id)
+        await workspaces.get_workspace(owner, agent_session_id)
 
 
 async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
@@ -557,8 +568,8 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
         owner.org_id, rules.fetch_secret_name(agent_project_id)
     )
 
-    session_id = await platform.software_engineer()
+    agent_session_id = await platform.software_engineer()
     with pytest.raises(Unavailable, match="is gone"):
-        await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
+        await platform.loop.managers.tools.prepare_agent_workspace(owner, agent_session_id, TWIN)
     assert platform.reader.credentials == [], "no read without the value"
     assert platform.reader.brought == [], "and no checkout"

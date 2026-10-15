@@ -62,10 +62,12 @@ class AgentProjectStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> SessionAgentProject | None: ...
+    async def read_binding(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionAgentProject | None: ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
         """The row of a session its purge has claimed, under the purge login.
         False when none was left."""
         ...

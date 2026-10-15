@@ -8,10 +8,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.language_models.types.fill import ModelRole
 from acme.om.matrix.types.matrix import MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOverride, MatrixPin
-from acme.om.models.types.fill import ModelRole
 
 
 class MatrixStorageInterface(ABC):
@@ -77,7 +77,7 @@ class MatrixTenantStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> MatrixPin | None:
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> MatrixPin | None:
         """The pin of the session's latest pinned fill-set version, or None."""
         ...
 

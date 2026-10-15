@@ -9,7 +9,7 @@ from pathlib import Path
 from worker_support import sign_in
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import EMPTY_UUID, new_id, utcnow
@@ -45,7 +45,7 @@ TRIAGE = AgentKind(
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 
 
@@ -85,7 +85,7 @@ async def test_a_linked_members_comment_on_the_software_engineers_pull_request_w
         platform_agents=PlatformAgents(corpus=read_corpus(ROOT)),
     )
     owner = await sign_in(container)
-    session = await container.managers.agents.start_session(
+    session = await container.managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER, title="the total")
     )
     await container.platform.intake.bind_work(owner, session.id, HandleKind.PULL_REQUEST, PR)
@@ -93,7 +93,7 @@ async def test_a_linked_members_comment_on_the_software_engineers_pull_request_w
 
     routed = await container.platform.intake.route(service(owner), comment("U-ANN"))
 
-    assert (routed.effect, routed.session_id, routed.principal_id) == (
+    assert (routed.effect, routed.agent_session_id, routed.principal_id) == (
         Effect.WAKE,
         session.id,
         owner.user_id,
@@ -108,7 +108,7 @@ async def test_a_kind_that_names_the_comment_tool_starts_in_the_worker(tmp_path:
     )
     owner = await sign_in(container)
 
-    session = await container.managers.agents.start_session(
+    session = await container.managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=TRIAGE.name, title="the report")
     )
 

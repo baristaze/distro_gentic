@@ -8,8 +8,8 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, FrozenMapping, Identifiable, Platform
-from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance, weakest
+from acme.om.base import Created, FrozenMapping, Identifiable, OmBase
+from acme.om.evidence.types.provenance import Dependency, Provenance, ToolOutputRef, weakest
 
 NAME = r"^[a-z][a-z0-9_.-]{0,99}$"
 """A check's name, and a kind's."""
@@ -36,7 +36,7 @@ class RunOutcome(StrEnum):
     ABORTED = "aborted"  # an abort ended it; a declared rule classifies it
 
 
-class RunImage(Platform):
+class RunImage(OmBase):
     """What a run ran under: the image's digest and the toolchain's
     versions, by name."""
 
@@ -44,7 +44,7 @@ class RunImage(Platform):
     toolchain: FrozenMapping = Field(default_factory=dict, validate_default=True)
 
 
-class CaseTally(Platform):
+class CaseTally(OmBase):
     """The cases a run streamed, counted by outcome."""
 
     passed: int = Field(default=0, ge=0)
@@ -57,14 +57,14 @@ class ExecutionRecord(Identifiable, Created):
     uncommitted changes, the run image, the host and its isolation, who
     ran it and wrote its results (`executor`), the check and its version,
     its parameters, metrics, timing, and outcome, its artifacts, and every
-    dependency it relied on with its provenance. `step_id` is the tool call
+    dependency it relied on with its provenance. `agent_step_id` is the tool call
     of the agent's that ran it, for a `work` run; `validation_id` the
     validation that ran it, for the executor's."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
-    step_id: UUID | None = None
+    agent_step_id: UUID | None = None
     validation_id: UUID | None = None
     version: str = Field(pattern=VERSION)
     dirty: bool
@@ -80,7 +80,7 @@ class ExecutionRecord(Identifiable, Created):
     finished_at: datetime
     outcome: RunOutcome
     cases: CaseTally = Field(default_factory=CaseTally)
-    artifacts: tuple[ArtifactRef, ...] = ()
+    artifacts: tuple[ToolOutputRef, ...] = ()
     dependencies: tuple[Dependency, ...] = ()
     abort: str | None = Field(default=None, min_length=1, max_length=500)
 
@@ -113,6 +113,6 @@ class ExecutionRecord(Identifiable, Created):
         return weakest(*(dependency.provenance for dependency in self.dependencies))
 
 
-class ExecutionRecordPage(Platform):
+class ExecutionRecordPage(OmBase):
     items: tuple[ExecutionRecord, ...]
     has_more: bool

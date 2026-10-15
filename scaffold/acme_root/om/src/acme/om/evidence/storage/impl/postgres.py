@@ -112,17 +112,17 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
         return await self._insert(Inferences, org_id, inference)
 
     async def read_records(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[ExecutionRecord]:
         stmt = select(ExecutionRecords).where(
-            ExecutionRecords.org_id == org_id, ExecutionRecords.session_id == session_id
+            ExecutionRecords.org_id == org_id, ExecutionRecords.agent_session_id == agent_session_id
         )
         if after is not None:
             stmt = stmt.where(ExecutionRecords.id > after)
         return await self._records(org_id, stmt.order_by(ExecutionRecords.id).limit(limit))
 
     async def read_cited(
-        self, org_id: UUID, session_id: UUID, ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         if not ids:
             return []
@@ -131,10 +131,10 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
             select(ExecutionRecords)
             .where(
                 ExecutionRecords.org_id == org_id,
-                ExecutionRecords.session_id == session_id,
+                ExecutionRecords.agent_session_id == agent_session_id,
                 or_(
                     ExecutionRecords.id.in_(named),
-                    ExecutionRecords.step_id.in_(named),
+                    ExecutionRecords.agent_step_id.in_(named),
                     ExecutionRecords.validation_id.in_(named),
                 ),
             )
@@ -144,10 +144,10 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
         return await self._records(org_id, stmt)
 
     async def read_validations(
-        self, org_id: UUID, session_id: UUID, version: str | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, version: str | None, limit: int
     ) -> list[Validation]:
         stmt = select(Validations).where(
-            Validations.org_id == org_id, Validations.session_id == session_id
+            Validations.org_id == org_id, Validations.agent_session_id == agent_session_id
         )
         if version is not None:
             stmt = stmt.where(Validations.version == version)
@@ -157,7 +157,7 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
             return [to_model(row, Validation) for row in rows]
 
     async def read_validation_records(
-        self, org_id: UUID, session_id: UUID, validation_ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, validation_ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         if not validation_ids:
             return []
@@ -165,7 +165,7 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
             select(ExecutionRecords)
             .where(
                 ExecutionRecords.org_id == org_id,
-                ExecutionRecords.session_id == session_id,
+                ExecutionRecords.agent_session_id == agent_session_id,
                 ExecutionRecords.validation_id.in_(list(validation_ids)),
             )
             .order_by(ExecutionRecords.id)
@@ -174,10 +174,10 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
         return await self._records(org_id, stmt)
 
     async def read_inferences(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[Inference]:
         stmt = select(Inferences).where(
-            Inferences.org_id == org_id, Inferences.session_id == session_id
+            Inferences.org_id == org_id, Inferences.agent_session_id == agent_session_id
         )
         if after is not None:
             stmt = stmt.where(Inferences.id > after)
@@ -194,13 +194,13 @@ class EvidenceStoragePostgresImpl(PgStorageBase, EvidenceStorageInterface):
 
     # The purges.
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         purged = 0
         async with self._purge_session_for(ExecutionRecords, org_id=org_id) as session:
             for table in WRITTEN_ONCE:
                 batch = (
                     select(table.id)
-                    .where(table.org_id == org_id, table.session_id == session_id)
+                    .where(table.org_id == org_id, table.agent_session_id == agent_session_id)
                     .limit(limit)
                 )
                 stmt = delete(table).where(table.org_id == org_id, table.id.in_(batch))

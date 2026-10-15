@@ -5,11 +5,13 @@ from uuid import UUID
 
 from acme.infra.exceptions import InfraException, KeyRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
-from acme.om.base import EMPTY_UUID, Platform, derived_id, new_id, utcnow
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.header import ControlCommand, ControlHeader
+from acme.om.base import EMPTY_UUID, OmBase, derived_id, new_id, utcnow
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, RequestContext, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
 from acme.om.exceptions import (
     InvalidCredential,
     NotFound,
@@ -20,7 +22,7 @@ from acme.om.exceptions import (
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.privacy import PrivacyManagerInterface
-from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention.agent_projects import SessionAgentProjectInterface
 from acme.om.retention.keys import KeyDestruction, TenantKeysInterface
 from acme.om.retention.manager import RetentionManagerInterface
@@ -37,8 +39,6 @@ from acme.om.retention.rules import (
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.types.policy import MAX_LIFETIME, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
-from acme.om.steps.types.header import ControlCommand, ControlHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
 
 log = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ ERASE_WRITES = 3
 that wrote the snapshot meanwhile."""
 
 
-class RetentionOptions(Platform):
+class RetentionOptions(OmBase):
     sweep_batch: int = 100  # snapshots one read of the sweep takes up at most
     purge_batch: int = 1000  # rows one purge statement deletes at most
     # How long a session a pass could not finish waits before a pass takes
@@ -74,7 +74,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         privacy: PrivacyManagerInterface,
         sessions: AgentSessionsManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         relay: OutboxRelayInterface,
         agent_projects: SessionAgentProjectInterface,
         options: RetentionOptions,
@@ -85,7 +85,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         self._privacy = privacy
         self._sessions = sessions
         self._tenancy = tenancy
-        self._events = events
+        self._change_events = events
         self._relay = relay
         self._agent_projects = agent_projects
         self._options = options
@@ -179,7 +179,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         snapshot = SessionRetention(
             id=new_id(),
             created_at=now,
-            session_id=session.id,
+            agent_session_id=session.id,
             agent_project_id=agent_project_id,
             policy=policy,
             policy_version=0 if tenant is None else tenant.version,
@@ -208,16 +208,16 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 return source.agent_project_id
         return await self._agent_projects.agent_project_of(ctx, session)
 
-    async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def get_snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         ctx.require(Permission.READ)
-        stored = await self._storage.read_snapshot(ctx.org_id, session_id)
+        stored = await self._storage.read_snapshot(ctx.org_id, agent_session_id)
         if stored is None:
-            raise NotFound(f"no retention snapshot of session {session_id}")
+            raise NotFound(f"no retention snapshot of session {agent_session_id}")
         return stored
 
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def erase_content(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         ctx.require(Permission.MANAGE_MEMBERS)
-        snapshot = await self.get_snapshot(ctx, session_id)
+        snapshot = await self.get_snapshot(ctx, agent_session_id)
         if snapshot.content_expired_at is not None:
             return snapshot
         # The sweep's own steps, once: the engine's revocation stands even
@@ -235,7 +235,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
             )
             if await self._storage.write_snapshot(ctx.org_id, done, snapshot.version):
                 return done
-            snapshot = await self.get_snapshot(ctx, session_id)
+            snapshot = await self.get_snapshot(ctx, agent_session_id)
             if snapshot.content_expired_at is not None:
                 return snapshot
         # A sweep that keeps writing the snapshot takes the erasure up at
@@ -260,7 +260,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
             except Exception:
                 log.exception(
                     "session %s of org %s stays behind its policy: its fold failed",
-                    snapshot.session_id,
+                    snapshot.agent_session_id,
                     org_id,
                 )
                 failed += 1
@@ -280,7 +280,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
             except Exception:
                 log.exception(
                     "session %s of org %s waits for its next attempt: its retention failed",
-                    snapshot.session_id,
+                    snapshot.agent_session_id,
                     org_id,
                 )
                 await self._defer(org_id, snapshot, retry)
@@ -332,7 +332,9 @@ class RetentionManagerImpl(RetentionManagerInterface):
             await self._storage.write_snapshot(org_id, later, snapshot.version)
         except Exception:
             log.exception(
-                "session %s of org %s stays in the next pass's read", snapshot.session_id, org_id
+                "session %s of org %s stays in the next pass's read",
+                snapshot.agent_session_id,
+                org_id,
             )
 
     async def _expire_content(
@@ -345,29 +347,29 @@ class RetentionManagerImpl(RetentionManagerInterface):
         tenant holds no key of has nothing to destroy, and is gone with no
         entry. A tenant deleted has no context, so its service alone can
         say so."""
-        session_id = snapshot.session_id
+        agent_session_id = snapshot.agent_session_id
         revoked_at: datetime | None = None
         keyless = False
         if ctx is not None:
             try:
-                revoked_at = (await self._privacy.revoke_key(ctx, session_id)).revoked_at
+                revoked_at = (await self._privacy.revoke_key(ctx, agent_session_id)).revoked_at
             except NotFound:
                 keyless = True
-        report = await self._destroy(org_id, session_id)
+        report = await self._destroy(org_id, agent_session_id)
         if report is None and revoked_at is None:
             return keyless, None
         if ctx is not None:
             await self._audit(ctx, snapshot, report, revoked_at)
         return True, report
 
-    async def _destroy(self, org_id: UUID, session_id: UUID) -> KeyDestruction | None:
+    async def _destroy(self, org_id: UUID, agent_session_id: UUID) -> KeyDestruction | None:
         """The session's key destroyed by the tenant's key service, and its
         report; None when that service holds the tenant's key alone."""
         custody = self._keys.custody(org_id)
         if custody is None:
             return None
         try:
-            return await custody.destroy(org_id, session_id)
+            return await custody.destroy(org_id, agent_session_id)
         except InfraException as error:
             if error.code != KeyRefused.code:
                 raise
@@ -385,7 +387,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         """The audit entry of a destruction: the key service's report as it
         came, or, with none, that no service reported it and when the engine
         revoked the key."""
-        session_id = snapshot.session_id
+        agent_session_id = snapshot.agent_session_id
         facts: dict[str, object]
         if report is not None:
             facts = {
@@ -401,10 +403,14 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 "revoked_at": None if revoked_at is None else revoked_at.isoformat(),
             }
         expires = snapshot.content_expires_at or snapshot.created_at
-        entry = audit_event(
-            ctx, derived_id(session_id, expires, KEY_DESTROYED), KEY_DESTROYED, session_id, facts
+        entry = audit_change_event(
+            ctx,
+            derived_id(agent_session_id, expires, KEY_DESTROYED),
+            KEY_DESTROYED,
+            agent_session_id,
+            facts,
         )
-        await self._events.append_event(ctx, entry)
+        await self._change_events.append_change_event(ctx, entry)
 
     async def _mark(self, ctx: TenantContext, snapshot: SessionRetention) -> bool:
         """The session marked deleted, its shape past its life; the engine's
@@ -415,7 +421,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
         sub-agent's below it, so the runs that end them leave the session for
         the next pass to mark. A sub-agent at work ends by itself."""
         try:
-            await self._sessions.delete_session(ctx, snapshot.session_id)
+            await self._sessions.delete_agent_session(ctx, snapshot.agent_session_id)
         except NotFound:
             return True
         except ValidationFailed:
@@ -430,19 +436,19 @@ class RetentionManagerImpl(RetentionManagerInterface):
         is about to wake, ends by itself. A cancel below comes down as a
         parent's does, so the note of it wakes no session above, which
         would open a loop the mark waits on."""
-        session = await self._sessions.get_session(ctx, snapshot.session_id)
-        parked = [session] if session.status is SessionStatus.PARKED else []
-        parked += await self._parked_below(ctx, snapshot.session_id)
+        session = await self._sessions.get_agent_session(ctx, snapshot.agent_session_id)
+        parked = [session] if session.status is AgentSessionStatus.PARKED else []
+        parked += await self._parked_below(ctx, snapshot.agent_session_id)
         expires = snapshot.shape_expires_at or snapshot.created_at
         for each in parked:
-            step_id = derived_id(each.id, expires, SHAPE_CANCEL)
-            below = each.id != snapshot.session_id
-            cancel = Step(
-                id=step_id,
+            agent_step_id = derived_id(each.id, expires, SHAPE_CANCEL)
+            below = each.id != snapshot.agent_session_id
+            cancel = AgentStep(
+                id=agent_step_id,
                 created_at=self._clock(),
-                session_id=each.id,
-                loop_id=step_id,
-                type=StepType.CONTROL,
+                agent_session_id=each.id,
+                loop_id=agent_step_id,
+                type=AgentStepType.CONTROL,
                 actor=Actor.ENGINE,
                 origin=Origin.PARENT if below else Origin.ENGINE,
                 header=ControlHeader(command=ControlCommand.CANCEL),
@@ -453,16 +459,16 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 "its loop is cancelled",
                 each.id,
                 ctx.org_id,
-                snapshot.session_id,
+                snapshot.agent_session_id,
             )
 
-    async def _parked_below(self, ctx: TenantContext, session_id: UUID) -> list[AgentSession]:
-        """Every parked session below `session_id`, children and theirs, a
+    async def _parked_below(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentSession]:
+        """Every parked session below `agent_session_id`, children and theirs, a
         level at a time; the tree's count bounds the walk. A deleted session
         is walked through and left out: the engine's delete never waits on
         it, and what waits below it still holds the session above."""
         parked: list[AgentSession] = []
-        parents = [session_id]
+        parents = [agent_session_id]
         while parents:
             parent_id = parents.pop(0)
             after: UUID | None = None
@@ -470,7 +476,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 page = await self._sessions.get_children(ctx, parent_id, after, CHILDREN_PAGE)
                 for child in page.items:
                     parents.append(child.id)
-                    if child.deleted_at is None and child.status is SessionStatus.PARKED:
+                    if child.deleted_at is None and child.status is AgentSessionStatus.PARKED:
                         parked.append(child)
                 if not page.has_more or not page.items:
                     break

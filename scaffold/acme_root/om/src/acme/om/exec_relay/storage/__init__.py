@@ -23,13 +23,15 @@ class ExecRelayStorageInterface(ABC):
 
     @abstractmethod
     async def read_items_by_key(
-        self, org_id: UUID, session_id: UUID, key: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, key: UUID, limit: int
     ) -> list[ExecItem]:
         """The items of one call, oldest first, at most `limit`."""
         ...
 
     @abstractmethod
-    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+    async def read_running(
+        self, org_id: UUID, agent_session_id: UUID, limit: int
+    ) -> list[ExecItem]:
         """The session's items a host runs now, oldest first, at most
         `limit`."""
         ...
@@ -90,7 +92,7 @@ class ExecRelayStorageInterface(ABC):
 
     @abstractmethod
     async def read_binding(
-        self, org_id: UUID, session_id: UUID
+        self, org_id: UUID, agent_session_id: UUID
     ) -> AgentWorkspaceBinding | None: ...
 
     @abstractmethod
@@ -103,7 +105,7 @@ class ExecRelayStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         """At most `limit` rows of each table that hold the session's: its
         items, their parts and controls, and its binding; returns how many
         went."""

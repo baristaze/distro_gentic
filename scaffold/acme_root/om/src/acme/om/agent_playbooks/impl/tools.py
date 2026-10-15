@@ -9,22 +9,22 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
 from acme.infra.transports import OutputSink
-from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.rules import narrowed
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, ToolFailure, ToolRequestHeader
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ToolFailure, ToolRequestHeader, WorkspaceSnapshot
-from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import approver_roles, response, strictest, verdict
 from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
-from acme.om.tools.types.policy import Decision, PolicyLayer, ToolPolicy
+from acme.om.tools.types.policy import Decision, ToolPolicy, ToolPolicyLayer
 
 REFUSAL_CHARS = 2_000
 HISTORY_PAGE = 200
@@ -38,7 +38,7 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         self,
         inner: ToolsManagerInterface,
         agent_playbooks: Callable[[], AgentPlaybooksManagerInterface],
-        steps: Callable[[], StepsManagerInterface],
+        steps: Callable[[], AgentStepsManagerInterface],
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
@@ -50,14 +50,14 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        defaults: PolicyLayer,
-        request: Step,
+        defaults: ToolPolicyLayer,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
-        above: Sequence[PolicyLayer] = (),
+        above: Sequence[ToolPolicyLayer] = (),
     ) -> Gate:
         beneath = await self._inner.gate(
             ctx,
@@ -92,15 +92,15 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             return self._denied(request)
         return await self._inner.execute(
@@ -119,15 +119,15 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             return self._denied(request)
         return await self._inner.recover(
@@ -146,14 +146,14 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | JobNotStarted | Step:
+    ) -> JobHandle | JobNotStarted | AgentStep:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             # Refused before its tool ran: nothing started.
             return JobNotStarted(response=self._denied(request))
@@ -176,45 +176,45 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
     async def write_policy(self, ctx: TenantContext, policy: ToolPolicy) -> ToolPolicy:
         return await self._inner.write_policy(ctx, policy)
 
-    async def prepare_workspace(
+    async def prepare_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: WorkspaceSnapshot | None = None,
-    ) -> Workspace:
-        return await self._inner.prepare_workspace(ctx, session_id, spec, restore)
+        restore: AgentWorkspaceSnapshot | None = None,
+    ) -> AgentWorkspace:
+        return await self._inner.prepare_agent_workspace(ctx, agent_session_id, spec, restore)
 
-    async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
-        await self._inner.release_workspace(ctx, workspace)
+    async def release_agent_workspace(self, ctx: TenantContext, workspace: AgentWorkspace) -> None:
+        await self._inner.release_agent_workspace(ctx, workspace)
 
-    async def snapshot_workspace(
+    async def snapshot_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
-        return await self._inner.snapshot_workspace(
-            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+    ) -> AgentStep:
+        return await self._inner.snapshot_agent_workspace(
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
         )
 
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
 
     async def find_snapshot(
-        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
-    ) -> WorkspaceSnapshot:
-        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
+        self, ctx: TenantContext, agent_session_id: UUID, snapshot_id: UUID
+    ) -> AgentWorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, agent_session_id, snapshot_id)
 
     async def input_hash(
-        self, ctx: TenantContext, session_id: UUID, call_input: Mapping[str, Any]
+        self, ctx: TenantContext, agent_session_id: UUID, call_input: Mapping[str, Any]
     ) -> str:
-        return await self._inner.input_hash(ctx, session_id, call_input)
+        return await self._inner.input_hash(ctx, agent_session_id, call_input)
 
     async def cancel_job(self, ctx: TenantContext, registry: ToolRegistry, job: JobHandle) -> None:
         await self._inner.cancel_job(ctx, registry, job)
@@ -222,60 +222,62 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
     async def decide_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         request_seq: int,
         *,
         approve: bool,
         note: str = "",
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.decide_call(
-            ctx, session_id, request_seq, approve=approve, note=note
+            ctx, agent_session_id, request_seq, approve=approve, note=note
         )
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
-        await self._inner.purge_workspace(org_id, session_id)
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> None:
+        await self._inner.purge_agent_workspace(org_id, agent_session_id)
 
-    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
-        await self._inner.erase_snapshots(ctx, session_id)
+    async def erase_snapshots(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        await self._inner.erase_snapshots(ctx, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)
 
     # Helpers.
 
-    async def _narrowed(self, ctx: TenantContext, request: Step, decided: Decision) -> Decision:
+    async def _narrowed(self, ctx: TenantContext, request: AgentStep, decided: Decision) -> Decision:
         header = request.header
         if not isinstance(header, ToolRequestHeader):
             return decided
         try:
-            gates = await self._agent_playbooks().gates_of(ctx, request.session_id)
+            gates = await self._agent_playbooks().gates_of(ctx, request.agent_session_id)
         except NotFound:
             # A session of its chain cannot be read, nor the gates it
             # invoked: the call waits for a person rather than run past them.
             return strictest(decided, Decision.APPROVE)
         return narrowed(decided, gates, header.tool, header.authorization_class)
 
-    async def _approvers(self, ctx: TenantContext, request: Step) -> tuple[Any, ...]:
+    async def _approvers(self, ctx: TenantContext, request: AgentStep) -> tuple[Any, ...]:
         header = request.header
         assert isinstance(header, ToolRequestHeader)
         return approver_roles(await self._inner.get_policy(ctx), header.authorization_class)
 
-    async def _after(self, ctx: TenantContext, request: Step) -> list[Step]:
-        later: list[Step] = []
+    async def _after(self, ctx: TenantContext, request: AgentStep) -> list[AgentStep]:
+        later: list[AgentStep] = []
         after = request.seq
         while True:
-            page = await self._steps().get_steps(ctx, request.session_id, after, HISTORY_PAGE)
+            page = await self._steps().get_agent_steps(
+                ctx, request.agent_session_id, after, HISTORY_PAGE
+            )
             later += page.items
             if not page.has_more or not page.items:
                 return later
             after = page.items[-1].seq
 
-    def _denied(self, request: Step) -> Step:
+    def _denied(self, request: AgentStep) -> AgentStep:
         header = request.header
         tool = header.tool if isinstance(header, ToolRequestHeader) else "this tool"
         return self._answer(
             request, f"an agent playbook of this session does not allow {tool}", ToolFailure.DENIED
         )
 
-    def _answer(self, request: Step, text: str, failure: ToolFailure) -> Step:
+    def _answer(self, request: AgentStep, text: str, failure: ToolFailure) -> AgentStep:
         return response(new_id(), self._clock(), request, text, failure, limit=REFUSAL_CHARS)

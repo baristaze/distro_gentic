@@ -20,9 +20,19 @@ from acme.om.agent_billing.storage import SpendAccountStorageInterface
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound, UnpricedModel, UnresolvedRole, ValidationFailed
+from acme.om.language_models.prices import ModelPricesInterface
+from acme.om.language_models.types.fill import (
+    Eligibility,
+    Fill,
+    FillSet,
+    ModelAsk,
+    ModelRole,
+    RoleFill,
+    SwitchReason,
+)
 from acme.om.matrix import rules
 from acme.om.matrix.resolver import MatrixResolverInterface, Renewal
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
@@ -35,16 +45,6 @@ from acme.om.matrix.types.matrix import (
 )
 from acme.om.matrix.types.record import ModelRef
 from acme.om.matrix.types.tenant import MatrixPin
-from acme.om.models.prices import ModelPricesInterface
-from acme.om.models.types.fill import (
-    Eligibility,
-    Fill,
-    FillSet,
-    ModelAsk,
-    ModelRole,
-    RoleFill,
-    SwitchReason,
-)
 from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.trust.storage import TrustStorageInterface
@@ -58,7 +58,7 @@ Workload = Callable[[AgentSession], WorkloadClass]
 """A product's classes of work: the workload class of a session."""
 
 
-class MatrixOptions(Platform):
+class MatrixOptions(OmBase):
     environment: Environment = "local"  # the environment every question names
     default_tier: str = DEFAULT_TIER  # the plan tier of a tenant no operator gave a share
     reads: int = 1000  # the results, retirements, or choices one read takes at most
@@ -110,7 +110,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
     async def resolve(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
         asks: Sequence[ModelAsk] = (),
@@ -118,10 +118,10 @@ class MatrixResolverImpl(MatrixResolverInterface):
         asked = {found.role: found for found in asks}
         if len(asked) != len(asks):
             raise UnresolvedRole("a kind asks a model role twice")
-        pin = await self._tenants.read_pin(ctx.org_id, session_id)
+        pin = await self._tenants.read_pin(ctx.org_id, agent_session_id)
         version = await (self._current() if pin is None else self._version(pin.matrix_version))
         retired = await self.retired()
-        ask = await self._asking(ctx, session_id)
+        ask = await self._asking(ctx, agent_session_id)
         tenant = await self._tenant(ctx)
 
         def answers(at: MatrixVersion) -> tuple[RoleFill, ...]:
@@ -142,7 +142,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
             MatrixPin(
                 id=new_id(),
                 created_at=self._clock(),
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 fill_set_version=1,
                 matrix_version=version.number,
             ),
@@ -154,7 +154,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
         return answers(await self._version(pin.matrix_version))
 
     async def renewal(
-        self, ctx: TenantContext, session_id: UUID, head: FillSet, required: Eligibility
+        self, ctx: TenantContext, agent_session_id: UUID, head: FillSet, required: Eligibility
     ) -> Renewal | None:
         retired = await self.retired()
         gone = [
@@ -168,7 +168,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
         if not gone:
             return None
         current = await self._current()
-        ask = await self._asking(ctx, session_id)
+        ask = await self._asking(ctx, agent_session_id)
         tenant = await self._tenant(ctx)
         switches = tuple(
             (
@@ -237,13 +237,13 @@ class MatrixResolverImpl(MatrixResolverInterface):
         return current
 
     async def _asking(
-        self, ctx: TenantContext, session_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID
     ) -> Callable[[ModelRole, ModelAsk | None], MatrixQuery]:
         """The question the session asks for each model role, with the size
         its kind asks of it, if any."""
-        session = await self._sessions.read_session(ctx.org_id, session_id)
+        session = await self._sessions.read_session(ctx.org_id, agent_session_id)
         if session is None:
-            raise NotFound(f"agent session {session_id} not found")
+            raise NotFound(f"agent session {agent_session_id} not found")
         share = await self._shares.read_share(ctx.org_id)
         tier = self._options.default_tier if share is None else share.plan_tier
         workload = self._workload(session)

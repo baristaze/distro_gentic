@@ -90,6 +90,6 @@ def another_session(claimant: Claimant, item: WorkItem) -> bool:
     work and nothing else, whatever lane the item reached it on, so an item
     that names no session is not its session's either. A claimant that
     serves no one session takes any."""
-    if claimant.session_id is None:
+    if claimant.agent_session_id is None:
         return False
-    return str(item.payload.get("session_id")) != str(claimant.session_id)
+    return str(item.payload.get("agent_session_id")) != str(claimant.agent_session_id)

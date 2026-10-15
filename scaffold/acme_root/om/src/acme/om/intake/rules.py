@@ -33,8 +33,11 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.integrations.events import ProvidedEvent
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.content import Content, TextBlock
+from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal
-from acme.om.base import Platform, derived_id
+from acme.om.base import OmBase, derived_id
 from acme.om.context import CredentialKind, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import ValidationFailed
@@ -48,9 +51,6 @@ from acme.om.intake.types.event import (
     WorkNames,
 )
 from acme.om.intake.types.route import Effect
-from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import InputHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
 
 DELIVERED = frozenset({Effect.WAKE, Effect.WAKE_AS_DATA, Effect.WAIT, Effect.RECORD})
 """The effects that land an input in the session's history."""
@@ -58,7 +58,7 @@ DELIVERED = frozenset({Effect.WAKE, Effect.WAKE_AS_DATA, Effect.WAIT, Effect.REC
 WAKES = frozenset({Effect.WAKE, Effect.WAKE_AS_DATA})
 
 
-class Facts(Platform):
+class Facts(OmBase):
     """What the table reads of one event in one session: what arrived, who
     wrote it, a check's state, whether the session is archived, and whether
     the author is a mapped user who may instruct the session."""
@@ -104,7 +104,7 @@ def in_person(ctx: TenantContext) -> bool:
     session of their own. A call an agent makes runs under its principal's
     live context, which is internal, and a program speaks on an API key:
     neither is a person in person."""
-    return ctx.credential_kind is CredentialKind.SESSION_TOKEN
+    return ctx.credential_kind is CredentialKind.AUTH_SESSION_TOKEN
 
 
 ARRIVALS: dict[Arrival, str] = {
@@ -130,7 +130,9 @@ def event_of(
         raise ValidationFailed("the delivery names no installation a tenant connected")
     org_id = tenant
     try:
-        session_id = None if provided.session_id is None else UUID(provided.session_id)
+        agent_session_id = (
+            None if provided.agent_session_id is None else UUID(provided.agent_session_id)
+        )
         event = FeedbackEvent(
             id=provided.key,
             integration=integration,
@@ -142,7 +144,7 @@ def event_of(
                 name=provided.author_name,
             ),
             names=WorkNames(
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 pull_request=provided.pull_request,
                 branch=provided.branch,
             ),
@@ -178,11 +180,11 @@ def described(event: FeedbackEvent) -> str:
 
 def input_step(
     event: FeedbackEvent,
-    session_id: UUID,
+    agent_session_id: UUID,
     effect: Effect,
     principal: Principal,
     now: datetime,
-) -> Step:
+) -> AgentStep:
     """The input a session receives for an effect that delivers one. A
     principal's message speaks in `principal`'s name: the mapped user's,
     whose context appends it. Any other input is an event under
@@ -190,14 +192,14 @@ def input_step(
     derived from the event's, so a redelivery appends nothing."""
     if effect not in DELIVERED:
         raise ValueError(f"{effect.value} delivers no input")
-    step_id = derived_id(event.id, event.occurred_at, "intake:input")
+    agent_step_id = derived_id(event.id, event.occurred_at, "intake:input")
     message = effect is Effect.WAKE
-    return Step(
-        id=step_id,
+    return AgentStep(
+        id=agent_step_id,
         created_at=now,
-        session_id=session_id,
-        loop_id=step_id,
-        type=StepType.MESSAGE if message else StepType.EVENT,
+        agent_session_id=agent_session_id,
+        loop_id=agent_step_id,
+        type=AgentStepType.MESSAGE if message else AgentStepType.EVENT,
         actor=Actor.PERSON if message else Actor.EXTERNAL,
         origin=Origin.INTEGRATION,
         header=InputHeader(waking=effect in WAKES, principal=principal),

@@ -104,7 +104,7 @@ class HostsManagerInterface(ABC):
 
     @abstractmethod
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, pool_id: UUID | None
+        self, ctx: TenantContext, agent_session_id: UUID, pool_id: UUID | None
     ) -> SessionPlacement:
         """A principal sets where the session runs: one of the tenant's pools,
         or the cloud with None. This is the one way a session's placement
@@ -114,7 +114,7 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
         """Where the session runs and how many of its pool's hosts are online:
         a pinned session with none online waits, and reads so here. A
         sub-agent reads its root's. NotFound when the tenant holds no such
@@ -125,7 +125,7 @@ class HostsManagerInterface(ABC):
     # machine of the platform's cloud gets, and its machine's host.
 
     @abstractmethod
-    async def work_placement(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+    async def work_placement(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
         """Where the session's work runs, as the relay routes it: the pool a
         principal pinned it to, as `placement_of` reads it, or, for a session
         of the cloud, its pool of one in the cloud pool once it has one, or
@@ -133,7 +133,9 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
+    async def session_pool(
+        self, ctx: TenantContext, agent_session_id: UUID, region: str
+    ) -> HostPool:
         """The session's pool in the cloud pool, made the first time it is
         asked for, under an id read off the tenant and the session, so every
         process asks for the same one. It is the platform's: hidden from the

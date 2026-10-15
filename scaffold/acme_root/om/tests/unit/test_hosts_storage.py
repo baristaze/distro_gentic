@@ -1,8 +1,9 @@
 import pytest
-from contracts.hosts_storage import HostsStorageContract
 
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.memory import HostsStorageMemoryImpl
+
+from contracts.hosts_storage import HostsStorageContract
 
 
 class TestHostsStorageMemory(HostsStorageContract):

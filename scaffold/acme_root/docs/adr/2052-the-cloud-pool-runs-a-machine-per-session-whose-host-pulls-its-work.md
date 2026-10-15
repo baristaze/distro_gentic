@@ -118,9 +118,9 @@ with its machine.
 - A warm machine reads its metadata endpoint until a session claims it,
   and runs nothing of a session's until then.
 - No deployment runs a machine yet: the runner keeps
-  `ACME_WORKSPACE_BACKEND=none` and the pool's image unset. The trigger
+  `ACME_AGENT_WORKSPACE_BACKEND=none` and the pool's image unset. The trigger
   is the platform's cloud account: the environment then calls the
-  module, gives the runner and the sweep `ACME_MACHINES_BACKEND=ec2` and
+  module, gives the runner and the sweep `ACME_VMS_BACKEND=ec2` and
   its outputs, and their task roles its policy.
 - A session of the pool whose agent project names a workspace base is
   refused for good. The trigger is a cloud agent project with a

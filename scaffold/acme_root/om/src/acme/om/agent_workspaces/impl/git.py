@@ -24,8 +24,8 @@ from datetime import datetime, timedelta
 
 from pydantic import Field
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
-from acme.infra.workspaces import Workspace
 from acme.om.agent_workspaces.agent_projects import SourceControlInterface
 from acme.om.agent_workspaces.git import WorkspaceGitInterface
 from acme.om.agent_workspaces.types.source import (
@@ -35,7 +35,7 @@ from acme.om.agent_workspaces.types.source import (
     RepositoryBinding,
     Snapshot,
 )
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import Unavailable
 from acme.om.tools.seal import RecordSealInterface
@@ -182,7 +182,7 @@ brought in, `-` where they do not: what the checkout says of itself, which
 tells only what was not delivered."""
 
 
-class GitOptions(Platform):
+class GitOptions(OmBase):
     # How long one operation may take, the clone and the push included.
     timeout: timedelta = timedelta(minutes=5)
     # Who a snapshot commit names as its author and committer.
@@ -211,7 +211,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def sync(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
@@ -234,7 +234,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def cut(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         *,
@@ -244,7 +244,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         env = {"BRANCH": branch, "START": start or ""}
         await self._run(ctx, workspace, epoch, "cut", CUT, env)
 
-    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
+    async def checkout(self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int) -> Checkout:
         words = await self._run(ctx, workspace, epoch, "checkout", CHECKOUT, {})
         if len(words) != 4 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")
@@ -257,7 +257,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def snapshot(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         ref: str,
@@ -285,7 +285,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         return Snapshot(ref=ref, commit=commit, remote_branch=words[2] == "yes")
 
     async def outgoing(
-        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, head: str, *, epoch: int
     ) -> bytes:
         env = {"COMMIT": head, "BUNDLE": OUTGOING, "OUTGOING_REF": OUTGOING_REF}
         words = await self._run(ctx, workspace, epoch, "outgoing", OUTGOING_SCRIPT, env)
@@ -294,12 +294,12 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         return await self._bundle(workspace, int(words[1]))
 
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, branch: str, head: str, *, epoch: int
     ) -> None:
         env = {"BRANCH": branch, "COMMIT": head}
         await self._run(ctx, workspace, epoch, "landed", LANDED, env)
 
-    async def _bundle(self, workspace: Workspace, size: int) -> bytes:
+    async def _bundle(self, workspace: AgentWorkspace, size: int) -> bytes:
         """The bundle a script made, read back whole: empty when it made none,
         and `Unavailable` past its bound or short of the size it printed."""
         if size == 0:
@@ -317,7 +317,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def _run(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         epoch: int,
         operation: str,
         script: str,
@@ -330,7 +330,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def _lines(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         epoch: int,
         operation: str,
         script: str,

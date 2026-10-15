@@ -24,11 +24,8 @@ from acme.om.agent_sessions.kinds import (
     WakeAgentSessionPayload,
     WakeAgentSessionsPayload,
 )
-from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
-from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import NotFound
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential, NotFound
 from acme.om.tenancy import TenancyManagerInterface
@@ -130,7 +127,7 @@ class LeaseNoticeHandlerImpl(WorkHandlerInterface):
         )
 
 
-class StalledOptions(Platform):
+class StalledOptions(OmBase):
     # A session pending this long with no write to its row and no loop item
     # on it queued or claimed is one whose loop no run holds: its loop's work
     # failed for good, or never landed. A run never writes the row while it

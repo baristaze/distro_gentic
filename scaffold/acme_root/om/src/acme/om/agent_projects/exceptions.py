@@ -1,9 +1,9 @@
 """The agent projects swimlane's refusals, each in a shape of the platform's root."""
 
-from acme.om.exceptions import Conflict, PlatformException
+from acme.om.exceptions import Conflict, OmException
 
 
-class AgentProjectsException(PlatformException): ...
+class AgentProjectsException(OmException): ...
 
 
 class AgentProjectFixed(AgentProjectsException, Conflict):

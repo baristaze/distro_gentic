@@ -21,11 +21,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_automation_storage import make_agent_automation
-from contracts.agent_playbook_storage import make_agent_playbook
-from contracts.agent_workspace_storage import make_workspace
-from contracts.change_event_storage import make_change_event
-from contracts.platform_agents_storage import finished, make_validation, refused
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -34,7 +29,6 @@ from acme.om.agent_automations.types.agent_automation import Action
 from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
 from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.base import new_id
-from acme.om.change_events.storage.impl.postgres import ChangeEventStoragePostgresImpl
 from acme.om.change_events.storage.impl.postgres import ChangeEventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
@@ -55,7 +49,11 @@ from acme.om.storage.migrate import (
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 
+from contracts.agent_automation_storage import make_agent_automation
+from contracts.agent_playbook_storage import make_agent_playbook
+from contracts.agent_workspace_storage import make_workspace
 from contracts.change_event_storage import make_change_event
+from contracts.platform_agents_storage import finished, make_validation, refused
 
 pytestmark = pytest.mark.integration
 
@@ -463,7 +461,9 @@ async def test_the_one_notice_comes_back_as_the_lists_last_entry(
     for org, (agent_session_id, listed) in held.items():
         last = listed[-1] if listed else None
         assert await notices_of(core, org, agent_session_id, "notice", WORKSPACES_BEFORE) == last
-        assert await notices_of(core, org, agent_session_id, table=WORKSPACES_BEFORE) == list(listed)
+        assert await notices_of(core, org, agent_session_id, table=WORKSPACES_BEFORE) == list(
+            listed
+        )
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []

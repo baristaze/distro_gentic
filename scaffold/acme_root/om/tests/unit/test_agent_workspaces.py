@@ -12,28 +12,19 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from contracts.agent_project_storage import make_agent_project
-from contracts.agent_workspaces import (
-    BASE,
-    REPOSITORY,
-    AgentProjectsTwin,
-    GitTwin,
-    PullRequestsTwin,
-    ReaderTwin,
-)
-from contracts.loops import ASSISTANT, reply, said
-from contracts.platform_loops import PlatformLoop, platform_loop_over
 
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    Workspace,
+    AgentWorkspace,
 )
-from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
@@ -62,10 +53,20 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unavailable
 from acme.om.platform_root import PlatformRootOptions
-from acme.om.steps.types.header import LoopOutcome, ParkReason
-from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+
+from contracts.agent_project_storage import make_agent_project
+from contracts.agent_workspaces import (
+    BASE,
+    REPOSITORY,
+    AgentProjectsTwin,
+    GitTwin,
+    PullRequestsTwin,
+    ReaderTwin,
+)
+from contracts.loops import ASSISTANT, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 
 def kind(name: str, mode: IsolationMode, egress: EgressMode = EgressMode.OPEN) -> AgentKind:
@@ -101,20 +102,20 @@ def loop_of(tmp_path: Path, *kinds: AgentKind, **over: Any) -> PlatformLoop:
     )
 
 
-def provider(loop: PlatformLoop) -> WorkspaceTwinImpl:
-    workspaces = loop.infra.get_workspaces()
-    assert isinstance(workspaces, WorkspaceTwinImpl)
+def provider(loop: PlatformLoop) -> AgentWorkspaceTwinImpl:
+    workspaces = loop.infra.get_agent_workspaces()
+    assert isinstance(workspaces, AgentWorkspaceTwinImpl)
     return workspaces
 
 
-def of_type(steps: list[Step], step_type: StepType) -> list[Step]:
+def of_type(steps: list[AgentStep], step_type: AgentStepType) -> list[AgentStep]:
     return [step for step in steps if step.type is step_type]
 
 
-async def one_loop(loop: PlatformLoop, session_id: Any, text: str = "Answer it.") -> Any:
-    await loop.say(session_id, text)
+async def one_loop(loop: PlatformLoop, agent_session_id: Any, text: str = "Answer it.") -> Any:
+    await loop.say(agent_session_id, text)
     loop.anthropic.add(reply(said("Done.")))
-    return await loop.loops.run(loop.owner, session_id)
+    return await loop.loops.run(loop.owner, agent_session_id)
 
 
 # Check 1: a host that cannot give a session's pinned isolation refuses its
@@ -129,39 +130,39 @@ async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_th
     # reached.
     storage = StorageMemoryImpl()
     loop = loop_of(tmp_path, storage=storage, environment="production", result_gate=gate(storage))
-    session_id = await loop.start("twinned")
-    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    agent_session_id = await loop.start("twinned")
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert pinned.level is IsolationMode.TWIN, "pinned when the session was created"
 
-    run = await one_loop(loop, session_id)
+    run = await one_loop(loop, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None
-    assert run.park.reason is ParkReason.RESOURCE and run.park.unlock == "workspace"
+    assert run.park.reason is ParkReason.LEASABLE_RESOURCE and run.park.unlock == "workspace"
     assert run.park.retry_at is not None and run.park.retry_at > loop.clock()
     assert loop.anthropic.calls == [], "refused before the first model call"
     assert provider(loop).live == set(), "no weaker place, and no place at all, was made"
-    steps = await loop.history(session_id)
-    assert [step.type for step in steps] == [StepType.MESSAGE, StepType.PARKED]
+    steps = await loop.history(agent_session_id)
+    assert [step.type for step in steps] == [AgentStepType.MESSAGE, AgentStepType.PARKED]
 
     # At its retry time it asks again, and a host that still cannot give it
     # parks it again: it waits, and never runs on less.
     loop.clock.now = run.park.retry_at
-    await loop.managers.agent_sessions.wake_session(loop.owner, session_id, run.park)
-    again = await loop.loops.run(loop.owner, session_id)
-    assert again.park is not None and again.park.reason is ParkReason.RESOURCE
+    await loop.managers.agent_sessions.wake_agent_session(loop.owner, agent_session_id, run.park)
+    again = await loop.loops.run(loop.owner, agent_session_id)
+    assert again.park is not None and again.park.reason is ParkReason.LEASABLE_RESOURCE
     assert loop.anthropic.calls == []
 
 
 async def test_a_prepare_is_held_to_the_pin_whatever_a_loop_asks(tmp_path: Path) -> None:
     loop = loop_of(tmp_path, CONTAINED)
-    session_id = await loop.start("contained")
+    agent_session_id = await loop.start("contained")
     weaker = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.OPEN))
 
     with pytest.raises(IsolationRefused):
-        await loop.managers.tools.prepare_workspace(loop.owner, session_id, weaker)
+        await loop.managers.tools.prepare_agent_workspace(loop.owner, agent_session_id, weaker)
 
     assert provider(loop).live == set(), "the twin was asked for the container, and refused it"
-    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert (pinned.level, pinned.egress) == (IsolationMode.CONTAINER, EgressMode.NONE)
 
 
@@ -169,18 +170,22 @@ async def test_a_session_never_pinned_is_pinned_at_its_first_prepare_and_held_to
     tmp_path: Path,
 ) -> None:
     loop = loop_of(tmp_path)
-    session_id = new_id()
+    agent_session_id = new_id()
     with pytest.raises(NotFound):
-        await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+        await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     asked = TWINNED.isolation
 
-    workspace = await loop.managers.tools.prepare_workspace(loop.owner, session_id, asked)
-    await loop.managers.tools.release_workspace(loop.owner, workspace)
+    workspace = await loop.managers.tools.prepare_agent_workspace(
+        loop.owner, agent_session_id, asked
+    )
+    await loop.managers.tools.release_agent_workspace(loop.owner, workspace)
 
-    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert pinned.level is IsolationMode.TWIN
     asked_again = CONTAINED.isolation
-    again = await loop.managers.tools.prepare_workspace(loop.owner, session_id, asked_again)
+    again = await loop.managers.tools.prepare_agent_workspace(
+        loop.owner, agent_session_id, asked_again
+    )
     assert again.spec.mode is IsolationMode.TWIN, "the pin, not what a later loop asks"
 
 
@@ -199,34 +204,34 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
             workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
         ),
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
-    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
+    assert (await one_loop(loop, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
     assert git.cuts == [branch], "its first loop cut the branch from the default branch"
     assert git.pushed == {}, "a clean checkout keeps nothing"
     git.dirty = True  # the next loop leaves work uncommitted
 
-    second = await one_loop(loop, session_id, "Go on.")
+    second = await one_loop(loop, agent_session_id, "Go on.")
 
     assert second.outcome is LoopOutcome.SUCCEEDED
     assert git.cuts == [branch], "the branch the checkout holds is kept"
     ((ref, commit),) = git.pushed.items()
     assert ref.startswith(f"{SNAPSHOT_PREFIX}/{branch}/"), "beside the branch, never on it"
-    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert held.snapshot_ref == ref and len(held.notices) == 1 and commit in held.notices[0]
     assert provider(loop).live == set(), "kept, then let go"
 
     git.dirty = False
-    third = await one_loop(loop, session_id, "And now?")
+    third = await one_loop(loop, agent_session_id, "And now?")
 
     assert third.outcome is LoopOutcome.SUCCEEDED
-    steps = await loop.history(session_id)
-    (told,) = of_type(steps, StepType.ENVIRONMENT_CHANGED)
+    steps = await loop.history(agent_session_id)
+    (told,) = of_type(steps, AgentStepType.ENVIRONMENT_CHANGED)
     assert ref in told.as_text() and commit in told.as_text()
-    requests = of_type(steps, StepType.MODEL_REQUEST)
+    requests = of_type(steps, AgentStepType.MODEL_REQUEST)
     assert requests[1].seq < told.seq < requests[2].seq, "told before the next loop's call"
     assert told.id in requests[2].refs, "the call delivered it"
-    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert held.notices == (), "told once"
 
 
@@ -238,15 +243,15 @@ async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path
             workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
         ),
     )
-    session_id = await loop.start("twinned")
-    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    agent_session_id = await loop.start("twinned")
+    assert (await one_loop(loop, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
     git.dirty, git.refuses_push = True, True
 
-    run = await one_loop(loop, session_id, "Go on.")
+    run = await one_loop(loop, agent_session_id, "Go on.")
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    assert session_id in provider(loop).live, "the instance, and the work in it, stay"
-    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)
+    assert agent_session_id in provider(loop).live, "the instance, and the work in it, stay"
+    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert held.snapshot_ref is None and held.notices == ()
 
 
@@ -263,32 +268,32 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
             pull_requests=pull_requests,
         ),
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
     git.remote.add(branch)
-    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    assert (await one_loop(loop, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
     # Its pull request merged and its branch went, while the checkout still
     # holds work a release could not push.
     git.remote.discard(branch)
     pull_requests.fates[branch] = PullRequestFate.MERGED
     git.dirty, git.refuses_push = True, True
     git.calls.clear()
-    await loop.say(session_id, "Next change.")
+    await loop.say(agent_session_id, "Next change.")
     loop.anthropic.add(reply(said("Never asked.")))
 
     with pytest.raises(Unavailable):
-        await loop.loops.run(loop.owner, session_id)
+        await loop.loops.run(loop.owner, agent_session_id)
 
     assert git.cuts == [] and git.calls == ["snapshot"], "nothing was cut over the work"
     git.refuses_push = False
     git.calls.clear()
 
-    rebuilt = await loop.loops.run(loop.owner, session_id)
+    rebuilt = await loop.loops.run(loop.owner, agent_session_id)
 
     assert rebuilt.outcome is LoopOutcome.SUCCEEDED
     assert git.calls[:2] == ["snapshot", "cut"], "kept first, then cut"
     ((ref, commit),) = git.pushed.items()
-    (told,) = of_type(await loop.history(session_id), StepType.ENVIRONMENT_CHANGED)
+    (told,) = of_type(await loop.history(agent_session_id), AgentStepType.ENVIRONMENT_CHANGED)
     assert ref in told.as_text() and commit in told.as_text() and "merged" in told.as_text()
 
 
@@ -302,13 +307,13 @@ async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for
             workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
         ),
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
     git.remote.add(branch)
     git.local.add(branch)
     git.diverged = True
 
-    run = await one_loop(loop, session_id)
+    run = await one_loop(loop, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None and loop.anthropic.calls == []
     assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "workspace")
@@ -325,16 +330,18 @@ async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_perso
             workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
         ),
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
     git.remote.add(branch)
     git.local.add(branch)
-    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
-    assert (await loop.platform.agent_workspaces.get_workspace(loop.owner, session_id)).branch_seen
+    assert (await one_loop(loop, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
+    assert (
+        await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
+    ).branch_seen
     git.remote.discard(branch)
     calls = len(loop.anthropic.calls)
 
-    lost = await one_loop(loop, session_id, "Go on.")
+    lost = await one_loop(loop, agent_session_id, "Go on.")
 
     assert lost.end is RunEnd.PARKED and lost.park is not None
     assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "workspace")
@@ -356,18 +363,18 @@ async def test_a_branch_gone_after_its_pull_request_merged_is_rebuilt_and_the_lo
             pull_requests=pull_requests,
         ),
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
     git.remote.add(branch)
-    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    assert (await one_loop(loop, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
     git.remote.discard(branch)
     pull_requests.fates[branch] = PullRequestFate.MERGED
 
-    rebuilt = await one_loop(loop, session_id, "Next change.")
+    rebuilt = await one_loop(loop, agent_session_id, "Next change.")
 
     assert rebuilt.outcome is LoopOutcome.SUCCEEDED
     assert git.cuts == [branch]
-    (told,) = of_type(await loop.history(session_id), StepType.ENVIRONMENT_CHANGED)
+    (told,) = of_type(await loop.history(agent_session_id), AgentStepType.ENVIRONMENT_CHANGED)
     assert "merged" in told.as_text() and branch in told.as_text()
 
 
@@ -395,9 +402,9 @@ async def test_a_sessions_egress_is_its_agent_projects_allowlist_as_pinned(tmp_p
         rules=(SOURCE, MIRROR),
     )
     written = await workspaces.write_allowlist(loop.owner, listed)
-    session_id = await loop.start("twinned")
+    agent_session_id = await loop.start("twinned")
 
-    async def allowed(request: EgressRequest, of: Any = session_id) -> bool:
+    async def allowed(request: EgressRequest, of: Any = agent_session_id) -> bool:
         return (await workspaces.egress(loop.owner, of, request)).allowed
 
     assert await allowed(ask("git.example.com", "93.184.215.14", EgressMethod.POST))
@@ -483,13 +490,13 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
     loop = loop_of(
         tmp_path, platform=PlatformRootOptions(workspace_agent_projects=AgentProjectsTwin())
     )
-    session_id = await loop.start("twinned")
-    branch = session_branch(session_id)
+    agent_session_id = await loop.start("twinned")
+    branch = session_branch(agent_session_id)
     workspaces = loop.platform.agent_workspaces
 
     async def outward(kind: WriteKind, ref: str, repository: str = REPOSITORY) -> bool:
         write = RepositoryWrite(repository=repository, kind=kind, ref=ref)
-        return await workspaces.outward(loop.owner, session_id, write)
+        return await workspaces.outward(loop.owner, agent_session_id, write)
 
     assert not await outward(WriteKind.PUSH, branch)
     assert not await outward(WriteKind.PUSH, f"refs/heads/{branch}")
@@ -530,27 +537,27 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
         loop.platform.evidence._work_product,  # pyright: ignore[reportAttributeAccessIssue]
         WorkProductAgentWorkspacesImpl,
     ), "the root reads the evidence's work product from the workspaces"
-    session_id = await loop.start("twinned")
-    workspace = await loop.managers.tools.prepare_workspace(
-        loop.owner, session_id, TWINNED.isolation
+    agent_session_id = await loop.start("twinned")
+    workspace = await loop.managers.tools.prepare_agent_workspace(
+        loop.owner, agent_session_id, TWINNED.isolation
     )
     git.dirty = True  # the loop's work, not yet committed
     held = HeldWorkspaces()
     products = WorkProductAgentWorkspacesImpl(loop.platform.agent_workspaces, held)
 
     with pytest.raises(Unavailable):
-        await products.delivered(loop.owner, session_id)
+        await products.delivered(loop.owner, agent_session_id)
     held.hold(workspace, epoch=1)
-    delivered = await products.delivered(loop.owner, session_id)
+    delivered = await products.delivered(loop.owner, agent_session_id)
 
     assert delivered is not None and delivered.agent_project == "git.example.com/ajax/app"
     assert (delivered.base, delivered.head, delivered.dirty) == (BASE, "c" * 40, True)
     assert delivered.changed == ("checks/test_guard.py",), "as the repository holds it"
     git.dirty = False
-    clean = await products.delivered(loop.owner, session_id)
+    clean = await products.delivered(loop.owner, agent_session_id)
     assert clean is not None and not clean.dirty, "the checkout holds nothing undelivered"
     git.head = "d" * 40
-    ahead = await products.delivered(loop.owner, session_id)
+    ahead = await products.delivered(loop.owner, agent_session_id)
     assert ahead is not None and ahead.dirty, "a commit the repository lacks is not delivered"
 
     unbound = loop_of(
@@ -558,7 +565,9 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
         platform=PlatformRootOptions(workspace_agent_projects=AgentProjectsTwin(repository=None)),
     )
     other = await unbound.start("twinned")
-    loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
+    loose = await unbound.managers.tools.prepare_agent_workspace(
+        unbound.owner, other, TWINNED.isolation
+    )
     with pytest.raises(Unavailable):
         await unbound.platform.agent_workspaces.work_product(unbound.owner, loose)
 
@@ -574,7 +583,7 @@ class SlowPushGit(GitTwin):
     async def snapshot(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         ref: str,
@@ -602,29 +611,29 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
     tools, steps = loop.managers.tools, loop.managers.steps
     products = loop.platform.evidence._work_product  # pyright: ignore[reportAttributeAccessIssue]
     assert isinstance(products, WorkProductAgentWorkspacesImpl)
-    session_id = await loop.start("twinned")
-    await steps.begin_run(loop.owner, session_id)
-    parked = await tools.prepare_workspace(loop.owner, session_id, TWINNED.isolation)
+    agent_session_id = await loop.start("twinned")
+    await steps.begin_run(loop.owner, agent_session_id)
+    parked = await tools.prepare_agent_workspace(loop.owner, agent_session_id, TWINNED.isolation)
     # The run parks, and its release pushes its work slowly.
     git.cue, git.dirty = asyncio.Event(), True
-    releasing = asyncio.create_task(tools.release_workspace(loop.owner, parked))
+    releasing = asyncio.create_task(tools.release_agent_workspace(loop.owner, parked))
     await asyncio.wait_for(git.waiting.wait(), timeout=5)
 
     # The session resumes first: the next run takes its epoch and the
     # workspace, then the release lands.
-    await steps.begin_run(loop.owner, session_id)
-    resumed = await tools.prepare_workspace(loop.owner, session_id, TWINNED.isolation)
+    await steps.begin_run(loop.owner, agent_session_id)
+    resumed = await tools.prepare_agent_workspace(loop.owner, agent_session_id, TWINNED.isolation)
     git.cue.set()
     await releasing
 
     assert git.pushed, "the parked run's work was kept"
-    assert session_id in provider(loop).live, "the instance is the resumed run's, and stays"
-    delivered = await products.delivered(loop.owner, session_id)
+    assert agent_session_id in provider(loop).live, "the instance is the resumed run's, and stays"
+    delivered = await products.delivered(loop.owner, agent_session_id)
     assert delivered is not None and delivered.head == "c" * 40, "its validate reads it"
-    await tools.release_workspace(loop.owner, resumed)
-    assert session_id not in provider(loop).live, "the resumed run lets its own go"
+    await tools.release_agent_workspace(loop.owner, resumed)
+    assert agent_session_id not in provider(loop).live, "the resumed run lets its own go"
     with pytest.raises(Unavailable):
-        await products.delivered(loop.owner, session_id)
+        await products.delivered(loop.owner, agent_session_id)
 
 
 @pytest.mark.parametrize("prepares", [True, False], ids=["prepares", "never-prepares"])
@@ -650,26 +659,30 @@ async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_
         ),
     )
     steps = host_a.managers.steps
-    session_id = await host_a.start("twinned")
-    await steps.begin_run(host_a.owner, session_id)
-    parked = await host_a.managers.tools.prepare_workspace(
-        host_a.owner, session_id, TWINNED.isolation
+    agent_session_id = await host_a.start("twinned")
+    await steps.begin_run(host_a.owner, agent_session_id)
+    parked = await host_a.managers.tools.prepare_agent_workspace(
+        host_a.owner, agent_session_id, TWINNED.isolation
     )
     # The run parks on host A, and its release pushes its work slowly.
     git.cue, git.dirty = asyncio.Event(), True
-    releasing = asyncio.create_task(host_a.managers.tools.release_workspace(host_a.owner, parked))
+    releasing = asyncio.create_task(
+        host_a.managers.tools.release_agent_workspace(host_a.owner, parked)
+    )
     await asyncio.wait_for(git.waiting.wait(), timeout=5)
 
     # The next run takes its epoch on host B, then host A's release lands.
-    await steps.begin_run(host_a.owner, session_id)
+    await steps.begin_run(host_a.owner, agent_session_id)
     if prepares:
-        await host_b.managers.tools.prepare_workspace(host_a.owner, session_id, TWINNED.isolation)
+        await host_b.managers.tools.prepare_agent_workspace(
+            host_a.owner, agent_session_id, TWINNED.isolation
+        )
     git.cue.set()
     await releasing
 
     assert git.pushed, "the parked run's work was kept"
-    assert session_id not in provider(host_a).live, "host A's instance goes at once"
-    assert (session_id in provider(host_b).live) is prepares, "host B's is its own run's"
+    assert agent_session_id not in provider(host_a).live, "host A's instance goes at once"
+    assert (agent_session_id in provider(host_b).live) is prepares, "host B's is its own run's"
 
 
 # A session's agent project and its repository are the agent projects' rows.
@@ -693,7 +706,7 @@ async def test_a_session_started_in_an_agent_project_works_on_the_agent_projects
     )
     await loop.platform.agent_workspaces.write_allowlist(loop.owner, listed)
 
-    session = await loop.platform.agent_projects.start_session(
+    session = await loop.platform.agent_projects.start_agent_session(
         loop.owner, agent_project.id, Start(id=new_id(), kind="twinned", title="a report")
     )
 
@@ -715,15 +728,15 @@ async def test_a_session_started_in_an_agent_project_works_on_the_agent_projects
 
 async def test_a_sessions_purge_takes_its_workspace_row(tmp_path: Path) -> None:
     loop = loop_of(tmp_path)
-    session_id = await loop.start("twinned")
+    agent_session_id = await loop.start("twinned")
     other = await loop.start("twinned")
     workspaces = loop.platform.agent_workspaces
-    assert (await workspaces.get_workspace(loop.owner, session_id)).id == session_id
+    assert (await workspaces.get_workspace(loop.owner, agent_session_id)).id == agent_session_id
 
-    await loop.managers.tools.purge_workspace(loop.owner.org_id, session_id)
+    await loop.managers.tools.purge_agent_workspace(loop.owner.org_id, agent_session_id)
 
     with pytest.raises(NotFound):
-        await workspaces.get_workspace(loop.owner, session_id)
+        await workspaces.get_workspace(loop.owner, agent_session_id)
     assert (await workspaces.get_workspace(loop.owner, other)).id == other
 
 

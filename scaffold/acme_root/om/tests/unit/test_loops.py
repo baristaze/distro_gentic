@@ -22,9 +22,6 @@ from acme.infra.agent_workspaces import (
 )
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
-from acme.integrations.model_providers.types import ErrorKind
-from acme.integrations.model_providers.calls import ModelCall
-from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, StopReason
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.limits import Limit, Limits, tally_loop, tripped

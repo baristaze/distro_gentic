@@ -8,19 +8,19 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import SecretUse
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import ParkReason, ToolRequestHeader
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.attribution.rules import PRINCIPAL_PARK, principal_of
-from acme.om.attribution.types.authority import SessionAuthority
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.attribution.types.authority import AgentSessionAuthority
+from acme.om.base import OmBase, derived_id, new_id, utcnow
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
 from acme.om.exceptions import Conflict, NotFound, UniqueKeyTaken, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ParkReason, ToolRequestHeader
-from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.trust.exceptions import SecretCrossesWall
 from acme.om.trust.keys import KeyProbeInterface
@@ -44,7 +44,7 @@ KEY_SAVED = "trust.provider_key.created"
 KEY_ROTATED = "trust.provider_key.updated"
 
 
-class TrustOptions(Platform):
+class TrustOptions(OmBase):
     # The steps one read of the history takes when it looks back from a call
     # for the model request that asked for it; it reads on until it finds it.
     read_back: int = Field(default=16, gt=0)
@@ -64,8 +64,8 @@ class TrustManagerImpl(TrustManagerInterface):
     def __init__(
         self,
         storage: TrustStorageInterface,
-        steps: StepsManagerInterface,
-        events: EventsManagerInterface,
+        steps: AgentStepsManagerInterface,
+        events: ChangeEventsManagerInterface,
         attribution: AttributionManagerInterface,
         sessions: AgentSessionsManagerInterface,
         tenancy: TenancyManagerInterface,
@@ -79,7 +79,7 @@ class TrustManagerImpl(TrustManagerInterface):
     ) -> None:
         self._storage = storage
         self._steps = steps
-        self._events = events
+        self._change_events = events
         self._attribution = attribution
         self._sessions = sessions
         self._tenancy = tenancy
@@ -93,18 +93,20 @@ class TrustManagerImpl(TrustManagerInterface):
 
     # Four identities.
 
-    async def audit_call(self, ctx: TenantContext, request: Step) -> CallAudit:
+    async def audit_call(self, ctx: TenantContext, request: AgentStep) -> CallAudit:
         ctx.require(Permission.WRITE)
         header = request.header
         if not isinstance(header, ToolRequestHeader) or not request.refs:
             raise ValidationFailed(f"step {request.id} is not a tool request")
         # The response that asked for the call, then the request it answers,
         # whose spender paid for the choice.
-        response = await self._before(ctx, request.session_id, request.refs[0], request.seq)
+        response = await self._before(ctx, request.agent_session_id, request.refs[0], request.seq)
         if response.responds_to is None:
             raise ValidationFailed(f"step {response.id} answers no model request")
-        asked = await self._before(ctx, request.session_id, response.responds_to, response.seq)
-        executor = await self._placement.executor_of(ctx.org_id, request.session_id)
+        asked = await self._before(
+            ctx, request.agent_session_id, response.responds_to, response.seq
+        )
+        executor = await self._placement.executor_of(ctx.org_id, request.agent_session_id)
         try:
             # The call runs under the context it is handed: its principal's,
             # as the gate's authority answered it for this call.
@@ -112,21 +114,23 @@ class TrustManagerImpl(TrustManagerInterface):
         except ValueError as error:
             raise ValidationFailed(f"tool request {request.id}: {error}") from error
         # One entry a request: a call run again after a crash finds its own.
-        entry = audit_event(
+        entry = audit_change_event(
             ctx,
             derived_id(request.id, request.created_at, "trust:call"),
             CALL_AUDITED,
             request.id,
             audit.model_dump(mode="json"),
         )
-        await self._events.append_event(ctx, entry)
+        await self._change_events.append_change_event(ctx, entry)
         return audit
 
-    async def assign_principal(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+    async def assign_principal(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionAuthority:
         ctx.require(Permission.WRITE)
-        taken = await self._attribution.assign_principal(ctx, session_id)
-        await self._wake_on_principal(ctx, session_id)
-        await self._carry_down(ctx, session_id)
+        taken = await self._attribution.assign_principal(ctx, agent_session_id)
+        await self._wake_on_principal(ctx, agent_session_id)
+        await self._carry_down(ctx, agent_session_id)
         return taken
 
     # Secrets by placement.
@@ -196,16 +200,16 @@ class TrustManagerImpl(TrustManagerInterface):
         return declaration
 
     async def resolve_secrets(
-        self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
+        self, ctx: TenantContext, agent_session_id: UUID, uses: Sequence[SecretUse]
     ) -> dict[str, str]:
         ctx.require(Permission.READ)
         if not uses:
             return {}
-        inside = await self._placement.inside_wall(ctx.org_id, session_id)
+        inside = await self._placement.inside_wall(ctx.org_id, agent_session_id)
         # A name means what the first owner the session is placed on declares
         # it as, in the registry's order: never what an owner it is not
         # placed on declares.
-        placed = await self._owners.placed(ctx, session_id)
+        placed = await self._owners.placed(ctx, agent_session_id)
         declared: dict[str, SecretDeclaration] = {}
         for use in uses:
             for kind, owner_id in placed.items():
@@ -305,17 +309,17 @@ class TrustManagerImpl(TrustManagerInterface):
 
     # Helpers.
 
-    async def _wake_on_principal(self, ctx: TenantContext, session_id: UUID) -> None:
+    async def _wake_on_principal(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         """Wakes a session parked because its principal no longer held; one
         parked for anything else stays parked."""
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         park = session.park
         if (
             park is not None
             and park.reason is ParkReason.PERSON
             and park.unlock == PRINCIPAL_PARK.unlock
         ):
-            await self._sessions.wake_session(ctx, session_id, park)
+            await self._sessions.wake_agent_session(ctx, agent_session_id, park)
 
     async def _carry_down(self, ctx: TenantContext, parent_id: UUID) -> None:
         """A take-over carries to the parent's sub-agents parked on their
@@ -333,26 +337,26 @@ class TrustManagerImpl(TrustManagerInterface):
                     and park.unlock == PRINCIPAL_PARK.unlock
                 ):
                     await self._attribution.follow_parent(ctx, child.id)
-                    await self._sessions.wake_session(ctx, child.id, park)
+                    await self._sessions.wake_agent_session(ctx, child.id, park)
                 await self._carry_down(ctx, child.id)
             if not page.has_more or not page.items:
                 return
             after = page.items[-1].id
 
     async def _before(
-        self, ctx: TenantContext, session_id: UUID, step_id: UUID, before_seq: int
-    ) -> Step:
-        """The step `step_id` of the session's history, read back from just
+        self, ctx: TenantContext, agent_session_id: UUID, agent_step_id: UUID, before_seq: int
+    ) -> AgentStep:
+        """The step `agent_step_id` of the session's history, read back from just
         before `before_seq`, a window at a time."""
         through = before_seq - 1
         while through > 0:
             after = max(0, through - self._options.read_back)
-            page = await self._steps.get_steps(ctx, session_id, after, through - after)
+            page = await self._steps.get_agent_steps(ctx, agent_session_id, after, through - after)
             for step in page.items:
-                if step.id == step_id:
+                if step.id == agent_step_id:
                     return step
             through = after
-        raise ValidationFailed(f"step {step_id} is not in the history of {session_id}")
+        raise ValidationFailed(f"step {agent_step_id} is not in the history of {agent_session_id}")
 
     async def _relay_all(self, ctx: TenantContext, rows: tuple[OutboxRow, ...]) -> None:
         """The write has committed; a relay that fails is left to the sweep."""

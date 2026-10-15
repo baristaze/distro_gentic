@@ -18,18 +18,16 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import APP
-from contracts.loops import ALLOWED, call, reply, said
-from contracts.platform_loops import PlatformLoop, platform_loop_over
-from contracts.tools import failure_of, result_text
 from pydantic import SecretStr
 from unit.test_tools_mcp_servers import SERVER, free_port, logged
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports.redaction import forms
-from acme.infra.workspaces import Workspace
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
+from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
@@ -48,8 +46,6 @@ from acme.om.connectors.types.connector import (
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import Conflict, NotAuthorized, ValidationFailed
 from acme.om.exec_relay.types.exec import McpRequest
-from acme.om.steps.types.header import LoopOutcome, ToolFailure
-from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.mcp import definition_of
@@ -58,6 +54,11 @@ from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.tools.types.toolset import LOAD_TOOLSET, Toolset
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor
+
+from contracts.doubles import APP
+from contracts.loops import ALLOWED, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
+from contracts.tools import failure_of, result_text
 
 TOKEN = "tok-5be0c3a91d7f24"
 
@@ -122,10 +123,10 @@ class Placed(PlacementInterface):
     def __init__(self, inside: bool) -> None:
         self.inside = inside
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
         return self.inside
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
         raise NotImplementedError
 
 
@@ -155,7 +156,7 @@ class HostCalls:
 
     async def __call__(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: McpRequest,
         *,
         key: UUID,
@@ -199,7 +200,7 @@ def tenant(
 
 
 def acting(
-    at: Tenant, role: Role, credential: CredentialKind = CredentialKind.SESSION_TOKEN
+    at: Tenant, role: Role, credential: CredentialKind = CredentialKind.AUTH_SESSION_TOKEN
 ) -> TenantContext:
     """Someone of the tenant, in `role`, on `credential`."""
     return build_context(
@@ -212,14 +213,14 @@ def acting(
     )
 
 
-async def ran(loop: PlatformLoop, session_id: UUID) -> list[Step]:
-    run = await loop.loops.run(loop.owner, session_id)
+async def ran(loop: PlatformLoop, agent_session_id: UUID) -> list[AgentStep]:
+    run = await loop.loops.run(loop.owner, agent_session_id)
     assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
-    return await loop.history(session_id)
+    return await loop.history(agent_session_id)
 
 
-def responses(steps: list[Step]) -> list[Step]:
-    return [step for step in steps if step.type is StepType.TOOL_RESPONSE]
+def responses(steps: list[AgentStep]) -> list[AgentStep]:
+    return [step for step in steps if step.type is AgentStepType.TOOL_RESPONSE]
 
 
 def leaks(text: str) -> bool:
@@ -259,11 +260,11 @@ async def connected(at: Tenant, url: str, *tools: str) -> UUID:
     return connector.id
 
 
-async def asked(at: Tenant, session_id: UUID, text: str, *replies: Any) -> list[Step]:
+async def asked(at: Tenant, agent_session_id: UUID, text: str, *replies: Any) -> list[AgentStep]:
     """One loop of the session: a message, the model's replies, its run."""
-    await at.loop.say(session_id, text)
+    await at.loop.say(agent_session_id, text)
     at.loop.anthropic.add(*replies)
-    return await ran(at.loop, session_id)
+    return await ran(at.loop, agent_session_id)
 
 
 # Check 1: a tenant connects a server, reviews its tools, and attaches it;
@@ -275,11 +276,11 @@ async def test_a_session_loads_a_connected_server_and_its_answer_renders_as_data
 ) -> None:
     at = tenant(tmp_path)
     await connected(at, words.url, "lookup", "whoami")
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
-        session_id,
+        agent_session_id,
         "Look the word up.",
         reply(call("load_toolset", toolset="words")),
         reply(call("words__lookup", word="cat")),
@@ -395,17 +396,17 @@ async def test_a_withdrawn_tool_stops_at_its_next_call_in_a_session_that_pinned_
 ) -> None:
     at = tenant(tmp_path)
     connector_id = await connected(at, words.url, "lookup")
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
     await asked(
         at,
-        session_id,
+        agent_session_id,
         "Load the words.",
         reply(call("load_toolset", toolset="words")),
         reply(said("Loaded.")),
     )
     await at.connectors.review(at.loop.owner, connector_id, ConnectorReview())
     steps = await asked(
-        at, session_id, "Look.", reply(call("words__lookup", word="cat")), reply(said("No."))
+        at, agent_session_id, "Look.", reply(call("words__lookup", word="cat")), reply(said("No."))
     )
     assert failure_of(responses(steps)[-1]) is ToolFailure.PERMANENT
     later = await at.loop.start("ops_analyst")
@@ -495,10 +496,10 @@ async def test_the_credential_reaches_no_step_and_no_log_line(
         connector = await at.connectors.get_connector(at.loop.owner, connector_id)
         assert connector.secret == connector_secret(connector_id), "a name, never a value"
         assert not leaks(connector.model_dump_json())
-        session_id = await at.loop.start("ops_analyst")
+        agent_session_id = await at.loop.start("ops_analyst")
         steps = await asked(
             at,
-            session_id,
+            agent_session_id,
             "Who am I?",
             reply(call("load_toolset", toolset="words")),
             reply(call("words__whoami")),
@@ -560,11 +561,11 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
         owner, ConnectorDraft(name="words", summary="Look words up.", url=words.url)
     )
     await at.connectors.attach(owner, outside.id, ConnectorAttachment(kind="ops_analyst"))
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
-        session_id,
+        agent_session_id,
         "Find the ticket.",
         reply(call("load_toolset", toolset="tracker")),
         reply(call("tracker__find", q="login")),
@@ -612,9 +613,9 @@ async def test_a_host_servers_failure_is_the_calls_and_its_review_carries_defini
     await at.connectors.attach(
         owner, inside.id, ConnectorAttachment(kind="ops_analyst", deferred=False)
     )
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
     steps = await asked(
-        at, session_id, "Find it.", reply(call("tracker__find")), reply(said("Not there."))
+        at, agent_session_id, "Find it.", reply(call("tracker__find")), reply(said("Not there."))
     )
     assert [tool.name for tool in at.loop.anthropic.calls[0].tools] == ["lookup", "tracker__find"]
     refused = responses(steps)[-1]

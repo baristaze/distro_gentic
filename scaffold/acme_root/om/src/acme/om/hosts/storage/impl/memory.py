@@ -43,7 +43,9 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         return self._get(self._pools, org_id, pool_id)
 
     async def read_pools(self, org_id: UUID, limit: int) -> list[HostPool]:
-        return [pool for pool in self._rows(self._pools, org_id) if pool.session_id is None][:limit]
+        return [pool for pool in self._rows(self._pools, org_id) if pool.agent_session_id is None][
+            :limit
+        ]
 
     async def create_enrollment_token(
         self, org_id: UUID, token: EnrollmentToken, outbox_rows: tuple[OutboxRow, ...]
@@ -207,9 +209,9 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
                     self._put(self._credentials, org_id, ended)
             return claimant_of(revoked)
 
-    async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None:
+    async def read_placement(self, org_id: UUID, agent_session_id: UUID) -> SessionPlacement | None:
         for placement in self._rows(self._placements, org_id):
-            if placement.session_id == session_id:
+            if placement.agent_session_id == agent_session_id:
                 return placement
         return None
 
@@ -221,13 +223,13 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         async with self._lock:
-            stored = await self.read_placement(org_id, placement.session_id)
+            stored = await self.read_placement(org_id, placement.agent_session_id)
             stored_version = 0 if stored is None else stored.version
             if stored_version != expected_version or (
                 stored is not None and stored.id != placement.id
             ):
                 raise PreconditionFailed(
-                    f"the placement of session {placement.session_id} is no longer at "
+                    f"the placement of session {placement.agent_session_id} is no longer at "
                     f"version {expected_version}"
                 )
             if stored is None and placement.id in self._placements:

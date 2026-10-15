@@ -1,8 +1,9 @@
 import pytest
-from contracts.connector_storage import ConnectorStorageContract
 
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.connectors.storage.impl.memory import ConnectorStorageMemoryImpl
+
+from contracts.connector_storage import ConnectorStorageContract
 
 
 class TestConnectorStorageMemory(ConnectorStorageContract):

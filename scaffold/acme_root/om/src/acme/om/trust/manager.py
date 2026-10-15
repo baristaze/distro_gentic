@@ -15,9 +15,9 @@ from uuid import UUID
 
 from acme.infra.transports import SecretUse
 from acme.integrations.model_providers.types import ProviderName
-from acme.om.attribution.types.authority import SessionAuthority
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.attribution.types.authority import AgentSessionAuthority
 from acme.om.context import TenantContext
-from acme.om.steps.types.step import Step
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import ProviderKey
 from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration
@@ -27,7 +27,7 @@ class TrustManagerInterface(ABC):
     # Four identities.
 
     @abstractmethod
-    async def audit_call(self, ctx: TenantContext, request: Step) -> CallAudit:
+    async def audit_call(self, ctx: TenantContext, request: AgentStep) -> CallAudit:
         """Writes the audit entry of a tool call, before it runs, under the
         context the call runs under, its principal's: the executor the
         session's placement answers, that principal, the agent the request
@@ -38,7 +38,9 @@ class TrustManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def assign_principal(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+    async def assign_principal(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionAuthority:
         """The caller takes a session over, as attribution's take-over does,
         and a session parked because its principal no longer held is woken,
         so its calls run under the caller from its next run. The take-over
@@ -91,7 +93,7 @@ class TrustManagerInterface(ABC):
 
     @abstractmethod
     async def resolve_secrets(
-        self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
+        self, ctx: TenantContext, agent_session_id: UUID, uses: Sequence[SecretUse]
     ) -> dict[str, str]:
         """The name the tenant's store keeps each of `uses` under, for the
         session: a name means the declaration of the first owner the session

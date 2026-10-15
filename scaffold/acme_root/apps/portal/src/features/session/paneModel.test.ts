@@ -207,7 +207,7 @@ describe("the panes store", () => {
 
 describe("what the platform's tabs read from the calls", () => {
   const calls = [
-    call("u1", { tool: "write_plan", input: { plan: "1. Run it." } }),
+    call("u1", { tool: "write_agent_plan", input: { plan: "1. Run it." } }),
     call("u2", { tool: "edit_file", input: { path: "src/dates.py", old_text: "a\n", new_text: "b\nc\n" } }),
     call("u3", { tool: "write_file", input: { path: "NOTES.md", text: "x\n" } }),
     call("u4", { tool: "edit_file", input: { path: "src/dates.py", old_text: "c\n", new_text: "d\n" } }),

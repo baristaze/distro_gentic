@@ -9,9 +9,9 @@ from uuid import UUID
 
 from pydantic import model_validator
 
-from acme.infra.workspaces import IsolationSpec
+from acme.infra.agent_workspaces import IsolationSpec
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 ExecEffect = Literal["read_only", "idempotent", "unsafe"]
 """What a repeat of an `exec` item may do: its tool's effect, as the engine
@@ -33,7 +33,7 @@ class ExecOperation(StrEnum):
     MCP_CALL = "mcp_call"
 
 
-class ExecPayload(Platform):
+class ExecPayload(OmBase):
     """`exec` work at wire version 1: one operation of a tool call, for the
     host that holds the session's workspace. Its item goes to that host's
     lane.
@@ -48,7 +48,7 @@ class ExecPayload(Platform):
 
     host_id: UUID
     item_id: UUID  # the relay's item, whose id derives from the call's key
-    session_id: UUID
+    agent_session_id: UUID
     key: UUID  # the tool request's idempotency key
     operation: ExecOperation
     effect: ExecEffect
@@ -68,7 +68,7 @@ class WorkspaceOperation(StrEnum):
     ERASE = "erase"  # a host's store lets the session's snapshots go
 
 
-class WorkspacePayload(Platform):
+class WorkspacePayload(OmBase):
     """A workspace to prepare, release, purge, or snapshot, or a session's
     snapshots to erase. Preparing goes to the lane of the session's
     placement, since any host of the pool may make it; releasing, purging,
@@ -92,7 +92,7 @@ class WorkspacePayload(Platform):
     operation: WorkspaceOperation
     pool_id: UUID | None = None
     host_id: UUID | None = None
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     spec: IsolationSpec | None = None
     isolation: HostIsolation | None = None
     egress: tuple[str, ...] | None = None  # None is open egress
@@ -123,7 +123,8 @@ class WorkspacePayload(Platform):
         elif named is not None:
             raise ValueError("a release, a purge, or an erase names no snapshot")
         if self.kept_for is not None and (
-            self.operation is not WorkspaceOperation.SNAPSHOT or self.kept_for == self.session_id
+            self.operation is not WorkspaceOperation.SNAPSHOT
+            or self.kept_for == self.agent_session_id
         ):
             raise ValueError("only a snapshot is kept for another session, and never its own")
         return self

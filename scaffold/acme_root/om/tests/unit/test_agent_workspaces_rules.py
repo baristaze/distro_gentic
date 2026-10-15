@@ -6,7 +6,7 @@ from ipaddress import ip_address
 
 import pytest
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.types.egress import (
     READ_ONLY,

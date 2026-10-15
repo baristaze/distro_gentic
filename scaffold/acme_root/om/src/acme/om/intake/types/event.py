@@ -12,9 +12,9 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
+from acme.om.base import OmBase
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_TEXT = 20_000
 """The most of an event's text a session receives; the rest is cut."""
@@ -48,7 +48,7 @@ class CheckState(StrEnum):
     FAILED = "failed"
 
 
-class Author(Platform):
+class Author(OmBase):
     """The account behind an event in the integration's system: its kind,
     its id there, and the name it shows. A person's id is what an account
     link maps to a user of the tenant."""
@@ -58,12 +58,12 @@ class Author(Platform):
     name: Stored = Field(min_length=1, max_length=MAX_NAME)
 
 
-class WorkNames(Platform):
+class WorkNames(OmBase):
     """The work an event names: a session by its id, a pull request, or a
     branch, each as the integration spells it. The router tries them in
     that order."""
 
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     pull_request: Stored | None = Field(default=None, min_length=1, max_length=MAX_NAME)
     branch: Stored | None = Field(default=None, min_length=1, max_length=MAX_NAME)
 
@@ -72,7 +72,7 @@ SERVED = frozenset({Provenance.REAL, Provenance.TWIN})
 """What may serve an event: the integration's system itself, or its twin."""
 
 
-class FeedbackEvent(Platform):
+class FeedbackEvent(OmBase):
     """One event from outside. `id` is derived from the delivery that carried
     it, so a redelivery is the same event. `integration` names the system
     it came from, and `provenance` what served it, the system or its twin,
@@ -104,14 +104,14 @@ class FeedbackEvent(Platform):
         return self
 
 
-class ChatApproval(Platform):
+class ChatApproval(OmBase):
     """A person's yes or no to one tool call, clicked in chat: the chat
     account that clicked, and the call it decides by its session and its
     place in the history."""
 
     integration: Stored = Field(min_length=1, max_length=MAX_NAME)
     external_id: Stored = Field(min_length=1, max_length=MAX_NAME)
-    session_id: UUID
+    agent_session_id: UUID
     request_seq: int = Field(ge=1)
     approve: bool
     note: Stored = Field(default="", max_length=MAX_TEXT)

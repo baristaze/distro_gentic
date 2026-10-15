@@ -13,42 +13,42 @@ import aioboto3
 from acme.infra.breaker import Breaker
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.impl.valkey import ValkeyConnection
-from acme.infra.machines import MachinesInterface, SeedsInterface
-from acme.infra.machines.ec2 import MachinesEc2Impl
-from acme.infra.machines.seeded import PLAIN_WRITE, SeedsChannelImpl, SeedsNullImpl
 from acme.infra.streams import StreamsInterface
 from acme.infra.streams.breaker import StreamsBreakerImpl
 from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.streams.valkey import StreamsValkeyImpl
+from acme.infra.vms import SeedsInterface, VmsInterface
+from acme.infra.vms.ec2 import MachinesEc2Impl
+from acme.infra.vms.seeded import PLAIN_WRITE, SeedsChannelImpl, SeedsNullImpl
 
 
 def unsafe_on_platform(settings: InfraSettings) -> str | None:
     """Why the platform refuses these settings at boot, or None: a VM
     workspace on the platform's cloud machines, since a machine of the cloud
     takes no command from outside, and its host pulls."""
-    if settings.workspace_backend == "vm" and settings.machines_backend == "ec2":
+    if settings.agent_workspace_backend == "vm" and settings.vms_backend == "ec2":
         return (
-            "ACME_WORKSPACE_BACKEND=vm is refused with ACME_MACHINES_BACKEND=ec2: "
+            "ACME_AGENT_WORKSPACE_BACKEND=vm is refused with ACME_VMS_BACKEND=ec2: "
             "a machine of the cloud takes no command from outside, and its host pulls"
         )
     return None
 
 
-def cloud_machines(settings: InfraSettings, aws: aioboto3.Session) -> MachinesInterface | None:
+def cloud_machines(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterface | None:
     """The machines of the platform's cloud account, when the settings name
     them; None for any other backend, which the root builds itself."""
-    if settings.machines_backend != "ec2":
+    if settings.vms_backend != "ec2":
         return None
     return MachinesEc2Impl(
         aws,
         region=settings.aws_region,
         timeout=timedelta(seconds=settings.aws_timeout_seconds),
-        boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
+        boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
         template=settings.machine_launch_template,
         subnets=tuple(s for s in settings.machine_subnets.split(",") if s),
         closed=settings.machine_closed_group,
         open_=settings.machine_open_group,
-        encrypted=settings.machine_store_encrypted,
+        encrypted=settings.vm_store_encrypted,
     )
 
 
@@ -61,7 +61,7 @@ class PlatformInfra:
     seeds: SeedsInterface
 
     @classmethod
-    def local(cls, machines: MachinesInterface) -> PlatformInfra:
+    def local(cls, machines: VmsInterface) -> PlatformInfra:
         """In this process: the memory streams, and seeds handed through the
         twin machines' channel."""
         return cls(
@@ -75,7 +75,7 @@ class PlatformInfra:
         settings: InfraSettings,
         valkey: ValkeyConnection | None,
         breaker: Breaker | None,
-        machines: MachinesInterface,
+        machines: VmsInterface,
     ) -> PlatformInfra:
         """As the settings pick them: the live streams follow the cache, behind
         the same breaker; a machine of the cloud is handed its seed as it
@@ -86,8 +86,8 @@ class PlatformInfra:
         seeds: SeedsInterface = SeedsNullImpl()
         if isinstance(machines, MachinesEc2Impl):
             seeds = machines
-        elif settings.machines_backend == "lima":
-            seeds = SeedsChannelImpl(machines, timedelta(seconds=settings.machine_timeout_seconds))
+        elif settings.vms_backend == "lima":
+            seeds = SeedsChannelImpl(machines, timedelta(seconds=settings.vm_timeout_seconds))
         return cls(streams, seeds)
 
     def describe(self) -> list[str]:

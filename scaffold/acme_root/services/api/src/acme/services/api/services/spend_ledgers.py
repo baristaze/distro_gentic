@@ -21,8 +21,8 @@ class SpendLedgersServiceInterface(ABC):
         org_id: UUID,
         *,
         kind: EntryKind | None,
-        hold_id: UUID | None,
-        session_id: UUID | None,
+        spend_hold_id: UUID | None,
+        agent_session_id: UUID | None,
         limit: int,
     ) -> SpendLedgerPageView:
         """The tenant's entries, the newest first, of one kind, one hold, or

@@ -35,12 +35,12 @@ On Lima, from the repository's root, with a hypervisor:
 make machine-image NAME=acme-vm-image
 ```
 
-It starts a machine from the Lima template `ACME_MACHINE_IMAGE` names,
+It starts a machine from the Lima template `ACME_VM_IMAGE` names,
 copies this checkout in, runs `install.sh` there, stops the machine, and
 keeps it under the name given. Set `ACME_CLOUD_POOL_IMAGE` to that name,
-`ACME_MACHINES_BACKEND=lima`, and `ACME_CLOUD_POOL_API_URL` to where the
+`ACME_VMS_BACKEND=lima`, and `ACME_CLOUD_POOL_API_URL` to where the
 API answers from inside a guest, such as `http://host.lima.internal:8000`.
-The name must not start with `ACME_MACHINE_PREFIX` and a `p`: those are
+The name must not start with `ACME_VM_PREFIX` and a `p`: those are
 the pool's own machines.
 
 In the cloud, the image is an AMI made the same way: an instance of a

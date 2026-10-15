@@ -36,11 +36,10 @@ from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionUsageView,
     AgentSessionView,
-    ApprovalView,
-    ToolOutputPageView,
-    BoundsView,
     AgentStepPageView,
     AgentStepView,
+    ApprovalView,
+    BoundsView,
     ControlRequest,
     DeadlineRequest,
     DecisionRequest,
@@ -51,8 +50,6 @@ from acme.services.api.types.agent_sessions import (
     QuestionView,
     SessionModelUsageView,
     StartAgentSessionRequest,
-    AgentStepPageView,
-    AgentStepView,
     ToolCallPageView,
     ToolOutputPageView,
     VisibilityRequest,
@@ -321,7 +318,9 @@ async def get_approvals(
 
 
 @router.get("/{agent_session_id}/bounds", response_model=BoundsView)
-async def get_bounds(ctx: Ctx, sessions: AgentSessionsService, agent_session_id: UUID) -> BoundsView:
+async def get_bounds(
+    ctx: Ctx, sessions: AgentSessionsService, agent_session_id: UUID
+) -> BoundsView:
     """The loop limits of the session's kind, and its tree's bounds."""
     return await sessions.get_bounds(ctx, agent_session_id)
 

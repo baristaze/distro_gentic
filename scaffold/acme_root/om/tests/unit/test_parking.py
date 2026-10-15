@@ -12,26 +12,16 @@ import pytest
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.kinds import (
     AgentSessionWorkKind,
     WakeAgentSessionPayload,
     WakeAgentSessionsPayload,
 )
-from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.limits import step_guard_park
 from acme.om.agent_sessions.rules import wakes_after
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.types.agent_step import Actor, AgentStepType
-from acme.om.agent_steps.types.header import (
-from acme.om.base import new_id, utcnow
-from acme.om.spend_budgets.rules import HOLD_RETRY, spend_budget_park, window_bounds
-from acme.om.spend_budgets.types.amount import Amount, AmountUnit, Spend
-from acme.om.spend_budgets.types.breach import SpendBreach, SpendBreachAction, Refusal
-from acme.om.spend_budgets.types.budget import SpendBudgetScope, SpendBudgetScopeKind, WindowKind
-from acme.om.spend_budgets.types.hold import Billed, SpendHold, SpendHoldRequest
-from acme.om.context import Role, TenantContext
-from acme.om.exceptions import StaleWriter
-from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.agent_steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -42,7 +32,7 @@ from acme.om.agent_steps.types.header import (
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import StaleWriter
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.spend_budgets.rules import HOLD_RETRY, spend_budget_park, window_bounds
 from acme.om.spend_budgets.types.amount import Amount, AmountUnit, Spend
 from acme.om.spend_budgets.types.spend_breach import Refusal, SpendBreach, SpendBreachAction
@@ -55,7 +45,10 @@ from acme.om.spend_budgets.types.spend_hold import Billed, SpendHold, SpendHoldR
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import (
+    WakeAgentSessionPayload,
+    WakeAgentSessionsPayload,
     WorkItem,
+    WorkKind,
 )
 
 from contracts.agent_session_storage import make_agent_session
@@ -64,8 +57,6 @@ from contracts.doubles import context
 from contracts.spend_budget_storage import make_spend_budget
 from contracts.tools import stand_ins
 
-# What `make_agent_session` names, so the agents manager classes every tool it
-# offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
 

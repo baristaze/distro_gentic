@@ -2,19 +2,19 @@
 where one of its sessions' work stands, what one of its hosts is handed,
 and a session's history as `read` sees it, its shape. Each answers ids,
 counts, times, and states; a session's content is the agent sessions'
-`StepPageView`, behind a grant of its own."""
+`AgentStepPageView`, behind a grant of its own."""
 
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin
+from acme.om.agent_steps.types.content import ContentState
+from acme.om.agent_steps.types.header import ControlCommand, LoopOutcome, ToolFailure
 from acme.om.hosts.rules import HostState
 from acme.om.placement.types.share import PlanTier
-from acme.om.steps.types.content import ContentState
-from acme.om.steps.types.header import ControlCommand, LoopOutcome, ToolFailure
-from acme.om.steps.types.step import Actor, Origin, StepType
 from acme.om.work.types.tenant_cap import MAX_CAP
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.agent_sessions import ParkView
@@ -74,8 +74,8 @@ class SessionStandingView(View):
     `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
     false is the default tier."""
 
-    session_id: UUID
-    status: SessionStatus
+    agent_session_id: UUID
+    status: AgentSessionStatus
     park: ParkView | None
     changed_at: datetime
     pending_input: bool
@@ -119,7 +119,7 @@ class StepShapeView(View):
     id: UUID
     seq: int
     loop_id: UUID
-    type: StepType
+    type: AgentStepType
     actor: Actor
     origin: Origin
     responds_to: UUID | None

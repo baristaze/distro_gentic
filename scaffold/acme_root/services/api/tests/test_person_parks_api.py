@@ -20,7 +20,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
 from api_support import (
     AGENT_PROJECT_ID,
     add_member,
@@ -30,8 +29,6 @@ from api_support import (
     sign_in,
     sign_in_as,
 )
-from contracts.loops import Build, Lookup, call, reply, said, use
-from contracts.sub_agents import spawn
 
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl

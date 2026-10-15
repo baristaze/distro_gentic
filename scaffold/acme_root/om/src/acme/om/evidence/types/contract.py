@@ -9,8 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 
-from acme.om.base import FrozenMapping, Platform
-from acme.om.evidence.types.provenance import ArtifactRef, Dependency
+from acme.om.base import FrozenMapping, OmBase
+from acme.om.evidence.types.provenance import Dependency, ToolOutputRef
 from acme.om.evidence.types.record import NAME, VERSION, RunImage, RunOutcome
 
 SCHEMA = 1
@@ -25,7 +25,7 @@ FIELDS = frozenset({"version", "out"})
 and where the results stream goes."""
 
 
-class CheckDeclaration(Platform):
+class CheckDeclaration(OmBase):
     """A check as an agent project declares it: its name and version, the command
     template a runner is started with, its kind, the capabilities a place
     must offer to run it, the version of the results schema it writes, and
@@ -55,7 +55,7 @@ class CheckDeclaration(Platform):
         return command
 
 
-class Offer(Platform):
+class Offer(OmBase):
     """What a place to run checks offers: its capabilities, and the results
     schemas its runner writes."""
 
@@ -69,7 +69,7 @@ class CaseOutcome(StrEnum):
     SKIPPED = "skipped"
 
 
-class StartLine(Platform):
+class StartLine(OmBase):
     """The first line of a run: what ran, at which version, under what."""
 
     kind: Literal["start"]
@@ -86,7 +86,7 @@ class StartLine(Platform):
     started_at: datetime
 
 
-class CaseLine(Platform):
+class CaseLine(OmBase):
     """One case, written as it finishes."""
 
     kind: Literal["case"]
@@ -95,14 +95,14 @@ class CaseLine(Platform):
     seconds: float = Field(ge=0)
 
 
-class EndLine(Platform):
+class EndLine(OmBase):
     """The last line of a run: how it ended, and what it measured and made."""
 
     kind: Literal["end"]
     outcome: RunOutcome
     finished_at: datetime
     metrics: FrozenMapping = Field(default_factory=dict, validate_default=True)
-    artifacts: tuple[ArtifactRef, ...] = ()
+    artifacts: tuple[ToolOutputRef, ...] = ()
     abort: str | None = Field(default=None, min_length=1, max_length=500)
 
 

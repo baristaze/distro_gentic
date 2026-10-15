@@ -118,7 +118,7 @@ output "migration_files" {
 output "session_runner_access" {
   description = "The session runner's task role policies, by ARN, and the variables its execution role injects from the secret store."
   value = {
-    policy_arns  = module.session_runner.task_policy_arns
-    secret_names = module.session_runner.injected_secret_names
+    policy_arns  = module.agent_session_runner.task_policy_arns
+    secret_names = module.agent_session_runner.injected_secret_names
   }
 }

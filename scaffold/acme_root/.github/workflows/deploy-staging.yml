@@ -220,8 +220,8 @@ jobs:
           cache-from: type=gha,scope=maintenance
           cache-to: type=gha,scope=maintenance,mode=max
       - name: build and push the session runner image
-        id: session_runner
-        if: steps.existing.outputs.session_runner == ''
+        id: agent_session_runner
+        if: steps.existing.outputs.agent_session_runner == ''
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -236,7 +236,7 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           API_DIGEST: ${{ steps.api.outputs.digest || steps.existing.outputs.api }}
           MAINTENANCE_DIGEST: ${{ steps.maintenance.outputs.digest || steps.existing.outputs.maintenance }}
-          SESSION_RUNNER_DIGEST: ${{ steps.session_runner.outputs.digest || steps.existing.outputs.session_runner }}
+          SESSION_RUNNER_DIGEST: ${{ steps.agent_session_runner.outputs.digest || steps.existing.outputs.agent_session_runner }}
         run: |
           {
             echo "api_image=$REGISTRY/acme-api@$API_DIGEST"

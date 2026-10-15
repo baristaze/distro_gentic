@@ -10,9 +10,9 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.base import Created, Identifiable, Trackable
 from acme.om.levers.types.lever import LeverFinding
-from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_TEXT = 10_000
 MAX_SLUG = 80
@@ -62,6 +62,6 @@ class AgentKnowledgeRecall(Identifiable, Created):
     slug: which lever it reached, kept so a reading of the sessions that
     stalled can name it."""
 
-    session_id: UUID
+    agent_session_id: UUID
     entry_id: UUID
     version: int = Field(ge=1)

@@ -7,13 +7,14 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from contracts.product_namespace import NAMESPACES, PARCELS, Parcels
 from worker_support import build_container, request
 
 from acme.om import product_namespaces
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
 from acme.workers.maintenance.main import build_loop
+
+from contracts.product_namespace import NAMESPACES, PARCELS, Parcels
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +42,7 @@ async def test_a_declared_namespaces_purge_runs_before_the_purge_it_names(
     )
     await parcels.add(owner, "crate")
     await container.managers.tenancy.credentials.create_api_key(owner, "ci", Role.MEMBER)
-    events = container.storage.get_event_storage()
+    events = container.storage.get_change_event_storage()
     assert await events.read_after(org.id, 0, 100), "the stream holds its events"
     tenancy = container.storage.get_tenancy_storage()
     stored = await tenancy.read_org(org.id)

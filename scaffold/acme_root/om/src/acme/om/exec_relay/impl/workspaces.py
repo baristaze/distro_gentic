@@ -25,13 +25,13 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceLost,
     Durability,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    Workspace,
-    WorkspaceLost,
+    AgentWorkspace,
 )
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
@@ -71,27 +71,27 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         self._sleep = sleep
         self._clock = clock
 
-    async def pool_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        placed = await self._hosts().placement_of(ctx, session_id)
+    async def pool_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
+        placed = await self._hosts().placement_of(ctx, agent_session_id)
         return None if placed.pool is None else placed.pool.id
 
     async def held_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot | None = None,
         *,
         pooled: PlacementState | None = None,
-    ) -> Workspace | None:
-        placed = pooled or await self._hosts().placement_of(ctx, session_id)
+    ) -> AgentWorkspace | None:
+        placed = pooled or await self._hosts().placement_of(ctx, agent_session_id)
         if placed.pool is None:
             return None
         if spec.durability is Durability.SNAPSHOT and pooled is None:
-            await self._snapshots_offered(ctx, placed, session_id, spec)
+            await self._snapshots_offered(ctx, placed, agent_session_id, spec)
         if restore is not None:
-            return await self._restored(ctx, placed, session_id, spec, restore)
-        binding = await self._exec_relay().binding_of(ctx, session_id)
+            return await self._restored(ctx, placed, agent_session_id, spec, restore)
+        binding = await self._exec_relay().binding_of(ctx, agent_session_id)
         if binding is not None:
             holder = await self._hosts().get_host(ctx, placed.pool.id, binding.host_id)
             if holder is not None and holder.host.revoked_at is None:
@@ -99,20 +99,20 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
                     # A workspace lives where it was prepared: the session
                     # waits for its host, and never moves on a guess.
                     raise IsolationRefused(
-                        f"host {binding.host_name}, which holds session {session_id}'s "
+                        f"host {binding.host_name}, which holds session {agent_session_id}'s "
                         "workspace, is offline",
                         clears=True,
                     )
-                return _held(ctx, session_id, spec, binding)
+                return _held(ctx, agent_session_id, spec, binding)
             # Its host was revoked or moved, and took the workspace with it:
             # another host of the pool prepares one.
         # Read before the ask: a prepare that failed is followed by a new
         # one, and the run still says why the last was refused.
-        refused = await self._exec_relay().prepare_refusal(ctx, session_id)
-        await self._exec_relay().ask_prepare(ctx, session_id, spec)
+        refused = await self._exec_relay().prepare_refusal(ctx, agent_session_id)
+        await self._exec_relay().ask_prepare(ctx, agent_session_id, spec)
         why = "" if refused is None else f"; a host refused it: {refused}"
         raise IsolationRefused(
-            f"no host of pool {placed.pool.name} holds session {session_id}'s workspace yet "
+            f"no host of pool {placed.pool.name} holds session {agent_session_id}'s workspace yet "
             f"({placed.hosts_online} online); one prepares it when it claims the work{why}",
             clears=True,
         )
@@ -120,18 +120,18 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
     async def snapshot_on_host(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         snapshot_id: UUID,
         *,
         kept_for: UUID | None = None,
     ) -> UUID:
         item_id = await self._exec_relay().ask_snapshot(
-            ctx, session_id, spec, snapshot_id, kept_for=kept_for
+            ctx, agent_session_id, spec, snapshot_id, kept_for=kept_for
         )
         if item_id is None:
             raise SnapshotRefused(
-                f"no live host holds session {session_id}'s workspace, so none snapshots it"
+                f"no live host holds session {agent_session_id}'s workspace, so none snapshots it"
             )
         return item_id
 
@@ -141,11 +141,17 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
             return None
         return row.last_error or "the host gave no reason"
 
-    async def erase_on_host(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
-        await self._exec_relay().ask_erase(ctx, session_id, host_id)
+    async def erase_on_host(
+        self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID
+    ) -> None:
+        await self._exec_relay().ask_erase(ctx, agent_session_id, host_id)
 
     async def _snapshots_offered(
-        self, ctx: TenantContext, placed: PlacementState, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        placed: PlacementState,
+        agent_session_id: UUID,
+        spec: IsolationSpec,
     ) -> None:
         """Refuses, until one comes, a workspace kept by snapshots in a pool
         where no live, online host advertises snapshots at its level: it
@@ -165,7 +171,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         level = spec.mode.value if isolation is None else isolation.value
         holds = "" if isolation is None else f", which would hold {SNAPSHOTS[isolation][1]}"
         raise IsolationRefused(
-            f"session {session_id} keeps its workspace by snapshots, and no live host of pool "
+            f"session {agent_session_id} keeps its workspace by snapshots, and no live host of pool "
             f"{placed.pool.name} has probed snapshots of a {level} workspace{holds}: it waits "
             "for one",
             clears=True,
@@ -175,31 +181,31 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         self,
         ctx: TenantContext,
         placed: PlacementState,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot,
-    ) -> Workspace:
+    ) -> AgentWorkspace:
         """The workspace once a host restored it from `restore`."""
         assert placed.pool is not None
         relay = self._exec_relay()
-        item_id = await relay.ask_restore(ctx, session_id, spec, restore)
+        item_id = await relay.ask_restore(ctx, agent_session_id, spec, restore)
         by = self._clock() + self._restore_wait
         wait = self._first_poll
         while True:
             row = await relay.workspace_work(ctx, item_id)
             if row.status is WorkStatus.DONE:
-                binding = await relay.binding_of(ctx, session_id)
+                binding = await relay.binding_of(ctx, agent_session_id)
                 if binding is not None:
-                    return _held(ctx, session_id, spec, binding)
+                    return _held(ctx, agent_session_id, spec, binding)
             if row.status is WorkStatus.FAILED:
-                raise WorkspaceLost(
-                    f"snapshot {restore.id} of session {session_id} did not come back from its "
+                raise AgentWorkspaceLost(
+                    f"snapshot {restore.id} of session {agent_session_id} did not come back from its "
                     f"host's store: {row.last_error or 'the host gave no reason'}"
                 )
             left = (by - self._clock()).total_seconds()
             if left <= 0:
                 raise IsolationRefused(
-                    f"no host of pool {placed.pool.name} has restored session {session_id}'s "
+                    f"no host of pool {placed.pool.name} has restored session {agent_session_id}'s "
                     f"workspace from snapshot {restore.id} yet; one does when it claims the work",
                     clears=True,
                 )
@@ -208,6 +214,6 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
 
 
 def _held(
-    ctx: TenantContext, session_id: UUID, spec: IsolationSpec, binding: AgentWorkspaceBinding
-) -> Workspace:
-    return Workspace(id=session_id, org_id=ctx.org_id, spec=spec, location=binding.location)
+    ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec, binding: AgentWorkspaceBinding
+) -> AgentWorkspace:
+    return AgentWorkspace(id=agent_session_id, org_id=ctx.org_id, spec=spec, location=binding.location)

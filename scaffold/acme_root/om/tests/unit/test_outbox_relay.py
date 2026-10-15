@@ -22,8 +22,8 @@ from acme.om.context import AppContext, AppType, Permission, RequestContext, Ten
 from acme.om.outbox.impl.relay import DEAD_LETTER_KIND, OutboxOptions, OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.root import KINDS, Managers, build_managers
 from acme.om.platform_root import PlatformManagers, build_platform_managers
+from acme.om.root import KINDS, Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.impl.creates import user_payload
 from acme.om.tenancy.impl.manager import TenancyOptions
@@ -285,7 +285,9 @@ async def test_a_relayed_item_lands_on_its_kinds_lane(
     under a cap of one there; on the default lane, it fills that cap."""
     storage = StorageMemoryImpl()
     kinds = KINDS.extended((LONG,))
-    managers = build_platform_managers(storage, infra, TenancyOptions(dev_sign_in=True), work_kinds=kinds)
+    managers = build_platform_managers(
+        storage, infra, TenancyOptions(dev_sign_in=True), work_kinds=kinds
+    )
     ctx = await sign_in(managers)
     woken: list[str] = []
 

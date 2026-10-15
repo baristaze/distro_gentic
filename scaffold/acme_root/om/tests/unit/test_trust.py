@@ -11,18 +11,20 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import make_agent_project, make_binding
-from contracts.doubles import context
-from contracts.factories import make_org
-from contracts.loops import reply, said, use
-from contracts.tools import INJECTED_TOKEN, echoing
-from contracts.trust import Trusted, trusted
 
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.redaction import forms, marker
 from acme.infra.transports.twin import TwinReply
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, AgentStep
+from acme.om.agent_steps.types.content import ToolResultBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import (
+    LoopOutcome,
+    ParkReason,
+    ToolFailure,
+    ToolResponseHeader,
+)
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.rules import PRINCIPAL_PARK
@@ -30,9 +32,6 @@ from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKi
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
-from acme.om.steps.types.content import ToolResultBlock, ToolUseBlock
-from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure, ToolResponseHeader
-from acme.om.steps.types.step import Actor, Step, StepType
 from acme.om.tools.impl.manager import SECRET_USED
 from acme.om.trust.exceptions import KeyRefused, SecretCrossesWall
 from acme.om.trust.impl.keys import ProviderClientsCachedImpl
@@ -45,6 +44,13 @@ from acme.om.trust.types.identities import (
 )
 from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
 from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore, kept_as
+
+from contracts.agent_project_storage import make_agent_project, make_binding
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.loops import reply, said, use
+from contracts.tools import INJECTED_TOKEN, echoing
+from contracts.trust import Trusted, trusted
 
 SECRET = "ghs_4b1d9e7c2a6f80c3-deploy"
 
@@ -62,12 +68,12 @@ def call(name: str) -> ToolUseBlock:
     return use(name, use_id=f"use_{name}_{new_id().hex[:8]}")
 
 
-def of_type(steps: list[Step], step_type: StepType) -> list[Step]:
+def of_type(steps: list[AgentStep], step_type: AgentStepType) -> list[AgentStep]:
     return [step for step in steps if step.type is step_type]
 
 
 async def audits(platform: Trusted) -> list[CallAudit]:
-    events = await platform.managers.events.get_events(platform.owner, 0, 500)
+    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
     return [CallAudit.model_validate(e.payload) for e in events if e.kind == CALL_AUDITED]
 
 
@@ -104,7 +110,7 @@ async def another_agent_project(platform: Trusted) -> UUID:
 async def of_agent_project(platform: Trusted, agent_project_id: UUID) -> UUID:
     """A session of `agent_project_id`, its row written once it stands."""
     start = Start(id=new_id(), kind="steady", title="the ledger")
-    session = await platform.managers.agents.start_session(platform.owner, start)
+    session = await platform.managers.agents.start_agent_session(platform.owner, start)
     binding = make_binding(session.id, agent_project_id)
     await platform.storage.get_agent_project_storage().bind_session(platform.owner.org_id, binding)
     return session.id
@@ -122,10 +128,10 @@ def reading(platform: Trusted) -> list[str]:
     return seen
 
 
-async def call_the_api(platform: Trusted, session_id: UUID) -> None:
-    await platform.say(session_id, "Call the records API.")
+async def call_the_api(platform: Trusted, agent_session_id: UUID) -> None:
+    await platform.say(agent_session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Done.")))
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
     assert run.outcome is LoopOutcome.SUCCEEDED
 
 
@@ -135,25 +141,25 @@ async def call_the_api(platform: Trusted, session_id: UUID) -> None:
 
 async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) -> None:
     platform = trusted(tmp_path)
-    session_id = await platform.start()
-    platform.placement.walled.add(session_id)
+    agent_session_id = await platform.start()
+    platform.placement.walled.add(agent_session_id)
     # The owner asks, then hands the steer to a member: the call runs under
     # its steerer, and the one whose message it answers pays.
-    await platform.say(session_id, "Find the total.")
+    await platform.say(agent_session_id, "Find the total.")
     steerer = platform.member()
     await platform.managers.agent_sessions.add_participant(
-        platform.owner, session_id, steerer.user_id
+        platform.owner, agent_session_id, steerer.user_id
     )
     await platform.managers.attribution.assign_principal(
-        platform.owner, session_id, steerer.user_id
+        platform.owner, agent_session_id, steerer.user_id
     )
     platform.anthropic.add(reply(said("Looking."), call("lookup")), reply(said("It is 12.")))
 
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
     (audit,) = await audits(platform)
-    (request,) = of_type(await platform.history(session_id), StepType.TOOL_REQUEST)
+    (request,) = of_type(await platform.history(agent_session_id), AgentStepType.TOOL_REQUEST)
     assert audit.request_id == request.id and audit.tool == "lookup"
     # The machine that ran it, whom it ran under, who paid, and who acted:
     # each from its own source, and no two the same.
@@ -161,26 +167,28 @@ async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) 
     assert audit.principal == person(steerer.user_id), "steady: its steerer's authority"
     assert audit.spender == person(platform.owner.user_id), "the person who asked pays"
     assert audit.actor == ActorRef(
-        actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, session_id=session_id)
+        actor=Actor.AGENT,
+        agent=AgentRef(kind="steady", version=1, agent_session_id=agent_session_id),
     )
     answers = [
         audit.executor.credential_id,
         audit.principal.id,
         audit.spender.id,
-        audit.actor.agent.session_id if audit.actor.agent else None,
+        audit.actor.agent.agent_session_id if audit.actor.agent else None,
     ]
     assert len(set(answers)) == 4
     assert platform.lookup.ran_as == [steerer.user_id]
 
 
 async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
-    session_id, payer = new_id(), person(new_id())
+    agent_session_id, payer = new_id(), person(new_id())
     agent = ActorRef(
-        actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, session_id=session_id)
+        actor=Actor.AGENT,
+        agent=AgentRef(kind="steady", version=1, agent_session_id=agent_session_id),
     )
     whole = {
         "request_id": new_id(),
-        "session_id": session_id,
+        "agent_session_id": agent_session_id,
         "tool": "lookup",
         "executor": Executor(kind=ExecutorKind.HOST, credential_id=new_id(), label="build-host-1"),
         "principal": person(new_id()),
@@ -193,7 +201,7 @@ async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
     )
     principal_as_actor = ActorRef(actor=Actor.PERSON)
     elsewhere = ActorRef(
-        actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, session_id=new_id())
+        actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, agent_session_id=new_id())
     )
     for conflated in (
         {"executor": machine_as_person},
@@ -212,12 +220,12 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
-    session_id = await platform.start()
-    await platform.say(session_id, "Find the total.")
+    agent_session_id = await platform.start()
+    await platform.say(agent_session_id, "Find the total.")
     platform.anthropic.add(reply(said("Looking."), call("lookup")))
     platform.transition.revoked.add(platform.owner.user_id)
 
-    parked = await platform.loops.run(platform.owner, session_id)
+    parked = await platform.loops.run(platform.owner, agent_session_id)
 
     assert parked.end is RunEnd.PARKED and parked.park is not None
     assert (parked.park.reason, parked.park.unlock) == (ParkReason.PERSON, PRINCIPAL_PARK.unlock)
@@ -227,22 +235,26 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     # authority: the session stays parked, and a run takes nothing up. An
     # admin, who may take a lapsed steer.
     other = platform.member(Role.ADMIN)
-    await platform.managers.agent_sessions.add_participant(other, session_id, other.user_id)
-    await platform.say(session_id, "Please go on.", other)
-    again = await platform.loops.run(platform.owner, session_id)
+    await platform.managers.agent_sessions.add_participant(other, agent_session_id, other.user_id)
+    await platform.say(agent_session_id, "Please go on.", other)
+    again = await platform.loops.run(platform.owner, agent_session_id)
     assert again.end is RunEnd.IDLE
-    session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    session = await platform.managers.agent_sessions.get_agent_session(
+        platform.owner, agent_session_id
+    )
     assert session.park is not None and session.park.unlock == PRINCIPAL_PARK.unlock
     assert platform.lookup.ran_as == []
 
     # A viewer takes nothing over.
     with pytest.raises(NotAuthorized):
-        await platform.trust.trust.assign_principal(context(Role.VIEWER, make_org()), session_id)
+        await platform.trust.trust.assign_principal(
+            context(Role.VIEWER, make_org()), agent_session_id
+        )
 
-    taken = await platform.trust.trust.assign_principal(other, session_id)
+    taken = await platform.trust.trust.assign_principal(other, agent_session_id)
     assert taken.principal == person(other.user_id)
     platform.anthropic.add(reply(said("It is 12.")))
-    resumed = await platform.loops.run(platform.owner, session_id)
+    resumed = await platform.loops.run(platform.owner, agent_session_id)
 
     assert resumed.outcome is LoopOutcome.SUCCEEDED
     assert platform.lookup.ran_as == [other.user_id], "under the person who took it over"
@@ -300,19 +312,19 @@ async def test_a_secrets_value_reaches_no_step_no_log_no_stream_part_and_no_mode
         platform.owner, agent_project, INJECTED_TOKEN.name, SECRET
     )
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start(agent_project=True)
-    await platform.say(session_id, "Call the records API.")
+    agent_session_id = await platform.start(agent_project=True)
+    await platform.say(agent_session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Done.")))
 
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    steps = await platform.history(session_id)
-    (answer,) = of_type(steps, StepType.TOOL_RESPONSE)
+    steps = await platform.history(agent_session_id)
+    (answer,) = of_type(steps, AgentStepType.TOOL_RESPONSE)
     (result,) = answer.content.blocks
     assert isinstance(result, ToolResultBlock)
     assert marker(INJECTED_TOKEN.name) in result.parts[0].model_dump_json(), "it ran, redacted"
-    events = await platform.managers.events.get_events(platform.owner, 0, 500)
+    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
     used = [e for e in events if e.kind == SECRET_USED]
     assert [e.payload["secret"] for e in used] == [INJECTED_TOKEN.name], "audited by name"
     held = [
@@ -343,15 +355,15 @@ async def test_a_cloud_secret_is_refused_for_a_session_inside_a_customers_wall(
         platform.owner, agent_project, INJECTED_TOKEN.name, SECRET
     )
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start(agent_project=True)
-    platform.placement.walled.add(session_id)
-    await platform.say(session_id, "Call the records API.")
+    agent_session_id = await platform.start(agent_project=True)
+    platform.placement.walled.add(agent_session_id)
+    await platform.say(agent_session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Refused.")))
 
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    (answer,) = of_type(await platform.history(session_id), StepType.TOOL_RESPONSE)
+    (answer,) = of_type(await platform.history(agent_session_id), AgentStepType.TOOL_RESPONSE)
     header = answer.header
     assert isinstance(header, ToolResponseHeader) and header.failure is ToolFailure.DENIED
     assert "api_token is a cloud secret" in answer.model_dump_json()
@@ -404,11 +416,11 @@ async def test_each_agent_project_keeps_its_own_value_of_one_name_and_its_sessio
             owner, agent_project_id, INJECTED_TOKEN.name, f"value-{agent_project_id}"
         )
     seen = reading(platform)
-    for session_id in (
+    for agent_session_id in (
         await platform.start(agent_project=True),
         await of_agent_project(platform, theirs),
     ):
-        await call_the_api(platform, session_id)
+        await call_the_api(platform, agent_session_id)
 
     assert seen == [f"value-{ours}", f"value-{theirs}"], "each session its own agent project's"
     secrets = platform.infra.get_secrets()
@@ -425,8 +437,8 @@ async def test_a_session_never_reaches_another_agent_projects_secret_of_its_name
     await trust.put_secret(owner, theirs, INJECTED_TOKEN.name, "value-theirs")
     seen = reading(platform)
     first, loose = await platform.start(agent_project=True), await platform.start()
-    for session_id in (first, loose):
-        resolved = await trust.resolve_secrets(owner, session_id, (INJECTED_TOKEN,))
+    for agent_session_id in (first, loose):
+        resolved = await trust.resolve_secrets(owner, agent_session_id, (INJECTED_TOKEN,))
         assert resolved == {}, "the name alone: the tenant's own, never theirs"
 
     await call_the_api(platform, first)

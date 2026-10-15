@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 import pytest
 
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.rules import settlement_of
-from acme.om.budgets.storage import LedgerStorageInterface
-from acme.om.budgets.types.hold import BillUnknown, Hold
+from acme.om.spend_budgets.rules import spend_settlement_of
+from acme.om.spend_budgets.storage import LedgerStorageInterface
+from acme.om.spend_budgets.types.spend_hold import BillUnknown, SpendHold
+
 from contracts.ledger_storage import a_hold, a_line
 
 
@@ -26,7 +27,7 @@ class PlatformLedgerStorageContract:
         first, second, now = new_id(), new_id(), utcnow()
         line = a_line(cost_micros=100_000)
 
-        def opened(at: datetime) -> Hold:
+        def opened(at: datetime) -> SpendHold:
             return a_hold(line).model_copy(update={"created_at": at})
 
         old, older, settled = (opened(now - timedelta(hours=h)) for h in (2, 3, 4))
@@ -38,8 +39,10 @@ class PlatformLedgerStorageContract:
             (first, recent),
             (second, ancient),
         ):
-            assert await storage.open_hold(org, hold) is None
-        await storage.close_hold(first, settlement_of(settled, BillUnknown(), new_id(), now))
+            assert await storage.open_spend_hold(org, hold) is None
+        await storage.close_spend_hold(
+            first, spend_settlement_of(settled, BillUnknown(), new_id(), now)
+        )
         floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
         found = await storage.read_open(floor, cut, 10)
         assert [(org, hold.id, due) for org, hold, due in found] == [

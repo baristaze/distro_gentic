@@ -408,7 +408,9 @@ class AgentSessionStorageContract:
             sessions[0],
         ]
         assert await storage.read_agent_sessions(org, None, sessions[2].id, 1) == [waiting]
-        assert await storage.read_agent_sessions(org, AgentSessionStatus.PARKED, None, 10) == [waiting]
+        assert await storage.read_agent_sessions(org, AgentSessionStatus.PARKED, None, 10) == [
+            waiting
+        ]
         assert await storage.read_agent_sessions(org, AgentSessionStatus.IDLE, None, 10) == [
             sessions[2],
             sessions[0],

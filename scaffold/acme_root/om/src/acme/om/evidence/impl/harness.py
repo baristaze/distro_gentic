@@ -4,7 +4,7 @@ from uuid import UUID
 
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.types.result import Result
-from acme.om.base import Identifiable, Platform, new_id, utcnow
+from acme.om.base import Identifiable, OmBase, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.acceptance import Chain, evidence_text, judge_chain, scenario_refusal
 from acme.om.evidence.collector import collect, digest
@@ -22,7 +22,7 @@ PAGE = 500
 """Rows one read of the session's runs, or its inferences, takes."""
 
 
-class AcceptanceOptions(Platform):
+class AcceptanceOptions(OmBase):
     max_validations: int = 100  # validations and baselines of one session the harness reads
     max_runs: int = 100_000  # runs of those it reads
     max_inferences: int = 10_000  # hypotheses and findings it reads
@@ -54,7 +54,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         self,
         ctx: TenantContext,
         scenario: Scenario,
-        session_id: UUID,
+        agent_session_id: UUID,
         result: Result,
         surfaces: Mapping[Surface, Mapping[str, str]],
     ) -> AcceptanceVerdict:
@@ -70,20 +70,20 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
                 f"a scan covers every surface the agent reads; missing: {[s.value for s in missing]}"
             )
         verdict_id, now = new_id(), self._clock()
-        verdict = await self._gate.check(ctx, session_id, result)
-        work_product = await self._work_product.delivered(ctx, session_id)
+        verdict = await self._gate.check(ctx, agent_session_id, result)
+        work_product = await self._work_product.delivered(ctx, agent_session_id)
         bound = self._options.max_validations
         validations = tuple(
-            await self._storage.read_validations(ctx.org_id, session_id, None, bound + 1)
+            await self._storage.read_validations(ctx.org_id, agent_session_id, None, bound + 1)
         )
         # Every run of the session, the agent's own beside the executor's:
         # the chain is judged from the executor's, and the scan reads them all.
         records = await _paged(
-            lambda after: self._storage.read_records(ctx.org_id, session_id, after, PAGE),
+            lambda after: self._storage.read_records(ctx.org_id, agent_session_id, after, PAGE),
             self._options.max_runs,
         )
         inferences = await _paged(
-            lambda after: self._storage.read_inferences(ctx.org_id, session_id, after, PAGE),
+            lambda after: self._storage.read_inferences(ctx.org_id, agent_session_id, after, PAGE),
             self._options.max_inferences,
         )
         unread: list[Break] = []
@@ -92,7 +92,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         if len(inferences) > self._options.max_inferences:
             unread.append(Break(link=Link.HYPOTHESES, reason="more inferences than it reads"))
         hidden, hidden_break = await self._hidden(
-            ctx, scenario, session_id, work_product, verdict_id
+            ctx, scenario, agent_session_id, work_product, verdict_id
         )
         read = {surface: dict(items) for surface, items in surfaces.items()}
         read[Surface.PROMPT]["objective"] = scenario.objective
@@ -113,7 +113,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             id=verdict_id,
             created_at=now,
             scenario=scenario.name,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             head=work_product.head if work_product is not None else None,
             breaks=breaks,
             hidden=hidden,
@@ -123,7 +123,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         self,
         ctx: TenantContext,
         scenario: Scenario,
-        session_id: UUID,
+        agent_session_id: UUID,
         work_product: WorkProduct | None,
         verdict_id: UUID,
     ) -> tuple[tuple[ExecutionRecord, ...], tuple[Break, ...]]:
@@ -145,7 +145,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             if refusal is not None:
                 return (), (Break(link=Link.HIDDEN, reason=refusal),)
         request = ExecutionRequest(
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             agent_project=scenario.agent_project,
             purpose=RunPurpose.VALIDATION,
             version=work_product.head,
@@ -165,7 +165,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             records = collect(
                 report.results,
                 executor=report.executor,
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 agent_project=scenario.agent_project,
                 purpose=RunPurpose.VALIDATION,
                 validation_id=verdict_id,

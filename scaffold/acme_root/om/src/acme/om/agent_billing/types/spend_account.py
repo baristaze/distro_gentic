@@ -13,7 +13,7 @@ from typing import ClassVar, Self
 from pydantic import Field, model_validator
 
 from acme.om.agent_billing.types.unit_plan import MAX_NAME, UnitPlanRef
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 
 MAX_ZONES = 32
 """The zone changes a spend account keeps: enough to place every window still
@@ -29,7 +29,7 @@ class FundingMode(StrEnum):
     OWN_KEY = "own_key"  # the tenant's own provider key pays the provider
 
 
-class ZoneChange(Platform):
+class ZoneChange(OmBase):
     """The tenant's time zone from `at` on, an IANA name."""
 
     zone: str = Field(min_length=1, max_length=MAX_NAME)
@@ -66,7 +66,7 @@ class SpendAccount(Identifiable, Trackable):
         return UnitPlanRef(id=self.unit_plan_id, version=self.unit_plan_version)
 
 
-class SpendAccountRequest(Platform):
+class SpendAccountRequest(OmBase):
     """What an owner sets when the tenant's spend account opens."""
 
     funding: FundingMode

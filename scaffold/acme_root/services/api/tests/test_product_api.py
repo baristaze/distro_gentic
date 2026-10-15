@@ -11,8 +11,6 @@ from typing import Annotated
 
 import pytest
 from api_support import build_container, client_over, sign_in
-from contracts import product_namespace
-from contracts.product_namespace import NAMESPACE, NAMESPACES, PARCELS, Parcels
 from fastapi import APIRouter, Depends
 
 from acme.om import product_namespaces
@@ -21,6 +19,9 @@ from acme.services.api import product_api, routers
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.platform_resolve import product_service
 from acme.services.api.products import ProductApi, ProductApiNamespace
+
+from contracts import product_namespace
+from contracts.product_namespace import NAMESPACE, NAMESPACES, PARCELS, Parcels
 
 
 class ParcelsService:

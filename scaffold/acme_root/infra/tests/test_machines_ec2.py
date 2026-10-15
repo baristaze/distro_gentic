@@ -15,8 +15,8 @@ import pytest
 from botocore.exceptions import ClientError
 
 from acme.infra.exceptions import InfraValidationFailed
-from acme.infra.machines import MachineSpec, MachineState, SnapshotNotFound
-from acme.infra.machines.ec2 import TAG, MachinesEc2Impl
+from acme.infra.vms import SnapshotNotFound, VmSpec, VmState
+from acme.infra.vms.ec2 import TAG, MachinesEc2Impl
 
 TEMPLATE = "lt-0pool"
 CLOSED, OPEN = "sg-closed", "sg-open"
@@ -201,8 +201,8 @@ async def cloud() -> AsyncIterator[tuple[MachinesEc2Impl, Ec2]]:
     await machines.close()
 
 
-def spec(*, egress_open: bool = False) -> MachineSpec:
-    return MachineSpec(image=AMI, egress_open=egress_open)
+def spec(*, egress_open: bool = False) -> VmSpec:
+    return VmSpec(image=AMI, egress_open=egress_open)
 
 
 async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with_its_seed(
@@ -222,8 +222,8 @@ async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with
     assert "UserData" not in opened
     assert closed["MetadataOptions"]["HttpTokens"] == "required"
     assert "IamInstanceProfile" not in closed, "a machine holds no role to hand out"
-    assert await machines.state("acme-vm-pclosed") is MachineState.RUNNING
-    assert await machines.state("acme-vm-pnone") is MachineState.ABSENT
+    assert await machines.state("acme-vm-pclosed") is VmState.RUNNING
+    assert await machines.state("acme-vm-pnone") is VmState.ABSENT
 
     await machines.seal("acme-vm-pclosed")
     (instance,) = [i for i in ec2.instances.values() if i["SecurityGroups"][0]["GroupId"] == CLOSED]
@@ -242,7 +242,7 @@ async def test_a_new_machine_boots_the_pools_image_named_by_its_ami_id(
     assert await machines.names("acme-vm-p") == ["acme-vm-pa"], "the image is no name of the pool's"
     with pytest.raises(SnapshotNotFound):
         await machines.launch_seeded("acme-vm-pb", spec(), "ami-0fffffffffffffff0", b"seed")
-    assert await machines.state("acme-vm-pb") is MachineState.ABSENT
+    assert await machines.state("acme-vm-pb") is VmState.ABSENT
 
 
 async def test_a_running_machine_handed_a_new_seed_is_stopped_reseeded_and_started(

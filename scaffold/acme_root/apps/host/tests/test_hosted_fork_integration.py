@@ -35,15 +35,15 @@ from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
-from acme.infra.buckets import Buckets
-from acme.infra.transports.broker import BrokerNullImpl
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
 )
-from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
+from acme.infra.buckets import Buckets
+from acme.infra.transports.broker import BrokerNullImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.calls import ModelReply
@@ -51,16 +51,9 @@ from acme.integrations.model_providers.content import TextBlock, ToolUseBlock
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
-from acme.om.agents.types.kind import AgentKind, TreeLimits
-from acme.om.agents.types.request import Start
-from acme.om.agents.types.run import LoopRun, RunEnd
-from acme.om.base import new_id, utcnow
-from acme.om.budgets.types.amount import Amount
-from acme.om.exceptions import NotFound
-from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.privacy.types.session_privacy import StorageMode, StoragePolicy
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.header import (
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.header import (
     ControlCommand,
     ControlHeader,
     LoopOutcome,
@@ -68,15 +61,22 @@ from acme.om.steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.steps.types.step import Step, StepType
+from acme.om.agents.types.kind import AgentKind, TreeLimits
+from acme.om.agents.types.request import Start
+from acme.om.agents.types.run import LoopRun, RunEnd
+from acme.om.base import new_id, utcnow
+from acme.om.exceptions import NotFound
+from acme.om.platform_root import PlatformPorts, ProductKinds
+from acme.om.privacy.types.agent_session_privacy import StorageMode, StoragePolicy
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 
 pytestmark = pytest.mark.integration
 
@@ -94,9 +94,9 @@ def forker(isolation: IsolationSpec) -> AgentKind:
             "tools": ("run_command", SPAWN_SUB_AGENT),
             "tree": TreeLimits(height=2, count=2),
             "share": Amount(tokens=1_000_000),
-            "policy": PolicyLayer(
+            "policy": ToolPolicyLayer(
                 rules=tuple(
-                    PolicyRule(authorization_class=kind, decision=Decision.ALLOW)
+                    ToolPolicyRule(authorization_class=kind, decision=Decision.ALLOW)
                     for kind in (ToolClass.EXECUTE, ToolClass.SPAWN)
                 )
             ),
@@ -107,7 +107,7 @@ def forker(isolation: IsolationSpec) -> AgentKind:
 KIND = forker(SEALED)
 ON_A_DIRECTORY = forker(HOST)
 
-SETTINGS = SessionRunnerSettings.model_validate(
+SETTINGS = AgentSessionRunnerSettings.model_validate(
     {"_env_file": None, "environment": "test", "runner_id": "runner-fork"}
 )
 
@@ -188,21 +188,21 @@ async def driven(host: HostAgent, work: Coroutine[Any, Any, LoopRun]) -> LoopRun
     return await running
 
 
-async def steps_of(runner: RunnerContainer, owner: Any, session_id: UUID) -> list[Step]:
-    page = await runner.managers.steps.get_steps(owner, session_id, 0, 200)
+async def steps_of(runner: RunnerContainer, owner: Any, agent_session_id: UUID) -> list[AgentStep]:
+    page = await runner.managers.steps.get_agent_steps(owner, agent_session_id, 0, 200)
     return list(page.items)
 
 
-def outputs(steps: list[Step]) -> list[str]:
+def outputs(steps: list[AgentStep]) -> list[str]:
     """What each call answered, in order."""
     return [
         step.as_tool_response().parts[0].text  # type: ignore[union-attr]
         for step in steps
-        if step.type is StepType.TOOL_RESPONSE
+        if step.type is AgentStepType.TOOL_RESPONSE
     ]
 
 
-def spawn_of(steps: list[Step]) -> tuple[Step, Step]:
+def spawn_of(steps: list[AgentStep]) -> tuple[AgentStep, AgentStep]:
     """The one spawn call and its answer: the child's id is the call's."""
     (request,) = [
         step
@@ -224,7 +224,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
     assert isinstance(model, ModelProviderScriptedImpl)
     pool = await api.pool("pool-a")
     host, store = await container_host_keeping(api, pool.id, tmp_path / "host")
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=KIND.name, title="a hypothesis")
     )
     parent = session.id
@@ -242,7 +242,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         assert await managers.exec_relay.binding_of(owner, parent) is not None
 
         # The parent writes a file and forks in the same run.
-        await managers.agent_sessions.wake_session(owner, parent, parked.park)
+        await managers.agent_sessions.wake_agent_session(owner, parent, parked.park)
         model.add(runs("sh", "-c", "echo from-the-parent > note"))
         model.add(forks())
         model.add(answers("Forked."))
@@ -252,7 +252,9 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         request, spawned = spawn_of(history)
         header = spawned.header
         assert isinstance(header, ToolResponseHeader) and header.failure is None, outputs(history)
-        assert not [s for s in history if s.type is StepType.SNAPSHOTTED], "the parent keeps none"
+        assert not [s for s in history if s.type is AgentStepType.SNAPSHOTTED], (
+            "the parent keeps none"
+        )
         child = request.id
 
         # The child starts from its own copy, which the host keeps as the child's.
@@ -264,7 +266,7 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
         )
         assert restore.snapshot is not None
         record = await managers.agent_workspaces.kept_snapshot(owner, restore.snapshot.id)
-        assert record is not None and record.on_host and record.session_id == child
+        assert record is not None and record.on_host and record.agent_session_id == child
         assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
         kept = store / record.reference
         assert kept.is_relative_to(store / str(owner.org_id) / str(child)), "kept as the child's"
@@ -293,14 +295,14 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
 
         # Nothing of either workspace reached the platform's bucket.
         buckets = api.container.infra.get_buckets()
-        for session_id in (parent, child):
-            prefix = session_prefix(session_id)
+        for agent_session_id in (parent, child):
+            prefix = session_prefix(agent_session_id)
             assert await buckets.list(owner.org_id, Buckets.SNAPSHOTS, prefix, 10) == []
     finally:
-        provider = WorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
-        for session_id in (parent, child):
-            if session_id is not None:
-                await provider.purge(owner.org_id, session_id)
+        provider = AgentWorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
+        for agent_session_id in (parent, child):
+            if agent_session_id is not None:
+                await provider.purge(owner.org_id, agent_session_id)
         await runner.storage.close()
 
 
@@ -325,7 +327,7 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
     assert isinstance(model, ModelProviderScriptedImpl)
     pool = await api.pool("pool-a")
     host, _ = await directory_host(api, pool.id, tmp_path / "host")
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=ON_A_DIRECTORY.name, title="a hypothesis")
     )
     parent = session.id
@@ -342,7 +344,7 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
         await host.idle()
         before = (await managers.agents.tree_of(owner, parent)).size
 
-        await managers.agent_sessions.wake_session(owner, parent, parked.park)
+        await managers.agent_sessions.wake_agent_session(owner, parent, parked.park)
         model.add(runs("sh", "-c", "echo from-the-parent > note"))
         model.add(forks())
         model.add(answers("Refused."))
@@ -356,7 +358,7 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
         assert reason in text, text
         assert (await managers.agents.tree_of(owner, parent)).size == before, "no slot taken"
         with pytest.raises(NotFound):
-            await managers.agent_sessions.get_session(owner, request.id)
+            await managers.agent_sessions.get_agent_session(owner, request.id)
         assert await managers.agent_workspaces.kept_snapshots(owner, request.id) == ()
         assert await managers.agent_workspaces.kept_snapshots(owner, parent) == ()
         latest = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, parent)

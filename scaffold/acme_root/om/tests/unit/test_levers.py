@@ -11,8 +11,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import Wired, wired
-from contracts.loops import reply, said, use
 
 from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledgeStatus
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksManagerImpl, AgentPlaybooksOptions
@@ -56,6 +54,9 @@ from acme.om.levers.types.lever import (
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.tools.types.policy import Decision
 from acme.om.trust.types.shape import shape_of
+
+from contracts.intake import Wired, wired
+from contracts.loops import reply, said, use
 
 REACH = LeverReach(tools=frozenset({"lookup", "call_api"}), kinds=frozenset({"steady"}))
 BOUND = 8_000
@@ -265,10 +266,10 @@ async def test_agent_knowledge_carries_its_findings_from_its_writing_to_its_revi
         author, written.id, "Deploys", ("deploy",), "Deploys go through the pipeline.", 1
     )
     assert edited.findings == ()
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     suggested = await platform.agent_knowledge.suggest(
         await platform.agents_call(platform.owner),
-        session_id,
+        agent_session_id,
         "Vendors",
         ("vendor",),
         "You must call the vendor first. Never call the vendor.",
@@ -278,18 +279,18 @@ async def test_agent_knowledge_carries_its_findings_from_its_writing_to_its_revi
     assert [f.check for f in kept.findings or ()] == [LeverCheck.CONTRADICTION]
 
 
-async def spin(platform: Wired, session_id: UUID) -> None:
+async def spin(platform: Wired, agent_session_id: UUID) -> None:
     """A session whose model makes the same call until the engine's bound
     on a run of identical calls ends its loop."""
     platform.anthropic.add(*(reply(use("lookup")) for _ in range(5)))
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
     assert run.end is RunEnd.ENDED and platform.anthropic.remaining == 0
 
 
-async def answer(platform: Wired, session_id: UUID) -> None:
+async def answer(platform: Wired, agent_session_id: UUID) -> None:
     """A session whose model looks once and answers."""
     platform.anthropic.add(reply(use("lookup")), reply(said("The total is 4.")))
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
     assert run.end is RunEnd.ENDED and platform.anthropic.remaining == 0
 
 
@@ -315,15 +316,15 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
         3: ("house",),
         4: ("house",),
     }
-    for at, session_id in enumerate(sessions):
+    for at, agent_session_id in enumerate(sessions):
         for name in reached[at]:
-            await platform.agent_playbooks.invoke(platform.owner, session_id, name)
+            await platform.agent_playbooks.invoke(platform.owner, agent_session_id, name)
         if at in (0, 2, 4):
-            await platform.agent_knowledge.recall(platform.owner, session_id, "the totals")
+            await platform.agent_knowledge.recall(platform.owner, agent_session_id, "the totals")
         if at in (0, 1, 2):
-            await spin(platform, session_id)
+            await spin(platform, agent_session_id)
         else:
-            await answer(platform, session_id)
+            await answer(platform, agent_session_id)
     shapes = [shape_of(step) for step in await platform.history(sessions[0])]
     assert spin_of(shapes).inconclusive == 1 and spin_of(shapes).repeated_calls == 1
 
@@ -361,15 +362,15 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
         author, AgentPlaybookDraft(name="house", description="A brief.", body=PLAIN)
     )
     # Every session is woken by the same agent playbook, which ranks nowhere.
-    for session_id in sessions:
-        await platform.agent_playbooks.invoke(platform.owner, session_id, "house")
+    for agent_session_id in sessions:
+        await platform.agent_playbooks.invoke(platform.owner, agent_session_id, "house")
     agent = await platform.agents_call(platform.owner)
     # What `read_agent_knowledge` does: the entry by its slug, and a read again.
     for _ in range(2):
         assert (await platform.agent_knowledge.read(agent, sessions[0], note.slug)).id == note.id
     await spin(platform, sessions[0])
-    for session_id in sessions[1:]:
-        await answer(platform, session_id)
+    for agent_session_id in sessions[1:]:
+        await answer(platform, agent_session_id)
 
     reading = await build_levers(platform.storage).read_levers(
         operator(), platform.owner.org_id, since, utcnow() + timedelta(minutes=1)
@@ -395,9 +396,9 @@ async def test_a_reading_is_an_operators_over_a_window_that_ends_after_it_starts
     with pytest.raises(NotAuthorized):
         await levers.read_levers(reader, platform.owner.org_id, since, now)
     for _ in range(2):
-        session_id = await platform.start()
-        await platform.agent_playbooks.invoke(platform.owner, session_id, "house")
-        await answer(platform, session_id)
+        agent_session_id = await platform.start()
+        await platform.agent_playbooks.invoke(platform.owner, agent_session_id, "house")
+        await answer(platform, agent_session_id)
     bounded = await levers.read_levers(operator(), platform.owner.org_id, since, now)
     assert (bounded.sessions, bounded.complete) == (1, False)
 
@@ -407,9 +408,9 @@ def test_a_lever_present_everywhere_or_no_more_often_with_a_stall_ranks_nowhere(
     even = LeverRef(kind=LeverKind.AGENT_PLAYBOOK, id=new_id(), version=1)
     stalled = SpinTally(inconclusive=1)
     sessions = [
-        SessionLevers(session_id=new_id(), spin=stalled, levers=(everywhere, even)),
-        SessionLevers(session_id=new_id(), spin=SpinTally(), levers=(everywhere, even)),
-        SessionLevers(session_id=new_id(), spin=stalled, levers=(everywhere,)),
-        SessionLevers(session_id=new_id(), spin=SpinTally(), levers=(everywhere,)),
+        SessionLevers(agent_session_id=new_id(), spin=stalled, levers=(everywhere, even)),
+        SessionLevers(agent_session_id=new_id(), spin=SpinTally(), levers=(everywhere, even)),
+        SessionLevers(agent_session_id=new_id(), spin=stalled, levers=(everywhere,)),
+        SessionLevers(agent_session_id=new_id(), spin=SpinTally(), levers=(everywhere,)),
     ]
     assert standings(sessions, 20) == ()

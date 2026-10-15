@@ -11,9 +11,9 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.agent_steps.types.stream import StreamPart
+from acme.om.base import OmBase
 from acme.om.retention.crossing import Crossing
-from acme.om.steps.types.stream import StreamPart
 
 MAX_SEEN = 64
 """The most streams one read names the last part of."""
@@ -25,55 +25,55 @@ past 10^14 in exponent form, which is no id: such an entry would land
 nothing, and a read after it would read nothing."""
 
 
-class LiveRead(Platform):
+class LiveRead(OmBase):
     """A handle to one session's live streams until `expires_at`, handed to
     a viewer the way a browser app is handed a presigned URL. Whoever holds
     `handle` reads that session's open streams and nothing else, by the
     handle alone, until it expires."""
 
-    session_id: UUID
+    agent_session_id: UUID
     handle: str
     expires_at: datetime
 
 
-class Grant(Platform):
+class Grant(OmBase):
     """What a handle grants once its signature verifies: one session, read
     by one viewer, until a time. A session's id is the platform's, never
     two tenants', so the session names its tenant."""
 
-    session_id: UUID
+    agent_session_id: UUID
     viewer_id: UUID
     expires_at: datetime
 
 
-class Seen(Platform):
+class Seen(OmBase):
     """The place of the last part of one stream a reader saw, the `last` of
     a part that joins several: it resumes after it."""
 
-    step_id: UUID
+    agent_step_id: UUID
     n: int = Field(ge=0)
 
 
-class LiveStream(Platform):
+class LiveStream(OmBase):
     """One open stream as a reader gets it: the step it adds up to, the
     oldest part the buffer still holds, and the parts after the reader's
     last. `dropped` says the buffer let go of parts the reader never saw;
     the step holds them once it is stored."""
 
-    step_id: UUID
+    agent_step_id: UUID
     first: int = Field(ge=0)
     parts: tuple[StreamPart, ...] = ()
     dropped: bool = False
 
 
-class LivePage(Platform):
+class LivePage(OmBase):
     """One read of a session's open streams."""
 
-    session_id: UUID
+    agent_session_id: UUID
     streams: tuple[LiveStream, ...] = ()
 
 
-class Entry(Platform):
+class Entry(OmBase):
     """One numbered entry of a product's stream, its bytes the claimant's."""
 
     n: int = Field(ge=0, le=MAX_ENTRY)
@@ -88,7 +88,7 @@ class SentEntry(Entry):
     crossing: Crossing
 
 
-class Appended(Platform):
+class Appended(OmBase):
     """What a claimant appends to one stream of its kind for the item it
     holds, under the claim token its claim was handed: the stream, and its
     entries in their order. An entry numbered at or below the stream's last
@@ -99,7 +99,7 @@ class Appended(Platform):
     entries: tuple[SentEntry, ...]
 
 
-class ItemRead(Platform):
+class ItemRead(OmBase):
     """A handle to one item's streams of one kind until `expires_at`, handed
     to a viewer as a session's is: whoever holds `handle` reads those
     streams and nothing else, by the handle alone, until it expires."""
@@ -110,7 +110,7 @@ class ItemRead(Platform):
     expires_at: datetime
 
 
-class ItemGrant(Platform):
+class ItemGrant(OmBase):
     """What an item's handle grants once its signature verifies: one item's
     streams of one kind, read by one viewer, until a time. An item's id is
     the platform's, never two tenants', so the item names its tenant."""
@@ -121,7 +121,7 @@ class ItemGrant(Platform):
     expires_at: datetime
 
 
-class ItemSeen(Platform):
+class ItemSeen(OmBase):
     """The number of the last entry of one stream a reader saw: it resumes
     after it."""
 
@@ -129,7 +129,7 @@ class ItemSeen(Platform):
     n: int = Field(ge=0, le=MAX_ENTRY)
 
 
-class ItemStream(Platform):
+class ItemStream(OmBase):
     """One open stream of an item as a reader gets it: the oldest entry the
     buffer still holds, the entries after the reader's last, and whether the
     buffer let go of entries the reader never saw."""
@@ -140,7 +140,7 @@ class ItemStream(Platform):
     dropped: bool = False
 
 
-class ItemPage(Platform):
+class ItemPage(OmBase):
     """One read of an item's open streams of one kind."""
 
     item_id: UUID

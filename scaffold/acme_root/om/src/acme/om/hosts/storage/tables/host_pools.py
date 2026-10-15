@@ -12,4 +12,4 @@ class HostPools(IdentifiableMixin, TrackableMixin, Base):
     name: Mapped[str]
     region: Mapped[str]
     labels: Mapped[list[str]]
-    session_id: Mapped[UUID | None]
+    agent_session_id: Mapped[UUID | None]

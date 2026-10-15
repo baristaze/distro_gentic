@@ -1,12 +1,13 @@
 import pytest
-from contracts.agent_workspace_storage import (
-    AgentWorkspaceStorageContract,
-    RepositoryCredentialContract,
-)
 
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions
+
+from contracts.agent_workspace_storage import (
+    AgentWorkspaceStorageContract,
+    RepositoryCredentialContract,
+)
 
 pytestmark = pytest.mark.integration
 

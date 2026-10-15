@@ -369,7 +369,7 @@ export function sharingOf(
         : [],
     mayJoin: mayWrite && !takesPart && session.visibility === "org_wide",
     mayShare: mayWrite && standing === "made",
-    mayTakeSteer: mayWrite && permissions.includes("manage_sessions") && !steering && lapsed,
+    mayTakeSteer: mayWrite && permissions.includes("manage_agent_sessions") && !steering && lapsed,
   };
 }
 

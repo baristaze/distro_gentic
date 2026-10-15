@@ -20,21 +20,18 @@ from uuid import UUID
 
 import pytest
 from api_support import seed_request
-from contracts.agent_project_storage import in_agent_project
-from contracts.checks_repository import UNIT, OnDisk, Repository
-from contracts.evidence_storage import make_policy
 from host_support import Pace, Stack, directory_host, postgres, stack, started_host
 from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.client.types import IsolationMode
+from acme.infra.agent_workspaces import IsolationMode as ProviderMode
+from acme.infra.agent_workspaces import AgentWorkspace
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
-from acme.infra.workspaces import IsolationMode as ProviderMode
-from acme.infra.workspaces import Workspace
-from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
@@ -56,13 +53,17 @@ from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.services.api.seed import seed_platform
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.checks_repository import UNIT, OnDisk, Repository
+from contracts.evidence_storage import make_policy
 
 KIND = assistant()
 """The session's kind: its workspace is a directory on a host, as the
 pool's hosts make one."""
-SETTINGS = SessionRunnerSettings.model_validate(
+SETTINGS = AgentSessionRunnerSettings.model_validate(
     {"_env_file": None, "environment": "test", "runner_id": "runner-validation"}
 )
 SILENT = CheckDeclaration(
@@ -105,7 +106,7 @@ class ReadBack(TransportLocalImpl):
         self.read: list[tuple[str, bytes]] = []
 
     async def read_file(
-        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+        self, workspace: AgentWorkspace, path: str, max_bytes: int, offset: int = 0
     ) -> bytes:
         data = await super().read_file(workspace, path, max_bytes, offset)
         self.read.append((workspace.location, data))
@@ -118,7 +119,7 @@ class Hosted:
     where it makes each workspace."""
 
     agent: HostAgent
-    provider: WorkspaceHostImpl
+    provider: AgentWorkspaceHostImpl
     transport: ReadBack
     root: Path
     claimed: list[UUID] = field(default_factory=list)
@@ -129,7 +130,7 @@ async def pool_host(api: Stack, pool_id: UUID, where: Path) -> Hosted:
     root, as `directory_host` does, through a transport that keeps what it
     read back."""
     root = where / "workspaces"
-    provider = WorkspaceHostImpl(root)
+    provider = AgentWorkspaceHostImpl(root)
     transport = ReadBack(where)
     agent = await started_host(
         api,
@@ -214,7 +215,7 @@ async def delivered(
     container, repository = run.container, run.repository
     owner, managers = api.owner, container.managers
     await seed_platform(container.storage, managers, owner, (KIND,))
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=KIND.name, title="Fix the cart's total")
     )
     await api.container.managers.hosts.place_session(owner, session.id, pool_id)
@@ -286,26 +287,26 @@ async def test_a_pinned_agent_projects_delivery_is_validated_on_its_pools_host_a
     owner, managers = api.owner, run.container.managers
     pool = await api.pool("pool-a")
     host = await pool_host(api, pool.id, tmp_path / "host")
-    session_id, head = await delivered(run, api, pool.id)
+    agent_session_id, head = await delivered(run, api, pool.id)
 
     # The baseline at the base comes first, on the same host.
     await pumped(
-        managers.evidence.validate(owner, session_id, RunPurpose.BASELINE),
+        managers.evidence.validate(owner, agent_session_id, RunPurpose.BASELINE),
         {host.agent: host.claimed},
     )
     (validation,) = await pumped(
-        managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+        managers.evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed},
     )
 
     instance = instance_of(validation.executor)
-    assert instance != session_id, "the run's instance is never the session's workspace"
+    assert instance != agent_session_id, "the run's instance is never the session's workspace"
     location, stream = host.transport.read[-1]
     assert Path(location) == host.root.resolve() / owner.org_id.hex / instance.hex, (
         "the results stream was read on the pool's host, in the run's own instance"
     )
     assert validation.results_sha256 == digest(stream.rstrip(b"\n"))
-    runs = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    runs = (await managers.evidence.get_runs(owner, agent_session_id, None, 10)).items
     (record,) = [found for found in runs if found.purpose is RunPurpose.VALIDATION]
     assert validation.records == (record.id,) and record.executor == validation.executor
     assert (record.version, record.outcome, record.purpose) == (
@@ -314,7 +315,7 @@ async def test_a_pinned_agent_projects_delivery_is_validated_on_its_pools_host_a
         RunPurpose.VALIDATION,
     ), "the delivered commit's cart, against the base's fixture"
     verdict = await managers.agents.judge_result(
-        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+        owner, agent_session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert (verdict.accepted, verdict.verified) == (True, True), verdict.reason
     assert gone(location), "the instance went when the run ended"
@@ -351,11 +352,11 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     theirs, theirs_root = await directory_host(
         brix, (await brix.pool("pool-c")).id, tmp_path / "host-c", name="host-c"
     )
-    session_id, _ = await delivered(over_memory, api, pool.id)
+    agent_session_id, _ = await delivered(over_memory, api, pool.id)
     elsewhere: dict[HostAgent, list[UUID]] = {beside: [], theirs: []}
 
     (validation,) = await pumped(
-        managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+        managers.evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed, **elsewhere},
     )
 
@@ -380,14 +381,14 @@ async def test_the_instance_goes_when_its_check_ends_the_run(
     owner, managers = api.owner, over_memory.container.managers
     pool = await api.pool("pool-a")
     host = await pool_host(api, pool.id, tmp_path / "host-a")
-    session_id, _ = await delivered(over_memory, api, pool.id, SILENT)
+    agent_session_id, _ = await delivered(over_memory, api, pool.id, SILENT)
 
     (validation,) = await pumped(
-        managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+        managers.evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed},
     )
 
-    (record,) = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = (await managers.evidence.get_runs(owner, agent_session_id, None, 10)).items
     assert validation.records == (record.id,)
     assert record.outcome is RunOutcome.ERRORED, "a check that wrote no results counts, failed"
     assert host.claimed, "the run's instance was made on the pool's host"
@@ -401,17 +402,17 @@ async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_r
     owner, managers = api.owner, over_memory.container.managers
     pool = await api.pool("pool-a")
     host = await pool_host(api, pool.id, tmp_path / "host-a")
-    session_id, _ = await delivered(over_memory, api, pool.id, LONG)
+    agent_session_id, _ = await delivered(over_memory, api, pool.id, LONG)
 
     (validation,) = await asyncio.wait_for(
         pumped(
-            managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+            managers.evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION),
             {host.agent: host.claimed},
         ),
         timeout=60,
     )
 
-    (record,) = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = (await managers.evidence.get_runs(owner, agent_session_id, None, 10)).items
     assert validation.records == (record.id,) and record.outcome is RunOutcome.ERRORED
     ((_, read),) = host.transport.read
     assert len(read) == READ_BYTES + 1, "one read, of what crosses, and no more"

@@ -20,6 +20,7 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_projects.types.agent_project import AgentProject
+from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -28,7 +29,6 @@ from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
-from acme.om.budgets.types.amount import Amount
 from acme.om.context import (
     CredentialKind,
     RequestContext,
@@ -37,19 +37,19 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.exceptions import NotAuthorized
-from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.language_models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.steps.types.step import Step
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.impl.manager import TrustOptions
@@ -57,18 +57,19 @@ from acme.om.trust.keys import ClientFactory
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.root import TrustLayer, TrustManagers, absent_client
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
+
 from contracts.agent_project_storage import make_agent_project, make_binding
+from contracts.agent_step_storage import make_message
 from contracts.doubles import APP, context
 from contracts.factories import make_org
 from contracts.loops import Clock, Lookup
-from contracts.step_storage import make_message
 from contracts.tools import INJECTED_TOKEN, TWIN_SPEC, Command
 
-ALLOWED = PolicyLayer(
+ALLOWED = ToolPolicyLayer(
     rules=(
-        PolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW),
-        PolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
+        ToolPolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW),
+        ToolPolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
     )
 )
 
@@ -106,7 +107,7 @@ class Transition:
             org_id=org_id,
             role=Role.MEMBER,
             permissions=permissions_of(Role.MEMBER),
-            credential_kind=CredentialKind.SESSION_TOKEN,
+            credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
         )
 
 
@@ -127,11 +128,11 @@ class Placement(PlacementInterface):
     )
     walled: set[UUID] = field(default_factory=set[UUID])
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        return session_id in self.walled
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        return agent_session_id in self.walled
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
-        return self.host if session_id in self.walled else self.cloud
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
+        return self.host if agent_session_id in self.walled else self.cloud
 
 
 @dataclass
@@ -169,7 +170,7 @@ class Trusted:
             org_id=self.owner.org_id,
             role=role,
             permissions=permissions_of(role),
-            credential_kind=CredentialKind.SESSION_TOKEN,
+            credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
         )
 
     async def owners_agent_project(self) -> UUID:
@@ -183,7 +184,7 @@ class Trusted:
     ) -> UUID:
         """A session of no agent project, or of the owner's. Its agent project's row is
         written once it stands, so no workspace checks the agent project out."""
-        session = await self.managers.agents.start_session(
+        session = await self.managers.agents.start_agent_session(
             ctx or self.owner, Start(id=new_id(), kind=kind, title="the records")
         )
         if agent_project:
@@ -191,18 +192,22 @@ class Trusted:
             await self.storage.get_agent_project_storage().bind_session(self.owner.org_id, binding)
         return session.id
 
-    async def say(self, session_id: UUID, text: str, ctx: TenantContext | None = None) -> Step:
+    async def say(
+        self, agent_session_id: UUID, text: str, ctx: TenantContext | None = None
+    ) -> AgentStep:
         ctx = ctx or self.owner
         person = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
-        message = make_message(session_id, text, principal=person)
-        (stored,) = await self.managers.steps.append_inputs(ctx, session_id, [message])
+        message = make_message(agent_session_id, text, principal=person)
+        (stored,) = await self.managers.steps.append_inputs(ctx, agent_session_id, [message])
         return stored
 
-    async def history(self, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def history(self, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_steps(self.owner, session_id, after, 200)
+            page = await self.managers.steps.get_agent_steps(
+                self.owner, agent_session_id, after, 200
+            )
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
@@ -272,8 +277,8 @@ def trusted(
         managers.models,
         managers.windows,
         managers.tools,
-        CallGateBudgetImpl(
-            managers.budget_gate,
+        CallGateSpendBudgetImpl(
+            managers.spend_budget_gate,
             managers.pricing,
             managers.agent_sessions,
             managers.budgets,

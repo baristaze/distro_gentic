@@ -1,7 +1,7 @@
 from uuid import UUID
 
+from acme.infra.agent_workspaces import AgentWorkspaceBase
 from acme.infra.base import QuietNull
-from acme.infra.workspaces import WorkspaceBase
 from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import (
@@ -42,11 +42,11 @@ class WorkspaceAgentProjectsBoundImpl(WorkspaceAgentProjectsInterface):
 
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
+    ) -> AgentWorkspaceBase | None:
         agent_project = await self._storage.read_agent_project(ctx.org_id, agent_project_id)
-        if agent_project is None or agent_project.workspace_base is None:
+        if agent_project is None or agent_project.agent_workspace_base is None:
             return None
-        return agent_project.workspace_base.base()
+        return agent_project.agent_workspace_base.base()
 
 
 class WorkspaceAgentProjectsNullImpl(WorkspaceAgentProjectsInterface, QuietNull):
@@ -67,7 +67,7 @@ class WorkspaceAgentProjectsNullImpl(WorkspaceAgentProjectsInterface, QuietNull)
 
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
+    ) -> AgentWorkspaceBase | None:
         return None
 
 

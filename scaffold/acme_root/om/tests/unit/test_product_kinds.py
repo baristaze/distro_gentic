@@ -13,26 +13,13 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.evidence import (
-    CHECKOUT,
-    CHECKOUT_KEY,
-    ScriptedExecutor,
-    checkout_policy,
-    delivered,
-    evidence_over,
-)
-from contracts.evidence_storage import make_record, make_validation
-from contracts.factories import make_org
-from contracts.platform_doubles import SessionAgentProjectsMemory
-from contracts.tools import INJECTED_TOKEN
-from contracts.trust import trusted
 from pydantic import Field, ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.result import Claim, Result
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, AppType, Permission, RequestContext, Role, TenantContext
 from acme.om.evidence.executor import Executors
 from acme.om.evidence.rules import CEILINGS
@@ -47,10 +34,10 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
-from acme.om.leases.impl.kinds import NoopResourceKindImpl
+from acme.om.leases.impl.kinds import NoopLeasableResourceKindImpl
 from acme.om.leases.kinds import ResourceKindSpec
+from acme.om.leases.types.leasable_resource import LeasableResourceKind
 from acme.om.leases.types.request import NoopAsk
-from acme.om.leases.types.resource import ResourceKind
 from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
@@ -66,11 +53,10 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.rules import decide
-from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyCall, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.trust.owners import AgentProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
@@ -81,6 +67,21 @@ from acme.om.watch.root import build_kind_streams, build_stream
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
 
+from contracts.doubles import context
+from contracts.evidence import (
+    CHECKOUT,
+    CHECKOUT_KEY,
+    ScriptedExecutor,
+    checkout_policy,
+    delivered,
+    evidence_over,
+)
+from contracts.evidence_storage import make_record, make_validation
+from contracts.factories import make_org
+from contracts.platform_doubles import SessionAgentProjectsMemory
+from contracts.tools import INJECTED_TOKEN
+from contracts.trust import trusted
+
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 GATEWAY = AppContext(type=AppType.API, version="api@test")
@@ -89,7 +90,7 @@ RENDER = "RENDER"
 BATCH = "batch"
 
 
-class RenderPayload(Platform):
+class RenderPayload(OmBase):
     """A render job: the batch pool that runs it, and its frames."""
 
     pool_id: UUID
@@ -377,11 +378,11 @@ RENDER_CLASS = "render"
 """A class of the product's whose every call waits for a person."""
 PREVIEW_CLASS = "preview"
 """A class of the product's with no ceiling of its own."""
-EVERYTHING = PolicyLayer(rules=(PolicyRule(decision=Decision.ALLOW),))
+EVERYTHING = ToolPolicyLayer(rules=(ToolPolicyRule(decision=Decision.ALLOW),))
 """A tenant's layer that allows every call."""
 
 
-def engine_ceilings(managers: PlatformManagers) -> PolicyLayer:
+def engine_ceilings(managers: PlatformManagers) -> ToolPolicyLayer:
     """The ceilings the root hands the engine's tools manager, beneath the
     layers the root puts on it."""
     tools: object = managers.tools
@@ -394,7 +395,7 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
     product = ProductKinds(
         classes=(RENDER_CLASS, PREVIEW_CLASS), ceilings={RENDER_CLASS: Decision.APPROVE}
     )
-    render = PolicyCall(
+    render = ToolPolicyCall(
         tool="render_frames", authorization_class=RENDER_CLASS, effect=Effect.UNSAFE
     )
     preview = render.model_copy(update={"authorization_class": PREVIEW_CLASS})
@@ -408,19 +409,19 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
             ),
         )
         ceilings = engine_ceilings(managers)
-        assert decide(render, PolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
+        assert decide(render, ToolPolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
         # A class with no ceiling runs as the tenant allows, and the
         # platform's own ceilings stay as they were.
-        assert decide(preview, PolicyLayer(), EVERYTHING, ceilings) is Decision.ALLOW
+        assert decide(preview, ToolPolicyLayer(), EVERYTHING, ceilings) is Decision.ALLOW
         assert all(rule in ceilings.rules for rule in CEILINGS.rules)
 
 
 def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
     capped = ToolsOptions(
-        ceilings=PolicyLayer(
+        ceilings=ToolPolicyLayer(
             rules=(
                 *CEILINGS.rules,
-                PolicyRule(authorization_class=RENDER_CLASS, decision=Decision.DENY),
+                ToolPolicyRule(authorization_class=RENDER_CLASS, decision=Decision.DENY),
             )
         )
     )
@@ -473,8 +474,8 @@ class BatchPools(SecretOwnerInterface):
     async def holds(self, ctx: TenantContext, owner_id: UUID) -> bool:
         return owner_id in self.held
 
-    async def owner_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return self.placed.get(session_id)
+    async def owner_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
+        return self.placed.get(agent_session_id)
 
 
 def on_pool(pool_id: UUID, store: SecretStore = SecretStore.CLOUD) -> SecretDeclaration:
@@ -649,7 +650,7 @@ async def gate_reads(executor: str, script: dict[str, Any]) -> str:
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
     await evidence.manager.write_policy(owner, policy_in(executor))
-    work = make_record(session, step_id=new_id())
+    work = make_record(session, agent_step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
     # A baseline came first, written apart from the executors the case compares.
@@ -707,7 +708,7 @@ async def test_a_change_needing_checks_of_two_executors_validates_on_each() -> N
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
     await evidence.manager.write_policy(owner, two_executors())
-    work = make_record(session, step_id=new_id())
+    work = make_record(session, agent_step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
     await evidence.manager.validate(ctx, session, RunPurpose.BASELINE)
@@ -764,7 +765,7 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
     kinds' shape is refused where it is declared."""
     taken = ProductKinds(
         resources=lambda _managers: (
-            ResourceKindSpec(ResourceKind.NOOP, NoopAsk, NoopResourceKindImpl()),
+            ResourceKindSpec(LeasableResourceKind.NOOP, NoopAsk, NoopLeasableResourceKindImpl()),
         )
     )
     with pytest.raises(ValueError, match="resource kind noop is registered twice"):
@@ -774,4 +775,4 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
             platform_root_options=PlatformRootOptions(product_kinds=taken),
         )
     with pytest.raises(ValueError, match="lower case"):
-        ResourceKindSpec("Dock", NoopAsk, NoopResourceKindImpl())
+        ResourceKindSpec("Dock", NoopAsk, NoopLeasableResourceKindImpl())

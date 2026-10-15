@@ -1,9 +1,9 @@
 """The refusals of the watch."""
 
-from acme.om.exceptions import NotAuthenticated, PlatformException, PreconditionFailed
+from acme.om.exceptions import NotAuthenticated, OmException, PreconditionFailed
 
 
-class WatchException(PlatformException): ...
+class WatchException(OmException): ...
 
 
 class LiveReadRefused(WatchException, NotAuthenticated):

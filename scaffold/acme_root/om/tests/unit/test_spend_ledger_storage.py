@@ -1,8 +1,9 @@
 import pytest
-from contracts.spend_ledger_storage import SpendLedgerStorageContract
 
 from acme.om.agent_billing.storage import SpendLedgerStorageInterface
 from acme.om.agent_billing.storage.impl.memory import SpendLedgerStorageMemoryImpl
+
+from contracts.spend_ledger_storage import SpendLedgerStorageContract
 
 
 class TestSpendLedgerStorageMemory(SpendLedgerStorageContract):

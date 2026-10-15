@@ -10,6 +10,64 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from prometheus_client import REGISTRY
+from pydantic import SecretStr
+
+from acme.infra.base import SYSTEM_SCOPE
+from acme.integrations.model_providers.calls import ModelCall, StreamPart
+from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
+from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
+from acme.om.agent_billing.rules import LimitKind, notice_of
+from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
+from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import ControlCommand, LoopOutcome, ParkReason, SwitchedHeader
+from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.request import Start
+from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.base import new_id, utcnow
+from acme.om.context import Role, TenantContext
+from acme.om.exceptions import (
+    NotFound,
+    PreconditionFailed,
+    SpenderUnknown,
+    ValidationFailed,
+)
+from acme.om.language_models.types.fill import (
+    MAIN,
+    SUMMARIZER,
+    Eligibility,
+    Fill,
+    FillSwitch,
+    ModelAsk,
+    ModelSize,
+    RoleFill,
+    SwitchReason,
+)
+from acme.om.matrix import rules
+from acme.om.matrix.types.matrix import (
+    KEYS,
+    MatrixKey,
+    MatrixQuery,
+    MatrixRow,
+    MatrixStatus,
+)
+from acme.om.matrix.types.record import ModelRef
+from acme.om.matrix.types.tenant import FillOptions
+from acme.om.placement.rules import DEFAULT_TIER
+from acme.om.placement.types.share import FairShare
+from acme.om.platform_agents import kinds
+from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_root import ProductKinds
+from acme.om.privacy.types.agent_session_privacy import StorageMode
+from acme.om.retention import rules as retention_rules
+from acme.om.retention.types.policy import RetentionPolicy
+from acme.om.tools.types.toolset import Toolset
+from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
+
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.histories import History
@@ -28,63 +86,6 @@ from contracts.matrix import (
     agent_fleet_over,
     kept_in,
 )
-from prometheus_client import REGISTRY
-from pydantic import SecretStr
-
-from acme.infra.base import SYSTEM_SCOPE
-from acme.integrations.model_providers.calls import ModelCall, StreamPart
-from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
-from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
-from acme.om.agent_billing.rules import LimitKind, notice_of
-from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
-from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
-from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.agents.types.kind import AgentKind, DoneRule
-from acme.om.agents.types.request import Start
-from acme.om.agents.types.run import RunEnd
-from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import new_id, utcnow
-from acme.om.context import Role, TenantContext
-from acme.om.exceptions import (
-    NotFound,
-    PreconditionFailed,
-    SpenderUnknown,
-    ValidationFailed,
-)
-from acme.om.matrix import rules
-from acme.om.matrix.types.matrix import (
-    KEYS,
-    MatrixKey,
-    MatrixQuery,
-    MatrixRow,
-    MatrixStatus,
-)
-from acme.om.matrix.types.record import ModelRef
-from acme.om.matrix.types.tenant import FillOptions
-from acme.om.models.types.fill import (
-    MAIN,
-    SUMMARIZER,
-    Eligibility,
-    Fill,
-    FillSwitch,
-    ModelAsk,
-    ModelSize,
-    RoleFill,
-    SwitchReason,
-)
-from acme.om.placement.rules import DEFAULT_TIER
-from acme.om.placement.types.share import FairShare
-from acme.om.platform_agents import kinds
-from acme.om.platform_agents.kinds import SHIPPED
-from acme.om.platform_root import ProductKinds
-from acme.om.privacy.types.session_privacy import StorageMode
-from acme.om.retention import rules as retention_rules
-from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, SwitchedHeader
-from acme.om.steps.types.step import StepType
-from acme.om.tools.types.toolset import Toolset
-from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
 
 
 def anywhere(_: Fill) -> bool:
@@ -96,19 +97,19 @@ def a_start() -> Start:
 
 
 async def loop_once(
-    agent_fleet: AgentFleet, session_id: UUID, text: str = "What is the total?"
+    agent_fleet: AgentFleet, agent_session_id: UUID, text: str = "What is the total?"
 ) -> RunEnd:
-    await agent_fleet.loop.say(session_id, text)
-    ran = await agent_fleet.loop.loops.run(agent_fleet.owner, session_id)
+    await agent_fleet.loop.say(agent_session_id, text)
+    ran = await agent_fleet.loop.loops.run(agent_fleet.owner, agent_session_id)
     return ran.end
 
 
-async def switches(agent_fleet: AgentFleet, session_id: UUID) -> list[FillSwitch]:
+async def switches(agent_fleet: AgentFleet, agent_session_id: UUID) -> list[FillSwitch]:
     """The fill switches a session's history records; a toolset's load and
     a standing switch carry none."""
     return [
         step.header.fills
-        for step in await agent_fleet.loop.history(session_id)
+        for step in await agent_fleet.loop.history(agent_session_id)
         if isinstance(step.header, SwitchedHeader) and step.header.fills is not None
     ]
 
@@ -136,8 +137,10 @@ async def test_a_matrix_without_the_row_that_matches_everything_is_refused_at_pu
     )
     with pytest.raises(NotFound):
         await operators.get_version(agent_fleet.admin, None)
-    session_id = await agent_fleet.loop.start()
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED, "no published matrix, no model"
+    agent_session_id = await agent_fleet.loop.start()
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED, (
+        "no published matrix, no model"
+    )
     assert agent_fleet.loop.anthropic.calls == [] and agent_fleet.loop.openai.calls == []
 
 
@@ -383,17 +386,17 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
     await agent_fleet.loop.platform.retention.write_policy(
         agent_fleet.owner, current.model_copy(update={"policy": kept})
     )
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     overloaded = ScriptedFailure(kind=ErrorKind.OVERLOADED, retry_after=2)
     agent_fleet.loop.openai.add(overloaded, overloaded, overloaded)
     agent_fleet.loop.anthropic.add(overloaded, overloaded, overloaded)
 
-    parked = await loop_once(agent_fleet, session_id)
+    parked = await loop_once(agent_fleet, agent_session_id)
 
     assert parked is RunEnd.PARKED, "its last eligible fallback failed too"
-    (fell,) = await switches(agent_fleet, session_id)
+    (fell,) = await switches(agent_fleet, agent_session_id)
     assert (fell.from_fill, fell.to_fill) == (sol_eu, sonnet_eu)
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, session_id)
+    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert fills.eligibility == EU, "the fill set holds what the tenant requires"
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (sonnet_eu, ())
     assert (fills.roles[1].fill, fills.roles[1].fallbacks) == (haiku_eu, ())
@@ -406,7 +409,7 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
     await agent_fleet.money.agent_billing.open_spend_account(
         other, SpendAccountRequest(funding=FundingMode.PLATFORM, unit_plan_id="starter", zone="UTC")
     )
-    unkept = await agent_fleet.loop.managers.agents.start_session(other, a_start())
+    unkept = await agent_fleet.loop.managers.agents.start_agent_session(other, a_start())
     await agent_fleet.loop.managers.models.resolve_fill_set(
         other, unkept.id, (MAIN, SUMMARIZER), Eligibility()
     )
@@ -427,9 +430,9 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
             MatrixRow(fills=(SONNET,)),
         )
     )
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
     # The tenant now keeps nothing and stays in one region, and the sweep
     # folds it into the session's snapshot.
@@ -442,16 +445,18 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
         agent_fleet.owner, current.model_copy(update={"policy": kept})
     )
     snapshots = agent_fleet.loop.storage.get_retention_storage()
-    snapshot = await snapshots.read_snapshot(agent_fleet.owner.org_id, session_id)
+    snapshot = await snapshots.read_snapshot(agent_fleet.owner.org_id, agent_session_id)
     assert snapshot is not None
     tightened = retention_rules.folded(snapshot, kept, written.version, agent_fleet.loop.clock())
     assert await snapshots.write_snapshot(agent_fleet.owner.org_id, tightened, snapshot.version)
     overloaded = ScriptedFailure(kind=ErrorKind.OVERLOADED, retry_after=2)
     agent_fleet.loop.anthropic.add(overloaded, overloaded, overloaded)
 
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.PARKED
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.PARKED
 
-    moved = {(s.from_fill, s.to_fill, s.reason) for s in await switches(agent_fleet, session_id)}
+    moved = {
+        (s.from_fill, s.to_fill, s.reason) for s in await switches(agent_fleet, agent_session_id)
+    }
     assert moved == {
         (SONNET, sonnet_eu, SwitchReason.POLICY),
         (HAIKU, haiku_eu, SwitchReason.POLICY),
@@ -475,10 +480,10 @@ async def test_a_session_that_resolves_nothing_is_pinned_to_nothing(tmp_path: Pa
     await agent_fleet.loop.platform.retention.write_policy(
         agent_fleet.owner, current.model_copy(update={"policy": kept})
     )
-    session_id = await agent_fleet.loop.start()
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED, "no fill it may run on"
+    agent_session_id = await agent_fleet.loop.start()
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED, "no fill it may run on"
     with pytest.raises(NotFound):
-        await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, session_id)
+        await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
 
     second = await agent_fleet.publish(
         (
@@ -489,9 +494,9 @@ async def test_a_session_that_resolves_nothing_is_pinned_to_nothing(tmp_path: Pa
         )
     )
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id, "And now?") is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id, "And now?") is RunEnd.ENDED
 
-    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, session_id)
+    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
     assert pin.matrix_version == second.number
     assert [call.model for call in agent_fleet.loop.anthropic.calls] == [SONNET.model]
 
@@ -501,20 +506,20 @@ async def test_a_running_session_keeps_its_matrix_version_across_a_publish(
 ) -> None:
     agent_fleet = await agent_fleet_over(tmp_path)
     first = await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
     second = await agent_fleet.publish(
         (MatrixRow(key=MatrixKey(role=MAIN), fills=(SOL,)), *CATCH_ALL[1:])
     )
     agent_fleet.loop.anthropic.add(reply(said("The average is 3.")))
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
 
     assert agent_fleet.loop.openai.calls == [], "the session kept the version it started with"
     assert [call.model for call in agent_fleet.loop.anthropic.calls] == [SONNET.model] * 2
-    assert await switches(agent_fleet, session_id) == []
-    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, session_id)
+    assert await switches(agent_fleet, agent_session_id) == []
+    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
     assert (pin.matrix_version, pin.fill_set_version) == (first.number, 1)
     fresh = await agent_fleet.loop.start()
     agent_fleet.loop.openai.add(reply(said("The total is 12."), model=SOL.model))
@@ -540,9 +545,9 @@ async def test_a_calls_tokens_and_spend_count_under_its_sessions_pinned_version(
     one's."""
     agent_fleet = await agent_fleet_over(tmp_path)
     first = await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
     second = await agent_fleet.publish()
     old, new = str(first.number), str(second.number)
     before = {
@@ -556,7 +561,7 @@ async def test_a_calls_tokens_and_spend_count_under_its_sessions_pinned_version(
     }
 
     agent_fleet.loop.anthropic.add(reply(said("The average is 3.")))
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
 
     tokens, spend = before[old]
     assert (
@@ -605,9 +610,9 @@ async def test_a_call_counts_under_its_tenants_plan_tier_beside_its_version(
         "acme_model_tokens_total", matrix_version="none", plan_tier="none", kind="input"
     )
 
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
     assert counted("acme_model_tokens_total", **labelled, kind="input") == tokens + 120
     assert counted("acme_model_spend_micros_total", **labelled) > spend
@@ -624,10 +629,10 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     await agent_fleet.publish(
         (MatrixRow(key=MatrixKey(role=MAIN), fills=(SONNET,)), *CATCH_ALL[1:])
     )
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     overloaded = ScriptedFailure(kind=ErrorKind.OVERLOADED, retry_after=2)
     agent_fleet.loop.anthropic.add(overloaded, overloaded, overloaded)
-    assert await loop_once(agent_fleet, session_id) is RunEnd.PARKED, "no fallback: it waits"
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.PARKED, "no fallback: it waits"
 
     # The provider retires the model while the loop waits, and the matrix
     # names another. The loop resumes on the model it began with.
@@ -635,30 +640,30 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
         (MatrixRow(key=MatrixKey(role=MAIN), fills=(OPUS,)), *CATCH_ALL[1:])
     )
     await agent_fleet.matrix.matrix_operator.retire_model(agent_fleet.admin, ModelRef.of(SONNET))
-    session = await agent_fleet.loop.managers.agent_sessions.get_session(
-        agent_fleet.owner, session_id
+    session = await agent_fleet.loop.managers.agent_sessions.get_agent_session(
+        agent_fleet.owner, agent_session_id
     )
     assert session.park is not None and session.park.retry_at is not None
     agent_fleet.loop.clock.now = session.park.retry_at
-    await agent_fleet.loop.managers.agent_sessions.wake_session(
-        agent_fleet.owner, session_id, session.park
+    await agent_fleet.loop.managers.agent_sessions.wake_agent_session(
+        agent_fleet.owner, agent_session_id, session.park
     )
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    resumed = await agent_fleet.loop.loops.run(agent_fleet.owner, session_id)
+    resumed = await agent_fleet.loop.loops.run(agent_fleet.owner, agent_session_id)
     assert resumed.outcome is LoopOutcome.SUCCEEDED
-    assert await switches(agent_fleet, session_id) == [], "never inside a loop"
+    assert await switches(agent_fleet, agent_session_id) == [], "never inside a loop"
 
     agent_fleet.loop.anthropic.add(reply(said("The average is 3."), model=OPUS.model))
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
 
-    (switched,) = await switches(agent_fleet, session_id)
+    (switched,) = await switches(agent_fleet, agent_session_id)
     assert (switched.from_fill, switched.to_fill) == (SONNET, OPUS)
     assert switched.reason is SwitchReason.RETIRED
-    at = [step.type for step in await agent_fleet.loop.history(session_id)]
-    last_request = max(i for i, kind in enumerate(at) if kind is StepType.MODEL_REQUEST)
-    assert at.index(StepType.SWITCHED) < last_request, "switched before the loop's first call"
+    at = [step.type for step in await agent_fleet.loop.history(agent_session_id)]
+    last_request = max(i for i, kind in enumerate(at) if kind is AgentStepType.MODEL_REQUEST)
+    assert at.index(AgentStepType.SWITCHED) < last_request, "switched before the loop's first call"
     assert [call.model for call in agent_fleet.loop.anthropic.calls][-1] == OPUS.model
-    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, session_id)
+    pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
     assert (pin.fill_set_version, pin.matrix_version) == (2, second.number)
     fresh = await agent_fleet.loop.start()
     await agent_fleet.loop.managers.models.resolve_fill_set(
@@ -684,11 +689,11 @@ async def test_a_kinds_ask_is_answered_by_its_sizes_row_at_the_effort_a_fill_lis
     agent_fleet = await agent_fleet_over(tmp_path, kinds=(ASSISTANT, DELIVERY, asking))
     sonnet = SONNET.model_copy(update={"efforts": (Effort.HIGH, Effort.XHIGH)})
     await agent_fleet.publish(resized(ModelSize.L, sonnet, SOL))
-    session_id = await agent_fleet.loop.start("asking")
+    agent_session_id = await agent_fleet.loop.start("asking")
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, session_id)
+    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
     main, summarizer = fills.roles
     assert served(main) == [(SONNET.name, Effort.XHIGH), (SOL.name, SOL.effort)], (
         "the size's row, each fill at the effort asked where it lists it"
@@ -703,8 +708,8 @@ async def test_a_kinds_ask_is_answered_by_its_sizes_row_at_the_effort_a_fill_lis
     await agent_fleet.publish((main_row, *resized(ModelSize.L, opus)[1:]))
     await agent_fleet.matrix.matrix_operator.retire_model(agent_fleet.admin, ModelRef.of(SONNET))
     agent_fleet.loop.anthropic.add(reply(said("The average is 3."), model=OPUS.model))
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.ENDED
-    (switched,) = await switches(agent_fleet, session_id)
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
+    (switched,) = await switches(agent_fleet, agent_session_id)
     assert switched.to_fill == opus.at(Effort.XHIGH)
     assert agent_fleet.loop.anthropic.calls[-1].effort is Effort.XHIGH
 
@@ -821,12 +826,12 @@ async def own_keys(tmp_path: Path, *providers: ProviderName) -> tuple[AgentFleet
 async def test_an_own_key_tenants_calls_go_out_on_its_key_reference(tmp_path: Path) -> None:
     agent_fleet, saved = await own_keys(tmp_path, ProviderName.ANTHROPIC)
     await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).add(reply(said("The total is 12.")))
 
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, session_id)
+    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert fills.roles[0].fallbacks == (), "no fallback on a provider it holds no key for"
     assert len(agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).calls) == 1
     assert agent_fleet.loop.anthropic.calls == [] and agent_fleet.loop.openai.calls == [], (
@@ -845,17 +850,17 @@ async def test_billing_holds_an_own_key_call_only_when_it_carries_the_tenants_ke
 ) -> None:
     agent_fleet, saved = await own_keys(tmp_path, ProviderName.ANTHROPIC)
     await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     call = ModelCall(model=SONNET.model, messages=(), max_output_tokens=4_000)
     payer = Principal(kind=PrincipalKind.PERSON, id=agent_fleet.owner.user_id)
     with pytest.raises(SpenderUnknown, match="does not carry the tenant's own key"):
         await agent_fleet.money.calls.authorize(
-            agent_fleet.owner, session_id, payer, MAIN, SONNET, call, credential="platform"
+            agent_fleet.owner, agent_session_id, payer, MAIN, SONNET, call, credential="platform"
         )
     assert await agent_fleet.money.ledger.read_entries(agent_fleet.owner.org_id, limit=10) == []
     held = await agent_fleet.money.calls.authorize(
         agent_fleet.owner,
-        session_id,
+        agent_session_id,
         payer,
         MAIN,
         SONNET,
@@ -867,7 +872,7 @@ async def test_billing_holds_an_own_key_call_only_when_it_carries_the_tenants_ke
     )
 
     platform, _ = await platform_tenant(agent_fleet)
-    other = await agent_fleet.loop.managers.agents.start_session(platform, a_start())
+    other = await agent_fleet.loop.managers.agents.start_agent_session(platform, a_start())
     with pytest.raises(SpenderUnknown, match="carries a tenant's key"):
         await agent_fleet.money.calls.authorize(
             platform, other.id, payer, MAIN, SONNET, call, credential=str(saved["sk-anthropic"])
@@ -880,7 +885,7 @@ async def platform_tenant(agent_fleet: AgentFleet) -> tuple[TenantContext, UUID]
     await agent_fleet.money.agent_billing.open_spend_account(
         other, SpendAccountRequest(funding=FundingMode.PLATFORM, unit_plan_id="starter", zone="UTC")
     )
-    session = await agent_fleet.loop.managers.agents.start_session(other, a_start())
+    session = await agent_fleet.loop.managers.agents.start_agent_session(other, a_start())
     return other, session.id
 
 
@@ -889,12 +894,12 @@ async def test_a_session_needing_a_key_its_tenant_lacks_parks_and_spends_nothing
 ) -> None:
     agent_fleet, _ = await own_keys(tmp_path)
     await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
 
-    assert await loop_once(agent_fleet, session_id) is RunEnd.PARKED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.PARKED
 
-    session = await agent_fleet.loop.managers.agent_sessions.get_session(
-        agent_fleet.owner, session_id
+    session = await agent_fleet.loop.managers.agent_sessions.get_agent_session(
+        agent_fleet.owner, agent_session_id
     )
     assert session.park is not None and session.park.reason is ParkReason.PROVIDER
     assert session.park.unlock == "anthropic:key" and session.park.retry_at is None
@@ -940,7 +945,9 @@ async def test_a_refused_key_parks_only_the_sessions_that_need_it(tmp_path: Path
     assert (await agent_fleet.loop.loops.run(platform, theirs)).end is RunEnd.ENDED
 
     parks = [
-        (await agent_fleet.loop.managers.agent_sessions.get_session(agent_fleet.owner, s)).park
+        (
+            await agent_fleet.loop.managers.agent_sessions.get_agent_session(agent_fleet.owner, s)
+        ).park
         for s in (first, second)
     ]
     assert [p.unlock if p else None for p in parks] == ["anthropic:credential", "anthropic:key"]
@@ -976,7 +983,9 @@ async def test_a_key_saved_wakes_the_sessions_that_wait_for_one_and_each_names_w
     assert await loop_once(agent_fleet, refused) is RunEnd.PARKED
     assert await loop_once(agent_fleet, keyless) is RunEnd.PARKED
     sessions = agent_fleet.loop.managers.agent_sessions
-    parks = [(await sessions.get_session(agent_fleet.owner, s)).park for s in (refused, keyless)]
+    parks = [
+        (await sessions.get_agent_session(agent_fleet.owner, s)).park for s in (refused, keyless)
+    ]
     assert all(park is not None for park in parks)
     waiting, missing = (park for park in parks if park is not None)
     assert (waiting.unlock, missing.unlock) == ("anthropic:credential", "anthropic:key")
@@ -992,13 +1001,13 @@ async def test_a_key_saved_wakes_the_sessions_that_wait_for_one_and_each_names_w
         agent_fleet.owner, ProviderName.ANTHROPIC, "sk-b"
     )
 
-    for session_id in (refused, keyless):
-        session = await sessions.get_session(agent_fleet.owner, session_id)
-        assert (session.status, session.park) == (SessionStatus.PENDING, None)
+    for agent_session_id in (refused, keyless):
+        session = await sessions.get_agent_session(agent_fleet.owner, agent_session_id)
+        assert (session.status, session.park) == (AgentSessionStatus.PENDING, None)
     on_b = agent_fleet.on_key("sk-b", ProviderName.ANTHROPIC)
     on_b.add(reply(said("The total is 12.")), reply(said("The total is 12.")))
-    for session_id in (refused, keyless):
-        resumed = await agent_fleet.loop.loops.run(agent_fleet.owner, session_id)
+    for agent_session_id in (refused, keyless):
+        resumed = await agent_fleet.loop.loops.run(agent_fleet.owner, agent_session_id)
         assert (resumed.end, resumed.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED), resumed
     assert len(on_b.calls) == 2
 
@@ -1020,7 +1029,9 @@ async def test_a_permission_the_key_lacks_parks_only_the_session_that_met_it(
     assert await loop_once(agent_fleet, met) is RunEnd.PARKED
     assert await loop_once(agent_fleet, other) is RunEnd.ENDED
 
-    session = await agent_fleet.loop.managers.agent_sessions.get_session(agent_fleet.owner, met)
+    session = await agent_fleet.loop.managers.agent_sessions.get_agent_session(
+        agent_fleet.owner, met
+    )
     assert session.park is not None and session.park.unlock == "anthropic:permission"
     (key,) = await agent_fleet.trust.trust.get_provider_keys(agent_fleet.owner, 10)
     assert key.id == saved["sk-anthropic"] and key.status is KeyStatus.LIVE
@@ -1059,15 +1070,17 @@ async def test_a_compactions_failure_refuses_the_key_its_call_carried_and_no_oth
     client = RotatingClient(ProviderName.ANTHROPIC, rotate)
     agent_fleet.keyed["sk-first"] = client
     await agent_fleet.publish()
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     client.add(reply(said("The total is 12.")), reply(said("The average is 3.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
-    assert await loop_once(agent_fleet, session_id, "And the average?") is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
     client.add(ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=401))
-    compact = History(session_id).control(ControlCommand.COMPACT)
-    await agent_fleet.loop.managers.steps.append_inputs(agent_fleet.owner, session_id, [compact])
+    compact = History(agent_session_id).control(ControlCommand.COMPACT)
+    await agent_fleet.loop.managers.steps.append_inputs(
+        agent_fleet.owner, agent_session_id, [compact]
+    )
 
-    assert await loop_once(agent_fleet, session_id, "And the median?") is RunEnd.PARKED
+    assert await loop_once(agent_fleet, agent_session_id, "And the median?") is RunEnd.PARKED
 
     assert [call.model for call in client.calls][-1] == HAIKU.model, "the summarizer's call"
     keys = {k.id: k for k in await trust.get_provider_keys(agent_fleet.owner, 10)}
@@ -1132,12 +1145,12 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
     chosen = await choose(agent_fleet.owner, MAIN, OPUS)
     assert await agent_fleet.matrix.matrix.get_choices(agent_fleet.owner) == (chosen,)
 
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).add(
         reply(said("The total is 12."), model=OPUS.model)
     )
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, session_id)
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
+    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (OPUS, (SONNET,))
 
     platform, _ = await platform_tenant(agent_fleet)
@@ -1154,9 +1167,9 @@ async def test_a_purged_tenants_pins_and_choices_go_with_its_fill_sets(
     agent_fleet, _ = await own_keys(tmp_path, ProviderName.ANTHROPIC)
     await agent_fleet.publish()
     await agent_fleet.matrix.matrix.choose_fill(agent_fleet.owner, MAIN, SONNET)
-    session_id = await agent_fleet.loop.start()
+    agent_session_id = await agent_fleet.loop.start()
     agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).add(reply(said("The total is 12.")))
-    assert await loop_once(agent_fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
     models = agent_fleet.loop.managers.models
     assert await models.purge_tenant(agent_fleet.owner) == 0, "a living tenant keeps everything"
 
@@ -1167,5 +1180,5 @@ async def test_a_purged_tenants_pins_and_choices_go_with_its_fill_sets(
     assert await models.purge_tenant(agent_fleet.owner) == 3, "a pin, a choice, and a fill set"
     assert await models.purge_tenant(agent_fleet.owner) == 0
     with pytest.raises(NotFound):
-        await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, session_id)
+        await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
     assert await agent_fleet.matrix.matrix.get_choices(agent_fleet.owner) == ()

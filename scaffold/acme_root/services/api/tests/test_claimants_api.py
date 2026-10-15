@@ -20,7 +20,7 @@ import pytest
 from api_support import SMALL_BUDGET, build_container, client_over, seed_request, sign_in
 from tenant_support import person, tenant
 
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant
@@ -43,7 +43,7 @@ CLAIMANT_APP = {"X-App": "api", "X-App-Version": "node@test"}
 PROBED = {"os": "Linux 6.8", "shell": "/bin/bash", "capabilities": [], "isolation_modes": []}
 
 
-class RenderPayload(Platform):
+class RenderPayload(OmBase):
     pool_id: UUID
     frames: int
 

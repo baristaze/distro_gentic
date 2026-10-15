@@ -21,8 +21,8 @@ from uuid import UUID
 from pydantic import Field, StringConstraints, model_validator
 
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.base import Identifiable, Platform
-from acme.om.models.types.fill import Fill, ModelRole, ModelSize
+from acme.om.base import Identifiable, OmBase
+from acme.om.language_models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.placement.types.share import PlanTier
 
 NAME = r"^[a-z][a-z0-9-]{0,31}$"
@@ -51,7 +51,7 @@ KEYS = ("environment", "size", "role", "kind", "plan_tier", "workload")
 as many keys, the one that names the earlier key is the more specific."""
 
 
-class MatrixQuery(Platform):
+class MatrixQuery(OmBase):
     """One question: which fills serve this model role, for this agent kind
     on this plan tier, in this workload class and environment. `size` is the
     model size the kind asks of the role, and None when it asks none, which
@@ -65,7 +65,7 @@ class MatrixQuery(Platform):
     workload: WorkloadClass
 
 
-class MatrixKey(Platform):
+class MatrixKey(OmBase):
     """What a row answers: each key it names must equal the question's, and
     a key left None matches every value."""
 
@@ -105,7 +105,7 @@ class MatrixKey(Platform):
         return all(getattr(self, key) is None for key in KEYS)
 
 
-class MatrixRow(Platform):
+class MatrixRow(OmBase):
     """A row: what it answers, and its fills in order, the first the fill
     and the rest the fallbacks a failing provider falls to."""
 

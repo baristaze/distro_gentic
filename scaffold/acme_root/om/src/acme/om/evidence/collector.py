@@ -42,7 +42,7 @@ class Collector:
         self,
         *,
         executor: str,
-        session_id: UUID,
+        agent_session_id: UUID,
         agent_project: str,
         purpose: RunPurpose,
         validation_id: UUID | None,
@@ -53,7 +53,7 @@ class Collector:
         self._prepared = prepared
         self._base = {
             "executor": executor,
-            "session_id": session_id,
+            "agent_session_id": agent_session_id,
             "agent_project": agent_project,
             "purpose": purpose,
             "validation_id": validation_id,
@@ -148,7 +148,7 @@ def collect(
     results: bytes,
     *,
     executor: str,
-    session_id: UUID,
+    agent_session_id: UUID,
     agent_project: str,
     purpose: RunPurpose,
     validation_id: UUID | None,
@@ -159,7 +159,7 @@ def collect(
     """A whole results stream, read as the collector reads it line by line."""
     collector = Collector(
         executor=executor,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         agent_project=agent_project,
         purpose=purpose,
         validation_id=validation_id,

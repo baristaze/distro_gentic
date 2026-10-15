@@ -244,21 +244,23 @@ class AttributionManagerImpl(AttributionManagerInterface):
             return False
         raise NotAuthorized(f"join agent session {agent_session_id} to speak in it")
 
-    async def follow_parent(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+    async def follow_parent(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionAuthority:
         ctx.require(Permission.WRITE)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if session.parent_id is None:
-            raise ValidationFailed(f"agent session {session_id} has no parent to follow")
-        parent = await self._sessions.get_session_at_head(ctx, session.parent_id)
+            raise ValidationFailed(f"agent session {agent_session_id} has no parent to follow")
+        parent = await self._sessions.get_agent_session_at_head(ctx, session.parent_id)
         principal = call_principal(
             await self._authority(ctx, parent.id),
             parent.speaker,
             child=parent.parent_id is not None,
         )
-        authority = await self._authority(ctx, session_id)
+        authority = await self._authority(ctx, agent_session_id)
         if authority.principal == principal:
             return authority
-        followed = SessionAuthority.model_validate(
+        followed = AgentSessionAuthority.model_validate(
             {
                 **authority.model_dump(),
                 "principal": principal,

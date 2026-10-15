@@ -21,15 +21,6 @@ from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.impl.manager import (
-from acme.om.attribution.types.authority import AuthorityMode, Visibility
-from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import new_id, utcnow
-from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
-from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
-from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
-from acme.om.outbox.types.row import OutboxRow
-from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.agent_steps.impl.manager import (
     AgentStepsManagerImpl,
     AgentStepsOptions,
     no_registry,
@@ -58,7 +49,7 @@ from acme.om.context import AppContext, AppType, RequestContext, Role, TenantCon
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
 from contracts.agent_session_storage import make_agent_session
@@ -74,8 +65,6 @@ from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.tools import stand_ins
 
-# What `make_agent_session` names, so the agents manager classes every tool it
-# offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
 

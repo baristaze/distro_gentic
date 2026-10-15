@@ -9,17 +9,18 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import build_container, seed_request
-from contracts.agent_session_storage import make_session
-from contracts.tools import stand_ins
 from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, created, tenant_of
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_steps.types.stream import TextPart
 from acme.om.base import new_id
 from acme.om.exceptions import Unavailable
 from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.retention.crossing import CrossingKind, declared
-from acme.om.steps.types.stream import TextPart
 from acme.services.api.container import AppContainer
+
+from contracts.agent_session_storage import make_session
+from contracts.tools import stand_ins
 
 KEY = "a-live-read-key-for-tests-only-32+"
 SPEC = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -35,8 +36,14 @@ def container(tmp_path: Path) -> AppContainer:
     )
 
 
-def part(session_id: UUID, step_id: UUID, n: int) -> TextPart:
-    return TextPart(session_id=session_id, step_id=step_id, n=n, index=0, text=f"word{n} ")
+def part(agent_session_id: UUID, agent_step_id: UUID, n: int) -> TextPart:
+    return TextPart(
+        agent_session_id=agent_session_id,
+        agent_step_id=agent_step_id,
+        n=n,
+        index=0,
+        text=f"word{n} ",
+    )
 
 
 async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
@@ -62,7 +69,10 @@ async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
     # The first part goes at once; the two behind it within its window are
     # joined, and the joined part names the places it holds.
     parts = [(p["n"], p["last"], p["text"]) for p in stream["parts"]]
-    assert stream["step_id"] == str(step) and parts == [(0, 0, "word0 "), (1, 2, "word1 word2 ")]
+    assert stream["agent_step_id"] == str(step) and parts == [
+        (0, 0, "word0 "),
+        (1, 2, "word1 word2 "),
+    ]
 
     container.stream.emit(part(mine.id, step, 3))
     await container.stream.flush()

@@ -13,12 +13,11 @@ from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionUsageView,
     AgentSessionView,
-    ApprovalPageView,
-    ApprovalView,
-    ToolOutputPageView,
-    BoundsView,
     AgentStepPageView,
     AgentStepView,
+    ApprovalPageView,
+    ApprovalView,
+    BoundsView,
     ControlRequest,
     DeadlineRequest,
     DecisionRequest,
@@ -29,8 +28,6 @@ from acme.services.api.types.agent_sessions import (
     QuestionView,
     SessionModelUsageView,
     StartAgentSessionRequest,
-    AgentStepPageView,
-    AgentStepView,
     ToolCallPageView,
     ToolOutputPageView,
     VisibilityRequest,
@@ -75,19 +72,25 @@ class AgentSessionsServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def archive_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def archive_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         """The archive flag set on an idle session; a person's message
         clears it. One with a loop open is refused."""
         ...
 
     @abstractmethod
-    async def delete_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def delete_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         """The session marked deleted: hidden from every read until it is
         restored or its retention ends. One with a loop open is refused."""
         ...
 
     @abstractmethod
-    async def restore_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def restore_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         """A deleted session back as it was, with its history; one past its
         retention is `NotFound`."""
         ...
@@ -234,7 +237,9 @@ class AgentSessionsServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_usage(self, ctx: TenantContext, agent_session_id: UUID) -> SessionModelUsageView: ...
+    async def get_usage(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> SessionModelUsageView: ...
 
     @abstractmethod
     async def get_agent_session_usage(

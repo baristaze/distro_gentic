@@ -10,9 +10,10 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.rules import COMMIT
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.types.record import RunPurpose
@@ -29,7 +30,6 @@ from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import HandleKind
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.tools.base import NativeToolImpl, ResultInput, Text
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.policy import Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
@@ -57,7 +57,7 @@ class SubmitResultImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         raise ToolFailed(ToolFailure.PERMANENT, "a result is judged by the loop, never run")
 
 
@@ -65,7 +65,7 @@ class ValidateInput(ToolInput):
     baseline: bool = False
 
 
-class Validated(Platform):
+class Validated(OmBase):
     """The validations it kept, one per executor the checks name, and
     every run they wrote."""
 
@@ -106,10 +106,10 @@ class ValidateImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, ValidateInput)
         purpose = RunPurpose.BASELINE if call_input.baseline else RunPurpose.VALIDATION
-        kept = await self._evidence().validate(ctx, runtime.session_id, purpose)
+        kept = await self._evidence().validate(ctx, runtime.agent_session_id, purpose)
         return Validated(
             validations=tuple(validation.id for validation in kept),
             version=kept[0].version,
@@ -126,7 +126,7 @@ class PullRequestInput(ToolInput):
     body: str = Field(default="", max_length=MAX_PULL_REQUEST_BODY)
 
 
-class PullRequestOpened(Platform):
+class PullRequestOpened(OmBase):
     id: str
     url: str
     branch: str
@@ -179,7 +179,7 @@ class OpenPullRequestImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    ) -> OmBase:
         assert isinstance(call_input, PullRequestInput)
         found = await runtime.run(("git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"))
         head = found.stdout.strip()
@@ -188,20 +188,22 @@ class OpenPullRequestImpl(NativeToolImpl):
         agent_workspaces = self._agent_workspaces()
         try:
             intake = self._intake()
-            token = await agent_workspaces.mint_push_token(ctx, runtime.session_id)
+            token = await agent_workspaces.mint_push_token(ctx, runtime.agent_session_id)
             # Recorded and bound before the push: the forge's events on the
             # commit and the branch may come back before the push answers.
-            await intake.record_act(ctx, runtime.session_id, FORGE, (head,))
-            await intake.bind_work(ctx, runtime.session_id, HandleKind.BRANCH, token.branch)
+            await intake.record_act(ctx, runtime.agent_session_id, FORGE, (head,))
+            await intake.bind_work(ctx, runtime.agent_session_id, HandleKind.BRANCH, token.branch)
             opened = await agent_workspaces.open_pull_request(
                 ctx,
-                runtime.session_id,
+                runtime.agent_session_id,
                 token.token.get_secret_value(),
                 head,
                 call_input.title,
                 call_input.body,
             )
-            await intake.bind_work(ctx, runtime.session_id, HandleKind.PULL_REQUEST, opened.id)
+            await intake.bind_work(
+                ctx, runtime.agent_session_id, HandleKind.PULL_REQUEST, opened.id
+            )
         except Unavailable as failed:
             raise ToolFailed(ToolFailure.TRANSIENT, failed.message) from None
         except (NotFound, NotAuthorized, ValidationFailed, Conflict) as failed:

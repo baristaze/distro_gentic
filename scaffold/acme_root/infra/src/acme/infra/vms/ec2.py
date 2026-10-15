@@ -1,4 +1,4 @@
-"""Machines in the platform's cloud account: each machine an EC2 instance
+"""Vms in the platform's cloud account: each machine an EC2 instance
 started from the cloud pool's launch template, each snapshot an image of a
 stopped instance, its disk kept by the cloud's own snapshots under the
 template's key. A machine and a snapshot are found by the tag that carries
@@ -27,14 +27,14 @@ import aioboto3
 from acme.infra.aws_clients import AwsClientHolder, client_config
 from acme.infra.aws_errors import ClientError, error_code, translated
 from acme.infra.exceptions import BackendFailed, InfraValidationFailed
-from acme.infra.machines import (
+from acme.infra.vms import (
     Channel,
-    MachineReply,
-    MachinesInterface,
-    MachineSpec,
-    MachineState,
     SeedsInterface,
     SnapshotNotFound,
+    VmReply,
+    VmsInterface,
+    VmSpec,
+    VmState,
 )
 
 TAG = "acme:machine"
@@ -50,8 +50,8 @@ AMI_ID = re.compile(r"ami-[0-9a-f]{8,17}")
 name's tag, as a snapshot is."""
 
 
-class MachinesEc2Impl(MachinesInterface, SeedsInterface):
-    """Machines through the EC2 API, each call bounded by the client's
+class MachinesEc2Impl(VmsInterface, SeedsInterface):
+    """Vms through the EC2 API, each call bounded by the client's
     timeout, and each wait for a state by `boot`. `template` is the launch
     template the cloud pool's module makes: the instance's size, its
     encrypted disk under the pool's key, and no instance role. A machine
@@ -116,17 +116,17 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
     def encrypted_at_rest(self) -> bool:
         return self._encrypted
 
-    async def state(self, name: str) -> MachineState:
+    async def state(self, name: str) -> VmState:
         instance = await self._instance(name)
         if instance is not None:
             if instance["State"]["Name"] in ("pending", "running"):
-                return MachineState.RUNNING
-            return MachineState.STOPPED
+                return VmState.RUNNING
+            return VmState.STOPPED
         if await self._image(name) is not None:
-            return MachineState.STOPPED
-        return MachineState.ABSENT
+            return VmState.STOPPED
+        return VmState.ABSENT
 
-    async def launch(self, name: str, spec: MachineSpec, snapshot: str | None = None) -> None:
+    async def launch(self, name: str, spec: VmSpec, snapshot: str | None = None) -> None:
         await self._launch(name, spec, snapshot, None)
 
     async def run(
@@ -136,8 +136,8 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
         *,
         bound: timedelta,
         stdin: bytes | None = None,
-    ) -> MachineReply:
-        return MachineReply(126, b"", REFUSED.encode())
+    ) -> VmReply:
+        return VmReply(126, b"", REFUSED.encode())
 
     def channel(self, name: str) -> Channel:
         raise InfraValidationFailed(REFUSED)
@@ -246,7 +246,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
     # Seeds: the machine's first-boot data, and the endpoint closed once read.
 
     async def launch_seeded(
-        self, name: str, spec: MachineSpec, snapshot: str | None, seed: bytes
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
     ) -> None:
         await self._launch(name, spec, snapshot, seed)
 
@@ -262,7 +262,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
     # The parts.
 
     async def _launch(
-        self, name: str, spec: MachineSpec, snapshot: str | None, seed: bytes | None
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes | None
     ) -> None:
         """The machine under `name` running in the group of its egress, with
         `seed` as its first-boot data when given. One that stands is started
@@ -297,7 +297,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
     async def _make(
         self,
         name: str,
-        spec: MachineSpec,
+        spec: VmSpec,
         snapshot: str | None,
         seed: bytes | None,
         group: str,

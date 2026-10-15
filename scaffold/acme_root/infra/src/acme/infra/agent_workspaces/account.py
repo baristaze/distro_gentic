@@ -61,11 +61,9 @@ from acme.infra.agent_workspaces import (
     SnapshotRefused,
     refusal,
 )
-from acme.infra.agent_workspaces.host import UNKEPT, remove_directory
-from acme.infra.agent_workspaces.stragglers import PROC, end_stragglers
-from acme.infra.exceptions import InfraException
 from acme.infra.agent_workspaces.host import UNKEPT, held_mark, held_marks, remove_directory
 from acme.infra.agent_workspaces.stragglers import PROC, end_stragglers
+from acme.infra.exceptions import InfraException
 
 LIMITS = frozenset({"processes"})
 """What the mode enforces of a spec's limits: the account's processes, which
@@ -503,7 +501,9 @@ class AgentWorkspaceAccountImpl(AgentWorkspaceProviderInterface):
         marks = await asyncio.to_thread(held_marks, self._root)
         return [
             HeldInstance(
-                id=agent_workspace_id, org_id=org_id, location=str(self._job(org_id, agent_workspace_id) / HOME)
+                id=agent_workspace_id,
+                org_id=org_id,
+                location=str(self._job(org_id, agent_workspace_id) / HOME),
             )
             for org_id, agent_workspace_id in marks
         ]

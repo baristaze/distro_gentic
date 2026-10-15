@@ -55,18 +55,18 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.budgets.types.amount import Amount
-from acme.om.models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
-from acme.om.windows.rules import READ_ARTIFACT
+from acme.om.windows.rules import READ_TOOL_OUTPUT
 
 SOFTWARE_ENGINEER = "software_engineer"
 ANALYSIS = "analysis"
@@ -168,7 +168,7 @@ ARTIFACTS_TOOLSET = Toolset(
     name="artifacts",
     version=1,
     summary="Read back a result kept outside your window, by the handle its notice names.",
-    tools=(READ_ARTIFACT,),
+    tools=(READ_TOOL_OUTPUT,),
 )
 
 REVIEW_TOOLSET = Toolset(
@@ -245,11 +245,11 @@ WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode
 kinds that change or read files and run code."""
 
 
-def allowing(*classes: ToolClass) -> PolicyLayer:
+def allowing(*classes: ToolClass) -> ToolPolicyLayer:
     """A kind's layer of policy: these classes run unattended. A tenant
     narrows or loosens it, and the platform's ceilings hold above both."""
-    return PolicyLayer(
-        rules=tuple(PolicyRule(authorization_class=c, decision=Decision.ALLOW) for c in classes)
+    return ToolPolicyLayer(
+        rules=tuple(ToolPolicyRule(authorization_class=c, decision=Decision.ALLOW) for c in classes)
     )
 
 
@@ -411,7 +411,7 @@ SOFTWARE_ENGINEER_V7 = revised(
 """The software engineer before its workspace started from its agent project's
 workspace base: kept while a session may still run it."""
 
-WORKSPACE_BASE = (
+AGENT_WORKSPACE_BASE = (
     "Your workspace has no network. What your work needs installed comes from your agent project's "
     "environment, set up before you start. When the work needs a package your workspace "
     "lacks, do not try to install it: say which one in your result."
@@ -420,12 +420,12 @@ WORKSPACE_BASE = (
 is named rather than fetched through a network it does not have."""
 
 SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
-    update={"version": 8, "prompts": (*SOFTWARE_ENGINEER_V7.prompts, WORKSPACE_BASE)}
+    update={"version": 8, "prompts": (*SOFTWARE_ENGINEER_V7.prompts, AGENT_WORKSPACE_BASE)}
 )
 """The software engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
-reads back with `read_artifact`, by the handle the notice names. Its
+reads back with `read_tool_output`, by the handle the notice names. Its
 workspace starts from its agent project's workspace base, when the agent project names
 one, and keeps no egress (`WORKSPACE_BASE_KINDS`)."""
 
@@ -509,7 +509,7 @@ ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets,
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way a software engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with
-`read_artifact`, by the handle the notice names."""
+`read_tool_output`, by the handle the notice names."""
 
 PLANNER_KIND = AgentKind(
     name=PLANNER,
@@ -548,7 +548,7 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
         "own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The platform assistant before it read the tenant's sessions, agent projects,
 and agent automations, and its agent knowledge: kept while a session may still run
@@ -580,7 +580,7 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "hand_off_to_software_engineer and an objective that stands on its own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The platform assistant. A product adds its own readers to it through its
 slot (`ProductKinds.assistant_tools`), which the root joins to this version
@@ -638,7 +638,7 @@ REVIEWER_KIND = AgentKind(
     authority=AuthorityMode.STEADY,
     prompts=(REVIEWER_PROMPT,),
     policy=allowing(ToolClass.READ),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
     share=REVIEWER_SHARE,
 )
 """The reviewer. It reads one pull request through the forge, at its head,
@@ -671,7 +671,7 @@ OPS_ANALYST_KIND = AgentKind(
     authority=AuthorityMode.DELEGATED,
     prompts=(OPS_ANALYST_PROMPT,),
     policy=allowing(ToolClass.READ),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The ops analyst. It reads the tenant's operations on its person's own
 permissions: its sessions and what they wait on, its hosts and what they

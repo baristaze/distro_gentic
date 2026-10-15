@@ -7,7 +7,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.rate import Bound, RateRule
@@ -32,7 +32,7 @@ class Grade(StrEnum):
         return Provenance(self.value)
 
 
-class Requirement(Platform):
+class Requirement(OmBase):
     """A check that must pass for a kind of change: a change that touches a
     path one of `paths` matches. `rate`, when set, asks for repeated trials
     whose failure rate is bounded under it."""

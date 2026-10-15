@@ -30,20 +30,18 @@ from acme.infra.observability import (
 from acme.infra.trust import install_trust_store
 from acme.om.agent_sessions.kinds import LOOP_LANE, AgentSessionWorkKind
 from acme.om.agents.types.kind import AgentKind
-from acme.om.root import KINDS
 from acme.om.placement.rules import LOOP_LANE_PREFIX, tier_label
 from acme.om.platform_root import PlatformPorts
+from acme.om.root import KINDS
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.work.types.work_item import WorkKind
-from acme.workers.maintenance.health import Probe, WorkerHttpServer
-from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.runs import LoopHandlerImpl
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
+from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
 from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
-from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 
 log = logging.getLogger(__name__)
 

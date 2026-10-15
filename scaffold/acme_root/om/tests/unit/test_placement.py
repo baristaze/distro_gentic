@@ -13,15 +13,12 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
-from contracts.doubles import Members
-from contracts.loops import reply, said, use
-from contracts.placement_storage import make_share
-from contracts.platform_loops import platform_loop_over
-from contracts.tools import stand_ins
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -49,14 +46,18 @@ from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import TierShare
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.header import LoopOutcome
-from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.impl.manager import DEAD_LETTER_KIND
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+
+from contracts.agent_session_storage import make_session
+from contracts.doubles import Members
+from contracts.loops import reply, said, use
+from contracts.placement_storage import make_share
+from contracts.platform_loops import platform_loop_over
+from contracts.tools import stand_ins
 
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -120,13 +121,13 @@ def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -
     )
 
 
-def exec_on(host: UUID, session_id: UUID | None = None) -> dict[str, object]:
+def exec_on(host: UUID, agent_session_id: UUID | None = None) -> dict[str, object]:
     """An `exec` item's payload as the relay writes one, for `host`."""
     spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     payload = ExecPayload(
         host_id=host,
         item_id=new_id(),
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         key=new_id(),
         operation=ExecOperation.RUN,
         effect="unsafe",
@@ -297,7 +298,7 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     assert await managers.placement.claim_for(request(), walled, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
     assert failed is None, "never claimed again"
-    events = await managers.events.get_events(beta, after_seq=0, limit=10)
+    events = await managers.events.get_change_events(beta, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
     assert dead.target_id == stray.id and "another tenant" in str(dead.payload["last_error"])
 
@@ -315,7 +316,9 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     session's item is handed over."""
     ajax = await an_owner(managers)
     machine_id, pool, mine, other = new_id(), new_id(), new_id(), new_id()
-    machine = Claimant(kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, session_id=mine)
+    machine = Claimant(
+        kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, agent_session_id=mine
+    )
     stray = await managers.work.enqueue(
         ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, other))
     )
@@ -323,7 +326,7 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     assert await managers.placement.claim_for(request(), machine, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
     assert failed is None, "never claimed again"
-    events = await managers.events.get_events(ajax, after_seq=0, limit=10)
+    events = await managers.events.get_change_events(ajax, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
     assert dead.target_id == stray.id and "another session" in str(dead.payload["last_error"])
 
@@ -515,7 +518,7 @@ async def test_an_operator_sets_a_share_in_versions_and_the_stream_names_them(
     ).share
     assert (first.version, second.version, second.id) == (1, 2, first.id)
     assert second.created_by == second.updated_by == admin.identity_id
-    events = await managers.events.get_events(owner, after_seq=0, limit=10)
+    events = await managers.events.get_change_events(owner, after_seq=0, limit=10)
     assert [(e.kind, e.actor_id, e.payload["version"]) for e in events] == [
         (SHARE_SET_KIND, admin.identity_id, 1),
         (SHARE_SET_KIND, admin.identity_id, 2),
@@ -544,7 +547,7 @@ async def test_a_share_is_refused_to_a_reader_an_unknown_org_and_bad_terms(
             await managers.placement_operator.set_share(
                 operator(), owner.org_id, **{**terms, **bad}
             )
-    assert await managers.events.get_events(owner, after_seq=0, limit=10) == []
+    assert await managers.events.get_change_events(owner, after_seq=0, limit=10) == []
     with pytest.raises(NotFound):
         await managers.work_operator.read_tenant_cap(operator(), owner.org_id, tier_lane("pro"))
 
@@ -592,9 +595,9 @@ async def test_a_lost_claim_writes_nothing_and_the_next_claim_recovers_the_sessi
         operator(), owner.org_id, plan_tier="standard", own_lane=False, concurrency=1
     )
     loop = platform_loop_over(tmp_path, storage=storage, owner=owner)
-    session_id = await loop.start()
-    message = message_step(new_id(), utcnow(), session_id, owner, "Note the fix.")
-    await loop.managers.agent_sessions.receive(owner, session_id, [message])
+    agent_session_id = await loop.start()
+    message = message_step(new_id(), utcnow(), agent_session_id, owner, "Note the fix.")
+    await loop.managers.agent_sessions.receive(owner, agent_session_id, [message])
     loop.anthropic.add(
         reply(use("slow", use_id="use_slow"), use("note", use_id="use_note")),
         reply(said("The note did not finish; I checked.")),
@@ -606,21 +609,23 @@ async def test_a_lost_claim_writes_nothing_and_the_next_claim_recovers_the_sessi
         request(), lane, [WorkKind.LOOP], "runner-a", timedelta(milliseconds=50)
     )
     assert lost is not None
-    stalled = asyncio.ensure_future(loop.loops.run(lost[0], session_id))
+    stalled = asyncio.ensure_future(loop.loops.run(lost[0], agent_session_id))
     await loop.tools["slow"].started.wait()
     await asyncio.sleep(0.1)
     assert await work.requeue_stale(request(), 100) == 1, "its lease ran out"
 
     found = await work.claim(request(), lane, [WorkKind.LOOP], "runner-b", LEASE)
     assert found is not None and found[1].id == lost[1].id, "the lost claim does not count"
-    run = await loop.loops.run(found[0], session_id)
+    run = await loop.loops.run(found[0], agent_session_id)
     loop.tools["slow"].release.set()
     stale = await stalled
 
     assert run.outcome is LoopOutcome.SUCCEEDED and stale.end is RunEnd.STALE
     assert stale.epoch < run.epoch
     assert loop.tools["note"].ran_as == [], "an unsafe call is never repeated"
-    answers = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+    answers = [
+        s for s in await loop.history(agent_session_id) if s.type is AgentStepType.TOOL_RESPONSE
+    ]
     assert len(answers) == 2, "the new run's answers, and nothing of the stalled run's"
     with pytest.raises(LeaseLost):
         await work.complete(lost[0], lost[1])

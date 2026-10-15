@@ -79,18 +79,18 @@ async def revoke_host(ctx: Ctx, hosts: HostsService, host_id: UUID) -> HostView:
     return await hosts.revoke_host(ctx, host_id)
 
 
-@router.get("/agent-sessions/{session_id}/placement", response_model=PlacementView)
-async def placement_of(ctx: Ctx, hosts: HostsService, session_id: UUID) -> PlacementView:
+@router.get("/agent-sessions/{agent_session_id}/placement", response_model=PlacementView)
+async def placement_of(ctx: Ctx, hosts: HostsService, agent_session_id: UUID) -> PlacementView:
     """Where the session runs; a pinned session with no host online waits."""
-    return await hosts.placement_of(ctx, session_id)
+    return await hosts.placement_of(ctx, agent_session_id)
 
 
-@router.put("/agent-sessions/{session_id}/placement", response_model=PlacementView)
+@router.put("/agent-sessions/{agent_session_id}/placement", response_model=PlacementView)
 async def place_session(
-    ctx: Ctx, hosts: HostsService, session_id: UUID, body: PlaceSessionRequest
+    ctx: Ctx, hosts: HostsService, agent_session_id: UUID, body: PlaceSessionRequest
 ) -> PlacementView:
     """A principal pins the session to a pool, or moves it to the cloud."""
-    return await hosts.place_session(ctx, session_id, body)
+    return await hosts.place_session(ctx, agent_session_id, body)
 
 
 @router.post(

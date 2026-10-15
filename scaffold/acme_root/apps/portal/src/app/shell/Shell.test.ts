@@ -13,7 +13,7 @@ import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionView, MeView, OrgView, UserView } from "@acme/client";
 import { PREFERENCES_STORAGE_KEY, usePreferencesStore } from "../../store/preferences";
-import { useSessionStore } from "../../store/session";
+import { useAuthSessionStore } from "../../store/session";
 import { useSupportStore } from "../../store/support";
 import { EMPTY_PRODUCT, type PortalProduct } from "../product";
 import { queryClient } from "../queryClient";
@@ -71,7 +71,7 @@ vi.mock("../api", () => ({
         if (one[2] === "/children") return Promise.resolve({ items: all.filter((each) => each.parent_id === found.id), next_cursor: null });
         // The call it holds for a decision, while it is parked on one.
         if (one[2] === "/approvals")
-          return Promise.resolve(found.park?.unlock === "approval" ? [{ session_id: found.id, tool: "run_command", seq: 3, authorization_class: "write" }] : []);
+          return Promise.resolve(found.park?.unlock === "approval" ? [{ agent_session_id: found.id, tool: "run_command", seq: 3, authorization_class: "write" }] : []);
         return Promise.resolve(found);
       }
       if (path.startsWith("/v1/agent-sessions?")) {
@@ -174,12 +174,12 @@ beforeEach(async () => {
   useSupportStore.setState({ conversations: {} });
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   usePreferencesStore.setState({ theme: "system", sidebarFolded: false, sessionFilter: DEFAULT_FILTER, foldedTrees: [] });
-  useSessionStore.getState().setSession("ses_ajax", "ajax");
+  useAuthSessionStore.getState().setAuthSession("ses_ajax", "ajax");
   root = createRoot(container);
 });
 afterEach(async () => {
   await act(async () => root.render(null));
-  useSessionStore.getState().clear();
+  useAuthSessionStore.getState().clear();
   vi.unstubAllGlobals();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
@@ -445,20 +445,20 @@ it("signs out: the server session first, then the token here", async () => {
   await act(async () => item("Sign out").click());
   await settle();
   expect(net.posts.map((post) => post.path)).toEqual(["/v1/auth/logout"]);
-  expect(useSessionStore.getState().token).toBeNull();
+  expect(useAuthSessionStore.getState().token).toBeNull();
 });
 
 it("goes to the identity provider's logout when the server names one", async () => {
   await mount();
   const assign = vi.fn();
   vi.stubGlobal("location", { origin: "http://localhost:5173", assign });
-  net.logout = { provider_logout_url: "https://api.workos.com/user_management/sessions/logout?session_id=s1" };
+  net.logout = { provider_logout_url: "https://api.workos.com/user_management/sessions/logout?agent_session_id=s1" };
   await act(async () => trigger().click());
   await act(async () => item("Sign out").click());
   await settle();
   expect(net.posts[0]!.body).toEqual({ return_to: "http://localhost:5173/signed-out" });
-  expect(useSessionStore.getState().token).toBeNull();
-  expect(assign).toHaveBeenCalledWith("https://api.workos.com/user_management/sessions/logout?session_id=s1");
+  expect(useAuthSessionStore.getState().token).toBeNull();
+  expect(assign).toHaveBeenCalledWith("https://api.workos.com/user_management/sessions/logout?agent_session_id=s1");
 });
 
 describe("the support dock", () => {

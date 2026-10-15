@@ -230,12 +230,14 @@ class AgentAutomationStoragePostgresImpl(PgStorageBase, AgentAutomationStorageIn
         )
         return await self._runs(org_id, stmt)
 
-    async def read_session_run(self, org_id: UUID, session_id: UUID) -> AgentAutomationRun | None:
+    async def read_session_run(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentAutomationRun | None:
         stmt = (
             select(AgentAutomationRuns)
             .where(
                 AgentAutomationRuns.org_id == org_id,
-                AgentAutomationRuns.session_id == session_id,
+                AgentAutomationRuns.agent_session_id == agent_session_id,
                 AgentAutomationRuns.status == STARTED,
             )
             .order_by(AgentAutomationRuns.created_at.desc(), AgentAutomationRuns.id.desc())

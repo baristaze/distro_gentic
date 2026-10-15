@@ -27,7 +27,7 @@ class SessionRetention(Identifiable, Created):
     content rests sealed, as it does unless the session began memory-only.
     Every write after the first is a compare-and-set on `version`."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_project_id: UUID | None = None
     policy: RetentionPolicy
     policy_version: int = Field(default=0, ge=0)

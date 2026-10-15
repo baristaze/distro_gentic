@@ -7,12 +7,12 @@ from sqlalchemy import Update, case, delete, exists, func, literal, or_, select,
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.tables.agent_sessions import AgentSessions
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus, Among
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.attribution.types.authority import Visibility
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.steps.types.header import ParkReason
 from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 

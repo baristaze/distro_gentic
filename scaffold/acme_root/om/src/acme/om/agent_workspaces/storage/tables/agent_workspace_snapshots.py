@@ -11,15 +11,15 @@ class AgentWorkspaceSnapshots(IdentifiableMixin, TrackableMixin, Base):
     platform's bucket, or the store of a host inside its tenant's wall,
     named by its pool, its host, and the reference that store knows it by,
     with its hash and its size. Never its bytes. The index on (org_id,
-    session_id) serves a session's purge, so org_id gets no index of its
+    agent_session_id) serves a session's purge, so org_id gets no index of its
     own."""
 
     __tablename__ = "agent_workspace_snapshots"
     __org_id_index__ = False
     __table_args__ = (
-        Index("ix_agent_workspace_snapshots_org_id_session_id", "org_id", "session_id"),
+        Index("ix_agent_workspace_snapshots_org_id_session_id", "org_id", "agent_session_id"),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     hash: Mapped[str]
     size: Mapped[int] = mapped_column(BigInteger)
     pool_id: Mapped[UUID | None]

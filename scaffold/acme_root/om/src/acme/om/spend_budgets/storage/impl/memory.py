@@ -140,7 +140,7 @@ class LedgerStorageMemoryImpl(MemoryStorageBase, LedgerStorageInterface):
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold, datetime]]:
+    ) -> list[tuple[UUID, SpendHold, datetime]]:
         open_ = [
             (org_id, hold, hold.created_at)
             for org_id, hold in self._rows_across_tenants(self._holds)

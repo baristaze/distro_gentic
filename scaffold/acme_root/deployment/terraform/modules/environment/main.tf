@@ -542,7 +542,7 @@ module "maintenance" {
 # its placement names, over the relay. Its model keys are the platform's;
 # what a tenant spends is held by the money gate before each call, and what
 # the environment spends on runners by the count below and its ceiling.
-module "session_runner" {
+module "agent_session_runner" {
   source = "../service"
 
   name               = "session-runner"
@@ -563,8 +563,8 @@ module "session_runner" {
     # Its pools are its own size: it holds a few loops at once, and each
     # task's connections count in the pool rule (deployment/cloud/README.md).
     ACME_DATABASE_POOL_SIZE = tostring(var.session_runner_database_pool_size)
-    ACME_MODEL_PROVIDERS    = "live"
-    ACME_WORKSPACE_BACKEND  = "none"
+    ACME_LLM_PROVIDERS    = "live"
+    ACME_AGENT_WORKSPACE_BACKEND  = "none"
     # The image carries the knowledge map and the documents it lists here,
     # as the API's does; a deployed runner refuses to boot with no corpus.
     ACME_CORPUS_ROOT = "/app"
@@ -595,7 +595,7 @@ module "dashboard" {
 
   environment              = var.environment
   cluster_name             = module.cluster.name
-  service_names            = [module.api.service_name, module.maintenance.service_name, module.session_runner.service_name]
+  service_names            = [module.api.service_name, module.maintenance.service_name, module.agent_session_runner.service_name]
   database_identifier      = module.database.identifier
   load_balancer_arn_suffix = module.load_balancer.arn_suffix
   cache_node_ids           = module.cache.member_clusters
@@ -615,5 +615,5 @@ module "alarms" {
   api_log_group_name         = module.api.log_group_name
   maintenance_log_group_name = module.maintenance.log_group_name
   queue_names                = module.queue.queue_names
-  service_names              = [module.api.service_name, module.maintenance.service_name, module.session_runner.service_name]
+  service_names              = [module.api.service_name, module.maintenance.service_name, module.agent_session_runner.service_name]
 }

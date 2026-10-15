@@ -1,9 +1,9 @@
 """The refusals of the cloud pool swimlane."""
 
-from acme.om.exceptions import Conflict, PlatformException
+from acme.om.exceptions import Conflict, OmException
 
 
-class CloudPoolException(PlatformException): ...
+class CloudPoolException(OmException): ...
 
 
 class MachineUnbound(CloudPoolException, Conflict):

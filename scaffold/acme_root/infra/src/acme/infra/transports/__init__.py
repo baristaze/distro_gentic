@@ -100,7 +100,7 @@ class PathOutsideAgentWorkspace(InfraValidationFailed):
 
 class ReservedVariable(InfraValidationFailed):
     """A secret injected into a variable the host's network holds, its proxy
-    or its CA file (`acme.infra.workspaces.network`): refused before the
+    or its CA file (`acme.infra.agent_workspaces.network`): refused before the
     command runs, so no secret redirects a command's traffic or changes
     what it trusts."""
 

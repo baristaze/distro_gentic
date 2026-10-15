@@ -16,7 +16,7 @@ class ExecItems(IdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "exec_items"
     __org_id_index__ = False
     __table_args__ = (
-        Index("ix_exec_items_org_id_session_id_key", "org_id", "session_id", "key"),
+        Index("ix_exec_items_org_id_session_id_key", "org_id", "agent_session_id", "key"),
         # The sweep reads running items whose lease ended, across tenants.
         Index(
             "ix_exec_items_lease_expires_at_running",
@@ -24,7 +24,7 @@ class ExecItems(IdentifiableMixin, TrackableMixin, Base):
             postgresql_where=text("state = 'running'"),
         ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     key: Mapped[UUID]
     operation: Mapped[str]
     effect: Mapped[str]

@@ -7,8 +7,6 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from contracts.evidence import checkout_policy, delivered, stream
-from contracts.evidence_storage import make_policy
 
 from acme.om.base import new_id, utcnow
 from acme.om.evidence.collector import Collector, collect
@@ -28,6 +26,9 @@ from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest, Validation
 from acme.om.exceptions import ValidationFailed
+
+from contracts.evidence import checkout_policy, delivered, stream
+from contracts.evidence_storage import make_policy
 
 # Protected paths.
 
@@ -138,7 +139,7 @@ def a_validation(
     return Validation(
         id=new_id(),
         created_at=utcnow().replace(hour=0, minute=0) + timedelta(minutes=minute),
-        session_id=new_id(),
+        agent_session_id=new_id(),
         agent_project="checkout",
         purpose=purpose,
         version=version,
@@ -216,7 +217,7 @@ def collected(data: bytes) -> Any:
     return collect(
         data,
         executor="executor-1",
-        session_id=new_id(),
+        agent_session_id=new_id(),
         agent_project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
@@ -236,7 +237,7 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
     assert first.executor == "executor-1" and first.run_image.toolchain == {"python": "3.14"}
     collector = Collector(
         executor="executor-1",
-        session_id=new_id(),
+        agent_session_id=new_id(),
         agent_project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),

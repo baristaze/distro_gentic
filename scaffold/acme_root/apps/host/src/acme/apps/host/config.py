@@ -37,7 +37,7 @@ RECORDS_FOLDER = "records"
 @dataclass(frozen=True, kw_only=True)
 class Settings(ClaimantSettings):
     workspace_user: str | None
-    workspace_image: str = DEFAULT_IMAGE
+    agent_workspace_image: str = DEFAULT_IMAGE
     pull_timeout_seconds: float = 900.0
     max_clock_skew_seconds: float = 60.0
     snapshot_store: Path | None = None  # None: `snapshots` under its home
@@ -96,7 +96,7 @@ def settings_from_env() -> Settings:
     return Settings(
         **claimant,
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
-        workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
+        agent_workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
         pull_timeout_seconds=_seconds("ACME_HOST_PULL_TIMEOUT_SECONDS", 900.0),
         snapshot_store=Path(os.environ["ACME_HOST_SNAPSHOTS"])
         if os.environ.get("ACME_HOST_SNAPSHOTS")

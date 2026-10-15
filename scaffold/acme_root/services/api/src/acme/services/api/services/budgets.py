@@ -16,8 +16,8 @@ from acme.services.api.types.budgets import (
 
 class BudgetsServiceInterface(ABC):
     @abstractmethod
-    async def create_budget(
-        self, ctx: TenantContext, body: CreateBudgetRequest, budget_id: UUID
+    async def create_spend_budget(
+        self, ctx: TenantContext, body: CreateBudgetRequest, spend_budget_id: UUID
     ) -> BudgetView:
         """The budget under the id the edge gives it; a retry under that id
         answers the budget as stored. A tenant key that names another tenant,
@@ -30,11 +30,11 @@ class BudgetsServiceInterface(ABC):
     ) -> list[BudgetView]: ...
 
     @abstractmethod
-    async def get_budget(self, ctx: TenantContext, budget_id: UUID) -> BudgetView: ...
+    async def get_spend_budget(self, ctx: TenantContext, spend_budget_id: UUID) -> BudgetView: ...
 
     @abstractmethod
     async def change_amount(
-        self, ctx: TenantContext, budget_id: UUID, body: AmountRequest, version: int | None
+        self, ctx: TenantContext, spend_budget_id: UUID, body: AmountRequest, version: int | None
     ) -> BudgetView:
         """The new amount, on the version the caller read: none named is
         `ValidationFailed`, and one that moved is `PreconditionFailed`."""

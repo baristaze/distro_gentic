@@ -14,4 +14,4 @@ class PoolErasure(Identifiable, Created):
     name, which the sweep reads off the machines' backend."""
 
     tenant_id: UUID
-    session_id: UUID
+    agent_session_id: UUID

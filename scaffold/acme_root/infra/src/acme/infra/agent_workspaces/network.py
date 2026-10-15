@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Self
 from urllib.parse import urlsplit
 
+from acme.infra.agent_workspaces import EgressMode
 from acme.infra.exceptions import InfraException
-from acme.infra.workspaces import EgressMode
 
 PROXY_VARIABLES = (
     "HTTPS_PROXY",

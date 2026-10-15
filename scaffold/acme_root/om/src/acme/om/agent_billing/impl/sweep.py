@@ -14,18 +14,18 @@ from pydantic import Field
 
 from acme.om.agent_billing.storage import SpendLedgerStorageInterface
 from acme.om.agent_billing.sweep import HoldSweepInterface, ProviderBillsInterface
-from acme.om.base import EMPTY_UUID, Platform, utcnow
-from acme.om.budgets.gate import BudgetGateInterface
-from acme.om.budgets.storage import LedgerStorageInterface
-from acme.om.budgets.types.hold import Bill, BillUnknown, Hold
+from acme.om.base import EMPTY_UUID, OmBase, utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import InvalidCredential
+from acme.om.spend_budgets.gate import SpendBudgetGateInterface
+from acme.om.spend_budgets.storage import LedgerStorageInterface
+from acme.om.spend_budgets.types.spend_hold import Bill, BillUnknown, SpendHold
 from acme.om.tenancy import TenancyManagerInterface
 
 log = logging.getLogger(__name__)
 
 
-class HoldSweepOptions(Platform):
+class HoldSweepOptions(OmBase):
     # A hold due this long ago has no call left to settle it: a run renews
     # its lease while its model call streams, and a run that lost its lease
     # is stopped within half of it; a job is over at its deadline, and the
@@ -47,7 +47,7 @@ class HoldSweepImpl(HoldSweepInterface):
     def __init__(
         self,
         ledger: LedgerStorageInterface | SpendLedgerStorageInterface,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         tenancy: TenancyManagerInterface,
         bills: ProviderBillsInterface,
         options: HoldSweepOptions,
@@ -91,7 +91,7 @@ class HoldSweepImpl(HoldSweepInterface):
             start = self._read_to = end
         return taken
 
-    async def _settle(self, rctx: RequestContext, org_id: UUID, hold: Hold) -> bool:
+    async def _settle(self, rctx: RequestContext, org_id: UUID, hold: SpendHold) -> bool:
         """Settles one hold through its gate; False when it is left for the
         next call. A hold of a deleted tenant is left for good, as the rest of
         its ledger is."""
@@ -115,7 +115,7 @@ class HoldSweepImpl(HoldSweepInterface):
         )
         return True
 
-    async def _bill(self, org_id: UUID, hold: Hold) -> Bill:
+    async def _bill(self, org_id: UUID, hold: SpendHold) -> Bill:
         """What the provider says it billed, else the whole hold: a provider
         that cannot say, or cannot be asked, never lets a hold count less."""
         try:

@@ -4,16 +4,16 @@ from acme.infra.exceptions import InfraException
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.types.result import Claim, Result, Verdict
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.rules import Reading, judge, policy_key, refused
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.work_product import WorkProductInterface
-from acme.om.exceptions import PlatformException
+from acme.om.exceptions import OmException
 
 
-class ResultGateOptions(Platform):
+class ResultGateOptions(OmBase):
     max_cited: int = 500  # ids one result may cite
     max_validations: int = 100  # validations at one head, and at the base, the gate reads
     max_runs: int = 100_000  # runs of those validations the gate reads
@@ -42,7 +42,7 @@ class ResultGateEvidenceImpl(ResultGateInterface):
         self._agent_projects = agent_projects
         self._options = options or ResultGateOptions()
 
-    async def check(self, ctx: TenantContext, session_id: UUID, result: Result) -> Verdict:
+    async def check(self, ctx: TenantContext, agent_session_id: UUID, result: Result) -> Verdict:
         ctx.require(Permission.READ)
         cited = set(result.evidence)
         if len(cited) > self._options.max_cited:
@@ -50,29 +50,31 @@ class ResultGateEvidenceImpl(ResultGateInterface):
                 f"a claim cites at most {self._options.max_cited} runs; cite the ones that show it"
             )
         runs = await self._storage.read_cited(
-            ctx.org_id, session_id, sorted(cited), self._options.max_runs
+            ctx.org_id, agent_session_id, sorted(cited), self._options.max_runs
         )
         named = {
-            found for record in runs for found in (record.id, record.step_id, record.validation_id)
+            found
+            for record in runs
+            for found in (record.id, record.agent_step_id, record.validation_id)
         }
         reading = Reading(cited=tuple(runs), unresolved=tuple(sorted(cited - named, key=str)))
         if result.claim is Claim.FAILED or reading.unresolved or not reading.cited:
             return judge(result.claim, reading)
-        return judge(result.claim, await self._read(ctx, session_id, reading))
+        return judge(result.claim, await self._read(ctx, agent_session_id, reading))
 
-    async def _read(self, ctx: TenantContext, session_id: UUID, reading: Reading) -> Reading:
+    async def _read(self, ctx: TenantContext, agent_session_id: UUID, reading: Reading) -> Reading:
         try:
-            work_product = await self._work_product.delivered(ctx, session_id)
-        except (PlatformException, InfraException) as error:
+            work_product = await self._work_product.delivered(ctx, agent_session_id)
+        except (OmException, InfraException) as error:
             return Reading(cited=reading.cited, unread=error.message)
         if work_product is None or not work_product.changes_work_product:
             return Reading(cited=reading.cited, work_product=work_product)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         key = None if agent_project_id is None else policy_key(agent_project_id)
         policy = None if key is None else await self._storage.read_policy(ctx.org_id, key)
         bound = self._options.max_validations
         found = await self._storage.read_validations(
-            ctx.org_id, session_id, work_product.head, bound + 1
+            ctx.org_id, agent_session_id, work_product.head, bound + 1
         )
         if len(found) > bound:
             return Reading(
@@ -85,12 +87,12 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             if validation.purpose is RunPurpose.VALIDATION and validation.agent_project == key
         )
         based = await self._storage.read_validations(
-            ctx.org_id, session_id, work_product.base, bound
+            ctx.org_id, agent_session_id, work_product.base, bound
         )
         at_base = tuple(validation for validation in based if validation.agent_project == key)
         records = await self._storage.read_validation_records(
             ctx.org_id,
-            session_id,
+            agent_session_id,
             [validation.id for validation in validations],
             self._options.max_runs + 1,
         )

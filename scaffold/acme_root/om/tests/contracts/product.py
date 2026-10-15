@@ -5,14 +5,14 @@ and the authorization class that tool declares beside the platform's."""
 from collections.abc import Callable
 from datetime import timedelta
 
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.platform_agents.tools.base import NativeToolImpl
 from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.tools.tool import ToolInterface, ToolRuntime
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
+from acme.om.tools.types.policy import Decision, Target, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolInput, ToolMode, ToolSpec
 
 LEDGER_CLASS = "ledger"
@@ -24,7 +24,7 @@ class Nothing(ToolInput):
     pass
 
 
-class Title(Platform):
+class Title(OmBase):
     title: str
 
 
@@ -55,8 +55,10 @@ class ReadTitleImpl(NativeToolImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
-        session = await self._managers().agent_sessions.get_session(ctx, runtime.session_id)
+    ) -> OmBase:
+        session = await self._managers().agent_sessions.get_agent_session(
+            ctx, runtime.agent_session_id
+        )
         self._read.append(session.title)
         return Title(title=session.title)
 
@@ -69,10 +71,10 @@ LEDGER = AgentKind(
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=1, count=0),
     prompts=("Answer from the ledger.",),
-    policy=PolicyLayer(
-        rules=(PolicyRule(authorization_class=LEDGER_CLASS, decision=Decision.ALLOW),)
+    policy=ToolPolicyLayer(
+        rules=(ToolPolicyRule(authorization_class=LEDGER_CLASS, decision=Decision.ALLOW),)
     ),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The product's own kind: it reads through its tool and answers."""
 

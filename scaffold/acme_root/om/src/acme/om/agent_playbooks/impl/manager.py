@@ -17,10 +17,11 @@ from acme.om.agent_playbooks.types.agent_playbook import (
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_steps.rules import message_step
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.request import MAX_STANDING
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     Conflict,
@@ -35,7 +36,6 @@ from acme.om.levers.rules import checked
 from acme.om.levers.types.lever import LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.steps.rules import message_step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.windows.types.policy import CompactionPolicy
 
@@ -48,7 +48,7 @@ whatever the noun is called, so the id stays the one every release derived:
 an invocation run again sends its brief once."""
 
 
-class AgentPlaybooksOptions(Platform):
+class AgentPlaybooksOptions(OmBase):
     # The most agent playbooks one session's gates are read from.
     per_session: int = Field(default=50, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
@@ -143,28 +143,28 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         return found
 
     async def invoke(
-        self, ctx: TenantContext, session_id: UUID, name: str
+        self, ctx: TenantContext, agent_session_id: UUID, name: str
     ) -> AgentPlaybookInvocation:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized(
                 "an agent playbook is invoked by a principal, never by an agent's call"
             )
-        await self._agents.require_instructor(ctx, session_id)
-        return await self._invoked(ctx, session_id, await self.get_agent_playbook(ctx, name))
+        await self._agents.require_instructor(ctx, agent_session_id)
+        return await self._invoked(ctx, agent_session_id, await self.get_agent_playbook(ctx, name))
 
     async def invoke_version(
-        self, ctx: TenantContext, session_id: UUID, agent_playbook_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, agent_playbook_id: UUID
     ) -> AgentPlaybookInvocation:
         ctx.require(Permission.WRITE)
-        await self._agents.require_instructor(ctx, session_id)
+        await self._agents.require_instructor(ctx, agent_session_id)
         agent_playbook = await self._storage.read_agent_playbook(ctx.org_id, agent_playbook_id)
         if agent_playbook is None:
             raise NotFound(f"agent playbook {agent_playbook_id} not found")
-        return await self._invoked(ctx, session_id, agent_playbook)
+        return await self._invoked(ctx, agent_session_id, agent_playbook)
 
     async def _invoked(
-        self, ctx: TenantContext, session_id: UUID, agent_playbook: AgentPlaybook
+        self, ctx: TenantContext, agent_session_id: UUID, agent_playbook: AgentPlaybook
     ) -> AgentPlaybookInvocation:
         """The version brought into the session: its gates first, then its
         brief as the caller's message, which wakes the session."""
@@ -173,7 +173,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
             AgentPlaybookInvocation(
                 id=new_id(),
                 created_at=self._clock(),
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 agent_playbook_id=agent_playbook.id,
                 name=agent_playbook.name,
                 version=agent_playbook.version,
@@ -188,11 +188,11 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         brief = message_step(
             derived_id(invocation.id, invocation.created_at, BRIEF_SEED),
             self._clock(),
-            session_id,
+            agent_session_id,
             ctx,
             skill_md(agent_playbook),
         )
-        await self._sessions.receive(ctx, session_id, [brief])
+        await self._sessions.receive(ctx, agent_session_id, [brief])
         return invocation
 
     async def pin(
@@ -261,10 +261,12 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         if not in_person(ctx):
             raise NotAuthorized("an agent playbook is pinned by a person, never by an agent's call")
 
-    async def gates_of(self, ctx: TenantContext, session_id: UUID) -> tuple[AgentPlaybookGate, ...]:
+    async def gates_of(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> tuple[AgentPlaybookGate, ...]:
         ctx.require(Permission.READ)
         gates: list[AgentPlaybookGate] = []
-        at: UUID | None = session_id
+        at: UUID | None = agent_session_id
         while at is not None:
             # The row as stored: a session marked deleted still lends its
             # gates, and the walk goes on above it.

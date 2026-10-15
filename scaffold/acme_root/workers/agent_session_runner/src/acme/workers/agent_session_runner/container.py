@@ -14,16 +14,19 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agents.types.kind import AgentKind
-from acme.om.root import Managers, build_managers
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.platform_root import PlatformManagers, PlatformPorts
 from acme.om.product_kinds import PRODUCT_KINDS
+from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
-from acme.workers.agent_session_runner.platform.container import RunnerPlatform, build_runner_platform
+from acme.workers.agent_session_runner.platform.container import (
+    RunnerPlatform,
+    build_runner_platform,
+)
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 
 log = logging.getLogger(__name__)

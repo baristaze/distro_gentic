@@ -31,7 +31,10 @@ async def test_the_recent_read_opens_at_the_head_and_pages_back_to_the_floor(
         )
         theirs.add(made.json()["id"])
     # The trim takes the oldest across tenants: Ajax's first two.
-    assert await container.storage.get_event_storage().trim(utcnow() + timedelta(seconds=1), 2) == 2
+    assert (
+        await container.storage.get_change_event_storage().trim(utcnow() + timedelta(seconds=1), 2)
+        == 2
+    )
 
     async def page(headers: dict[str, str], **params: int) -> list[dict[str, object]]:
         read = await client.get("/v1/events/recent", headers=headers, params={"limit": 2, **params})

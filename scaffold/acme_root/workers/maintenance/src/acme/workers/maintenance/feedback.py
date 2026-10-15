@@ -7,7 +7,7 @@ from uuid import UUID
 
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.types.agent_automation import Firing
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import RequestContext, TenantContext
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.rules import described
@@ -15,7 +15,7 @@ from acme.om.intake.types.event import FeedbackEvent
 from acme.workers.maintenance.deliveries import DeliveryProviderInterface
 
 
-class FeedbackDelivery(Platform):
+class FeedbackDelivery(OmBase):
     """An event from an integration, as its ingress queues it once its
     signature is checked: the org the integration's installation belongs
     to, and the event in the platform's one shape."""

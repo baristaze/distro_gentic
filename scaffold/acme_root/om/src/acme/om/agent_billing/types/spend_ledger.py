@@ -17,9 +17,9 @@ from pydantic import Field
 
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_billing.types.unit_plan import MAX_NAME, UnitPlanRef
-from acme.om.base import Created, Identifiable, Platform
-from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import Hold, Settlement
+from acme.om.base import Created, Identifiable, OmBase
+from acme.om.spend_budgets.types.spend_breach import Refusal
+from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendSettlement
 
 
 class Bucket(StrEnum):
@@ -38,7 +38,7 @@ MONEY_BUCKETS = frozenset({Bucket.CREDITS, Bucket.LINE})
 """The buckets counted in millionths; the others count units."""
 
 
-class Funding(Platform):
+class Funding(OmBase):
     """The spend account as the gate read it for one hold."""
 
     mode: FundingMode
@@ -52,7 +52,7 @@ class Funding(Platform):
     period_end: datetime
 
 
-class PricedAt(Platform):
+class PricedAt(OmBase):
     """The row of the price table a model call's cap was read from."""
 
     version: str = Field(min_length=1, max_length=MAX_NAME)
@@ -60,7 +60,7 @@ class PricedAt(Platform):
     model: str = Field(min_length=1, max_length=MAX_NAME)
 
 
-class Draw(Platform):
+class Draw(OmBase):
     """What a hold reserves, or a settlement takes, of each bucket: units of
     the included and granted ones, millionths of the money ones."""
 
@@ -81,11 +81,11 @@ class Draw(Platform):
 NO_DRAW = Draw()
 
 
-class FundedHold(Platform):
+class FundedHold(OmBase):
     """The engine's hold, and what agent billing reads beside it. It is the hold's
     entry in the ledger, under the hold's own id."""
 
-    hold: Hold
+    hold: SpendHold
     funding: Funding
     units: int | None = Field(ge=0)  # the worst case in units; None when its cost is unknown
     priced: PricedAt | None = None  # None for a job, which no price table prices
@@ -111,15 +111,15 @@ class FundedHold(Platform):
         return self.hold.created_at
 
     @property
-    def session_id(self) -> UUID | None:
-        return self.hold.session_id
+    def agent_session_id(self) -> UUID | None:
+        return self.hold.agent_session_id
 
 
 class Charge(Identifiable, Created):
     """What one call is billed: its units, what each bucket paid, and the
     sum the money buckets paid. Written with its settlement."""
 
-    hold_id: UUID
+    spend_hold_id: UUID
     price_version: str | None = Field(default=None, max_length=MAX_NAME)
     units: int = Field(ge=0)
     draw: Draw
@@ -147,7 +147,7 @@ class WindowRaise(Identifiable, Created):
     """A one-time raise of one budget for the window open when it was made,
     and for no other."""
 
-    budget_id: UUID
+    spend_budget_id: UUID
     window_start: datetime
     cost_micros: int = Field(default=0, ge=0)
     tokens: int = Field(default=0, ge=0)
@@ -157,16 +157,16 @@ class WindowRaise(Identifiable, Created):
 class Approval(Identifiable, Created):
     """A person's yes to one call of a session past its norm, up to a cost."""
 
-    session_id: UUID
+    agent_session_id: UUID
     up_to_micros: int = Field(gt=0)
     approved_by: UUID
 
 
-Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
+Entry = FundedHold | SpendSettlement | Charge | Credit | Grant | WindowRaise | Approval
 """One entry of the ledger, of whichever kind."""
 
 
-class EntryPage(Platform):
+class EntryPage(OmBase):
     """One read of a tenant's ledger, the newest first. `has_more` says the
     read was cut at its limit: older entries match it too. The manager asks
     storage for one entry more than the limit and keeps it out, so it is a
@@ -186,7 +186,7 @@ class EntryKind(StrEnum):
     APPROVAL = "approval"
 
 
-class Count(Platform):
+class Count(OmBase):
     """One counter in one period: what open holds reserve, what was spent,
     and what was added to it (credits, grants, a raise). A ledger's counts
     can be rebuilt from its entries."""
@@ -198,7 +198,7 @@ class Count(Platform):
     added: int = Field(default=0, ge=0)
 
 
-class Shortfall(Platform):
+class Shortfall(OmBase):
     """Units of a call's worst case no bucket covers. `units` is None when
     the call's cost is unknown, so no bucket can be drawn for it.
     `resets_at` is when a fresh billing period covers it, or None when only
@@ -212,7 +212,7 @@ class Shortfall(Platform):
     their settlements can free the room."""
 
 
-class Turned(Platform):
+class Turned(OmBase):
     """What the ledger answers a hold it does not open: the budget lines it
     breaches, the units no bucket covers, or both. Nothing is written."""
 

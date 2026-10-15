@@ -7,7 +7,6 @@ stop only where that rule says."""
 import math
 
 import pytest
-from contracts.evidence_storage import make_record
 
 from acme.om.base import new_id
 from acme.om.evidence.rates import (
@@ -22,6 +21,8 @@ from acme.om.evidence.rates import (
 )
 from acme.om.evidence.types.rate import Bound, RateClaim, RateRule
 from acme.om.evidence.types.record import RunOutcome
+
+from contracts.evidence_storage import make_record
 
 ALTERNATIVE = 0.001
 """The rate a sequential bound in these cases is built to tell apart; the

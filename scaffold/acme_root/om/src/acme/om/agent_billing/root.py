@@ -1,7 +1,7 @@
 """The platform's money behind the engine's gate: the gate a root hands the
 engine's root as its budget gate, and the refusal of a root that did not.
 
-    managers = build_platform_managers(storage, infra, ..., budget_gate=build_money_gate(storage))
+    managers = build_platform_managers(storage, infra, ..., spend_budget_gate=build_money_gate(storage))
     refuse_open_money(environment, managers)
 
 Handed a money gate, the engine's root puts agent billing's call gate in front of
@@ -49,7 +49,7 @@ def build_money_gate(
     alerting reads; the unit plans and the unit scale are the ones the platform
     publishes."""
     return MoneyGateImpl(
-        storage.get_budget_storage(),
+        storage.get_spend_budget_storage(),
         storage.get_spend_account_storage(),
         storage.get_spend_ledger_storage(),
         pager or OperatorPagerLogImpl(),
@@ -98,7 +98,7 @@ def refuse_open_money(environment: str, managers: PlatformManagers) -> None:
     platform's key."""
     if environment == LOCAL:
         return
-    gate = managers.budget_gate
+    gate = managers.spend_budget_gate
     if not isinstance(gate, MoneyGateInterface):
         raise UnsafeConfiguration(
             f"{type(gate).__name__} is not the money gate, and is refused "

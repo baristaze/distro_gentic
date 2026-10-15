@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-from contracts.ports import open_ports
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_billing.gate import MoneyGateInterface
@@ -14,6 +13,8 @@ from acme.om.exceptions import UnsafeConfiguration
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.settings import MaintenanceSettings
+
+from contracts.ports import open_ports
 
 STAGING = MaintenanceSettings.model_validate(
     {"_env_file": None, "environment": "staging", "worker_id": "maintenance-test"}
@@ -23,9 +24,9 @@ STAGING = MaintenanceSettings.model_validate(
 def test_the_worker_sweeps_the_money_gates_holds_on_its_ledger(tmp_path: Path) -> None:
     storage = StorageMemoryImpl()
     container = WorkerContainer.for_tests(storage, InfraLocalImpl(tmp_path), STAGING)
-    assert isinstance(container.managers.budget_gate, MoneyGateInterface)
+    assert isinstance(container.managers.spend_budget_gate, MoneyGateInterface)
     holds = container.platform.holds
-    assert holds._gate is container.managers.budget_gate  # pyright: ignore[reportPrivateUsage]
+    assert holds._gate is container.managers.spend_budget_gate  # pyright: ignore[reportPrivateUsage]
     assert holds._ledger is storage.get_spend_ledger_storage()  # pyright: ignore[reportPrivateUsage]
 
 

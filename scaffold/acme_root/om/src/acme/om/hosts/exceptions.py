@@ -1,9 +1,9 @@
 """The refusals of the hosts swimlane."""
 
-from acme.om.exceptions import NotAuthorized, PlatformException
+from acme.om.exceptions import NotAuthorized, OmException
 
 
-class HostsException(PlatformException): ...
+class HostsException(OmException): ...
 
 
 class VersionBelowFloor(HostsException):

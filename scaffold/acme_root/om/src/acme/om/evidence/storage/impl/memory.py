@@ -85,52 +85,53 @@ class EvidenceStorageMemoryImpl(MemoryStorageBase, EvidenceStorageInterface):
             return self._insert(self._inferences, org_id, inference)
 
     async def read_records(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[ExecutionRecord]:
         return [
             record
             for record in self._rows(self._records, org_id)
-            if record.session_id == session_id and (after is None or record.id > after)
+            if record.agent_session_id == agent_session_id and (after is None or record.id > after)
         ][:limit]
 
     async def read_cited(
-        self, org_id: UUID, session_id: UUID, ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         wanted = set(ids)
         return [
             record
             for record in self._rows(self._records, org_id)
-            if record.session_id == session_id
-            and {record.id, record.step_id, record.validation_id} & wanted
+            if record.agent_session_id == agent_session_id
+            and {record.id, record.agent_step_id, record.validation_id} & wanted
         ][:limit]
 
     async def read_validations(
-        self, org_id: UUID, session_id: UUID, version: str | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, version: str | None, limit: int
     ) -> list[Validation]:
         return [
             validation
             for validation in self._rows(self._validations, org_id)
-            if validation.session_id == session_id
+            if validation.agent_session_id == agent_session_id
             and (version is None or validation.version == version)
         ][:limit]
 
     async def read_validation_records(
-        self, org_id: UUID, session_id: UUID, validation_ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, validation_ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         wanted = set(validation_ids)
         return [
             record
             for record in self._rows(self._records, org_id)
-            if record.session_id == session_id and record.validation_id in wanted
+            if record.agent_session_id == agent_session_id and record.validation_id in wanted
         ][:limit]
 
     async def read_inferences(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[Inference]:
         return [
             inference
             for inference in self._rows(self._inferences, org_id)
-            if inference.session_id == session_id and (after is None or inference.id > after)
+            if inference.agent_session_id == agent_session_id
+            and (after is None or inference.id > after)
         ][:limit]
 
     async def read_inference(self, org_id: UUID, inference_id: UUID) -> Inference | None:
@@ -138,15 +139,26 @@ class EvidenceStorageMemoryImpl(MemoryStorageBase, EvidenceStorageInterface):
 
     # The purges.
 
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         async with self._lock:
             return (
-                self._drop(self._records, org_id, lambda row: row.session_id == session_id, limit)
-                + self._drop(
-                    self._validations, org_id, lambda row: row.session_id == session_id, limit
+                self._drop(
+                    self._records,
+                    org_id,
+                    lambda row: row.agent_session_id == agent_session_id,
+                    limit,
                 )
                 + self._drop(
-                    self._inferences, org_id, lambda row: row.session_id == session_id, limit
+                    self._validations,
+                    org_id,
+                    lambda row: row.agent_session_id == agent_session_id,
+                    limit,
+                )
+                + self._drop(
+                    self._inferences,
+                    org_id,
+                    lambda row: row.agent_session_id == agent_session_id,
+                    limit,
                 )
             )
 

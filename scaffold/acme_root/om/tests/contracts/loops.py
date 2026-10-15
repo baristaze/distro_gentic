@@ -21,12 +21,8 @@ from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
-from acme.om.agent_root import AgentRootOptions
-from acme.integrations.model_providers.calls import ModelReply
-from acme.integrations.model_providers.registry import ModelProvidersOverImpl
-from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
-from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
@@ -36,9 +32,9 @@ from acme.om.agent_steps.types.header import (
     LoopOutcome,
     ParkReason,
 )
+from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.hooks import LoopHooksInterface
 from acme.om.agents.impl.hooks import LoopHooksNullImpl
-from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits

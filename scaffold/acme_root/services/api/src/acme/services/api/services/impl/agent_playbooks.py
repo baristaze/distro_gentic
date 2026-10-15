@@ -34,7 +34,7 @@ class AgentPlaybooksServiceImpl(AgentPlaybooksServiceInterface):
         )
 
     async def invoke(self, ctx: TenantContext, name: str, body: InvokeRequest) -> InvocationView:
-        invocation = await self._agent_playbooks.invoke(ctx, body.session_id, name)
+        invocation = await self._agent_playbooks.invoke(ctx, body.agent_session_id, name)
         return InvocationView.model_validate(invocation)
 
     async def pin(self, ctx: TenantContext, body: PinRequest) -> PinView:

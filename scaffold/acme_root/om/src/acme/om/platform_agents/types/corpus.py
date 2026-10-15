@@ -4,10 +4,10 @@ naming the document it came from so an answer can cite it."""
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class Listing(Platform):
+class Listing(OmBase):
     """One line of the knowledge map: a document's title and its path from
     the map's folder."""
 
@@ -15,13 +15,13 @@ class Listing(Platform):
     path: str = Field(min_length=1)
 
 
-class Document(Platform):
+class Document(OmBase):
     title: str = Field(min_length=1)
     path: str = Field(min_length=1)
     text: str
 
 
-class Corpus(Platform):
+class Corpus(OmBase):
     """What the assistant may quote, and nothing else: the documents one
     audience of the knowledge map is served."""
 
@@ -29,7 +29,7 @@ class Corpus(Platform):
     documents: tuple[Document, ...] = ()
 
 
-class Passage(Platform):
+class Passage(OmBase):
     """One section of a document: its citation (the document's path and the
     heading the section sits under) and its text."""
 

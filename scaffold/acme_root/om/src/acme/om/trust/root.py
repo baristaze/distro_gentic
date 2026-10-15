@@ -19,11 +19,11 @@ from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.storage.impl.memory import AgentStepStorageMemoryImpl
 from acme.om.base import utcnow
 from acme.om.platform_root import PlatformManagers, ProductKinds
-from acme.om.privacy.impl.keys import SessionKeysImpl
+from acme.om.privacy.impl.keys import AgentSessionKeysImpl
 from acme.om.root import private_history
-from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.trust.impl.keys import ProviderClientsCachedImpl
@@ -60,13 +60,13 @@ def build_trust_operator(
     API serves an operator, and what the grant job writes grants with. An
     operator's shape is read from the history at rest, never opened; content
     is opened as the engine opens it, by each session's key."""
-    keys = SessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
+    keys = AgentSessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
     return TrustOperatorManagerImpl(
         storage.get_trust_storage(),
         storage.get_agent_session_storage(),
-        storage.get_step_storage(),
-        private_history(storage, keys, StepStorageMemoryImpl()),
-        storage.get_event_storage(),
+        storage.get_agent_step_storage(),
+        private_history(storage, keys, AgentStepStorageMemoryImpl()),
+        storage.get_change_event_storage(),
         options or TrustOptions(),
         clock,
     )

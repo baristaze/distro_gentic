@@ -14,12 +14,12 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 MAX_NAME = 200
 
 
-class SpendUnitScale(Platform):
+class SpendUnitScale(OmBase):
     """The published weight of the unit: the reference cost one unit stands
     for, in millionths of the reference currency."""
 
@@ -27,12 +27,12 @@ class SpendUnitScale(Platform):
     micros_per_unit: int = Field(ge=1)
 
 
-class UnitPlanRef(Platform):
+class UnitPlanRef(OmBase):
     id: str = Field(min_length=1, max_length=MAX_NAME)
     version: int = Field(ge=1)
 
 
-class UnitPlan(Platform):
+class UnitPlan(OmBase):
     id: str = Field(min_length=1, max_length=MAX_NAME)
     version: int = Field(ge=1)
     included_units: int = Field(ge=0)  # each billing period
@@ -43,7 +43,7 @@ class UnitPlan(Platform):
         return UnitPlanRef(id=self.id, version=self.version)
 
 
-class UnitPlanCatalog(Platform):
+class UnitPlanCatalog(OmBase):
     """Every version of every unit plan the platform publishes. A version is
     never changed in place; the latest of a unit plan is what a new spend account
     takes."""

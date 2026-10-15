@@ -19,7 +19,7 @@ const agentAutomation = (org: "a" | "b", name: string): AgentAutomationView => (
   id: `au${org}`,
   name,
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_agent_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -88,7 +88,7 @@ describe("the agent automations list", () => {
     expect(made!.body).toMatchObject({
       name: "Nightly tidy",
       trigger: { kind: "schedule", every: "PT86400S" },
-      action: { kind: "start_session", agent_kind: "assistant", title: "Tidy the docs", brief: "Tidy the docs." },
+      action: { kind: "start_agent_session", agent_kind: "assistant", title: "Tidy the docs", brief: "Tidy the docs." },
       limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000 },
     });
   });

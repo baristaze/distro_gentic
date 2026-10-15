@@ -8,15 +8,15 @@ from uuid import UUID
 from pydantic import Field, StringConstraints
 
 from acme.integrations.model_providers.types import ProviderName
-from acme.om.base import Created, Identifiable, Platform
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.base import Created, Identifiable, OmBase
+from acme.om.language_models.types.fill import Fill, ModelRole
 
 MAX_MODEL = 200
 
 BenchmarkName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_.-]{0,99}$")]
 
 
-class ModelRef(Platform):
+class ModelRef(OmBase):
     """A provider's model, by name, as a fill names it."""
 
     provider: ProviderName
@@ -31,7 +31,7 @@ class ModelRef(Platform):
         return f"{self.provider.value}/{self.model}"
 
 
-class BenchmarkRun(Platform):
+class BenchmarkRun(OmBase):
     """What a person records of one benchmark run: the model, the model role
     it was run for, the benchmark, whether it passed, and where its evidence
     is (`run`, a reference such as the run's id or its report's address)."""

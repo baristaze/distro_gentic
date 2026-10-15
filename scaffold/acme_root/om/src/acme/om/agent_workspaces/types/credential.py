@@ -10,10 +10,10 @@ from typing import ClassVar
 
 from pydantic import Field, SecretStr
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 
 
-class FetchCredential(Platform):
+class FetchCredential(OmBase):
     """A read-only credential of the repository an agent project binds, as source
     control takes it over HTTPS: a user name and a password or token."""
 
@@ -31,7 +31,7 @@ class RepositoryCredential(Identifiable, Trackable):
     version: int = Field(default=1, ge=1)
 
 
-class PushToken(Platform):
+class PushToken(OmBase):
     """A token that writes the session's own branch, its snapshots, and its
     pull request on the repository its agent project binds, until it expires or
     the loop's workspace goes, whichever is first."""

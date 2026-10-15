@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.base import Created, Identifiable, OmBase
 
 MACHINE_NAME = r"^[a-z][a-z0-9-]{0,62}$"
 """How the machines' backend names a machine: short, since a backend may keep
@@ -36,7 +36,7 @@ class PoolVm(Identifiable, Created):
     name: str = Field(pattern=MACHINE_NAME)
     egress_open: bool
     tenant_id: UUID | None = None
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
     pool_id: UUID | None = None
     bound_by: UUID | None = None
     host_id: UUID | None = None
@@ -49,10 +49,10 @@ class PoolVm(Identifiable, Created):
     @property
     def warm(self) -> bool:
         """Started ahead, and claimed by no session yet."""
-        return self.session_id is None
+        return self.agent_session_id is None
 
 
-class MachineSnapshot(Platform):
+class MachineSnapshot(OmBase):
     """A snapshot of a session's machine, kept by the machines' backend in its
     own store: the name it keeps it under, and the digest its disk is held
     to. Never the disk."""

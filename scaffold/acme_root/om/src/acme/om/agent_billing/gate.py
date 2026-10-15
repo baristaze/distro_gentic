@@ -2,7 +2,7 @@
 model call and every job that spends, which holds the call's worst case on
 its limits and on the buckets that pay for it, in one ledger.
 
-It is the engine's `BudgetGateInterface`, with what a model call adds: the
+It is the engine's `SpendBudgetGateInterface`, with what a model call adds: the
 row of the price table its cap was read from, which its bill is read from
 too."""
 
@@ -11,18 +11,18 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
-from acme.om.budgets.gate import BudgetGateInterface
-from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import HoldRequest
 from acme.om.context import TenantContext
+from acme.om.spend_budgets.gate import SpendBudgetGateInterface
+from acme.om.spend_budgets.types.spend_breach import Refusal
+from acme.om.spend_budgets.types.spend_hold import SpendHoldRequest
 
 
-class MoneyGateInterface(BudgetGateInterface):
+class MoneyGateInterface(SpendBudgetGateInterface):
     @abstractmethod
     async def authorize_priced(
         self,
         ctx: TenantContext,
-        request: HoldRequest,
+        request: SpendHoldRequest,
         priced: PricedAt | None,
         *,
         credential: str | None = None,
@@ -43,6 +43,6 @@ class MoneyGateInterface(BudgetGateInterface):
         ...
 
     @abstractmethod
-    async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
+    async def read_hold(self, ctx: TenantContext, spend_hold_id: UUID) -> FundedHold:
         """A hold of the tenant; one another tenant holds is `NotFound`."""
         ...

@@ -22,7 +22,7 @@ from acme.om.benchmarks.types.benchmark import (
 )
 from acme.om.context import AppContext, AppType, CredentialKind, OperatorContext, OperatorRole
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, Break, Link
-from acme.om.models.types.fill import MAIN, Fill, RoleFill
+from acme.om.language_models.types.fill import MAIN, Fill, RoleFill
 from acme.om.tenancy.rules import operator_permissions_of
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset()
@@ -83,7 +83,7 @@ def make_trials(
         trials.append(
             Trial(
                 contender=contender,
-                session_id=session,
+                agent_session_id=session,
                 executor=executor,
                 started_at=start + timedelta(minutes=at),
                 verdict=judged(session, broken[contender].pop(0)),
@@ -95,13 +95,13 @@ def make_trials(
     )
 
 
-def judged(session_id: UUID, broken: int) -> AcceptanceVerdict:
+def judged(agent_session_id: UUID, broken: int) -> AcceptanceVerdict:
     """A verdict on a session's chain with its first `broken` links broken."""
     return AcceptanceVerdict(
         id=new_id(),
         created_at=utcnow(),
         scenario="orders-vanish",
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         head="c0ffee",
         breaks=tuple(Break(link=link, reason="it is missing") for link in list(Link)[:broken]),
     )

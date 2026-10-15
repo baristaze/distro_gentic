@@ -30,7 +30,7 @@ from acme.services.api.services.agent_sessions import AgentSessionsServiceInterf
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
-from acme.services.api.services.events import EventsServiceInterface
+from acme.services.api.services.events import ChangeEventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.exec_relay import ExecRelayServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface
@@ -103,7 +103,7 @@ class PlatformServicesImpl(PlatformServicesInterface):
         # The engine's services, as its root built them.
         self._tenancy = engine.get_tenancy_service()
         self._admin = engine.get_admin_service()
-        self._events = engine.get_events_service()
+        self._change_events = engine.get_change_events_service()
         self._media = engine.get_media_service()
         self._flags = engine.get_flags_service()
         self._realtime = engine.get_realtime_service()
@@ -139,8 +139,8 @@ class PlatformServicesImpl(PlatformServicesInterface):
     def get_admin_service(self) -> AdminServiceInterface:
         return self._admin
 
-    def get_events_service(self) -> EventsServiceInterface:
-        return self._events
+    def get_change_events_service(self) -> ChangeEventsServiceInterface:
+        return self._change_events
 
     def get_media_service(self) -> MediaServiceInterface:
         return self._media

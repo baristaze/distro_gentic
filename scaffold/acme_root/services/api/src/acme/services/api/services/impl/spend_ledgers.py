@@ -11,8 +11,8 @@ from acme.om.agent_billing.types.spend_ledger import (
     Grant,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Settlement
 from acme.om.context import OperatorContext
+from acme.om.spend_budgets.types.spend_hold import SpendSettlement
 from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
 from acme.services.api.types.spend_ledgers import (
     SpendLedgerEntryView,
@@ -29,16 +29,16 @@ def entry_view(entry: Entry) -> SpendLedgerEntryView:
                 kind=EntryKind.HOLD,
                 id=entry.id,
                 created_at=entry.created_at,
-                session_id=entry.session_id,
+                agent_session_id=entry.agent_session_id,
                 units=entry.units,
                 cost_micros=entry.hold.exposure.cost_micros,
             )
-        case Settlement():
+        case SpendSettlement():
             return SpendLedgerEntryView(
                 kind=EntryKind.SETTLEMENT,
                 id=entry.id,
                 created_at=entry.created_at,
-                hold_id=entry.hold_id,
+                spend_hold_id=entry.spend_hold_id,
                 cost_micros=entry.spent.cost_micros,
                 tokens=entry.spent.tokens,
             )
@@ -47,7 +47,7 @@ def entry_view(entry: Entry) -> SpendLedgerEntryView:
                 kind=EntryKind.CHARGE,
                 id=entry.id,
                 created_at=entry.created_at,
-                hold_id=entry.hold_id,
+                spend_hold_id=entry.spend_hold_id,
                 units=entry.units,
                 amount_micros=entry.amount_micros,
             )
@@ -73,7 +73,7 @@ def entry_view(entry: Entry) -> SpendLedgerEntryView:
                 kind=EntryKind.RAISE,
                 id=entry.id,
                 created_at=entry.created_at,
-                budget_id=entry.budget_id,
+                spend_budget_id=entry.spend_budget_id,
                 cost_micros=entry.cost_micros,
                 tokens=entry.tokens,
                 by=entry.raised_by,
@@ -83,7 +83,7 @@ def entry_view(entry: Entry) -> SpendLedgerEntryView:
                 kind=EntryKind.APPROVAL,
                 id=entry.id,
                 created_at=entry.created_at,
-                session_id=entry.session_id,
+                agent_session_id=entry.agent_session_id,
                 amount_micros=entry.up_to_micros,
                 by=entry.approved_by,
             )
@@ -99,12 +99,17 @@ class SpendLedgersServiceImpl(SpendLedgersServiceInterface):
         org_id: UUID,
         *,
         kind: EntryKind | None,
-        hold_id: UUID | None,
-        session_id: UUID | None,
+        spend_hold_id: UUID | None,
+        agent_session_id: UUID | None,
         limit: int,
     ) -> SpendLedgerPageView:
         page = await self._agent_billing.get_entries(
-            admin, org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=limit
+            admin,
+            org_id,
+            kind=kind,
+            spend_hold_id=spend_hold_id,
+            agent_session_id=agent_session_id,
+            limit=limit,
         )
         return SpendLedgerPageView(
             items=[entry_view(entry) for entry in page.items], has_more=page.has_more

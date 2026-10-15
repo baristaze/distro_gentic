@@ -11,6 +11,8 @@ from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import OperatorContext, OperatorPermission, Permission, TenantContext
 from acme.om.exceptions import NotFound, PreconditionFailed, ValidationFailed
+from acme.om.language_models.prices import ModelPricesInterface
+from acme.om.language_models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.matrix import rules
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.manager import MatrixManagerInterface, MatrixOperatorManagerInterface
@@ -18,8 +20,6 @@ from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageIn
 from acme.om.matrix.types.matrix import MatrixRow, MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, BenchmarkRun, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOptions, FillOverride, MatrixPin
-from acme.om.models.prices import ModelPricesInterface
-from acme.om.models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.trust.storage import TrustStorageInterface
 
 log = logging.getLogger(__name__)
@@ -174,11 +174,11 @@ class MatrixManagerImpl(MatrixManagerInterface):
         self._options = options
         self._clock = clock
 
-    async def get_pin(self, ctx: TenantContext, session_id: UUID) -> MatrixPin:
+    async def get_pin(self, ctx: TenantContext, agent_session_id: UUID) -> MatrixPin:
         ctx.require(Permission.READ)
-        pin = await self._tenants.read_pin(ctx.org_id, session_id)
+        pin = await self._tenants.read_pin(ctx.org_id, agent_session_id)
         if pin is None:
-            raise NotFound(f"session {session_id} holds no matrix version")
+            raise NotFound(f"session {agent_session_id} holds no matrix version")
         return pin
 
     async def get_options(self, ctx: TenantContext) -> tuple[FillOptions, ...]:

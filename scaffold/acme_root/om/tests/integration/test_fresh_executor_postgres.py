@@ -19,20 +19,15 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import in_agent_project
-from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
-from contracts.evidence_storage import make_policy
-from contracts.loops import DELIVERY
-from contracts.tools import stand_ins
 
+from acme.infra.agent_workspaces import AgentWorkspaceBase, EgressMode, IsolationMode, AgentWorkspace
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE, container_name
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.workspaces import EgressMode, IsolationMode, Workspace, WorkspaceBase
-from acme.infra.workspaces.container import DEFAULT_IMAGE, container_name
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.request import Start
@@ -51,6 +46,12 @@ from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_p
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
+from contracts.evidence_storage import make_policy
+from contracts.loops import DELIVERY
+from contracts.tools import stand_ins
 
 
 def docker_runs() -> bool:
@@ -98,7 +99,7 @@ TOTAL = 4
 """
 """A cart whose code removes the base's fixture from its folder, which
 stays writable, while the check runs, and writes its own total there."""
-WORKSPACE_BASE = WorkspaceBase(
+AGENT_WORKSPACE_BASE = AgentWorkspaceBase(
     image=DEFAULT_IMAGE,
     setup=(
         "python3 -c 'import site; "
@@ -120,7 +121,7 @@ class ReadBack(TransportContainerImpl):
         self.read: list[bytes] = []
 
     async def read_file(
-        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+        self, workspace: AgentWorkspace, path: str, max_bytes: int, offset: int = 0
     ) -> bytes:
         data = await super().read_file(workspace, path, max_bytes, offset)
         self.read.append(data)
@@ -140,8 +141,8 @@ class OnDocker(InfraConfiguredImpl):
                     "environment": "local",
                     "buckets_backend": "local",
                     "buckets_root": root / "buckets",
-                    "workspaces_root": workspaces,
-                    "workspace_backend": "container",
+                    "agent_workspaces_root": workspaces,
+                    "agent_workspace_backend": "container",
                 }
             )
         )
@@ -197,7 +198,7 @@ class Delivered:
         owner, _ = await self.managers.tenancy.bootstrap(
             RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
         )
-        session = await self.managers.agents.start_session(
+        session = await self.managers.agents.start_agent_session(
             owner, Start(id=new_id(), kind="delivery", title="Fix the cart's total")
         )
         self.agent_project_id = await in_agent_project(
@@ -226,10 +227,10 @@ class Delivered:
 
 
 async def validated(
-    evidence: EvidenceManagerInterface, ctx: TenantContext, session_id: UUID
+    evidence: EvidenceManagerInterface, ctx: TenantContext, agent_session_id: UUID
 ) -> list[ExecutionRecord]:
     """The session's runs at the head: every run but its baseline's."""
-    runs = (await evidence.get_runs(ctx, session_id, None, 10)).items
+    runs = (await evidence.get_runs(ctx, agent_session_id, None, 10)).items
     return [run for run in runs if run.purpose is RunPurpose.VALIDATION]
 
 
@@ -256,17 +257,17 @@ async def test_a_deliverys_checks_run_in_a_fresh_container_and_the_gate_confirms
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     delivered = Delivered(storage, tmp_path)
-    owner, session_id, head = await delivered.session({"src/cart.py": "TOTAL = 3\n"})
+    owner, agent_session_id, head = await delivered.session({"src/cart.py": "TOTAL = 3\n"})
     evidence = delivered.managers.evidence
 
-    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
-    (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    await evidence.validate(owner, agent_session_id, RunPurpose.BASELINE)
+    (validation,) = await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
 
     stream = delivered.infra.transport.read[-1]
     assert validation.results_sha256 == digest(stream.rstrip(b"\n")), (
         "the validation hashes to the results stream the run wrote"
     )
-    (record,) = await validated(evidence, owner, session_id)
+    (record,) = await validated(evidence, owner, agent_session_id)
     assert validation.records == (record.id,)
     assert (record.version, record.outcome, record.purpose) == (
         head,
@@ -278,7 +279,7 @@ async def test_a_deliverys_checks_run_in_a_fresh_container_and_the_gate_confirms
     assert record.executor == validation.executor and gone(instance)
 
     verdict = await delivered.managers.agents.judge_result(
-        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+        owner, agent_session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert (verdict.accepted, verdict.verified) == (True, True), verdict.reason
 
@@ -291,20 +292,20 @@ async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     delivered = Delivered(storage, tmp_path)
-    owner, session_id, head = await delivered.session(
+    owner, agent_session_id, head = await delivered.session(
         {"src/cart.py": "TOTAL = 4\n", ".gitattributes": "checks/expected.txt export-ignore\n"}
     )
     evidence = delivered.managers.evidence
 
-    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
-    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    await evidence.validate(owner, agent_session_id, RunPurpose.BASELINE)
+    await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
 
-    (record,) = await validated(evidence, owner, session_id)
+    (record,) = await validated(evidence, owner, agent_session_id)
     assert (record.version, record.outcome) == (head, RunOutcome.FAILED), (
         "the base's runner read the base's fixture against the head's cart"
     )
     verdict = await delivered.managers.agents.judge_result(
-        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+        owner, agent_session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert not verdict.accepted, "the gate refuses a success the checks never showed"
     assert "did not pass" in (verdict.reason or ""), verdict.reason
@@ -318,12 +319,12 @@ async def test_a_head_whose_code_changes_the_bases_fixture_while_it_runs_has_no_
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     delivered = Delivered(storage, tmp_path)
-    owner, session_id, head = await delivered.session({"src/cart.py": REWRITES})
+    owner, agent_session_id, head = await delivered.session({"src/cart.py": REWRITES})
     evidence = delivered.managers.evidence
 
-    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
 
-    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = (await evidence.get_runs(owner, agent_session_id, None, 10)).items
     assert (record.version, record.outcome, record.isolation) == (
         head,
         RunOutcome.ERRORED,
@@ -345,12 +346,12 @@ async def test_a_new_file_in_a_protected_folder_passes_and_a_replaced_one_has_no
     storage: StoragePostgresImpl, tmp_path: Path, cart: str, outcome: RunOutcome
 ) -> None:
     delivered = Delivered(storage, tmp_path)
-    owner, session_id, head = await delivered.session({"src/cart.py": cart})
+    owner, agent_session_id, head = await delivered.session({"src/cart.py": cart})
     evidence = delivered.managers.evidence
 
-    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
 
-    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = (await evidence.get_runs(owner, agent_session_id, None, 10)).items
     assert (record.version, record.outcome, record.isolation) == (head, outcome, "container")
     assert gone(UUID(record.executor.removeprefix("executor:")))
 
@@ -397,18 +398,18 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
     assert gone(UUID(record.executor.removeprefix("executor:")))
 
 
-async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID) -> None:
-    """The session's workspace pinned to `WORKSPACE_BASE`, in a container with
+async def pin(storage: StoragePostgresImpl, ctx: TenantContext, agent_session_id: UUID) -> None:
+    """The session's workspace pinned to `AGENT_WORKSPACE_BASE`, in a container with
     no egress, as its kind would pin it to its agent project's workspace base."""
     rows = storage.get_agent_workspace_storage()
-    kept = await rows.read_workspace(ctx.org_id, session_id)
+    kept = await rows.read_workspace(ctx.org_id, agent_session_id)
     if kept is not None:
-        moved = kept.model_copy(update={"base": WORKSPACE_BASE, "version": kept.version + 1})
+        moved = kept.model_copy(update={"base": AGENT_WORKSPACE_BASE, "version": kept.version + 1})
         await rows.write_workspace(ctx.org_id, moved, kept.version)
         return
     now = utcnow()
     pinned = AgentSessionWorkspace(
-        id=session_id,
+        id=agent_session_id,
         created_at=now,
         updated_at=now,
         created_by=ctx.user_id,
@@ -416,8 +417,8 @@ async def pin(storage: StoragePostgresImpl, ctx: TenantContext, session_id: UUID
         level=IsolationMode.CONTAINER,
         egress=EgressMode.NONE,
         egress_source="its kind's",
-        base=WORKSPACE_BASE,
-        branch=f"sessions/{session_id}",
+        base=AGENT_WORKSPACE_BASE,
+        branch=f"sessions/{agent_session_id}",
     )
     assert await rows.create_workspace(ctx.org_id, pinned)
 
@@ -441,21 +442,21 @@ async def test_a_sessions_checks_run_on_the_workspace_base_it_pinned(
 
     delivered = Delivered(storage, tmp_path / "pinned")
     evidence = delivered.managers.evidence
-    owner, session_id, head = await delivered.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
-    await pin(storage, owner, session_id)
-    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
-    (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    owner, agent_session_id, head = await delivered.session({"src/cart.py": NEEDS_WORKSPACE_BASE})
+    await pin(storage, owner, agent_session_id)
+    await evidence.validate(owner, agent_session_id, RunPurpose.BASELINE)
+    (validation,) = await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
 
-    (record,) = await validated(evidence, owner, session_id)
+    (record,) = await validated(evidence, owner, agent_session_id)
     assert (record.version, record.outcome, record.isolation) == (
         head,
         RunOutcome.PASSED,
         "container",
     ), "the check imports what the workspace base's setup installed"
-    assert record.run_image.image == WORKSPACE_BASE.image
+    assert record.run_image.image == AGENT_WORKSPACE_BASE.image
     instance = UUID(validation.executor.removeprefix("executor:"))
     assert gone(instance), "the instance goes after its run"
     verdict = await delivered.managers.agents.judge_result(
-        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+        owner, agent_session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert (verdict.accepted, verdict.verified) == (True, True), verdict.reason
