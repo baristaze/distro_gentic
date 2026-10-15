@@ -1,6 +1,6 @@
 import { personName } from "../../app/recordModel";
 import { useAgentAutomationPrincipal } from "../../queries/agentAutomations";
-import { useAuditEvents } from "../../queries/events";
+import { useAuditEvents } from "../../queries/changeEvents";
 import { useUsers } from "../../queries/tenancy";
 import { auditRows } from "./auditModel";
 

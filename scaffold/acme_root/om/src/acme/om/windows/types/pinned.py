@@ -6,20 +6,20 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class PinnedItem(Platform):
+class PinnedItem(OmBase):
     """One principal message in the zone: quoted whole, or, beyond the
     zone's bound, an excerpt that cites the message by its step."""
 
-    step_id: UUID
+    agent_step_id: UUID
     seq: int = Field(ge=1)
     text: str
     whole: bool
 
 
-class PinnedZone(Platform):
+class PinnedZone(OmBase):
     """The session's objective, its first principal message, and the
     standing instructions of the messages after it, as of the latest
     summary. Messages past the digest's bound are counted and cited by the

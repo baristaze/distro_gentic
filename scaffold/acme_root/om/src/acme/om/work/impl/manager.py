@@ -8,10 +8,10 @@ from pydantic import ValidationError
 
 from acme.infra.observability import OUTCOMES
 from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface, WorkAvailablePayload
-from acme.om.base import EMPTY_UUID, Platform, derived_id, new_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, derived_id, new_id, utcnow
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, RequestContext, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
 from acme.om.exceptions import (
     InvalidCredential,
     LeaseLost,
@@ -33,7 +33,6 @@ from acme.om.work.types.work_item import (
     WorkItem,
     WorkKind,
     WorkStatus,
-    relayed_lane,
 )
 
 log = logging.getLogger(__name__)
@@ -42,7 +41,7 @@ DEAD_LETTER_KIND = "work.item.failed"
 """The audit event a dead letter leaves in the tenant's stream."""
 
 
-class WorkOptions(Platform):
+class WorkOptions(OmBase):
     base_retry_delay: timedelta = timedelta(seconds=30)
     max_retry_delay: timedelta = timedelta(minutes=15)
     stale_stagger: timedelta = timedelta(seconds=5)
@@ -65,12 +64,11 @@ def caused_by(rctx: RequestContext, item: WorkItem) -> RequestContext:
     return rctx.model_copy(update={"caused_by_request_id": cause})
 
 
-def not_before(kind: WorkKindSpec, payload: object) -> datetime | None:
-    """When work of this kind may run, read off its payload: the payload's
-    `not_before` for a scheduled kind and for a wake that names a time, None
-    for any other. A payload that does not parse answers None here; `_land`
-    refuses it with the reason."""
-    shape = kind.payload
+def not_before(shape: type[OmBase], payload: object) -> datetime | None:
+    """When work whose kind carries this shape may run, read off its
+    payload: the payload's `not_before` for a scheduled kind and for a wake
+    that names a time, None for any other. A payload that does not parse
+    answers None here; `_land` refuses it with the reason."""
     if not issubclass(shape, ScheduledPayload | WakeParkedPayload):
         return None
     try:
@@ -103,20 +101,20 @@ class WorkManagerImpl(WorkManagerInterface):
         self,
         storage: WorkStorageInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        change_events: ChangeEventsManagerInterface,
         topics: TopicsInterface,
         options: WorkOptions,
         kinds: WorkKinds,
         lanes: Lanes | None = None,
     ) -> None:
         """`kinds` is the registry every kind is read through: its payload,
-        and the permission that asks for it. `lanes` answers the lane an
+        the permission that asks for it, and its lane. `lanes` answers the lane an
         item goes to, at every enqueue, so no producer picks it; None keeps
         the lane the item came with."""
         self._kinds = kinds
         self._storage = storage
         self._tenancy = tenancy
-        self._events = events
+        self._change_events = change_events
         self._topics = topics
         self._options = options
         self._lanes = lanes
@@ -124,11 +122,14 @@ class WorkManagerImpl(WorkManagerInterface):
     async def enqueue(self, ctx: TenantContext, item: WorkItem) -> WorkItem:
         """The direct create, under a context: work a CLI, a sweep, or an app asks
         for on its own, which no core write announced. The actor is the
-        context's and the key is the caller's. The caller authorizes the whole
-        run, which has the service role, so it holds the permission the kind
-        is asked for with; a kind the registry does not hold is asked for by
-        nobody."""
-        ctx.require(self._asking(item))
+        context's, and the key and the lane are the caller's. The caller
+        authorizes the whole run, which has the service role, so it holds the
+        permission the kind is asked for with; a kind the registry does not
+        hold is asked for by nobody."""
+        kind = self._kinds.get(item.kind)
+        if kind is None:
+            raise NotAuthorized(f"no permission asks for work of kind {item.kind}")
+        ctx.require(kind.permission)
         now = utcnow()
         queued = item.model_copy(
             update={
@@ -144,7 +145,7 @@ class WorkManagerImpl(WorkManagerInterface):
                 "last_error": None,
             }
         )
-        return await self._land(ctx.org_id, queued)
+        return await self._land(ctx.org_id, kind, queued)
 
     async def enqueue_relayed(self, org_id: UUID, row: OutboxRow) -> WorkItem:
         """The enqueue of work a core write started: the relay makes it from the
@@ -155,17 +156,18 @@ class WorkManagerImpl(WorkManagerInterface):
         caused the work and its trace context come from the row too, which
         names the request that made the write: the row is the whole handoff,
         so nothing here is minted afresh. A row carries no routing of its
-        own, so the lane is the kind's (`relayed_lane`): its own in
-        `WORK_LANES`, else the default one, and `lanes` may answer another. A
-        kind whose payload is a `ScheduledPayload`, and a wake that names a
-        time, waits in the queue until its `not_before`."""
+        own, so the lane is the one the kind's spec names, the default one
+        unless it names its own, and `lanes` may answer another. A kind whose payload is a
+        `ScheduledPayload`, and a wake that names a time, waits in the queue
+        until its `not_before`."""
         kind = self._kinds.get(row.kind.removeprefix(WORK_ROW_PREFIX))
         if kind is None:
             raise ValidationFailed(f"outbox row {row.id} asks for unknown work {row.kind}")
         now = utcnow()
-        available_at = max(now, not_before(kind, row.payload) or now)
+        available_at = max(now, not_before(kind.payload, row.payload) or now)
         return await self._land(
             org_id,
+            kind,
             WorkItem(
                 id=new_id(),
                 created_at=now,
@@ -178,7 +180,7 @@ class WorkManagerImpl(WorkManagerInterface):
                 request_id=row.request_id,  # the request that made the write
                 traceparent=row.traceparent,  # its trace context, for the run's link
                 payload=row.payload,
-                lane=relayed_lane(kind.name),
+                lane=kind.lane,
                 status=WorkStatus.QUEUED,
                 available_at=available_at,
             ),
@@ -192,7 +194,7 @@ class WorkManagerImpl(WorkManagerInterface):
             raise NotAuthorized(f"no permission asks for work of kind {item.kind}")
         return kind.permission
 
-    async def _land(self, org_id: UUID, queued: WorkItem) -> WorkItem:
+    async def _land(self, org_id: UUID, kind: WorkKindSpec, queued: WorkItem) -> WorkItem:
         """The insert both enqueues share: the payload against the shape its kind
         fixes, the lane `lanes` answers, the create, and the wake. Ids are
         minted above storage, so the only way to present one twice is a retry,
@@ -200,9 +202,6 @@ class WorkManagerImpl(WorkManagerInterface):
         idempotency key, already written and nothing changes, a claim on the
         row included, so the row as stored is the answer and it was announced
         when it landed."""
-        kind = self._kinds.get(queued.kind)
-        if kind is None:
-            raise ValidationFailed(f"{queued.kind} is no kind of work this process knows")
         try:
             kind.payload.model_validate(queued.payload)
         except ValidationError as error:
@@ -455,7 +454,7 @@ class WorkManagerImpl(WorkManagerInterface):
         The copy starts from the stored row, so what a worker sends back cannot
         rewrite who asked for the work, when it was asked for, or what it is;
         the note a hand-back carries is the one field the caller supplies. And
-        every write here is the platform's, so it signs `updated_by` with
+        every write here is the system's, so it signs `updated_by` with
         EMPTY_UUID and never with `ctx.user_id`: the context the work runs
         under is the attribution of the work, never of the bookkeeping on its
         row."""
@@ -543,9 +542,9 @@ class WorkManagerImpl(WorkManagerInterface):
             ctx.org_id,
             item.last_error,
         )
-        event = await self._events.append_event(
+        event = await self._change_events.append_change_event(
             ctx,
-            audit_event(
+            audit_change_event(
                 ctx,
                 new_id(),
                 DEAD_LETTER_KIND,

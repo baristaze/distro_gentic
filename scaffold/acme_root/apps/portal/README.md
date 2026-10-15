@@ -75,7 +75,7 @@ conversation only when it is their own
   the one transport client and the types generated from the API's document.
   The portal calls `fetch` nowhere and never reads the generated schema.
 - `src/app/`: routes, the slot (`product.ts`, `platform.tsx`), the query
-  cache, the session, and the one client instance the app shares.
+  cache, the auth session, and the one client instance the app shares.
   `src/app/shell/` is the frame: the left bar, Settings' own bar, the
   search, and their keys.
 - `src/features/<name>/`: one folder per screen, a pure model, a
@@ -94,7 +94,7 @@ conversation only when it is their own
   field is write-only: the form sends it once, and the page shows only
   who set it and when. A new API key's secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
-  `flags.ts` reads the session's flags as one snapshot from the API, and a
+  `flags.ts` reads the auth session's flags as one snapshot from the API, and a
   view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
   bundle.
 - `src/realtime/`: the socket and its router. A push about a user reads
@@ -120,12 +120,12 @@ On the local stack, `/login/dev` signs in by address alone.
 The browser check needs the whole stack up: the API, the maintenance
 worker, the session runner on the scripted provider, and this dev server.
 It starts none of them. The session runner reads its script from
-`ACME_MODEL_SCRIPT`, which `portal_check.py` writes, and a session's kind
+`ACME_LLM_SCRIPT`, which `portal_check.py` writes, and a session's kind
 is registered only when `ACME_CORPUS_ROOT` is set:
 
 ```bash
 uv run --package acme-api python services/api/tests/portal_check.py script .local/model-script.json
-# start the runner with ACME_MODEL_PROVIDERS=scripted, ACME_MODEL_SCRIPT,
+# start the runner with ACME_LLM_PROVIDERS=scripted, ACME_LLM_SCRIPT,
 # ACME_MODEL_SCRIPT_PACE_SECONDS=0.15, and ACME_CORPUS_ROOT set
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e
 ```
@@ -161,7 +161,7 @@ runner:
 
 ```bash
 uv run --package acme-api python services/api/tests/portal_check.py script .local/scene.json --scene software_engineer
-# with ACME_FORGE_INTEGRATION=twin and ACME_WORKSPACE_BACKEND=host set for
+# with ACME_FORGE_INTEGRATION=twin and ACME_AGENT_WORKSPACE_BACKEND=host set for
 # the seed, both processes, and the check, and PORTAL_REPOSITORIES naming
 # an empty folder:
 uv run --package acme-api python services/api/tests/portal_stack.py api --port 8000

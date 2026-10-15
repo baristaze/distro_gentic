@@ -8,7 +8,7 @@ The scaffold's leases namespace gives a scarce resource a lease under a
 fencing token, and a line in front of it (ADR 0086). A waiter registers
 its hooks: whether it still waits, and the rows a grant, an end without
 a lease, and a revocation land to tell it. Its own waiter is a
-long-running record parked on `resource`.
+long-running record parked on `leasable_resource`.
 
 An agent session is the other thing that waits. A tool that needs a
 resource asks for it on the session's behalf. The model must not spend
@@ -20,8 +20,8 @@ it to clear.
 
 ## Decision
 
-**A session is a waiter kind.** The engine registers `session` beside
-the orchestration. A session still waits while its loop is open, that
+**A session is a waiter kind.** The engine registers `agent_session`
+beside the orchestration. A session still waits while its loop is open, that
 is, while it is not idle. A grant, an end without a lease, and a
 revocation each land a `LEASE_NOTICE` work item for the session in the
 same commit.
@@ -34,7 +34,7 @@ when granted at once, or its place and estimate. The loop reads its asks
 from those answers.
 
 **The loop parks only when the turn ends.** When the model ends its turn
-with no call while an ask waits, the loop parks on `resource`, unlocked
+with no call while an ask waits, the loop parks on `leasable_resource`, unlocked
 by `grant`, with no retry time. The park names the request nearest its
 grant, its place, and its estimate. The request's own wait bounds the
 park: past it the sweep ends the request, which wakes the session. A

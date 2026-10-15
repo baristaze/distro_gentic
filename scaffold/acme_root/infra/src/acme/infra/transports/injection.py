@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import (
     CommandSpec,
@@ -15,8 +16,8 @@ from acme.infra.transports import (
     SecretVia,
 )
 from acme.infra.transports.redaction import Redactor
-from acme.infra.workspaces import Workspace
-from acme.infra.workspaces.network import HOST_NETWORK_VARIABLES
+from acme.infra.agent_workspaces import Workspace
+from acme.infra.agent_workspaces.network import HOST_NETWORK_VARIABLES
 
 BASE_LANG = "C.UTF-8"
 
@@ -32,7 +33,7 @@ class Injection:
 async def injected(
     secrets: SecretsInterface,
     broker: CredentialBrokerInterface,
-    workspace: Workspace,
+    workspace: AgentWorkspace,
     command: CommandSpec,
 ) -> AsyncIterator[Injection]:
     """Attaches the brokered secrets, resolves the injected ones, and takes

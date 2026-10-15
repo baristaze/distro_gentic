@@ -8,23 +8,23 @@ from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_steps.storage import AgentStepStorageInterface
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
-from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
+from acme.om.change_events.storage import ChangeEventStorageInterface
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.connectors.storage import ConnectorStorageInterface
-from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.language_models.storage import FillSetStorageInterface
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
-from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.park_alerts.storage import ParkAlertStorageInterface
@@ -32,7 +32,7 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
-from acme.om.steps.storage import StepStorageInterface
+from acme.om.spend_budgets.storage import LedgerStorageInterface, SpendBudgetStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
 from acme.om.trust.storage import TrustStorageInterface
@@ -41,32 +41,43 @@ from acme.om.work.storage import WorkStorageInterface
 
 
 class StorageInterface(ABC):
+    """One getter per namespace's storage, sorted by namespace, and the two
+    calls on the root as a whole."""
+
+    @abstractmethod
+    async def healthcheck(self) -> bool: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+    @abstractmethod
+    def get_change_event_storage(self) -> ChangeEventStorageInterface: ...
+
+    @abstractmethod
+    def get_idempotency_storage(self) -> IdempotencyStorageInterface: ...
+
+    @abstractmethod
+    def get_lease_storage(self) -> LeasesStorageInterface: ...
+
+    @abstractmethod
+    def get_media_storage(self) -> MediaStorageInterface: ...
+
+    @abstractmethod
+    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface: ...
+
+    @abstractmethod
+    def get_outbox_storage(self) -> OutboxStorageInterface: ...
+
     @abstractmethod
     def get_tenancy_storage(self) -> TenancyStorageInterface: ...
 
     @abstractmethod
     def get_work_storage(self) -> WorkStorageInterface: ...
 
-    @abstractmethod
-    def get_media_storage(self) -> MediaStorageInterface: ...
+    # A copy adds its entries below this line.
 
     @abstractmethod
-    def get_idempotency_storage(self) -> IdempotencyStorageInterface: ...
-
-    @abstractmethod
-    def get_event_storage(self) -> EventStorageInterface: ...
-
-    @abstractmethod
-    def get_outbox_storage(self) -> OutboxStorageInterface: ...
-
-    @abstractmethod
-    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface: ...
-
-    @abstractmethod
-    def get_lease_storage(self) -> LeasesStorageInterface: ...
-
-    @abstractmethod
-    def get_step_storage(self) -> StepStorageInterface: ...
+    def get_agent_step_storage(self) -> AgentStepStorageInterface: ...
 
     @abstractmethod
     def get_agent_session_storage(self) -> AgentSessionStorageInterface: ...
@@ -81,22 +92,10 @@ class StorageInterface(ABC):
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
 
     @abstractmethod
-    def get_agent_project_storage(self) -> AgentProjectStorageInterface: ...
-
-    @abstractmethod
-    def get_retention_storage(self) -> RetentionStorageInterface: ...
-
-    @abstractmethod
-    def get_budget_storage(self) -> BudgetStorageInterface: ...
+    def get_spend_budget_storage(self) -> SpendBudgetStorageInterface: ...
 
     @abstractmethod
     def get_ledger_storage(self) -> LedgerStorageInterface: ...
-
-    @abstractmethod
-    def get_spend_account_storage(self) -> SpendAccountStorageInterface: ...
-
-    @abstractmethod
-    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface: ...
 
     @abstractmethod
     def get_fill_set_storage(self) -> FillSetStorageInterface: ...
@@ -106,6 +105,18 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_tool_storage(self) -> ToolStorageInterface: ...
+
+    @abstractmethod
+    def get_agent_project_storage(self) -> AgentProjectStorageInterface: ...
+
+    @abstractmethod
+    def get_retention_storage(self) -> RetentionStorageInterface: ...
+
+    @abstractmethod
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface: ...
+
+    @abstractmethod
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface: ...
 
     @abstractmethod
     def get_evidence_storage(self) -> EvidenceStorageInterface: ...
@@ -157,9 +168,3 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface: ...
-
-    @abstractmethod
-    async def healthcheck(self) -> bool: ...
-
-    @abstractmethod
-    async def close(self) -> None: ...

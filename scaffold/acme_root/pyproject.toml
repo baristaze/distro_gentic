@@ -15,7 +15,7 @@ members = [
     "integrations",
     "services/api",
     "workers/maintenance",
-    "workers/session_runner",
+    "workers/agent_session_runner",
     "clients/python",
     "apps/cli",
     "apps/host",
@@ -29,7 +29,7 @@ acme-infra = { workspace = true }
 acme-integrations = { workspace = true }
 acme-api = { workspace = true }
 acme-maintenance = { workspace = true }
-acme-session-runner = { workspace = true }
+acme-agent-session-runner = { workspace = true }
 acme-client = { workspace = true }
 acme-cli = { workspace = true }
 acme-host = { workspace = true }
@@ -43,8 +43,8 @@ dev = [
     "ruff>=0.16.8",
     "pyright>=1.1.414",
     "httpx>=0.28.1",
-    # Pinned exactly: `make openapi` regenerates clients/python/src/acme/client/schema.py
-    # with it and CI checks the committed file is current.
+    # Pinned exactly: `make openapi` regenerates clients/python/src/acme/client/schema/
+    # with it and CI checks the committed files are current.
     "datamodel-code-generator==0.82.0",
 ]
 
@@ -53,9 +53,10 @@ asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
 pythonpath = [
     "om/tests",
+    "infra/tests",
     "services/api/tests",
     "workers/maintenance/tests",
-    "workers/session_runner/tests",
+    "workers/agent_session_runner/tests",
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
@@ -70,7 +71,7 @@ testpaths = [
     "integrations/tests",
     "services/api/tests",
     "workers/maintenance/tests",
-    "workers/session_runner/tests",
+    "workers/agent_session_runner/tests",
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
@@ -87,12 +88,12 @@ markers = [
 
 # The engine's static checker (`make agentic-check`), which `checkers/`
 # carries. The layout is the scaffold's, so only the package is named, and
-# the Python client's types, generated from the committed OpenAPI document
+# the Python client's types, generated from the committed OpenAPI documents
 # by `make openapi` and never hand-edited, are left out, as the linter
 # leaves them.
 [tool.agentic-check]
 package = "acme"
-exclude = ["clients/python/src/acme/client/schema.py"]
+exclude = ["clients/python/src/acme/client/schema/**"]
 
 # The platform's static checker (`make distro-check`), which `checkers/`
 # carries beside the engine's. The layout is the scaffold's, so only the
@@ -155,7 +156,7 @@ reason = "the unique index is (org_id, idempotency_key), led by the tenant as th
 rule = "DEL-12"
 path = "apps/site/package.json"
 adr = "docs/adr/0002-technology-choices.md"
-reason = "a static page with no script and no state; the portal and every app that calls the platform stay React on Vite"
+reason = "a static page with no script and no state; the portal and every app that calls the system stay React on Vite"
 
 # The watch keeps no table: a live part is a cache in the stream service,
 # and a command by hand is the relay's item and an entry in the tenant's
@@ -192,8 +193,6 @@ path = "om/src/acme/om/hosts/impl/manager.py"
 adr = "docs/adr/2052-the-cloud-pool-runs-a-machine-per-session-whose-host-pulls-its-work.md"
 reason = "a session's pool of one is named by its session, so concurrent prepares converge on one pool"
 
-# The storage methods that take no tenant, the same list
-# om/tests/unit/test_storage_exceptions.py holds.
 # The root's hooks wire: the engine's root hands each hook what it built so
 # far, and an impl of them builds the impls a layer above adds, as a root
 # does.
@@ -214,100 +213,6 @@ path = "om/src/acme/om/root_hooks.py"
 adr = "docs/adr/2064-the-platform-wires-in-files-of-its-own-and-a-product-declares-its-namespaces.md"
 reason = "each hook takes the managers the engine's root built so far, at boot; it is wiring, and no request reaches it"
 
-[tool.arch-check.options.CTX-12]
-tenantless = [
-    "AgentSessionStorageInterface.read_purgeable",
-    "AgentSessionStorageInterface.count_parked",
-    "AgentSessionStorageInterface.read_stalled",
-    "BenchmarkStorageInterface.create_benchmark",
-    "BenchmarkStorageInterface.read_benchmark",
-    "BenchmarkStorageInterface.read_history",
-    "CloudPoolStorageInterface.ask_erase",
-    "CloudPoolStorageInterface.claim_warm",
-    "CloudPoolStorageInterface.create_machine",
-    "CloudPoolStorageInterface.delete_erasure",
-    "CloudPoolStorageInterface.delete_machine",
-    "CloudPoolStorageInterface.mark_enrolled",
-    "CloudPoolStorageInterface.mark_sealed",
-    "CloudPoolStorageInterface.mark_started",
-    "CloudPoolStorageInterface.read_by_key",
-    "CloudPoolStorageInterface.read_by_name",
-    "CloudPoolStorageInterface.read_erasures",
-    "CloudPoolStorageInterface.read_machine",
-    "CloudPoolStorageInterface.read_machines",
-    "CloudPoolStorageInterface.read_of_session",
-    "CloudPoolStorageInterface.read_of_tenant",
-    "CloudPoolStorageInterface.rekey",
-    "CloudPoolStorageInterface.reserve_warm",
-    "CloudPoolStorageInterface.spend_key",
-    "EventStorageInterface.count_since",
-    "EventStorageInterface.trim",
-    "HostsStorageInterface.read_enrollment_token_by_digest",
-    "HostsStorageInterface.read_claimant_by_credential_digest",
-    "HostsStorageInterface.count_hosts",
-    "PlacementStorageInterface.read_uncarried",
-    "IntakeStorageInterface.read_installation_org",
-    "IdempotencyStorageInterface.purge_records",
-    "LeasesStorageInterface.purge_settled",
-    "LeasesStorageInterface.read_due_orgs",
-    "LedgerStorageInterface.read_open",
-    "MatrixStorageInterface.add_result",
-    "MatrixStorageInterface.add_retirement",
-    "MatrixStorageInterface.create_version",
-    "MatrixStorageInterface.publish_version",
-    "MatrixStorageInterface.read_latest",
-    "MatrixStorageInterface.read_results",
-    "MatrixStorageInterface.read_retirements",
-    "MatrixStorageInterface.read_version",
-    "MediaStorageInterface.purge_files_across_tenants",
-    "MediaStorageInterface.read_purgeable",
-    "SpendLedgerStorageInterface.read_open",
-    "OrchestrationsStorageInterface.purge_settled",
-    "OutboxStorageInterface.claim_pending",
-    "OutboxStorageInterface.count_failed_since",
-    "OutboxStorageInterface.oldest_pending_at",
-    "OutboxStorageInterface.purge_done",
-    "ExecRelayStorageInterface.read_bindings",
-    "ExecRelayStorageInterface.read_expired",
-    "RetentionStorageInterface.read_behind",
-    "RetentionStorageInterface.read_due",
-    "TenancyStorageInterface.clear_failed_sign_ins",
-    "TenancyStorageInterface.confirm_totp",
-    "TenancyStorageInterface.count_orgs",
-    "TenancyStorageInterface.count_orgs_and_users",
-    "TenancyStorageInterface.delete_person",
-    "TenancyStorageInterface.disable_operator",
-    "TenancyStorageInterface.purge_deleted",
-    "TenancyStorageInterface.purge_sign_in_delays",
-    "TenancyStorageInterface.read_api_key_by_digest",
-    "TenancyStorageInterface.read_identity",
-    "TenancyStorageInterface.read_identity_by_email_digest",
-    "TenancyStorageInterface.read_identity_by_issuer_subject",
-    "TenancyStorageInterface.read_memberships_by_identity",
-    "TenancyStorageInterface.read_operator_tokens",
-    "TenancyStorageInterface.read_org_by_slug",
-    "TenancyStorageInterface.read_orgs",
-    "TenancyStorageInterface.read_platform_size",
-    "TenancyStorageInterface.read_session_by_digest",
-    "TenancyStorageInterface.read_session_by_id",
-    "TenancyStorageInterface.read_session_with_identity_by_digest",
-    "TenancyStorageInterface.read_sign_in_delay",
-    "TenancyStorageInterface.read_users_by_identity",
-    "TenancyStorageInterface.record_failed_sign_in",
-    "TenancyStorageInterface.redeem_socket_ticket",
-    "TenancyStorageInterface.use_totp_step",
-    "TenancyStorageInterface.write_identity",
-    "TenancyStorageInterface.write_platform_size",
-    "TenancyStorageInterface.write_time_zone",
-    "TenancyStorageInterface.write_totp_secret",
-    "WorkStorageInterface.claim_next",
-    "WorkStorageInterface.count_failed_since",
-    "WorkStorageInterface.count_ready_ahead",
-    "WorkStorageInterface.count_ready_by_lane",
-    "WorkStorageInterface.oldest_ready_at",
-    "WorkStorageInterface.purge_items",
-    "WorkStorageInterface.requeue_stale",
-]
 
 # The sites that build a stage above the request stage, the same list
 # om/tests/unit/test_stage_construction.py holds: the helper that assembles
@@ -323,10 +228,11 @@ sites = [
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.resume",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_context",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.member_context",
-    "om/src/acme/om/agent_automations/root.py::agent_automation_principals",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_contexts",
-    "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.delegated_context",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.sweep_context",
+    # A copy adds its entries below this line.
+    "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.delegated_context",
+    "om/src/acme/om/agent_automations/root.py::agent_automation_principals",
 ]
 builders = ["build_context"]
 
@@ -339,7 +245,7 @@ builders = ["build_context"]
 [tool.arch-check.options.OM-02]
 tenantless = [
     "OutboxRow",
-    "Event",
+    "ChangeEvent",
     "Claimant",
     "ClaimantIdentity",
     "HostIdentity",

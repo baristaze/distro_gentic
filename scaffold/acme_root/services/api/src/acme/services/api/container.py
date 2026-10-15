@@ -18,6 +18,9 @@ from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.root import IntegrationsInterface
+from acme.om.agent_root import AgentRootOptions
+from acme.om.agents.types.kind import AgentKind
+from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build_managers
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.platform_root import PlatformManagers, PlatformPorts
@@ -70,8 +73,8 @@ def totp_key(settings: ApiSettings) -> str | None:
 def tenancy_options(settings: ApiSettings) -> TenancyOptions:
     return TenancyOptions(
         login_ttl=timedelta(seconds=settings.login_lifetime_seconds),
-        session_ttl=timedelta(seconds=settings.session_lifetime_seconds),
-        session_idle_ttl=timedelta(seconds=settings.session_idle_lifetime_seconds),
+        auth_session_ttl=timedelta(seconds=settings.auth_session_lifetime_seconds),
+        auth_session_idle_ttl=timedelta(seconds=settings.auth_session_idle_lifetime_seconds),
         sign_in_free_failures=settings.sign_in_free_failures,
         sign_in_delay_base=timedelta(seconds=settings.sign_in_delay_base_seconds),
         sign_in_delay_cap=timedelta(seconds=settings.sign_in_delay_cap_seconds),
@@ -124,7 +127,7 @@ def postgres_storage(settings: ApiSettings) -> StorageInterface:
 
 def memory_storage() -> StorageInterface:
     """The storage root in memory, for a command that reads the app's shape
-    and no data: the OpenAPI document is emitted over it."""
+    and no data: each namespace's OpenAPI document is emitted over it."""
     return StorageMemoryImpl()
 
 

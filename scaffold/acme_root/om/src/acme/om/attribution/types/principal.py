@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 MAX_KIND = 200
 """The longest agent kind's name a reference carries."""
@@ -25,7 +25,7 @@ class PrincipalKind(StrEnum):
     SERVICE = "service"  # a service principal the tenant grants
 
 
-class Principal(Platform):
+class Principal(OmBase):
     """On whose authority something runs, or who pays for a model call: a
     user of the tenant by its id, and the API key they spoke through, if
     any. A key caps its holder's role, so every call made on what they said
@@ -37,11 +37,11 @@ class Principal(Platform):
     key_id: UUID | None = None
 
 
-class AgentRef(Platform):
+class AgentRef(OmBase):
     """The agent behind a step whose actor is an agent: its kind, the
     kind's version, and the session it runs in. A reference, never a
     grant."""
 
     kind: str = Field(min_length=1, max_length=MAX_KIND)
     version: int = Field(ge=1)
-    session_id: UUID
+    agent_session_id: UUID

@@ -1,12 +1,12 @@
 """The compaction policy: when a window compacts, what it keeps verbatim,
-what renders as a stub, and when a tool result is kept as an artifact. A
+what renders as a stub, and when a tool result is kept as a tool output. A
 root injects it; these are its defaults."""
 
 from typing import Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 SUMMARIZER_PROMPT = (
     "You fold the record of an agent's session into a summary the agent "
@@ -39,7 +39,7 @@ The pinned zone quotes principals alone, so an objective an agent wrote,
 a hand-off's, lives on only in the summary."""
 
 
-class CompactionPolicy(Platform):
+class CompactionPolicy(OmBase):
     """Sizes are in characters, and a window's in tokens, estimated at
     `chars_per_token` where the provider reported none."""
 
@@ -58,11 +58,11 @@ class CompactionPolicy(Platform):
     clipped to it where the summarizer reads it."""
     result_bound: int = Field(default=24_000, gt=0)
     """A tool result, or a child's report to its parent, longer than this
-    is kept as an artifact."""
+    is kept as a tool output."""
     preview_head: int = Field(default=2_000, gt=0)
     preview_tail: int = Field(default=2_000, gt=0)
     page_max: int = Field(default=24_000, gt=0)
-    """The most characters one read of an artifact answers."""
+    """The most characters one read of a tool output answers."""
     pinned_bound: int = Field(default=8_000, gt=0)
     """The characters of principals' messages the pinned zone quotes whole."""
     digest_chars: int = Field(default=200, gt=0)

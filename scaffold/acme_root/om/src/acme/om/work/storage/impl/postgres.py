@@ -118,7 +118,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         ready = select(WorkItems.id).where(
             WorkItems.lane == lane,
             WorkItems.status == WorkStatus.QUEUED.value,
-            WorkItems.kind.in_([str(kind) for kind in kinds]),
+            WorkItems.kind.in_(list(kinds)),
             WorkItems.available_at <= now,
         )
         # rules.is_at_cap, in SQL: the tenants that already hold their cap on
@@ -161,7 +161,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
                 lease_expires_at=now + lease,
                 attempts=WorkItems.attempts + 1,  # rules.attempts_after_claim, in SQL
                 updated_at=now,
-                updated_by=EMPTY_UUID,  # the claim is the platform's write
+                updated_by=EMPTY_UUID,  # the claim is the system's write
             )
             .returning(WorkItems)
         )

@@ -17,12 +17,27 @@ from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.cache import OutageSignalCacheImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
+from acme.integrations.model_providers.calls import ModelCall, ModelReply
+from acme.integrations.model_providers.registry import ModelProvidersOverImpl
+from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
+from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
+from acme.om.agent_root import AgentRootOptions
 from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import (
+    ControlCommand,
+    ControlHeader,
+    LoopOutcome,
+    ParkReason,
+)
+from acme.om.agents.hooks import LoopHooksInterface
+from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -32,39 +47,38 @@ from acme.om.agents.types.result import Claim
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform, new_id, utcnow
-from acme.om.budgets.types.amount import Amount
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
-from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
-from acme.om.models.layer import ModelsLayer
-from acme.om.root import Managers, build_managers, engine_tools
-from acme.om.steps.types.content import TextBlock, ToolUseBlock
-from acme.om.steps.types.header import LoopOutcome, ParkReason
-from acme.om.steps.types.step import Step, StepType
+from acme.om.language_models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.language_models.layer import LanguageModelsLayer
+from acme.om.root import Managers, build_managers
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
 from acme.om.tools.impl.manager import ToolsOptions
+from acme.om.tools.native import native_tools
 from acme.om.tools.tool import JobToolInterface, ToolInterface, ToolRuntime
 from acme.om.tools.types.call import JobHandle, JobStarted
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
+from acme.om.tools.types.policy import Decision, Target, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
+
+from contracts.agent_step_storage import make_message
 from contracts.doubles import APP, context
 from contracts.factories import make_org
-from contracts.step_storage import make_message
 
 SONNET = "claude-sonnet-5-5"
 """The main role's model in the resolver's default table."""
 
-ALLOWED = PolicyLayer(
+ALLOWED = ToolPolicyLayer(
     rules=(
-        PolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW),
-        PolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.ALLOW),
-        PolicyRule(authorization_class=ToolClass.INTEGRATION, decision=Decision.ALLOW),
+        ToolPolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW),
+        ToolPolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.ALLOW),
+        ToolPolicyRule(authorization_class=ToolClass.INTEGRATION, decision=Decision.ALLOW),
     )
 )
 
@@ -73,7 +87,7 @@ class Asked(ToolInput):
     q: str = "the total"
 
 
-class Found(Platform):
+class Found(OmBase):
     text: str
 
 
@@ -121,9 +135,7 @@ class Lookup(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, Asked)
         self.ran_as.append(ctx.user_id)
         if self.holds and len(self.ran_as) == 1:
@@ -167,9 +179,7 @@ class Build(JobToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         handle = self.started.setdefault(runtime.key, f"{self._spec.name}-{len(self.started) + 1}")
         self.deadlines.append(runtime.deadline)
         return JobStarted(handle=handle)
@@ -231,7 +241,7 @@ BUILDER = AgentKind(
 HELPER = AgentKind(
     name="helper",
     version=1,
-    tools=("lookup", "ask_person", "write_plan", "read_attachment"),
+    tools=("lookup", "ask_person", "write_agent_plan", "read_attachment"),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=1, count=0),
@@ -285,7 +295,7 @@ async def live(rctx: RequestContext, org_id: UUID, principal: Principal) -> Tena
         org_id=org_id,
         role=Role.MEMBER,
         permissions=permissions_of(Role.MEMBER),
-        credential_kind=CredentialKind.SESSION_TOKEN,
+        credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
     )
 
 
@@ -316,24 +326,28 @@ class Loop:
     credential: str  # the name of the platform's own key, as the signal keys it
 
     async def start(self, kind: str = "assistant") -> UUID:
-        session = await self.managers.agents.start_session(
+        session = await self.managers.agents.start_agent_session(
             self.owner, Start(id=new_id(), kind=kind, title="a question")
         )
         return session.id
 
-    async def say(self, session_id: UUID, text: str, ctx: TenantContext | None = None) -> Step:
+    async def say(
+        self, agent_session_id: UUID, text: str, ctx: TenantContext | None = None
+    ) -> AgentStep:
         """A principal's message, durable when this returns."""
         ctx = ctx or self.owner
         person = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
-        message = make_message(session_id, text, principal=person)
-        (stored,) = await self.managers.steps.append_inputs(ctx, session_id, [message])
+        message = make_message(agent_session_id, text, principal=person)
+        (stored,) = await self.managers.agent_steps.append_inputs(ctx, agent_session_id, [message])
         return stored
 
-    async def history(self, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def history(self, agent_session_id: UUID) -> list[AgentStep]:
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_steps(self.owner, session_id, after, 200)
+            page = await self.managers.agent_steps.get_agent_steps(
+                self.owner, agent_session_id, after, 200
+            )
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
@@ -346,7 +360,7 @@ class Loop:
             org_id=self.owner.org_id,
             role=Role.MEMBER,
             permissions=permissions_of(Role.MEMBER),
-            credential_kind=CredentialKind.SESSION_TOKEN,
+            credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
         )
 
 
@@ -361,13 +375,13 @@ def loop_over(
     sink: StreamSinkMemoryImpl | None = None,
     jitter: Callable[[], float] = random.random,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
-    models_layer: ModelsLayer | None = None,
+    language_models_layer: LanguageModelsLayer | None = None,
     reader: AttachmentReaderInterface | None = None,
     extra: tuple[ToolInterface, ...] = (),
-    ceilings: PolicyLayer | None = None,
+    ceilings: ToolPolicyLayer | None = None,
     sessions: AgentSessionsOptions | None = None,
     infra: InfraLocalImpl | None = None,
-    attached: AttachedToolsetsInterface | None = None,
+    hooks: LoopHooksInterface | None = None,
     build: Callable[..., Managers] = build_managers,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -377,13 +391,13 @@ def loop_over(
     `extra` after them: a product's own tool, which a kind of `kinds`
     names. `call_gate` None is the budgets' gate behind the call gate; a
     suite of a gate of its own builds it from the managers and the clock.
-    `models_layer` goes to the root as a layer's root hands it in, and the
+    `language_models_layer` goes to the root as a layer's root hands it in, and the
     loop takes the layer's call credentials. `ceilings` None keeps the
     platform's, and `sessions` None is the sessions' own options. `infra`
     None is the local root over `tmp_path`; a suite on real Docker hands in
-    one whose workspaces are containers. `attached` answers the toolsets a
-    session holds beyond its kind. `build` builds the managers, the
-    engine's root unless a layer's suite hands in its own."""
+    one whose workspaces are containers. `hooks` None is the null hooks; a
+    suite of a layer's hooks hands in its own. `build` builds the managers,
+    the engine's root unless a layer's suite hands in its own."""
     infra = infra or InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -400,13 +414,16 @@ def loop_over(
         storage,
         infra,
         integrations=integrations,
-        agent_kinds=kinds,
-        principal_context=live,
-        tool_catalog=every,
-        attachment_reader=reader,
-        models_layer=models_layer,
-        tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
-        agent_sessions_options=sessions,
+        agent_root_options=AgentRootOptions(
+            agent_kinds=kinds,
+            principal_context=live,
+            tool_catalog=every,
+            attachment_reader=reader,
+            language_models_layer=language_models_layer,
+            tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
+            agent_sessions_options=sessions,
+            loop_hooks=hooks,
+        ),
     )
     clock = Clock()
     # The sessions of one case share one signal, as a fleet's do on Valkey:
@@ -420,23 +437,23 @@ def loop_over(
     sink = sink or StreamSinkMemoryImpl()
     options = options or LoopOptions(control_poll=timedelta(milliseconds=1))
     loops = LoopManagerImpl(
-        managers.steps,
+        managers.agent_steps,
         managers.agent_sessions,
         managers.agents,
         AgentKindCatalog(kinds=kinds),
         managers.attribution,
-        managers.models,
+        managers.language_models,
         managers.windows,
         managers.tools,
         (
-            CallGateBudgetImpl(
-                managers.budget_gate,
+            CallGateSpendBudgetImpl(
+                managers.spend_budget_gate,
                 managers.pricing,
                 managers.agent_sessions,
                 managers.budgets,
                 SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
-                version=None if models_layer is None else models_layer.version,
-                tier=None if models_layer is None else models_layer.tier,
+                version=None if language_models_layer is None else language_models_layer.version,
+                tier=None if language_models_layer is None else language_models_layer.tier,
                 clock=clock,
             )
             if call_gate is None
@@ -444,13 +461,13 @@ def loop_over(
         ),
         (
             CallCredentialsPlatformImpl(providers, options.credential)
-            if models_layer is None
-            else models_layer.credentials(providers)
+            if language_models_layer is None
+            else language_models_layer.credentials(providers)
         ),
         signal,
         sink,
-        engine_tools(
-            managers.steps,
+        native_tools(
+            managers.agent_steps,
             managers.agent_sessions,
             reader,
             managers.windows,
@@ -461,6 +478,7 @@ def loop_over(
         clock,
         sleep,
         leases=managers.leases,
+        hooks=hooks or LoopHooksNullImpl(),
         jitter=jitter,
         attached=attached or AttachedToolsetsNoneImpl(),
     )
@@ -534,10 +552,10 @@ async def outage_parks_at_once_and_resumes_at_the_retry_time(loop: Loop) -> None
     assert parked.park.reason is ParkReason.PROVIDER and parked.park.unlock == "anthropic"
     assert parked.park.retry_at == mark.retry_at, "it waits out the mark, no less"
     assert len(loop.anthropic.calls) == 3, "parked at once: no call, no retry"
-    assert [s for s in await loop.history(second) if s.type is StepType.MODEL_REQUEST] == []
+    assert [s for s in await loop.history(second) if s.type is AgentStepType.MODEL_REQUEST] == []
 
     loop.clock.now = mark.retry_at
-    await loop.managers.agent_sessions.wake_session(loop.owner, second, parked.park)
+    await loop.managers.agent_sessions.wake_agent_session(loop.owner, second, parked.park)
     loop.anthropic.add(reply(said("The average is 3.")))
     resumed = await loop.loops.run(loop.owner, second)
 
@@ -545,4 +563,47 @@ async def outage_parks_at_once_and_resumes_at_the_retry_time(loop: Loop) -> None
     assert len(loop.anthropic.calls) == 4, "one call, at the retry time"
     assert await loop.outages.current(*pair) is None, "the call that answered cleared the mark"
     types = [step.type for step in await loop.history(second)]
-    assert types.count(StepType.RESUMED) == 1 and len(loop.anthropic.calls) == 4
+    assert types.count(AgentStepType.RESUMED) == 1 and len(loop.anthropic.calls) == 4
+
+
+def of_type(steps: list[AgentStep], *types: AgentStepType) -> list[AgentStep]:
+    return [step for step in steps if step.type in types]
+
+
+def person(user_id: UUID) -> Principal:
+    return Principal(kind=PrincipalKind.PERSON, id=user_id)
+
+
+def text_of(call: ModelCall) -> str:
+    """Every text a call carries, its tool results' included."""
+    texts: list[str] = []
+    for message in call.messages:
+        for block in message.blocks:
+            parts = block.parts if isinstance(block, ToolResultBlock) else (block,)
+            texts.extend(part.text for part in parts if isinstance(part, TextBlock))
+    return "\n".join(texts)
+
+
+async def ran_alone(loop: Loop, agent_session_id: UUID) -> list[AgentStep]:
+    """The history once a run is done, after every step is checked to have
+    a number of its own, in order."""
+    steps = await loop.history(agent_session_id)
+    assert [step.seq for step in steps] == list(range(1, len(steps) + 1))
+    return steps
+
+
+def control(loop: Loop, agent_session_id: UUID, command: ControlCommand) -> AgentStep:
+    return AgentStep(
+        id=new_id(),
+        created_at=loop.clock(),
+        agent_session_id=agent_session_id,
+        loop_id=new_id(),
+        type=AgentStepType.CONTROL,
+        actor=Actor.PERSON,
+        origin=Origin.PORTAL,
+        header=ControlHeader(command=command),
+    )
+
+
+def answer_to(steps: list[AgentStep], request: AgentStep) -> AgentStep:
+    return next(step for step in steps if step.responds_to == request.id)

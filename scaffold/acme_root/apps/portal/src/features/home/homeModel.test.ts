@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { tenancy } from "@acme/client";
+import { homeCard, membersLine } from "./homeModel";
 import { NO_AGENT_PROJECT } from "../sessions/sessionsModel";
 import { chosenAgent, chosenAgentProject, composerStart, TITLE_CUT, titleFromPrompt } from "./homeModel";
 

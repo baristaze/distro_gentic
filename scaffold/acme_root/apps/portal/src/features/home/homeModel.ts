@@ -1,7 +1,7 @@
 // Pure: what Home's composer starts. The prompt's first line is the
 // session's title, cut at 80 characters, and the whole prompt is its first
 // message; the agent and the agent project come from the chips. No React, no fetch.
-import type { AgentProjectView, StartSessionRequest } from "@acme/client";
+import type { AgentProjectView, StartAgentSessionRequest } from "@acme/client";
 import type { AgentChoice } from "../../app/product";
 import { startRequest } from "../sessions/sessionsModel";
 
@@ -30,7 +30,7 @@ export interface ComposerDraft {
 export function composerStart(
   draft: ComposerDraft,
   agentProject: { required: boolean; count: number },
-): { request: StartSessionRequest; text: string } | { problem: string } {
+): { request: StartAgentSessionRequest; text: string } | { problem: string } {
   const text = draft.prompt.trim();
   if (!text) return { problem: "Describe the task first." };
   if (!draft.kind.trim()) return { problem: "Choose the agent that works on it." };

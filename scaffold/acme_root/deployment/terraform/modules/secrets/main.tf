@@ -1,4 +1,4 @@
-# Three kinds of secret live under one environment. The platform's own
+# Three kinds of secret live under one environment. The system's own
 # credentials (the five database URLs, the TOTP encryption key, the edge
 # secret, the Sentry DSN, the WorkOS application key and webhook secret, the
 # platform's model keys) are declared here and injected into tasks by the

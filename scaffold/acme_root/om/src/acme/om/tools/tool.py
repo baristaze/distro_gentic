@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.transports import (
     CommandResult,
     CommandSpec,
@@ -29,11 +30,10 @@ from acme.infra.transports import (
     SecretUse,
     TransportInterface,
 )
-from acme.infra.workspaces import Workspace
-from acme.om.base import Platform
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.rules import command_text
 from acme.om.tools.types.call import JobHandle
 from acme.om.tools.types.policy import Target
@@ -53,7 +53,7 @@ class TakenSnapshot:
     own snapshot too. What one that does not keep it holds outside the
     archive, such as a disk, goes once the child's copy is kept."""
 
-    workspace_id: UUID
+    agent_workspace_id: UUID
     archive: bytes = field(repr=False)
     kept: bool = False
 
@@ -65,17 +65,17 @@ TakeSnapshot = Callable[[], Awaitable[TakenSnapshot]]
 class ToolRuntime:
     """One call's way into its workspace. A preflight's is read-only. Its
     command goes with the seal its record keeps the output under: its
-    session's. `session_id` is the session the call was made in, read from
+    session's. `agent_session_id` is the session the call was made in, read from
     its request: a tool that reads the session's own records reads this
     one, never one its input names."""
 
     def __init__(
         self,
         transport: TransportInterface,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         seal: RecordSeal,
-        session_id: UUID,
+        agent_session_id: UUID,
         key: UUID,
         epoch: int,
         deadline: datetime,
@@ -92,7 +92,7 @@ class ToolRuntime:
         self._transport = transport
         self._workspace = workspace
         self._seal = seal
-        self._session_id = session_id
+        self._session_id = agent_session_id
         self._key = key
         self._epoch = epoch
         self._effect = effect
@@ -104,7 +104,7 @@ class ToolRuntime:
         self.deadline = deadline
 
     @property
-    def session_id(self) -> UUID:
+    def agent_session_id(self) -> UUID:
         """The session the call is made in: what a tool that starts a session
         of its own, a hand-off or a child, names as where it came from."""
         return self._session_id
@@ -238,9 +238,7 @@ class ToolInterface(ABC):
         ...
 
     @abstractmethod
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         """Does the call and returns its output, an instance of the spec's
         `output_model`; a job tool starts its work and answers `JobStarted`.
         A failure is a `ToolFailed` with its class, decided here, where it

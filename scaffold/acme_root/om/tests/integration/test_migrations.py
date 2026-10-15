@@ -24,7 +24,7 @@ import pytest
 from contracts.agent_automation_storage import make_agent_automation
 from contracts.agent_playbook_storage import make_agent_playbook
 from contracts.agent_workspace_storage import make_workspace
-from contracts.event_storage import make_event
+from contracts.change_event_storage import make_change_event
 from contracts.platform_agents_storage import finished, make_validation, refused
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -34,7 +34,8 @@ from acme.om.agent_automations.types.agent_automation import Action
 from acme.om.agent_playbooks.storage.impl.postgres import AgentPlaybookStoragePostgresImpl
 from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.base import new_id
-from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
+from acme.om.change_events.storage.impl.postgres import ChangeEventStoragePostgresImpl
+from acme.om.change_events.storage.impl.postgres import ChangeEventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
 from acme.om.storage.impl.pg_base import LoginSessions
@@ -53,6 +54,8 @@ from acme.om.storage.migrate import (
 )
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.change_event_storage import make_change_event
 
 pytestmark = pytest.mark.integration
 
@@ -204,19 +207,19 @@ async def test_a_stamp_writes_another_checkouts_heads_and_back(
 
 
 async def seed_two_tenants(pg_sessions: LoginSessions) -> None:
-    events = EventStoragePostgresImpl(pg_sessions)
+    events = ChangeEventStoragePostgresImpl(pg_sessions)
     for org in (new_id(), new_id()):
-        await events.append_events(org, [make_event(org)])
+        await events.append_change_events(org, [make_change_event(org)])
 
 
 def forced(connection: Connection) -> bool:
     return connection.exec_driver_sql(
-        "SELECT relforcerowsecurity FROM pg_class WHERE oid = 'activity.events'::regclass"
+        "SELECT relforcerowsecurity FROM pg_class WHERE oid = 'activity.change_events'::regclass"
     ).scalar_one()
 
 
-COUNT = "SELECT count(*) FROM activity.events"
-UPDATE = "UPDATE activity.events SET kind = kind"
+COUNT = "SELECT count(*) FROM activity.change_events"
+UPDATE = "UPDATE activity.change_events SET kind = kind"
 
 
 async def test_a_backfill_under_the_fence_touches_every_tenant(
@@ -239,7 +242,7 @@ async def test_a_backfill_under_the_fence_touches_every_tenant(
             await connection.rollback()
 
             def fenced(sync: Connection) -> tuple[int, bool]:
-                touched = backfill(sync, DatabaseRole.ACTIVITY, "events", COUNT, UPDATE)
+                touched = backfill(sync, DatabaseRole.ACTIVITY, "change_events", COUNT, UPDATE)
                 return touched, forced(sync)
 
             assert await connection.run_sync(fenced) == (2, True)
@@ -256,12 +259,14 @@ async def test_a_backfill_that_misses_rows_fails_and_keeps_the_fence(
     try:
         async with engine.connect() as connection:
             partial = (
-                "UPDATE activity.events SET kind = kind WHERE seq = 1"
-                " AND org_id = (SELECT org_id FROM activity.events ORDER BY org_id LIMIT 1)"
+                "UPDATE activity.change_events SET kind = kind WHERE seq = 1"
+                " AND org_id = (SELECT org_id FROM activity.change_events ORDER BY org_id LIMIT 1)"
             )
             with pytest.raises(RuntimeError, match="touched 1 rows of 2"):
                 await connection.run_sync(
-                    lambda sync: backfill(sync, DatabaseRole.ACTIVITY, "events", COUNT, partial)
+                    lambda sync: backfill(
+                        sync, DatabaseRole.ACTIVITY, "change_events", COUNT, partial
+                    )
                 )
             await connection.rollback()
             assert await connection.run_sync(forced) is True
@@ -288,7 +293,7 @@ WORKSPACES_BEFORE = "session_workspaces"
 
 
 async def notices_of(
-    url: str, org: UUID, session_id: UUID, column: str = "notices", table: str = WORKSPACES
+    url: str, org: UUID, agent_session_id: UUID, column: str = "notices", table: str = WORKSPACES
 ) -> object:
     """A workspace's notices, or another of its columns, as the migration
     login reads them, inside its tenant's fence, from `table`: the name the
@@ -298,7 +303,7 @@ async def notices_of(
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             read = await connection.exec_driver_sql(
-                f"SELECT {column} FROM core.{table} WHERE id = '{session_id}'"
+                f"SELECT {column} FROM core.{table} WHERE id = '{agent_session_id}'"
             )
             return read.scalar_one()
     finally:
@@ -321,8 +326,8 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
     await downgrade(DatabaseRole.CORE, core, "202610121743")
     await upgrade(DatabaseRole.CORE, core)
 
-    for org, session_id in held.items():
-        assert await notices_of(core, org, session_id) == ["newer"]
+    for org, agent_session_id in held.items():
+        assert await notices_of(core, org, agent_session_id) == ["newer"]
     assert await check(DatabaseRole.CORE, core) == []
 
 
@@ -341,7 +346,7 @@ async def notice_shape(url: str, table: str = WORKSPACES) -> list[tuple[object, 
     )
 
 
-async def told_before(url: str, org: UUID, session_id: UUID) -> None:
+async def told_before(url: str, org: UUID, agent_session_id: UUID) -> None:
     """The one notice a release before the list wrote and a loop was told,
     as the column still holds it, inside its tenant's fence."""
     engine = create_async_engine(url)
@@ -349,7 +354,7 @@ async def told_before(url: str, org: UUID, session_id: UUID) -> None:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             await connection.exec_driver_sql(
-                f"UPDATE core.{WORKSPACES_BEFORE} SET notice = 'told' WHERE id = '{session_id}'"
+                f"UPDATE core.{WORKSPACES_BEFORE} SET notice = 'told' WHERE id = '{agent_session_id}'"
             )
     finally:
         await engine.dispose()
@@ -425,8 +430,8 @@ async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_lis
     core = migrated[DatabaseRole.CORE]
     await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
     held = await seed_notices_before(core, ("older", "newer"), ("only",), ())
-    for org, (session_id, _) in held.items():
-        await told_before(core, org, session_id)
+    for org, (agent_session_id, _) in held.items():
+        await told_before(core, org, agent_session_id)
     assert await notice_shape(core, WORKSPACES_BEFORE) == [
         ("notice", None),
         ("notices", "'[]'::jsonb"),
@@ -435,8 +440,8 @@ async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_lis
     await upgrade(DatabaseRole.CORE, core)
 
     assert await notice_shape(core) == [("notices", None)]
-    for org, (session_id, listed) in held.items():
-        assert await notices_of(core, org, session_id) == list(listed)
+    for org, (agent_session_id, listed) in held.items():
+        assert await notices_of(core, org, agent_session_id) == list(listed)
     assert await check(DatabaseRole.CORE, core) == []
 
 
@@ -455,10 +460,10 @@ async def test_the_one_notice_comes_back_as_the_lists_last_entry(
         ("notice", None),
         ("notices", "'[]'::jsonb"),
     ]
-    for org, (session_id, listed) in held.items():
+    for org, (agent_session_id, listed) in held.items():
         last = listed[-1] if listed else None
-        assert await notices_of(core, org, session_id, "notice", WORKSPACES_BEFORE) == last
-        assert await notices_of(core, org, session_id, table=WORKSPACES_BEFORE) == list(listed)
+        assert await notices_of(core, org, agent_session_id, "notice", WORKSPACES_BEFORE) == last
+        assert await notices_of(core, org, agent_session_id, table=WORKSPACES_BEFORE) == list(listed)
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
@@ -508,7 +513,7 @@ SESSION_SHAPE = [("agent_project_id", "NO"), ("base", "NO"), ("head", "NO")]
 async def written_on_a_station(url: str, org: UUID) -> UUID:
     """A session as the release before the executor wrote it: a lab, a check
     version, and parameters, and no agent project or commit."""
-    session_id = new_id()
+    agent_session_id = new_id()
     actor = new_id()
     await in_tenant(
         url,
@@ -516,10 +521,10 @@ async def written_on_a_station(url: str, org: UUID) -> UUID:
         "INSERT INTO core.validation_sessions (id, org_id, created_at, updated_at,"
         " created_by, updated_by, lab_id, check_name, check_version, parameters,"
         " status, version) VALUES"
-        f" ('{session_id}', '{org}', now(), now(), '{actor}', '{actor}', '{new_id()}',"
+        f" ('{agent_session_id}', '{org}', now(), now(), '{actor}', '{actor}', '{new_id()}',"
         " 'report.totals', '1', '{}'::jsonb, 'queued', 1)",
     )
-    return session_id
+    return agent_session_id
 
 
 async def seed_sessions(pg_sessions: LoginSessions) -> dict[UUID, ValidationSession]:
@@ -627,7 +632,7 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
         assert (back.status, back.refusal) == (ValidationStatus.QUEUED, None)
 
 
-PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}
+PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "agent_session_id"}
 """The fields of an action the release before product action kinds holds,
 which forbids any other."""
 
@@ -737,7 +742,7 @@ async def test_an_invocation_the_release_before_wrote_reads_as_no_kind_manual(
     await in_tenant(
         core,
         org,
-        "INSERT INTO core.playbook_invocations (id, org_id, created_at, session_id,"
+        "INSERT INTO core.playbook_invocations (id, org_id, created_at, agent_session_id,"
         " playbook_id, name, version, invoked_by) VALUES"
         f" ('{new_id()}', '{org}', now(), '{session}', '{agent_playbook.id}', '{agent_playbook.name}', 1,"
         f" '{new_id()}')",

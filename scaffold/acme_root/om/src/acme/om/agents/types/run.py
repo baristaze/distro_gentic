@@ -5,8 +5,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
-from acme.om.steps.types.header import LoopOutcome, Park
+from acme.om.agent_steps.types.header import LoopOutcome, Park
+from acme.om.base import OmBase
 
 
 class RunEnd(StrEnum):
@@ -20,11 +20,11 @@ class RunEnd(StrEnum):
     IDLE = "idle"  # the session had no loop to run
 
 
-class LoopRun(Platform):
+class LoopRun(OmBase):
     """A run, as its caller learns of it: the epoch it held, the loop it
     ran, how it stopped, and the outcome or the park it stopped on."""
 
-    session_id: UUID
+    agent_session_id: UUID
     epoch: int = Field(ge=0)
     loop_id: UUID | None = None
     end: RunEnd
