@@ -15,6 +15,7 @@ import secrets as tokens
 import shlex
 import subprocess
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -132,7 +133,7 @@ class OnDocker(InfraLocalImpl):
     ) -> None:
         super().__init__(root)
         if keys is not None:
-            self._keys = keys
+            self._agent_infra = replace(self._agent_infra, keys=keys)
         self.workspaces = AgentWorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
         self.transport = TransportContainerImpl(
             root / "records", self.get_secrets(), BrokerNullImpl(), timedelta(seconds=120)
