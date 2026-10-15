@@ -61,7 +61,7 @@ The shape of a kind is the four profiles in
 | File | Change |
 |------|--------|
 | `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
-| `om/src/<name>/om/platform_agents/tools.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output |
+| `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
 | `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
@@ -74,8 +74,8 @@ The shape of a kind is the four profiles in
 ## Procedure
 
 1. Every process builds its catalog from `SHIPPED`:
-   `build_managers` in `om/src/<name>/om/root.py` puts it before the
-   product's own kinds, and the model matrix's root,
+   `build_platform_managers` in `om/src/<name>/om/platform_root.py`
+   puts it before the product's own kinds, and the model matrix's root,
    `om/src/<name>/om/matrix/root.py`, requires every role a shipped kind
    names. A kind in `SHIPPED` is in every process, so no container
    changes. A product's own kind, one no other product built on the
@@ -86,13 +86,15 @@ The shape of a kind is the four profiles in
    cases of its step 5, read over `PRODUCT_KINDS.agents`, and the kind in
    `om/src/<name>/om/agents/README.md`. It writes none of that skill's
    wiring: no `om/src/<name>/om/agents/kinds.py` and no `AGENT_KINDS`,
-   no `agent_kinds=` in a container's call to `build_managers`, and
-   neither the API's nor the maintenance worker's container test that
-   reads that call. Its kinds, every version it still runs, its tools,
+   no `agent_kinds=` in a container's call to `build_platform_managers`,
+   which stands here for that skill's `build_managers`, and neither the
+   API's nor the maintenance worker's container test that reads that
+   call. Its kinds, every version it still runs, its tools,
    and the classes they declare go in `PRODUCT_KINDS`, in
    `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
-   `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
-   every process's entry point hands its root as `PlatformPorts.kinds`.
+   `ceilings` of `ProductKinds` in
+   `om/src/<name>/om/platform_root.py`), which every process's entry
+   point hands its root as `PlatformPorts.kinds`.
    A version of its kind whose workspace starts from its agent project's
    workspace base, as the platform's software engineer does from version
    8, is named by its name and version in `workspace_bases`.
@@ -123,14 +125,17 @@ The shape of a kind is the four profiles in
    wrote changes in place.
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
-   A tool the platform ships for it is a `NativeToolImpl` in `tools.py`,
-   shape `ReadSessionImpl` for a read and
-   `HandOffToSoftwareEngineerImpl` for a spawn, registered in
-   `with_shipped`. The engine's `agentic-scaffold-tool` holds what a
-   tool's spec, target, and failures must be; follow it where it is
-   installed, and the shapes in `tools.py` either way, except that a
+   A tool the platform ships for it is a `NativeToolImpl` in the module
+   of its toolset under `tools/`, or of the toolset it is closest to
+   when it is in none, shape `ReadSessionImpl` (`tools/records.py`) for
+   a read and `HandOffToSoftwareEngineerImpl` (`tools/handoff.py`) for a
+   spawn, registered in `with_shipped`. The engine's
+   `agentic-scaffold-tool` holds what a tool's spec, target, and
+   failures must be; follow it where it is installed, and the shapes in
+   `tools/` either way, except that a
    product's class takes its ceiling in `PRODUCT_KINDS.ceilings` (step
-   1). Its test goes in `om/tests/unit/test_platform_agents.py`.
+   1). Its test goes in its toolset's
+   `om/tests/unit/test_platform_tools_<toolset>.py`.
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it

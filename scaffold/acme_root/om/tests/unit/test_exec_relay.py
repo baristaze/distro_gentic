@@ -22,7 +22,8 @@ import pytest
 from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_session
 from contracts.hosts_storage import make_credential, make_host
-from contracts.loops import DELIVERY, loop_over, reply, said
+from contracts.loops import DELIVERY, reply, said
+from contracts.platform_loops import platform_loop_over
 
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
@@ -72,8 +73,8 @@ from acme.om.placement.types.work import (
     WorkspaceOperation,
     WorkspacePayload,
 )
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
-from acme.om.root import Managers, build_managers
 from acme.om.steps.types.header import ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
@@ -97,7 +98,7 @@ class Wall:
     """One tenant's session pinned to a pool of two hosts, its workspace
     held by the first."""
 
-    managers: Managers
+    managers: PlatformManagers
     storage: StorageMemoryImpl
     owner: TenantContext
     pool: HostPool
@@ -113,17 +114,19 @@ def storage() -> StorageMemoryImpl:
 
 
 @pytest.fixture
-def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
-    return build_managers(
+def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
+    return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        hosts_options=HostsOptions(claim_lease=SHORT),
-        relay_options=ExecRelayOptions(lease=SHORT),
+        platform_root_options=PlatformRootOptions(
+            hosts_options=HostsOptions(claim_lease=SHORT),
+            relay_options=ExecRelayOptions(lease=SHORT),
+        ),
     )
 
 
 async def enrolled(
-    managers: Managers, owner: TenantContext, pool: HostPool, name: str
+    managers: PlatformManagers, owner: TenantContext, pool: HostPool, name: str
 ) -> HostIdentity:
     issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
     credential = await managers.hosts.enroll(
@@ -133,7 +136,7 @@ async def enrolled(
 
 
 @pytest.fixture
-async def wall(managers: Managers, storage: StorageMemoryImpl) -> Wall:
+async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
     now = utcnow()
     pool = await managers.hosts.create_pool(
@@ -158,7 +161,7 @@ async def wall(managers: Managers, storage: StorageMemoryImpl) -> Wall:
     return Wall(managers, storage, owner, pool, holder, other, workspace, epoch)
 
 
-def transport(managers: Managers) -> TransportRelayImpl:
+def transport(managers: PlatformManagers) -> TransportRelayImpl:
     return TransportRelayImpl(
         lambda: managers.exec_relay,
         lambda: RequestContext(request_id=new_id(), app=RUNNER),
@@ -193,7 +196,7 @@ class Host:
     it holds, streams parts, and pushes how the command ended, each with the
     hash it declares. It counts what it was handed."""
 
-    def __init__(self, managers: Managers, identity: HostIdentity) -> None:
+    def __init__(self, managers: PlatformManagers, identity: HostIdentity) -> None:
         self.managers = managers
         self.identity = identity
         self.handed: list[WorkItem] = []
@@ -898,9 +901,13 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
 ) -> None:
     contained = DELIVERY.model_copy(update={"name": "contained", "isolation": CONTAINER})
     # The session runner's layer: a pinned session's workspace is its host's.
-    loop = loop_over(tmp_path, kinds=(contained,), transport_layer=lambda direct: direct)
-    owner, hosts = loop.owner, loop.managers.hosts
-    pool = await pool_of(loop.managers, owner, "build")
+    loop = platform_loop_over(
+        tmp_path,
+        kinds=(contained,),
+        platform=PlatformRootOptions(transport_layer=lambda direct: direct),
+    )
+    owner, hosts = loop.owner, loop.platform.hosts
+    pool = await pool_of(loop.platform, owner, "build")
     session_id = await loop.start("contained")
     await hosts.place_session(owner, session_id, pool.id)
     await loop.say(session_id, "Build it.")
@@ -915,7 +922,7 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
     await loop.storage.get_hosts_storage().enroll(
         owner.org_id, silent, make_credential(silent.id), ()
     )
-    await loop.managers.exec_relay.bind_workspace(owner, session_id, silent.id, WHERE)
+    await loop.platform.exec_relay.bind_workspace(owner, session_id, silent.id, WHERE)
     assert waiting.park is not None and waiting.park.retry_at is not None
     loop.clock.now = waiting.park.retry_at
     await loop.managers.agent_sessions.wake_session(owner, session_id, waiting.park)
@@ -960,7 +967,7 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
 # holds it.
 
 
-async def pool_of(managers: Managers, owner: TenantContext, name: str) -> HostPool:
+async def pool_of(managers: PlatformManagers, owner: TenantContext, name: str) -> HostPool:
     now = utcnow()
     return await managers.hosts.create_pool(
         owner,

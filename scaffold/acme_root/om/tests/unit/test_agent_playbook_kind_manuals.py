@@ -14,7 +14,8 @@ import pytest
 from contracts.agent_project_storage import make_agent_project
 from contracts.doubles import context
 from contracts.histories import History
-from contracts.loops import ASSISTANT, SONNET, Loop, loop_over, reply, said, use
+from contracts.loops import ASSISTANT, SONNET, reply, said, use
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 from acme.integrations.model_providers.anthropic import request_body
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
@@ -37,6 +38,7 @@ from acme.om.exceptions import (
     UnknownAgentKind,
     ValidationFailed,
 )
+from acme.om.platform_root import PlatformRootOptions
 from acme.om.steps.types.content import TextBlock
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
@@ -62,20 +64,19 @@ def kind_manual(*gates: AgentPlaybookGate, body: str = STEPS) -> AgentPlaybookDr
 
 def pinned(
     tmp_path: Path, ceilings: PolicyLayer | None = None
-) -> tuple[Loop, AgentPlaybooksManagerInterface]:
+) -> tuple[PlatformLoop, AgentPlaybooksManagerInterface]:
     storage = StorageMemoryImpl()
     layer = AgentPlaybooksLayer(storage)
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         ceilings=ceilings,
-        tools_layer=layer.tools,
-        agents_layer=layer.agents,
+        platform=PlatformRootOptions(tools_layer=layer.tools, agents_layer=layer.agents),
     )
-    return loop, layer.build(loop.managers)
+    return loop, layer.build(loop.platform)
 
 
-def main_calls(loop: Loop) -> list[ModelCall]:
+def main_calls(loop: PlatformLoop) -> list[ModelCall]:
     return [call for call in loop.anthropic.calls if call.model == SONNET]
 
 
@@ -88,13 +89,13 @@ def standing(version: AgentPlaybook) -> str:
     return f"{STANDING_LEAD}\n\n{skill_md(version)}"
 
 
-async def started(loop: Loop, session_id: UUID | None = None) -> UUID:
+async def started(loop: PlatformLoop, session_id: UUID | None = None) -> UUID:
     start = Start(id=session_id or new_id(), kind=ASSISTANT.name, title="the ledger")
     return (await loop.managers.agents.start_session(loop.owner, start)).id
 
 
 async def asked(
-    loop: Loop, session_id: UUID, question: str, *replies: ModelReply
+    loop: PlatformLoop, session_id: UUID, question: str, *replies: ModelReply
 ) -> list[ModelCall]:
     """The main requests the session's run sent for the question."""
     before = len(main_calls(loop))
@@ -255,10 +256,10 @@ async def test_an_agent_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_
             update={"name": "agent-project-kind-manual"}
         ),
     )
-    pinned_agent_project = await loop.managers.agent_projects.create_agent_project(
+    pinned_agent_project = await loop.platform.agent_projects.create_agent_project(
         loop.owner, make_agent_project()
     )
-    other_agent_project = await loop.managers.agent_projects.create_agent_project(
+    other_agent_project = await loop.platform.agent_projects.create_agent_project(
         loop.owner, make_agent_project("octo/other")
     )
     await agent_playbooks.pin(loop.owner, ASSISTANT.name, tenants.name)
@@ -268,7 +269,7 @@ async def test_an_agent_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_
 
     async def in_agent_project(agent_project_id: UUID) -> UUID:
         start = Start(id=new_id(), kind=ASSISTANT.name, title="the ledger")
-        session = await loop.managers.agent_projects.start_session(
+        session = await loop.platform.agent_projects.start_session(
             loop.owner, agent_project_id, start
         )
         return session.id

@@ -8,7 +8,8 @@ the placement that says which side of the wall a session is on and the
 relay that reaches the host inside it:
 
     layer = ConnectorsLayer(storage, infra, client, placement=placement, host=relay.call_mcp)
-    managers = build_managers(storage, infra, ..., attached_toolsets=layer.attached)
+    options = PlatformRootOptions(attached_toolsets=layer.attached)
+    managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     connectors = layer.build(managers)
 
 A session's agent project is read from the agent projects' rows."""
@@ -28,7 +29,7 @@ from acme.om.connectors.impl.toolsets import ConnectorToolsetsImpl, HostCall
 from acme.om.connectors.manager import ConnectorsManagerInterface
 from acme.om.context import TenantContext
 from acme.om.levers.rules import reach_of
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.mcp import McpToolImpl
 from acme.om.trust.placement import PlacementInterface
@@ -37,7 +38,7 @@ from acme.om.trust.placement import PlacementInterface
 def build_connectors(
     storage: StorageInterface,
     infra: InfraInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     *,
     client: McpClientInterface,
     options: ConnectorsOptions | None = None,
@@ -99,10 +100,10 @@ class ConnectorsLayer:
 
     @property
     def attached(self) -> AttachedToolsetsInterface:
-        """What `build_managers` takes as `attached_toolsets`."""
+        """What `PlatformRootOptions` takes as `attached_toolsets`."""
         return AttachedToolsetsLateImpl(lambda: self._parts()[1])
 
-    def build(self, managers: Managers) -> ConnectorsManagerInterface:
+    def build(self, managers: PlatformManagers) -> ConnectorsManagerInterface:
         """The connectors manager over the engine's, once; built again, the same."""
         if self._built is None:
             manager = build_connectors(

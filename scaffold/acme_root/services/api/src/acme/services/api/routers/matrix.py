@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 from acme.om.models.types.fill import ModelRole
 from acme.services.api.gateway.auth import Ctx
-from acme.services.api.gateway.resolve import MatrixService
+from acme.services.api.gateway.platform_resolve import MatrixService
 from acme.services.api.types.matrix import ChooseRequest, FillChoiceView, FillOptionsView
 
 router = APIRouter(prefix="/matrix", tags=["matrix"])

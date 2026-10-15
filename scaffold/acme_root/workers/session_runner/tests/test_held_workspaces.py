@@ -45,7 +45,12 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
 from acme.om.platform_agents.kinds import PROMPT_CACHE_LIFE, WARM_GRACE
-from acme.om.root import Managers, ProductKinds, build_managers
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import snapshotted_step
@@ -139,7 +144,7 @@ class Host:
 
     def __init__(
         self,
-        managers: Managers,
+        managers: PlatformManagers,
         provider: WorkspaceProviderInterface,
         graces: Graces = NO_PRODUCT.warm_grace,
     ) -> None:
@@ -224,13 +229,15 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
 ) -> None:
     infra = HostInfra(tmp_path)
     connected = Connected()
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(DIRECTORY),),
-        workspace_agent_projects=AgentProjectsTwin(repository=str(remote)),
-        pull_requests=PullRequestsTwin(),
-        source_control=forge(connected),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(repository=str(remote)),
+            pull_requests=PullRequestsTwin(),
+            source_control=forge(connected),
+        ),
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
@@ -265,14 +272,16 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
 ) -> None:
     infra = InfraLocalImpl(tmp_path)
     source = GitTwin(refuses_push=True)
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(TWIN),),
-        workspace_agent_projects=AgentProjectsTwin(),
-        pull_requests=PullRequestsTwin(),
-        workspace_git=source,
-        workspace_reader=ReaderTwin(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            pull_requests=PullRequestsTwin(),
+            workspace_git=source,
+            workspace_reader=ReaderTwin(),
+        ),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)
@@ -303,14 +312,16 @@ async def test_each_instance_stays_for_its_own_kinds_grace_never_past_the_cache_
     kinds = ProductKinds(agents=(worker(TWIN, "brief"), worker(TWIN)), graces={"brief": brief})
     assert (kinds.warm_grace("brief"), kinds.warm_grace("worker")) == (brief, PROMPT_CACHE_LIFE)
     infra = InfraLocalImpl(tmp_path)
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=kinds.agents,
-        workspace_agent_projects=AgentProjectsTwin(),
-        pull_requests=PullRequestsTwin(),
-        workspace_git=GitTwin(),
-        workspace_reader=ReaderTwin(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            pull_requests=PullRequestsTwin(),
+            workspace_git=GitTwin(),
+            workspace_reader=ReaderTwin(),
+        ),
     )
     host = Host(managers, infra.get_workspaces(), kinds.warm_grace)
     await host.start()
@@ -333,14 +344,16 @@ async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
 ) -> None:
     infra = InfraLocalImpl(tmp_path)
     source = GitTwin()
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(TWIN),),
-        workspace_agent_projects=AgentProjectsTwin(),
-        pull_requests=PullRequestsTwin(),
-        workspace_git=source,
-        workspace_reader=ReaderTwin(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            pull_requests=PullRequestsTwin(),
+            workspace_git=source,
+            workspace_reader=ReaderTwin(),
+        ),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)
@@ -378,14 +391,16 @@ async def test_a_kept_sessions_instance_that_no_snapshot_holds_stays_until_one_d
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     infra = InfraLocalImpl(tmp_path)
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(KEPT),),
-        workspace_agent_projects=AgentProjectsTwin(),
-        pull_requests=PullRequestsTwin(),
-        workspace_git=GitTwin(),
-        workspace_reader=ReaderTwin(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            pull_requests=PullRequestsTwin(),
+            workspace_git=GitTwin(),
+            workspace_reader=ReaderTwin(),
+        ),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)
@@ -415,7 +430,7 @@ async def test_a_kept_sessions_instance_that_no_snapshot_holds_stays_until_one_d
     assert await host.held() == set()
 
 
-async def deleted(managers: Managers, org_id: UUID) -> None:
+async def deleted(managers: PlatformManagers, org_id: UUID) -> None:
     """The tenant's deletion carried to its end: an operator asks it, and
     the worker ends it."""
     tenancy = managers.tenancy
@@ -436,13 +451,15 @@ async def test_a_deleted_tenants_instance_is_purged_past_the_grace(
 ) -> None:
     infra = HostInfra(tmp_path)
     connected = Connected()
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(DIRECTORY),),
-        workspace_agent_projects=AgentProjectsTwin(repository=str(remote)),
-        pull_requests=PullRequestsTwin(),
-        source_control=forge(connected),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(repository=str(remote)),
+            pull_requests=PullRequestsTwin(),
+            source_control=forge(connected),
+        ),
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
@@ -468,14 +485,16 @@ async def test_an_instance_this_database_holds_no_record_of_is_left_alone(
     whose session's history it no longer holds. Each may hold the only copy
     of its work: past the grace it stays, and is logged once."""
     infra = InfraLocalImpl(tmp_path)
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(TWIN),),
-        workspace_agent_projects=AgentProjectsTwin(),
-        pull_requests=PullRequestsTwin(),
-        workspace_git=GitTwin(),
-        workspace_reader=ReaderTwin(),
+        platform_root_options=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            pull_requests=PullRequestsTwin(),
+            workspace_git=GitTwin(),
+            workspace_reader=ReaderTwin(),
+        ),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)

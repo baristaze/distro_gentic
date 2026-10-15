@@ -21,7 +21,7 @@ from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
 from acme.om.context import Role, TenantContext
 from acme.om.models.layer import ModelsLayer
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.types.org import Org
@@ -30,12 +30,13 @@ from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
 from contracts.doubles import context
 from contracts.factories import make_org
-from contracts.loops import ASSISTANT, DELIVERY, Clock, Loop, loop_over
+from contracts.loops import ASSISTANT, DELIVERY, Clock
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 
 @dataclass
 class Money:
-    loop: Loop
+    loop: PlatformLoop
     spend_accounts: SpendAccountStorageInterface
     ledger: SpendLedgerStorageInterface
     gate: MoneyGateImpl
@@ -99,7 +100,7 @@ def money_over(
         tenant = make_org()
         owner = context(Role.OWNER, tenant)
 
-    def gates(managers: Managers, clock: Clock) -> CallGateInterface:
+    def gates(managers: PlatformManagers, clock: Clock) -> CallGateInterface:
         gate = MoneyGateImpl(
             storage.get_budget_storage(),
             spend_accounts,
@@ -123,16 +124,16 @@ def money_over(
         built.append((gate, calls))
         return calls
 
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         owner=owner,
         options=loop_options,
         call_gate=gates,
         models_layer=models_layer,
-        tools_layer=tools_layer,
         kinds=kinds,
         extra=extra,
+        platform=PlatformRootOptions(tools_layer=tools_layer),
     )
     ((gate, calls),) = built
     payments = PaymentProviderTwinImpl()

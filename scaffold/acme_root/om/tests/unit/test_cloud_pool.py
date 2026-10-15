@@ -58,7 +58,7 @@ from acme.om.hosts.types.host import Advertisement, Enrollment, HostStatus
 from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool
-from acme.om.root import build_managers
+from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import hash_token
 
@@ -630,11 +630,13 @@ async def test_an_erase_asked_where_no_machine_is_reached_is_done_by_the_sweep(
 
 async def test_a_deleted_tenants_machine_goes_at_the_next_sweep(tmp_path: Path) -> None:
     storage = StorageMemoryImpl()
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        cloud_pool_options=CloudPoolOptions(prefix=PREFIX, image=IMAGE),
-        cloud_pool_stage=stage,
+        platform_root_options=PlatformRootOptions(
+            cloud_pool_options=CloudPoolOptions(prefix=PREFIX, image=IMAGE),
+            cloud_pool_stage=stage,
+        ),
     )
     orgs, rows = storage.get_tenancy_storage(), storage.get_cloud_pool_storage()
     held: dict[str, PoolVm] = {}

@@ -26,35 +26,36 @@ from acme.om.hosts import HostsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import COMMENT, CommentImpl
 from acme.om.platform_agents import kinds, rules
-from acme.om.platform_agents.tools import (
+from acme.om.platform_agents.tools.agent_knowledge import (
+    ReadAgentKnowledgeImpl,
+    SearchAgentKnowledgeImpl,
+    SearchCorpusImpl,
+    SuggestAgentKnowledgeImpl,
+)
+from acme.om.platform_agents.tools.code import EditFileImpl, RunCommandImpl, WriteFileImpl
+from acme.om.platform_agents.tools.files import ListFilesImpl, ReadFileImpl, SearchCodeImpl
+from acme.om.platform_agents.tools.handoff import HandOffToSoftwareEngineerImpl
+from acme.om.platform_agents.tools.operations import ListHostsImpl, ReadSpendImpl
+from acme.om.platform_agents.tools.records import (
     DraftToolPolicyImpl,
-    EditFileImpl,
-    HandOffToSoftwareEngineerImpl,
     ListAgentAutomationsImpl,
     ListAgentProjectsImpl,
-    ListFilesImpl,
-    ListHostsImpl,
     ListSessionsImpl,
-    NoteFindingImpl,
-    OpenPullRequestImpl,
     ReadAgentAutomationImpl,
-    ReadAgentKnowledgeImpl,
     ReadAgentProjectImpl,
-    ReadFileImpl,
+    ReadSessionImpl,
+    ReadWaitImpl,
+)
+from acme.om.platform_agents.tools.review import (
+    NoteFindingImpl,
     ReadPullRequestFileImpl,
     ReadPullRequestImpl,
-    ReadSessionImpl,
-    ReadSpendImpl,
-    ReadWaitImpl,
-    RunCommandImpl,
-    SearchAgentKnowledgeImpl,
-    SearchCodeImpl,
-    SearchCorpusImpl,
-    SubmitResultImpl,
     SubmitReviewImpl,
-    SuggestAgentKnowledgeImpl,
+)
+from acme.om.platform_agents.tools.work_product import (
+    OpenPullRequestImpl,
+    SubmitResultImpl,
     ValidateImpl,
-    WriteFileImpl,
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.steps import StepsManagerInterface

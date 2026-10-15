@@ -93,7 +93,7 @@ kind, a claimant kind, and a stream kind a product registers, over
 `WorkKindSpec` in `om/src/<name>/om/work/kinds.py`, `ClaimantKindSpec`
 in `om/src/<name>/om/placement/kinds.py`, `StreamKind` in
 `om/src/<name>/om/watch/kinds.py`, and `ProductKinds` and
-`PlatformPorts` in `om/src/<name>/om/root.py`.
+`PlatformPorts` in `om/src/<name>/om/platform_root.py`.
 
 | File | Change |
 |------|--------|

@@ -35,6 +35,7 @@ from runner_support import TOOLS, answers, assistant, runs
 from acme.infra.machines import MachineState
 from acme.infra.machines.lima import MachinesLimaImpl, hypervisor
 from acme.infra.machines.seeded import SeedsChannelImpl
+from acme.infra.platform_root import PlatformInfra
 from acme.infra.workspaces import Durability, EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
@@ -43,7 +44,7 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -157,7 +158,9 @@ async def runner(
     # The runner's machines are Lima's: its pool starts them, and hands each
     # its seed through the hypervisor's channel.
     infra._machines = machines  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
-    infra._seeds = SeedsChannelImpl(machines, TIMEOUT)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    infra._platform_infra = PlatformInfra(  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+        infra.get_streams(), SeedsChannelImpl(machines, TIMEOUT)
+    )
     settings = SessionRunnerSettings.model_validate(
         {
             "_env_file": None,

@@ -27,9 +27,9 @@ from acme.om.orchestrations import OrchestrationsManagerInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.platform_root import build_platform_managers
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
-from acme.om.root import build_managers
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -135,7 +135,7 @@ def test_the_system_login_follows_a_role_to_its_own_database() -> None:
 
 
 def test_business_root_has_a_field_per_manager(tmp_path: Path) -> None:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         integrations=absent_integrations(),
@@ -166,7 +166,7 @@ def test_business_root_has_a_field_per_manager(tmp_path: Path) -> None:
 
 def test_the_tenancy_manager_carries_each_delegate(tmp_path: Path) -> None:
     """A delegate is built by the root and reached through its manager."""
-    tenancy = build_managers(
+    tenancy = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         integrations=absent_integrations(),

@@ -9,8 +9,8 @@ from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLim
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import Platform
 from acme.om.context import TenantContext
-from acme.om.platform_agents.tools import NativeToolImpl
-from acme.om.root import Managers, ProductKinds
+from acme.om.platform_agents.tools.base import NativeToolImpl
+from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolInput, ToolMode, ToolSpec
@@ -44,7 +44,7 @@ class ReadTitleImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, managers: Callable[[], Managers], read: list[str]) -> None:
+    def __init__(self, managers: Callable[[], PlatformManagers], read: list[str]) -> None:
         self._managers = managers
         self._read = read
 
@@ -80,7 +80,7 @@ LEDGER = AgentKind(
 def ledger_product(read: list[str]) -> ProductKinds:
     """The product's parts, its tool keeping each title it read in `read`."""
 
-    def tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
+    def tools(managers: Callable[[], PlatformManagers]) -> tuple[ToolInterface, ...]:
         return (ReadTitleImpl(managers, read),)
 
     return ProductKinds(agents=(LEDGER,), tools=tools, classes=(LEDGER_CLASS,))

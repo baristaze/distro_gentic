@@ -9,7 +9,7 @@ from fastapi import APIRouter
 
 from acme.integrations.model_providers.types import ProviderName
 from acme.services.api.gateway.auth import Ctx
-from acme.services.api.gateway.resolve import ProviderKeysService
+from acme.services.api.gateway.platform_resolve import ProviderKeysService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.provider_keys import ProviderKeyView, SaveKeyRequest
 

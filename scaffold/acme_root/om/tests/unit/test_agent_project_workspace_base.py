@@ -18,7 +18,8 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
+from contracts.loops import ASSISTANT, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
@@ -36,7 +37,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_projects.types.agent_project import AgentWorkspaceBase
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER, WORKSPACE_BASE_KINDS
-from acme.om.root import ProductKinds
+from acme.om.platform_root import PlatformRootOptions, ProductKinds
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
@@ -134,12 +135,13 @@ class WorkspaceBases:
         self.setup = Setup()
         self.infra = InfraBuilt(tmp_path, self.setup)
         self.agent_projects = AgentProjectsTwin(repository=None)
-        self.loop: Loop = loop_over(
+        self.loop: PlatformLoop = platform_loop_over(
             tmp_path,
             kinds=(TAKES, OWN),
             infra=self.infra,
-            workspace_agent_projects=self.agent_projects,
-            product_kinds=product,
+            platform=PlatformRootOptions(
+                workspace_agent_projects=self.agent_projects, product_kinds=product
+            ),
         )
 
     async def run(self, session_id: UUID) -> LoopOutcome | None:
@@ -149,7 +151,7 @@ class WorkspaceBases:
 
     async def pinned(self, session_id: UUID) -> WorkspaceBase | None:
         return (
-            await self.loop.managers.agent_workspaces.get_workspace(self.loop.owner, session_id)
+            await self.loop.platform.agent_workspaces.get_workspace(self.loop.owner, session_id)
         ).base
 
     async def kept(self) -> list[str]:
@@ -213,7 +215,7 @@ async def test_a_kind_that_takes_its_agent_projects_workspace_base_pins_its_base
     assert await workspace_bases.pinned(bare) is None, (
         "its agent project named none when it was created"
     )
-    pinned = await loop.managers.agent_workspaces.get_workspace(loop.owner, takes)
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, takes)
     assert pinned.egress is EgressMode.NONE, "its workspace keeps its kind's egress"
 
 

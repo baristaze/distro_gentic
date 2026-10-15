@@ -38,7 +38,7 @@ from acme.om.context import AppContext, AppType, RequestContext, Role, TenantCon
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.steps.impl.manager import (
     StepsManagerImpl,
     StepsOptions,
@@ -316,18 +316,20 @@ def test_a_session_carries_a_park_exactly_while_parked() -> None:
 
 
 @pytest.fixture
-def managers(tmp_path: Path) -> Managers:
-    return build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+def managers(tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), tool_catalog=TOOLS
+    )
 
 
-async def kinds(managers: Managers, ctx: TenantContext, target: UUID) -> list[str]:
+async def kinds(managers: PlatformManagers, ctx: TenantContext, target: UUID) -> list[str]:
     """What the tenant's stream announced of one session."""
     events = await managers.events.get_events(ctx, 0, 100)
     return [e.kind.rsplit(".", 1)[-1] for e in events if e.target_id == target]
 
 
 async def test_a_session_lands_idle_at_its_own_root_and_a_child_joins_its_tree(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     sent = make_session().model_copy(update={"status_seq": 9, "version": 4, "root_id": new_id()})
@@ -345,7 +347,7 @@ async def test_a_session_lands_idle_at_its_own_root_and_a_child_joins_its_tree(
         await managers.agent_sessions.create_session(ctx, orphan)
 
 
-async def test_another_tenant_finds_no_session(managers: Managers) -> None:
+async def test_another_tenant_finds_no_session(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     session = await managers.agent_sessions.create_session(ctx, make_session())
     other = context(Role.OWNER)
@@ -356,7 +358,7 @@ async def test_another_tenant_finds_no_session(managers: Managers) -> None:
     assert (await managers.agent_sessions.get_sessions(other, None, None, 10)).items == ()
 
 
-async def test_sessions_page_by_status(managers: Managers) -> None:
+async def test_sessions_page_by_status(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     made = [await managers.agent_sessions.create_session(ctx, make_session()) for _ in range(3)]
     page = await managers.agent_sessions.get_sessions(ctx, SessionStatus.IDLE, None, 2)
@@ -369,7 +371,7 @@ async def test_sessions_page_by_status(managers: Managers) -> None:
 
 
 async def test_the_status_follows_the_history_and_announces_each_change(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     session = await managers.agent_sessions.create_session(ctx, make_session())
@@ -390,7 +392,7 @@ async def test_the_status_follows_the_history_and_announces_each_change(
 
 
 async def test_an_input_still_undelivered_when_a_loop_ends_is_kept_across_projections(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     sid = (await managers.agent_sessions.create_session(ctx, make_session())).id
@@ -414,7 +416,9 @@ async def test_an_input_still_undelivered_when_a_loop_ends_is_kept_across_projec
     assert (after.status, after.pending_input) == (SessionStatus.PENDING, late.id)
 
 
-async def test_the_sweep_purges_no_living_tenants_sessions_or_history(managers: Managers) -> None:
+async def test_the_sweep_purges_no_living_tenants_sessions_or_history(
+    managers: PlatformManagers,
+) -> None:
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
         "Ajax",
@@ -429,7 +433,7 @@ async def test_the_sweep_purges_no_living_tenants_sessions_or_history(managers: 
     assert await managers.agent_sessions.get_session(owner, session.id) == session
 
 
-async def test_a_long_history_is_folded_a_batch_at_a_time(managers: Managers) -> None:
+async def test_a_long_history_is_folded_a_batch_at_a_time(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     sid = (await managers.agent_sessions.create_session(ctx, make_session())).id
     for _ in range(5):
@@ -472,7 +476,7 @@ async def test_a_projection_behind_another_writer_reads_again_and_folds_on(
     the version; the projection reads what it left and folds on from it, and
     gives up after its attempts, landing nothing."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     outbox = storage.get_outbox_storage()
     assert isinstance(outbox, OutboxStorageMemoryImpl)
     overtaken = Overtaken(outbox)
@@ -504,7 +508,7 @@ async def test_a_deleted_tenants_purge_takes_up_at_most_a_batch_of_sessions_a_ca
     its records along, so one call reads the smaller session batch, not the
     rows' batch; the tenant reads as settled only once a call finds none."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     taken: list[UUID] = []
 
     async def held(org_id: UUID, session_id: UUID, tree_id: UUID | None) -> None:
@@ -531,7 +535,7 @@ async def test_a_deleted_tenants_purge_takes_up_at_most_a_batch_of_sessions_a_ca
 
 
 async def test_only_an_idle_session_is_archived_and_a_message_brings_it_back(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     sid = (await managers.agent_sessions.create_session(ctx, make_session())).id
@@ -548,7 +552,7 @@ async def test_only_an_idle_session_is_archived_and_a_message_brings_it_back(
         await managers.agent_sessions.archive_session(ctx, sid)
 
 
-async def test_a_viewer_reads_and_writes_nothing(managers: Managers) -> None:
+async def test_a_viewer_reads_and_writes_nothing(managers: PlatformManagers) -> None:
     org = make_org()
     member, viewer = context(Role.MEMBER, org), context(Role.VIEWER, org)
     seen = make_session(visibility=Visibility.ORG_WIDE)
@@ -563,7 +567,7 @@ async def test_a_viewer_reads_and_writes_nothing(managers: Managers) -> None:
 
 
 async def test_a_deleted_session_is_hidden_from_every_read_and_comes_back_whole(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """Mark deleted hides a session from every read: by id, on a page, as a
     parent, and from the writes that read it first. Its history stays as it
@@ -601,7 +605,9 @@ async def test_a_deleted_session_is_hidden_from_every_read_and_comes_back_whole(
     assert await kinds(managers, ctx, sid) == ["created", "deleted", "updated"]
 
 
-async def test_a_deleted_session_comes_back_only_for_one_who_sees_it(managers: Managers) -> None:
+async def test_a_deleted_session_comes_back_only_for_one_who_sees_it(
+    managers: PlatformManagers,
+) -> None:
     """A member who does not see a private session finds none to restore, as
     they find none to read, and it stays deleted; its creator restores it."""
     org = make_org()
@@ -619,7 +625,7 @@ async def test_a_deleted_session_comes_back_only_for_one_who_sees_it(managers: M
 
 
 async def test_a_switch_of_visibility_and_a_move_of_the_steer_are_each_announced(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """Who sees a session and who steers it are on its view, so a switch by
     its creator and a hand-off to a participant each announce its new
@@ -647,7 +653,7 @@ async def test_a_switch_of_visibility_and_a_move_of_the_steer_are_each_announced
     assert await updates() == joined + 2, "the hand-off is announced"
 
 
-async def test_only_an_idle_session_is_deleted(managers: Managers) -> None:
+async def test_only_an_idle_session_is_deleted(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     sid = (await managers.agent_sessions.create_session(ctx, make_session())).id
     await managers.steps.append_inputs(ctx, sid, [make_message(sid)])
@@ -665,7 +671,7 @@ async def test_a_loop_open_below_a_session_refuses_its_delete(tmp_path: Path) ->
     delete and is named. The deleted child still answers its kind to the
     session below it."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         managers.steps,
@@ -708,7 +714,7 @@ class Clock:
 
 
 def purging(
-    managers: Managers,
+    managers: PlatformManagers,
     storage: StorageMemoryImpl,
     clock: Clock,
     *,
@@ -743,7 +749,7 @@ async def test_a_purge_before_the_retention_ends_is_refused_and_one_after_takes_
     purge runs, and can be unmarked. Past the retention, counted from the
     last mark, the purge takes the session, its steps, and its cursor."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     clock = Clock()
     sessions = purging(managers, storage, clock)
     ctx = context(Role.MEMBER)
@@ -780,7 +786,7 @@ async def test_a_claimed_session_cannot_come_back_and_its_long_history_goes_in_b
     going answers an unmark as one gone, and each pass takes a batch more of
     its history, then its row once the history is gone."""
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     clock = Clock()
     sessions = purging(managers, storage, clock, batch=2)
     ctx = context(Role.MEMBER)
@@ -823,7 +829,7 @@ class RestoredMeanwhile(AgentSessionStorageMemoryImpl):
 
 async def test_an_unmark_that_lands_before_the_claim_keeps_the_session(tmp_path: Path) -> None:
     storage = StorageMemoryImpl()
-    managers = build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    managers = build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
     outbox = storage.get_outbox_storage()
     assert isinstance(outbox, OutboxStorageMemoryImpl)
     clock = Clock()

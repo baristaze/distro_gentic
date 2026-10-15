@@ -28,7 +28,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.exceptions import UnsafeConfiguration
-from acme.om.root import PlatformPorts
+from acme.om.platform_root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings

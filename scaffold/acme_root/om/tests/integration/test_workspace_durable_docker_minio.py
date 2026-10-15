@@ -21,7 +21,8 @@ from typing import Any
 
 import aioboto3
 import pytest
-from contracts.loops import ALLOWED, ASSISTANT, Loop, call, loop_over, reply, said
+from contracts.loops import ALLOWED, ASSISTANT, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 from contracts.tools import Command
 
 from acme.infra.buckets import Buckets, BucketsInterface
@@ -45,7 +46,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.container import WorkspaceContainerImpl, container_name
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.content import TextBlock
 from acme.om.steps.types.header import LoopOutcome, SnapshotHeader
 from acme.om.steps.types.step import Step, StepType
@@ -200,7 +201,7 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    managers = build_managers(storage, InfraConfiguredImpl(settings))
+    managers = build_platform_managers(storage, InfraConfiguredImpl(settings))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -218,11 +219,11 @@ def a_runner(
     owner: TenantContext,
     buckets: BucketsInterface,
     keys: KeyServiceInterface | None = None,
-) -> tuple[Loop, OnDocker]:
+) -> tuple[PlatformLoop, OnDocker]:
     """A runner's root, as one process builds it as it starts."""
     root.mkdir(parents=True, exist_ok=True)
     infra = OnDocker(root, buckets, keys)
-    loop = loop_over(
+    loop = platform_loop_over(
         root,
         kinds=(ASSISTANT, KEEPER),
         storage=storage,
@@ -264,7 +265,7 @@ async def test_a_kept_session_resumes_on_the_tree_it_left_after_the_runner_resta
         named = taken.header.snapshot
         stored = await minio.list(owner.org_id, BUCKET, session_prefix(session_id), 10)
         assert len(stored) == 1, "kept on MinIO"
-        record = await first.managers.agent_workspaces.kept_snapshot(owner, named.id)
+        record = await first.platform.agent_workspaces.kept_snapshot(owner, named.id)
         assert record is not None and not record.on_host and record.hash == named.hash
         name = container_name(session_id)
         shown = await docker("inspect", "--type", "container", name, bound=timedelta(seconds=20))

@@ -44,7 +44,11 @@ async def container(tmp_path: Path) -> AsyncIterator[WorkerContainer]:
 async def test_a_removed_members_links_go_over_postgres(container: WorkerContainer) -> None:
     tail = new_id().hex[-8:]
     slug, email = f"left-{tail}", f"bob-{tail}@example.test"
-    tenancy, intake, work = container.managers.tenancy, container.intake, container.managers.work
+    tenancy, intake, work = (
+        container.managers.tenancy,
+        container.platform.intake,
+        container.managers.work,
+    )
     links = container.storage.get_intake_storage()
     ann = await sign_in(container, slug)
     _, bob, _ = await tenancy.add_member(request(), slug, email, "Bob", Role.MEMBER)

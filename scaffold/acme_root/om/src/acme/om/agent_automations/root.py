@@ -41,7 +41,7 @@ from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import utcnow
 from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
-from acme.om.root import Managers, ProductActions, no_actions
+from acme.om.platform_root import PlatformManagers, ProductActions, no_actions
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 
@@ -72,7 +72,7 @@ def agent_automation_principals(
 
 def build_agent_automations(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     *,
     agent_project_required: bool,
     principal_context: PrincipalContext | None = None,

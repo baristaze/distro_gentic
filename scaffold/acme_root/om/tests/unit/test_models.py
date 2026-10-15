@@ -46,7 +46,7 @@ from acme.om.models.types.fill import (
     RoleFill,
     SwitchReason,
 )
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.steps.types.header import SwitchedHeader
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -84,11 +84,13 @@ EVERY_DEFAULT = Priced(
 
 
 @pytest.fixture
-def managers(tmp_path: Path) -> Managers:
-    return build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), model_prices=EVERY_DEFAULT)
+def managers(tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), model_prices=EVERY_DEFAULT
+    )
 
 
-async def a_run(managers: Managers, ctx: TenantContext) -> tuple[UUID, int, UUID]:
+async def a_run(managers: PlatformManagers, ctx: TenantContext) -> tuple[UUID, int, UUID]:
     """A session with a loop open and a run holding it: its id, the run's
     epoch, and the loop's id."""
     session_id = new_id()
@@ -97,7 +99,7 @@ async def a_run(managers: Managers, ctx: TenantContext) -> tuple[UUID, int, UUID
     return session_id, epoch, first.id
 
 
-async def switches(managers: Managers, ctx: TenantContext, session_id: UUID) -> list[Step]:
+async def switches(managers: PlatformManagers, ctx: TenantContext, session_id: UUID) -> list[Step]:
     page = await managers.steps.get_steps(ctx, session_id, 0, 100)
     return [s for s in page.items if s.type is StepType.SWITCHED]
 
@@ -123,7 +125,7 @@ async def test_the_resolver_refuses_a_model_with_no_price_row() -> None:
 
 
 async def test_a_root_resolves_only_what_the_list_table_prices(tmp_path: Path) -> None:
-    rooted = build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path))
+    rooted = build_platform_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path))
     ctx = context(Role.MEMBER)
     fills = await rooted.models.resolve_fill_set(ctx, new_id(), [MAIN, SUMMARIZER], Eligibility())
     assert [r.role for r in fills.roles] == [MAIN, SUMMARIZER], "the default table, all priced"
@@ -214,7 +216,7 @@ async def test_a_kind_that_asks_sizes_gets_the_tables_fills_at_its_efforts() -> 
 
 
 async def test_an_ask_never_widens_what_a_fill_allows_and_the_fill_set_keeps_both(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     session_id = new_id()
@@ -265,7 +267,7 @@ async def test_each_openai_fill_lists_exactly_the_efforts_its_model_takes() -> N
 # A session's fill set, and its switches.
 
 
-async def test_a_session_resolves_its_fills_once(managers: Managers) -> None:
+async def test_a_session_resolves_its_fills_once(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     session_id = new_id()
     with pytest.raises(NotFound):
@@ -285,7 +287,7 @@ async def test_a_session_resolves_its_fills_once(managers: Managers) -> None:
 
 
 async def test_a_switch_writes_a_new_version_and_a_switched_step_naming_both_fills(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, ctx)
@@ -313,7 +315,7 @@ async def test_a_switch_writes_a_new_version_and_a_switched_step_naming_both_fil
     assert await managers.models.get_fill_set(ctx, session_id) == second
 
 
-async def test_a_run_that_lost_its_claim_switches_nothing(managers: Managers) -> None:
+async def test_a_run_that_lost_its_claim_switches_nothing(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     session_id, stale, loop_id = await a_run(managers, ctx)
     first = await managers.models.resolve_fill_set(ctx, session_id, [MAIN], Eligibility())
@@ -335,7 +337,7 @@ async def test_a_run_that_lost_its_claim_switches_nothing(managers: Managers) ->
     ],
 )
 async def test_a_refused_switch_writes_nothing(
-    managers: Managers, role: str, to: Fill, refused: type[Exception]
+    managers: PlatformManagers, role: str, to: Fill, refused: type[Exception]
 ) -> None:
     ctx = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, ctx)
@@ -348,7 +350,7 @@ async def test_a_refused_switch_writes_nothing(
     assert await managers.models.get_fill_set(ctx, session_id) == first
 
 
-async def test_a_switch_stays_inside_the_sessions_eligibility(managers: Managers) -> None:
+async def test_a_switch_stays_inside_the_sessions_eligibility(managers: PlatformManagers) -> None:
     ctx = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, ctx)
     ineligible = SOL.model_copy(update={"eligibility": Eligibility(region="us")})
@@ -377,7 +379,9 @@ async def test_a_switch_stays_inside_the_sessions_eligibility(managers: Managers
     assert len(await switches(managers, ctx, session_id)) == 1
 
 
-async def test_a_fallback_takes_the_next_declared_fill_it_has_not_tried(managers: Managers) -> None:
+async def test_a_fallback_takes_the_next_declared_fill_it_has_not_tried(
+    managers: PlatformManagers,
+) -> None:
     ctx = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, ctx)
     head = await managers.models.resolve_fill_set(ctx, session_id, [MAIN], Eligibility())
@@ -406,7 +410,7 @@ class CrashAfterTheStep(FillSetStorageMemoryImpl):
 
 
 async def test_a_version_a_crash_left_unwritten_is_written_from_its_step(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     ctx = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, ctx)
@@ -438,7 +442,7 @@ async def test_a_version_a_crash_left_unwritten_is_written_from_its_step(
         await models.settle_switch(ctx, session_id, new_id(), later, at)
 
 
-async def test_a_viewer_reads_and_switches_nothing(managers: Managers) -> None:
+async def test_a_viewer_reads_and_switches_nothing(managers: PlatformManagers) -> None:
     member = context(Role.MEMBER)
     session_id, epoch, loop_id = await a_run(managers, member)
     viewer = context(Role.VIEWER)
@@ -452,7 +456,7 @@ async def test_a_viewer_reads_and_switches_nothing(managers: Managers) -> None:
         await managers.models.purge_tenant(viewer)
 
 
-async def test_the_sweep_purges_no_living_tenants_fill_sets(managers: Managers) -> None:
+async def test_the_sweep_purges_no_living_tenants_fill_sets(managers: PlatformManagers) -> None:
     ctx, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
         "Ajax",

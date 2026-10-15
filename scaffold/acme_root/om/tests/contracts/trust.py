@@ -38,7 +38,12 @@ from acme.om.context import (
 )
 from acme.om.exceptions import NotAuthorized
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
-from acme.om.root import Managers, ProductKinds, build_managers
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -133,7 +138,7 @@ class Placement(PlacementInterface):
 class Trusted:
     infra: InfraLocalImpl
     storage: StorageInterface
-    managers: Managers
+    managers: PlatformManagers
     trust: TrustManagers
     trust_options: TrustOptions
     loops: LoopManagerImpl
@@ -239,15 +244,17 @@ def trusted(
         product_kinds=product_kinds,
         clock=clock,
     )
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         infra,
         integrations=IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
         agent_kinds=(STEADY,),
         principal_context=transition,
         tool_catalog=catalog,
-        tools_layer=layer.tools,
-        product_kinds=product_kinds,
+        platform_root_options=PlatformRootOptions(
+            tools_layer=layer.tools,
+            product_kinds=product_kinds,
+        ),
     )
     trust = layer.build(managers)
 

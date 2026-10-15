@@ -32,8 +32,8 @@ from acme.om.base import new_id
 from acme.om.budgets.types.amount import Amount
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy
-from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.pg_base import LoginSessions, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
@@ -68,8 +68,8 @@ async def storage(
 
 
 @pytest.fixture
-def managers(storage: StoragePostgresImpl, tmp_path: Path) -> Managers:
-    return build_managers(
+def managers(storage: StoragePostgresImpl, tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY,),
@@ -77,7 +77,7 @@ def managers(storage: StoragePostgresImpl, tmp_path: Path) -> Managers:
     )
 
 
-async def an_org(managers: Managers) -> TenantContext:
+async def an_org(managers: PlatformManagers) -> TenantContext:
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
@@ -86,7 +86,7 @@ async def an_org(managers: Managers) -> TenantContext:
 
 
 async def an_agent_project(
-    managers: Managers, ctx: TenantContext, path: str = "octo/reports"
+    managers: PlatformManagers, ctx: TenantContext, path: str = "octo/reports"
 ) -> AgentProject:
     return await managers.agent_projects.create_agent_project(ctx, make_agent_project(path))
 
@@ -115,7 +115,7 @@ async def session_rows(pg_sessions: LoginSessions, org_id: UUID, session_id: UUI
 
 
 async def test_a_session_is_created_only_under_an_agent_project_of_its_own_tenant(
-    managers: Managers, pg_sessions: LoginSessions
+    managers: PlatformManagers, pg_sessions: LoginSessions
 ) -> None:
     ours, theirs = await an_org(managers), await an_org(managers)
     agent_project = await an_agent_project(managers, ours)
@@ -138,7 +138,7 @@ async def test_a_session_is_created_only_under_an_agent_project_of_its_own_tenan
 
 
 async def test_a_sessions_agent_project_never_changes(
-    managers: Managers, pg_sessions: LoginSessions
+    managers: PlatformManagers, pg_sessions: LoginSessions
 ) -> None:
     ctx = await an_org(managers)
     first, second = (
@@ -166,7 +166,7 @@ async def test_a_sessions_agent_project_never_changes(
     assert await managers.agent_projects.agent_project_of(ctx, session.id) == first
 
 
-async def test_only_the_bound_repository_is_work_product(managers: Managers) -> None:
+async def test_only_the_bound_repository_is_work_product(managers: PlatformManagers) -> None:
     ctx, other = await an_org(managers), await an_org(managers)
     reports, ledger = (
         await an_agent_project(managers, ctx),
@@ -183,7 +183,7 @@ async def test_only_the_bound_repository_is_work_product(managers: Managers) -> 
 
 
 async def test_an_agent_projects_retention_narrowing_reaches_its_sessions(
-    managers: Managers, pg_sessions: LoginSessions
+    managers: PlatformManagers, pg_sessions: LoginSessions
 ) -> None:
     ctx = await an_org(managers)
     narrow, other = (

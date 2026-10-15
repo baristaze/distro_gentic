@@ -1251,7 +1251,15 @@ story; the rest is its planned shape:
   workspace provider, an integration with its twin, an agent kind, an
   agent automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of
-  [Operations](#operations) in its `.agents/skills/`.
+  [Operations](#operations) in its `.agents/skills/`. The platform wires
+  in files of its own over the engine's: its root builds over the
+  engine's root through hooks, and each process builds the platform's
+  half beside the engine's. A product built on it declares what it adds
+  in three files and edits no wiring file: its kinds
+  (`product_kinds.py`), its namespaces with their purges
+  (`product_namespaces.py`), and their routes and services
+  (`product_api.py`). So a base move meets the layer below only where
+  that layer's own lines change.
 
 **Its first commit.** `distro_gentic` takes its base from
 `agentic_core`'s first stable release, by its tag, as [`agentic_core`

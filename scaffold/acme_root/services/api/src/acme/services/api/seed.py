@@ -27,8 +27,8 @@ from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.matrix.types.record import BenchmarkRun
 from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_root import PlatformManagers
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import PLATFORM_EMAIL_DOMAIN
 
@@ -64,7 +64,9 @@ class Seeded:
 
 
 @asynccontextmanager
-async def seed_operator(managers: Managers, rctx: RequestContext) -> AsyncIterator[OperatorContext]:
+async def seed_operator(
+    managers: PlatformManagers, rctx: RequestContext
+) -> AsyncIterator[OperatorContext]:
     """The provisioner, admitted as the grant job admits it: put on the
     allowlist with write, and admitted on an operator token the seed mints,
     holds in this process alone, and ends when it is done."""
@@ -80,7 +82,7 @@ async def seed_operator(managers: Managers, rctx: RequestContext) -> AsyncIterat
 
 async def seed_matrix(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     rctx: RequestContext,
     kinds: Sequence[AgentKind],
 ) -> int:
@@ -121,7 +123,7 @@ async def seed_matrix(
 
 async def seed_platform(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     owner: TenantContext,
     kinds: Sequence[AgentKind] = (),
     *,

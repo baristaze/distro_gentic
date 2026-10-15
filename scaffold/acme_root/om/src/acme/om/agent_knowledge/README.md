@@ -55,7 +55,7 @@ of](../../../../README.md).
 The recall at start is the tools layer `root.AgentKnowledgeLayer`,
 around `prepare_workspace`, for a session with no model request yet
 (`AgentSession.speaker` is None). A root that runs loops wraps its tools
-in it, and hands `AgentKnowledgeLayer.manager` to `build_managers` as
+in it, and hands `AgentKnowledgeLayer.manager` to `PlatformRootOptions` as
 `agent_knowledge`, for the agents' tools. A session's agent project is
 read from the agent projects' rows (`SessionAgentProjectsInterface`),
 never from a call's input; storage bounds every read to it

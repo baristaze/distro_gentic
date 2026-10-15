@@ -54,7 +54,8 @@ import pytest
 from api_support import seed_request, sign_in_as
 from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import E2E_KINDS, KINDS, answers, runs, submits, validates
+from platform_runner_support import E2E_KINDS, submits, validates
+from runner_support import KINDS, answers, runs
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -81,8 +82,8 @@ from acme.om.exceptions import StaleWriter
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.impl.sealed_steps import says_something
-from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.types.content import ContentState, TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.storage.migrate import VERSION_TABLE

@@ -13,7 +13,7 @@ from acme.om.watch.kinds import STREAM_KIND
 from acme.om.watch.rules import MAX_HANDLE
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import WatchService
+from acme.services.api.gateway.platform_resolve import WatchService
 from acme.services.api.types.agent_sessions import AgentSessionView
 from acme.services.api.types.watch import (
     CommandProgressView,

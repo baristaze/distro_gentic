@@ -21,7 +21,7 @@ from acme.om.context import TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.handler import WorkRefused
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus

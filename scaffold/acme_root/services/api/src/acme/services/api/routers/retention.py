@@ -8,8 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Ctx
+from acme.services.api.gateway.platform_resolve import RetentionService
 from acme.services.api.gateway.precondition import IfMatch
-from acme.services.api.gateway.resolve import RetentionService
 from acme.services.api.types.retention import (
     RetentionRequest,
     RetentionView,

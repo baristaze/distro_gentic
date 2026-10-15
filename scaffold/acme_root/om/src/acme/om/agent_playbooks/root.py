@@ -4,9 +4,8 @@ layer it wraps its agents in, so each new session is made with its kind's
 kind manual, and the agent playbooks manager built over the managers it returns.
 
     layer = AgentPlaybooksLayer(storage)
-    managers = build_managers(
-        storage, infra, ..., tools_layer=layer.tools, agents_layer=layer.agents
-    )
+    options = PlatformRootOptions(tools_layer=layer.tools, agents_layer=layer.agents)
+    managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     agent_playbooks = layer.build(managers)
 
 A root with another tools layer composes the two: `lambda inner:
@@ -24,7 +23,7 @@ from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents import AgentsManagerInterface
 from acme.om.base import utcnow
 from acme.om.levers.rules import reach_of
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.steps import StepsManagerInterface
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -61,7 +60,7 @@ class AgentPlaybooksLayer:
             self._clock,
         )
 
-    def build(self, managers: Managers) -> AgentPlaybooksManagerInterface:
+    def build(self, managers: PlatformManagers) -> AgentPlaybooksManagerInterface:
         """The agent playbooks manager over the engine's, once; built again, the same."""
         if self._built is None:
             agent_playbooks = AgentPlaybooksManagerImpl(

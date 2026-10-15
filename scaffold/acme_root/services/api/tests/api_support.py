@@ -20,7 +20,7 @@ from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountR
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import totp_code, totp_step

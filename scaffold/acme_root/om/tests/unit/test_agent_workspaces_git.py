@@ -61,7 +61,7 @@ from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
 
@@ -142,24 +142,26 @@ class Checkout:
         self.storage = storage or StorageMemoryImpl()
         self.keys: KeyServiceInterface | None = None
         self.transport_layer = transport_layer
-        self.managers: Managers = self.host(tmp_path, infra)
+        self.managers: PlatformManagers = self.host(tmp_path, infra)
         self.ctx: TenantContext = context(Role.MEMBER)
         self.connected: UUID | None = None
 
-    def host(self, root: Path, infra: InfraLocalImpl | None = None) -> Managers:
+    def host(self, root: Path, infra: InfraLocalImpl | None = None) -> PlatformManagers:
         """A root on a host of its own over the one storage, as a runner on
         another host, or one that restarted, builds it. A caller may pass
         the infra of the first host."""
         infra = infra or HostInfra(root, self.keys)
         self.keys = infra.get_keys()
-        return build_managers(
+        return build_platform_managers(
             self.storage,
             infra,
             agent_kinds=(WORKER,),
-            workspace_agent_projects=self.agent_projects,
-            pull_requests=self.pull_requests,
-            source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
-            transport_layer=self.transport_layer,
+            platform_root_options=PlatformRootOptions(
+                workspace_agent_projects=self.agent_projects,
+                pull_requests=self.pull_requests,
+                source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
+                transport_layer=self.transport_layer,
+            ),
         )
 
     async def tenant_of(self, integration: str, installation: str) -> UUID | None:
@@ -275,7 +277,7 @@ async def test_a_branch_held_nowhere_is_cut_from_its_last_snapshot(checkout: Che
 
 async def a_dead_run_then_a_parked_loop(
     checkout: Checkout, tmp_path: Path
-) -> tuple[UUID, Managers, Workspace, Managers, Workspace]:
+) -> tuple[UUID, PlatformManagers, Workspace, PlatformManagers, Workspace]:
     """A run on host A that left a draft in its checkout and died, then the
     run that took the session over on host B, its own draft in its checkout,
     not yet released."""
@@ -290,7 +292,7 @@ async def a_dead_run_then_a_parked_loop(
     return session_id, host_a, on_a, host_b, on_b
 
 
-async def sweep(checkout: Checkout, host: Managers, instance: Workspace) -> None:
+async def sweep(checkout: Checkout, host: PlatformManagers, instance: Workspace) -> None:
     """The release of an instance no run accounts for, as the sweep makes
     it: a workspace named by where its host holds it, never by the run that
     prepared it."""
@@ -309,7 +311,7 @@ def snapshot_of(checkout: Checkout, branch: str, notes: str) -> str:
     return ref
 
 
-async def told_both(checkout: Checkout, host: Managers, session_id: UUID) -> None:
+async def told_both(checkout: Checkout, host: PlatformManagers, session_id: UUID) -> None:
     """Both instances' notices wait, and the next loop is told of both, and
     then of neither again."""
     branch = session_branch(session_id)

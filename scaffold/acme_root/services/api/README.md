@@ -29,6 +29,15 @@ A request passes four layers, each in its own folder under
 app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
 `bootstrap`, `add-member`, `grant-operator`, and `openapi`.
 
+A product built on Acme declares a namespace of its own once, in
+`product_api.py`: one `ProductApiNamespace` in `PRODUCT_API` names its
+routers and its service factory, over the managers its `ProductNamespace`
+in `acme.om.product_namespaces` builds. A router reaches the service
+through `gateway.platform_resolve.product_service`. So, whatever the
+guideline's `arch-scaffold-entity` says, a product adds nothing to
+`HOSTED` in `routers/__init__.py`, to the services interface or its root,
+to `gateway/resolve.py`, or to `container.py`.
+
 ## Routes, by area
 
 - **Sign-in.** Start a sign-in at the identity provider, WorkOS

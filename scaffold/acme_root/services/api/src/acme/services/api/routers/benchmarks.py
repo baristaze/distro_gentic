@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query
 
 from acme.om.evidence.types.record import NAME
 from acme.services.api.gateway.admin import OperatorCtx
-from acme.services.api.gateway.resolve import BenchmarksService
+from acme.services.api.gateway.platform_resolve import BenchmarksService
 from acme.services.api.types.benchmarks import BenchmarkSummaryView, BenchmarkView
 from acme.services.api.types.common import LIMIT_DEFAULT
 

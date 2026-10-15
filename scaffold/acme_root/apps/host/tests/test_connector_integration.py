@@ -46,7 +46,7 @@ from acme.om.connectors.types.connector import (
 )
 from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
 from acme.om.placement.types.work import ExecOperation
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -57,8 +57,8 @@ from acme.om.tools.rules import definition_hash
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
 from acme.services.api.seed import seed_platform
-from acme.workers.session_runner import container as runner_container
 from acme.workers.session_runner.container import RunnerContainer
+from acme.workers.session_runner.platform import container as runner_container
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 pytestmark = pytest.mark.integration

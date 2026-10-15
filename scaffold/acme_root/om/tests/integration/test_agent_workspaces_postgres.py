@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
-from contracts.loops import ASSISTANT, loop_over, reply, said
+from contracts.loops import ASSISTANT, reply, said
+from contracts.platform_loops import platform_loop_over
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
@@ -28,7 +29,7 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
-from acme.om.root import build_managers
+from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -64,7 +65,7 @@ async def an_owner(storage: StoragePostgresImpl, tmp_path: Path) -> TenantContex
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    managers = build_managers(storage, InfraConfiguredImpl(settings))
+    managers = build_platform_managers(storage, InfraConfiguredImpl(settings))
     slug = f"ajax-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -81,14 +82,14 @@ async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_rea
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     agent_projects = AgentProjectsTwin()
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         owner=owner,
         kinds=(TWINNED,),
-        workspace_agent_projects=agent_projects,
+        platform=PlatformRootOptions(workspace_agent_projects=agent_projects),
     )
-    workspaces = loop.managers.agent_workspaces
+    workspaces = loop.platform.agent_workspaces
     listed = EgressAllowlist(
         id=new_id(),
         created_at=loop.clock(),
@@ -130,7 +131,7 @@ async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     owner = await an_owner(storage, tmp_path)
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         owner=owner,
@@ -160,14 +161,16 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     git = GitTwin()
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path,
         storage=storage,
         owner=owner,
         kinds=(TWINNED,),
-        workspace_agent_projects=AgentProjectsTwin(),
-        workspace_git=git,
-        workspace_reader=ReaderTwin(),
+        platform=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(),
+            workspace_git=git,
+            workspace_reader=ReaderTwin(),
+        ),
     )
     session_id = await loop.start("twinned")
     for text, leaves_work in (("First.", False), ("Second.", True), ("Third.", False)):
@@ -177,7 +180,7 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
         assert (await loop.loops.run(owner, session_id)).outcome is LoopOutcome.SUCCEEDED
 
     (kept,) = list(git.pushed)
-    held = await loop.managers.agent_workspaces.get_workspace(owner, session_id)
+    held = await loop.platform.agent_workspaces.get_workspace(owner, session_id)
     assert held.snapshot_ref == kept and held.notices == () and held.version > 1
     told = [s for s in await loop.history(session_id) if s.type is StepType.ENVIRONMENT_CHANGED]
     assert len(told) == 1 and kept in told[0].as_text()

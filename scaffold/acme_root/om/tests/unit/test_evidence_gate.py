@@ -38,7 +38,7 @@ from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest
 from acme.om.exceptions import PreconditionFailed, UnsafeConfiguration
-from acme.om.root import build_managers
+from acme.om.platform_root import build_platform_managers
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
@@ -596,13 +596,13 @@ async def test_a_failed_batch_stays_counted_after_a_clean_one() -> None:
 @pytest.mark.parametrize("environment", ["staging", "production", "test"])
 def test_a_deployed_root_refuses_a_quiet_null_result_gate(environment: str, tmp_path: Path) -> None:
     with pytest.raises(UnsafeConfiguration, match="ResultGateNullImpl"):
-        build_managers(
+        build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
             result_gate=ResultGateNullImpl(),
             environment=environment,
         )
-    local = build_managers(
+    local = build_platform_managers(
         StorageMemoryImpl(), InfraLocalImpl(tmp_path), result_gate=ResultGateNullImpl()
     )
     assert isinstance(local.agents, AgentsManagerImpl)
@@ -611,7 +611,7 @@ def test_a_deployed_root_refuses_a_quiet_null_result_gate(environment: str, tmp_
 async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate(
     tmp_path: Path,
 ) -> None:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY,),

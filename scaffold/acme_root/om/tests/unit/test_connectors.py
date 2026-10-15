@@ -19,7 +19,8 @@ from uuid import UUID
 
 import pytest
 from contracts.doubles import APP
-from contracts.loops import ALLOWED, Loop, call, loop_over, reply, said
+from contracts.loops import ALLOWED, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 from contracts.tools import failure_of, result_text
 from pydantic import SecretStr
 from unit.test_tools_mcp_servers import SERVER, free_port, logged
@@ -168,7 +169,7 @@ class HostCalls:
 
 @dataclass
 class Tenant:
-    loop: Loop
+    loop: PlatformLoop
     connectors: ConnectorsManagerInterface
 
 
@@ -191,10 +192,10 @@ def tenant(
         host=host,
         options=ConnectorsOptions(private_addresses=True),
     )
-    loop = loop_over(
+    loop = platform_loop_over(
         tmp_path, kinds=(OPS_ANALYST,), attached=layer.attached, storage=storage, infra=infra
     )
-    return Tenant(loop, layer.build(loop.managers))
+    return Tenant(loop, layer.build(loop.platform))
 
 
 def acting(
@@ -211,7 +212,7 @@ def acting(
     )
 
 
-async def ran(loop: Loop, session_id: UUID) -> list[Step]:
+async def ran(loop: PlatformLoop, session_id: UUID) -> list[Step]:
     run = await loop.loops.run(loop.owner, session_id)
     assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
     return await loop.history(session_id)

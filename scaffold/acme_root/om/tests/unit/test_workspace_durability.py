@@ -21,7 +21,8 @@ import pytest
 from contracts.agent_project_storage import make_agent_project
 from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
 from contracts.doubles import APP
-from contracts.loops import ASSISTANT, Asked, Found, Lookup, Loop, call, loop_over, reply, said
+from contracts.loops import ASSISTANT, Asked, Found, Lookup, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
@@ -50,6 +51,7 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
 from acme.om.hosts.types.placement import PlacementState
+from acme.om.platform_root import PlatformRootOptions
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention.impl.keys import TenantKeysImpl
 from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
@@ -107,18 +109,24 @@ KEEPER = kind("keeper", KEPT)
 CACHER = kind("cacher", CACHED)
 
 
-def kept_loop(tmp_path: Path, **roots: Any) -> tuple[Loop, WorkspaceTwinImpl]:
+def kept_loop(tmp_path: Path, **over: Any) -> tuple[PlatformLoop, WorkspaceTwinImpl]:
     infra = InfraLocalImpl(tmp_path)
     twin = infra.get_workspaces()
     assert isinstance(twin, WorkspaceTwinImpl)
-    roots.setdefault("workspace_reader", ReaderTwin())
-    loop = loop_over(
-        tmp_path, kinds=(KEEPER, CACHER), infra=infra, extra=(Scribble(twin),), **roots
+    platform = over.pop("platform", None) or PlatformRootOptions()
+    reader = platform.workspace_reader or ReaderTwin()
+    loop = platform_loop_over(
+        tmp_path,
+        kinds=(KEEPER, CACHER),
+        infra=infra,
+        extra=(Scribble(twin),),
+        platform=replace(platform, workspace_reader=reader),
+        **over,
     )
     return loop, twin
 
 
-async def wrote(loop: Loop, session_id: UUID, files: str) -> LoopOutcome | None:
+async def wrote(loop: PlatformLoop, session_id: UUID, files: str) -> LoopOutcome | None:
     await loop.say(session_id, "Write it.")
     loop.anthropic.add(reply(call("scribble", q=files)), reply(said("Written.")))
     return (await loop.loops.run(loop.owner, session_id)).outcome
@@ -128,7 +136,7 @@ def of_type(steps: list[Step], step_type: StepType) -> list[Step]:
     return [step for step in steps if step.type is step_type]
 
 
-async def in_bucket(loop: Loop, session_id: UUID) -> list[str]:
+async def in_bucket(loop: PlatformLoop, session_id: UUID) -> list[str]:
     buckets = loop.infra.get_buckets()
     return await buckets.list(loop.owner.org_id, Buckets.SNAPSHOTS, session_prefix(session_id), 50)
 
@@ -162,14 +170,14 @@ async def test_a_kept_kind_is_pinned_kept_and_an_agent_project_that_keeps_caches
 ) -> None:
     loop, _ = kept_loop(tmp_path)
     kept = await loop.start(KEEPER.name)
-    agent_projects = loop.managers.agent_projects
+    agent_projects = loop.platform.agent_projects
     caches = await agent_projects.create_agent_project(
         loop.owner, make_agent_project().model_copy(update={"workspace_snapshots": False})
     )
     narrowed = await agent_projects.start_session(
         loop.owner, caches.id, Start(id=new_id(), kind=KEEPER.name, title="a cache")
     )
-    workspaces = loop.managers.agent_workspaces
+    workspaces = loop.platform.agent_workspaces
 
     pinned = await workspaces.get_workspace(loop.owner, kept)
     assert (
@@ -186,7 +194,7 @@ async def test_a_session_that_keeps_no_content_at_rest_is_refused_a_kept_workspa
     good: refused at its creation, never pinned as a cache in its stead. A
     cache of the same tenant is created."""
     loop, _ = kept_loop(tmp_path)
-    retention = loop.managers.retention
+    retention = loop.platform.retention
     policy = await retention.get_policy(loop.owner)
     nothing_at_rest = RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY)
     await retention.write_policy(loop.owner, policy.model_copy(update={"policy": nothing_at_rest}))
@@ -195,7 +203,7 @@ async def test_a_session_that_keeps_no_content_at_rest_is_refused_a_kept_workspa
         await loop.start(KEEPER.name)
 
     cache = await loop.start(CACHER.name)
-    assert (await loop.managers.agent_workspaces.get_workspace(loop.owner, cache)).durability is (
+    assert (await loop.platform.agent_workspaces.get_workspace(loop.owner, cache)).durability is (
         Durability.CACHE
     )
 
@@ -208,7 +216,10 @@ async def test_a_cache_sessions_release_takes_no_snapshot_and_its_next_loop_star
 ) -> None:
     git = Syncs()
     loop, twin = kept_loop(
-        tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+        tmp_path,
+        platform=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+        ),
     )
     started = prepares(twin, monkeypatch)
     session_id = await loop.start(CACHER.name)
@@ -219,7 +230,7 @@ async def test_a_cache_sessions_release_takes_no_snapshot_and_its_next_loop_star
 
     assert not of_type(await loop.history(session_id), StepType.SNAPSHOTTED), "no snapshot"
     assert await in_bucket(loop, session_id) == []
-    assert await loop.managers.agent_workspaces.kept_snapshots(loop.owner, session_id) == ()
+    assert await loop.platform.agent_workspaces.kept_snapshots(loop.owner, session_id) == ()
     assert started == [None, None], "each loop starts from no snapshot"
     assert git.cuts == [branch], "its first loop cut the branch, and the next kept it"
     assert git.synced == [branch, branch], "each loop's checkout was brought up to its branch"
@@ -238,7 +249,10 @@ async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over
     restored tree, so the run goes on from what the snapshot holds."""
     git = Syncs()
     loop, twin = kept_loop(
-        tmp_path, workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+        tmp_path,
+        platform=PlatformRootOptions(
+            workspace_agent_projects=AgentProjectsTwin(), workspace_git=git
+        ),
     )
     started = prepares(twin, monkeypatch)
     session_id = await loop.start(KEEPER.name)
@@ -256,7 +270,7 @@ async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over
     assert started[-1] is not None, "the run started from the snapshot"
     assert twin.files[session_id] == b"as the run left it"
     assert git.cuts == [branch] and git.synced == [branch], "no branch was brought over it"
-    (record, *_) = await loop.managers.agent_workspaces.kept_snapshots(loop.owner, session_id)
+    (record, *_) = await loop.platform.agent_workspaces.kept_snapshots(loop.owner, session_id)
     assert record.id == taken.header.snapshot.id and not record.on_host, "in the bucket"  # type: ignore[union-attr]
 
 
@@ -312,13 +326,13 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
     and recorded there. Past it, the sweep revokes its key and takes them,
     from the bucket and from the records; another session's stay."""
     keys = TenantKeysImpl(KeyServiceMemoryImpl(), {})
-    loop, _ = kept_loop(tmp_path, tenant_keys=keys)
+    loop, _ = kept_loop(tmp_path, platform=PlatformRootOptions(tenant_keys=keys))
     # A live tenant, whose org the sweep mints a context for.
     owner, _ = await loop.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax-kept", "a@x.test", "Ann"
     )
     loop = replace(loop, owner=owner)
-    retention = loop.managers.retention
+    retention = loop.platform.retention
     policy = await retention.get_policy(loop.owner)
     week = RetentionPolicy(content_lifetime=WEEK)
     await retention.write_policy(loop.owner, policy.model_copy(update={"policy": week}))
@@ -330,7 +344,7 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
     )
     staying = await loop.start(KEEPER.name)
     assert await wrote(loop, staying, "kept for good") is LoopOutcome.SUCCEEDED
-    workspaces = loop.managers.agent_workspaces
+    workspaces = loop.platform.agent_workspaces
     assert len(await in_bucket(loop, expiring)) == 1
     assert len(await workspaces.kept_snapshots(loop.owner, expiring)) == 1
 
@@ -416,7 +430,9 @@ class Placed(PlacedWorkspacesInterface):
         return None
 
 
-def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerAgentWorkspacesImpl]) -> None:
+def on_host(
+    loop: PlatformLoop, placed: Placed, tools: list[ToolsManagerAgentWorkspacesImpl]
+) -> None:
     """The platform's tools over the loop's, with a pool of one host; the
     inner tools never take a hosted workspace's snapshot."""
 
@@ -428,7 +444,7 @@ def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerAgentWorkspacesI
     tools.append(
         ToolsManagerAgentWorkspacesImpl(
             inner,
-            loop.managers.agent_workspaces,
+            loop.platform.agent_workspaces,
             loop.managers.steps,
             HostOffer(),
             local=True,
@@ -461,7 +477,7 @@ async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_
 
     assert step.type is StepType.SNAPSHOTTED and step.header is not None
     named: WorkspaceSnapshot = step.header.snapshot  # type: ignore[union-attr]
-    record = await loop.managers.agent_workspaces.kept_snapshot(loop.owner, named.id)
+    record = await loop.platform.agent_workspaces.kept_snapshot(loop.owner, named.id)
     assert record is not None and record.on_host and placed.asked == [named.id]
     assert (named.hash, named.size) == (record.hash, record.size)
 

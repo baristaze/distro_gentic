@@ -29,7 +29,7 @@ from acme.infra.observability import (
 )
 from acme.infra.trust import install_trust_store
 from acme.om.placement.rules import LOOP_LANE_PREFIX, tier_label
-from acme.om.root import PlatformPorts
+from acme.om.platform_root import PlatformPorts
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
@@ -80,7 +80,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
     duty is to the instances its host holds."""
     managers = container.managers
     loop = LoopHandlerImpl(
-        managers.loop, managers.agent_sessions, container.park_alerts.notify_park
+        managers.loop, managers.agent_sessions, container.platform.park_alerts.notify_park
     )
     held = HeldWorkspacesSweep(
         container.infra.get_workspaces(),
@@ -90,7 +90,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         managers.steps,
         managers.work,
         managers.tenancy,
-        container.kinds.warm_grace,
+        container.platform.kinds.warm_grace,
         exec_relay=managers.exec_relay,
         cloud=managers.cloud_pool,
     )
@@ -107,7 +107,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         options=loop_options(
             container.settings,
             lane,
-            container.placement.lane_cap(claimed_lane(container.settings, lane)),
+            container.platform.placement.lane_cap(claimed_lane(container.settings, lane)),
         ),
     )
 

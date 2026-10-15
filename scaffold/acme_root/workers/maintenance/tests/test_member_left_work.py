@@ -55,7 +55,7 @@ async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
     tmp_path: Path,
 ) -> None:
     container = build_container(tmp_path)
-    tenancy, intake = container.managers.tenancy, container.intake
+    tenancy, intake = container.managers.tenancy, container.platform.intake
     links = container.storage.get_intake_storage()
     ann = await sign_in(container)
     bob = await add_bob(container)
@@ -85,7 +85,7 @@ async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
 
 async def test_a_deleted_account_leaves_no_link_in_a_team_org(tmp_path: Path) -> None:
     container = build_container(tmp_path)
-    intake = container.intake
+    intake = container.platform.intake
     links = container.storage.get_intake_storage()
     ann = await sign_in(container)
     await add_bob(container)
@@ -103,7 +103,7 @@ async def test_a_deleted_account_leaves_no_link_in_a_team_org(tmp_path: Path) ->
 
 async def test_a_member_who_holds_a_place_keeps_their_links(tmp_path: Path) -> None:
     container = build_container(tmp_path)
-    intake = container.intake
+    intake = container.platform.intake
     ann = await sign_in(container)
     bob = await add_bob(container)
     await intake.link_account(ann, "chat", "U-BOB", bob.id)
@@ -119,7 +119,11 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     drain cancels it, or its lease is lost) has deleted nothing; run again,
     it deletes every link and writes each link's audit once."""
     container = build_container(tmp_path)
-    intake, events, work = container.intake, container.managers.events, container.managers.work
+    intake, events, work = (
+        container.platform.intake,
+        container.managers.events,
+        container.managers.work,
+    )
     ann = await sign_in(container)
     bob = await add_bob(container)
     linked = [

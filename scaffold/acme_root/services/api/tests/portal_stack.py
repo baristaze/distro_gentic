@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from acme.om.root import ProductKinds
+    from acme.om.platform_root import ProductKinds
     from acme.services.api.container import AppContainer
     from acme.services.api.settings import ApiSettings
 
@@ -39,8 +39,8 @@ def scene_kinds() -> ProductKinds:
     included, on this host."""
     from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
     from acme.om.platform_agents.kinds import ANALYSIS_KIND, SOFTWARE_ENGINEER_KIND
+    from acme.om.platform_root import ProductKinds
     from acme.om.product_kinds import PRODUCT_KINDS
-    from acme.om.root import ProductKinds
     from acme.om.tools.native.ask_person import ASK_PERSON
     from acme.om.tools.native.write_plan import WRITE_PLAN
 
@@ -63,7 +63,7 @@ def scene_container(settings: ApiSettings) -> AppContainer:
     from acme.infra.impl.configured import InfraConfiguredImpl
     from acme.integrations.impl.configured import IntegrationsConfiguredImpl
     from acme.om.platform_agents.settings import shipped_agents
-    from acme.om.root import PlatformPorts
+    from acme.om.platform_root import PlatformPorts
     from acme.services.api.container import AppContainer, postgres_storage
 
     return AppContainer.over(
@@ -107,7 +107,7 @@ def runner() -> int:
     from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsBoundImpl
     from acme.om.agent_workspaces.types.source import RepositoryBinding
     from acme.om.context import TenantContext
-    from acme.om.root import PlatformPorts
+    from acme.om.platform_root import PlatformPorts
     from acme.om.storage.impl.postgres import StoragePostgresImpl
     from acme.workers.session_runner.main import main as run
     from acme.workers.session_runner.settings import SessionRunnerSettings

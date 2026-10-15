@@ -125,7 +125,7 @@ platform's cloud. Each call crosses the wall as `exec`
 The runner's transport is `impl/transport.TransportRelayImpl`, behind
 `TransportPlacedImpl`, which picks it per session by trust's
 `PlacementInterface`; the session runner wires both through
-`build_managers(transport_layer=...)`. `impl/placement.PlacementRelayedImpl`
+`PlatformRootOptions.transport_layer`. `impl/placement.PlacementRelayedImpl`
 answers trust's executor with the bound host, and
 `PlacementClaimsRelayedImpl` wraps placement's `claim_for` so a claimed
 `EXEC` row reaches a host only after `start`. An unsafe item's row takes

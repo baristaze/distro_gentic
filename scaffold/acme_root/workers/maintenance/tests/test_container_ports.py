@@ -24,7 +24,7 @@ def test_the_worker_sweeps_the_money_gates_holds_on_its_ledger(tmp_path: Path) -
     storage = StorageMemoryImpl()
     container = WorkerContainer.for_tests(storage, InfraLocalImpl(tmp_path), STAGING)
     assert isinstance(container.managers.budget_gate, MoneyGateInterface)
-    holds = container.holds
+    holds = container.platform.holds
     assert holds._gate is container.managers.budget_gate  # pyright: ignore[reportPrivateUsage]
     assert holds._ledger is storage.get_spend_ledger_storage()  # pyright: ignore[reportPrivateUsage]
 

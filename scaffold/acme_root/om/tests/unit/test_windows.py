@@ -52,9 +52,9 @@ from acme.om.models.types.fill import (
     RoleFill,
     SwitchReason,
 )
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
-from acme.om.root import Managers, build_managers
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import no_session
 from acme.om.steps.types.content import Content, TextBlock, ToolResultBlock
@@ -232,7 +232,7 @@ def an_engine(
     unless `clock` is given."""
     storage = StorageMemoryImpl()
     infra = InfraLocalImpl(tmp_path)
-    managers = build_managers(storage, infra)
+    managers = build_platform_managers(storage, infra)
     clocked: dict[str, Callable[[], datetime]] = {} if clock is None else {"clock": clock}
     models = ModelsManagerImpl(
         storage.get_fill_set_storage(),
@@ -917,7 +917,7 @@ def test_a_step_that_names_an_artifact_holds_its_head_and_tail() -> None:
 # The root's own wiring.
 
 
-async def authorized(managers: Managers, ctx: TenantContext, session_id: UUID) -> None:
+async def authorized(managers: PlatformManagers, ctx: TenantContext, session_id: UUID) -> None:
     """A session of the caller's, with its authority: a render reads who
     spoke and who pays from it."""
     now = utcnow()
@@ -937,7 +937,9 @@ async def authorized(managers: Managers, ctx: TenantContext, session_id: UUID) -
 
 
 async def test_a_root_hashes_a_prompt_under_the_sessions_key(tmp_path: Path) -> None:
-    managers = build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), model_prices=Priced())
+    managers = build_platform_managers(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), model_prices=Priced()
+    )
     ctx = context(Role.MEMBER)
     history = History()
     await authorized(managers, ctx, history.session_id)
@@ -969,7 +971,7 @@ async def test_a_root_hashes_a_prompt_under_the_sessions_key(tmp_path: Path) -> 
 
 
 async def test_a_root_with_the_nulls_wired_refuses_to_hash_or_spend(tmp_path: Path) -> None:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         model_prices=Priced(),

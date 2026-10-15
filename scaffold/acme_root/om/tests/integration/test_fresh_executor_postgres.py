@@ -47,7 +47,7 @@ from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
@@ -177,15 +177,17 @@ class Delivered:
         self.repository = Repository(tmp_path)
         self.infra = OnDocker(tmp_path)
         self.work = WorkProductMemoryImpl()
-        self.managers: Managers = build_managers(
+        self.managers: PlatformManagers = build_platform_managers(
             storage,
             self.infra,
             agent_kinds=(DELIVERY,),
             tool_catalog=stand_ins(*DELIVERY.tools),
             environment="production",
-            work_product=self.work,
-            workspace_agent_projects=OnDisk(self.repository),
-            workspace_reader=RepositoryReaderGitImpl(on_disk=True),
+            platform_root_options=PlatformRootOptions(
+                work_product=self.work,
+                workspace_agent_projects=OnDisk(self.repository),
+                workspace_reader=RepositoryReaderGitImpl(on_disk=True),
+            ),
         )
 
     async def session(self, files: dict[str, str]) -> tuple[TenantContext, UUID, str]:

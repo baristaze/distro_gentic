@@ -34,7 +34,7 @@ from acme.om.agent_automations.types.agent_automation import (
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized, ValidationFailed
-from acme.om.root import Managers
+from acme.om.platform_root import PlatformManagers
 
 JOB = "run_job"
 
@@ -90,7 +90,9 @@ class JobAction(AgentAutomationActionInterface):
 def declaring(
     *kinds: AgentAutomationActionInterface,
 ) -> Callable[..., tuple[AgentAutomationActionInterface, ...]]:
-    def actions(managers: Callable[[], Managers]) -> tuple[AgentAutomationActionInterface, ...]:
+    def actions(
+        managers: Callable[[], PlatformManagers],
+    ) -> tuple[AgentAutomationActionInterface, ...]:
         return kinds
 
     return actions

@@ -12,18 +12,18 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.root import StorageInterface
 from contracts.acceptance import DefectExecutor, EvidenceParts
-from contracts.doubles import SessionAgentProjectsMemory
 from contracts.evidence import CHECKOUT, checkout_policy
+from contracts.platform_doubles import SessionAgentProjectsMemory
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 
 @dataclass
 class World:
-    managers: Managers
+    managers: PlatformManagers
     parts: EvidenceParts
     owner: TenantContext
 
@@ -36,12 +36,14 @@ async def world_over(storage: StorageInterface, tmp_path: Path) -> World:
     )
     work, executor = WorkProductMemoryImpl(), DefectExecutor(name="executor-1")
     agent_projects = SessionAgentProjectsMemory(default=CHECKOUT)
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         InfraConfiguredImpl(settings),
-        executor=executor,
-        work_product=work,
-        session_policies=agent_projects,
+        platform_root_options=PlatformRootOptions(
+            executor=executor,
+            work_product=work,
+            session_policies=agent_projects,
+        ),
     )
     slug = f"export-{new_id().hex[-8:]}"
     owner, _ = await managers.tenancy.bootstrap(

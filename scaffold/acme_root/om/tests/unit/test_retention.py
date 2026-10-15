@@ -34,6 +34,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.amount import Amount
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention.agent_projects import SessionAgentProjectInterface
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared, verified
@@ -48,7 +49,6 @@ from acme.om.retention.types.policy import (
     RetentionPolicy,
     TenantRetention,
 )
-from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import Content, ContentState, TextBlock
 from acme.om.steps.types.header import (
     ControlCommand,
@@ -105,13 +105,15 @@ class Roots:
         self.keys = TenantKeysImpl(platform, self.owners)
         self.storage = StorageMemoryImpl()
         self.agent_projects = agent_projects or SessionAgentProjectNullImpl()
-        self.managers: Managers = build_managers(
+        self.managers: PlatformManagers = build_platform_managers(
             self.storage,
             InfraLocalImpl(tmp_path),
             tool_catalog=TOOLS,
             agent_kinds=(KIND,),
-            tenant_keys=self.keys,
-            agent_session_projects=self.agent_projects,
+            platform_root_options=PlatformRootOptions(
+                tenant_keys=self.keys,
+                agent_session_projects=self.agent_projects,
+            ),
         )
         self.options = options or RetentionOptions()
         self.now = utcnow()

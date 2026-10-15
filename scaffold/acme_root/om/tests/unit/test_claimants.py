@@ -41,7 +41,12 @@ from acme.om.hosts.types.host import (
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.kinds import HOST_PREFIX, ClaimantKinds, platform_claimant_kinds
 from acme.om.placement.types.claimant import ClaimantReport, ReportOutcome
-from acme.om.root import PLATFORM_PREFIXES, Managers, build_managers
+from acme.om.platform_root import (
+    PLATFORM_PREFIXES,
+    PlatformManagers,
+    PlatformRootOptions,
+    build_platform_managers,
+)
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import credential_kind_of
 from acme.om.work.types.work_item import WorkStatus
@@ -55,8 +60,12 @@ def storage() -> StorageMemoryImpl:
 
 
 @pytest.fixture
-def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path), product_kinds=PRODUCT)
+def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
+    return build_platform_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        platform_root_options=PlatformRootOptions(product_kinds=PRODUCT),
+    )
 
 
 @pytest.fixture
@@ -65,7 +74,7 @@ def clock() -> Clock:
 
 
 @pytest.fixture
-def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> HostsManagerImpl:
+def hosts(managers: PlatformManagers, storage: StorageMemoryImpl, clock: Clock) -> HostsManagerImpl:
     """The hosts manager the root builds, with the product's claimant kinds
     beside the platform's, on a clock the case moves."""
     return HostsManagerImpl(
@@ -100,7 +109,7 @@ async def identity_of(hosts: HostsManagerImpl, issued: IssuedCredential) -> Clai
 
 
 async def test_a_products_claimant_enrolls_with_a_credential_of_its_own_kind(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers, "ajax")
     pool = await a_batch_pool(hosts, owner)
@@ -133,7 +142,7 @@ async def test_a_products_claimant_enrolls_with_a_credential_of_its_own_kind(
 
 
 async def test_each_credential_opens_its_own_kinds_path_alone(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers, "ajax")
     pool = await a_batch_pool(hosts, owner)
@@ -174,7 +183,7 @@ async def test_each_credential_opens_its_own_kinds_path_alone(
 
 
 async def test_a_claimants_credential_claims_only_its_kinds_work_in_its_tenants_pool(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     ours, elsewhere = await a_batch_pool(hosts, ajax), await a_batch_pool(hosts, ajax)
@@ -223,7 +232,7 @@ async def test_a_claimants_credential_claims_only_its_kinds_work_in_its_tenants_
 
 
 async def test_a_claimant_token_whose_issuer_left_enrolls_nothing(
-    managers: Managers, hosts: HostsManagerImpl
+    managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers, "ajax")
     pool = await a_batch_pool(hosts, owner)
@@ -236,7 +245,7 @@ async def test_a_claimant_token_whose_issuer_left_enrolls_nothing(
 
 
 async def test_a_revoked_or_expired_claimant_credential_is_refused(
-    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+    managers: PlatformManagers, hosts: HostsManagerImpl, clock: Clock
 ) -> None:
     owner = await an_owner(managers, "ajax")
     pool = await a_batch_pool(hosts, owner)

@@ -48,7 +48,12 @@ from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, SOFTWARE_ENGINEER_KIND
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
-from acme.om.root import Managers, ProductKinds, build_managers
+from acme.om.platform_root import (
+    PlatformManagers,
+    PlatformRootOptions,
+    ProductKinds,
+    build_platform_managers,
+)
 from acme.om.steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import Step, StepType
@@ -106,7 +111,7 @@ class ModelProviderReadingImpl(ModelProviderScriptedImpl):
 @dataclass
 class Platform:
     storage: StorageInterface
-    managers: Managers
+    managers: PlatformManagers
     anthropic: ModelProviderReadingImpl
     openai: ModelProviderScriptedImpl
     owner: TenantContext
@@ -197,19 +202,21 @@ def platform_over(
     integrations = IntegrationsOverImpl(
         IdentityProviderAbsentImpl(), providers, {} if forge is None else {FORGE: forge}
     )
-    managers = build_managers(
+    managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
         integrations=integrations,
         principal_context=live,
         loop_options=LoopOptions(control_poll=timedelta(milliseconds=1)),
-        platform_agents=PlatformAgents(corpus=corpus),
         agent_kinds=kinds,
-        executor=executor,
-        work_product=work_product,
-        product_kinds=product_kinds,
-        agent_automations=lambda: agent_automations[0],
-        intake=None if forge is None else lambda: intakes[0],
+        platform_root_options=PlatformRootOptions(
+            platform_agents=PlatformAgents(corpus=corpus),
+            executor=executor,
+            work_product=work_product,
+            product_kinds=product_kinds,
+            agent_automations=lambda: agent_automations[0],
+            intake=None if forge is None else lambda: intakes[0],
+        ),
     )
     agent_automations.append(
         build_agent_automations(storage, managers, agent_project_required=False)

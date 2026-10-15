@@ -24,8 +24,8 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.retention.crossing import Crossing, CrossingKind, declared
-from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, StreamKind
 from acme.om.watch.root import build_kind_streams
 from acme.om.watch.types.live import MAX_ENTRY

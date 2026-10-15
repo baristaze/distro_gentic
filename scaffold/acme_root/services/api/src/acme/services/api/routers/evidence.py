@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Ctx
-from acme.services.api.gateway.resolve import EvidenceService
+from acme.services.api.gateway.platform_resolve import EvidenceService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.evidence import ExecutionPageView, ValidationView, WorkProductView
 

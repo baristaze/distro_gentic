@@ -6,8 +6,8 @@ version they read."""
 from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Ctx
+from acme.services.api.gateway.platform_resolve import ToolsService
 from acme.services.api.gateway.precondition import IfMatch
-from acme.services.api.gateway.resolve import ToolsService
 from acme.services.api.types.tools import ToolPolicyRequest, ToolPolicyView
 
 router = APIRouter(prefix="/tools", tags=["tools"])

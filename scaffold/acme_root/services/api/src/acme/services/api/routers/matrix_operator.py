@@ -15,7 +15,7 @@ from fastapi import APIRouter, Path, Response
 
 from acme.services.api.gateway.admin import OperatorCtx
 from acme.services.api.gateway.idempotency import OperatorIdem
-from acme.services.api.gateway.resolve import MatrixService
+from acme.services.api.gateway.platform_resolve import MatrixService
 from acme.services.api.types.matrix import (
     BenchmarkResultRequest,
     BenchmarkResultView,

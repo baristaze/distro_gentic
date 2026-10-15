@@ -94,7 +94,7 @@ Placement is the hosts' concept: `placement.PlacementInterface` declares
 the one fact the secrets read (inside a wall or not) and the one answer
 the audit reads (the executor), with `impl/placement.PlacementCloudImpl`
 as the default. The trust layer (`root.TrustLayer`) wraps the engine's
-tools manager through `build_managers(tools_layer=...)`; the decorator is
+tools manager through `PlatformRootOptions.tools_layer`; the decorator is
 `impl/tools.ToolsManagerTrustedImpl`. The audited principal is the one
 the call's context speaks for (`attribution.rules.principal_of`), never
 the tool request's header, which a take-over leaves behind.

@@ -1,7 +1,7 @@
 """The platform's money behind the engine's gate: the gate a root hands the
 engine's root as its budget gate, and the refusal of a root that did not.
 
-    managers = build_managers(storage, infra, ..., budget_gate=build_money_gate(storage))
+    managers = build_platform_managers(storage, infra, ..., budget_gate=build_money_gate(storage))
     refuse_open_money(environment, managers)
 
 Handed a money gate, the engine's root puts agent billing's call gate in front of
@@ -30,7 +30,8 @@ from acme.om.agent_billing.types.unit_plan import (
 )
 from acme.om.base import utcnow
 from acme.om.exceptions import UnsafeConfiguration
-from acme.om.root import LOCAL, Managers
+from acme.om.platform_root import PlatformManagers
+from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
 
 
@@ -61,7 +62,7 @@ def build_money_gate(
 
 def build_agent_billing(
     storage: StorageInterface,
-    managers: Managers,
+    managers: PlatformManagers,
     payments: PaymentProviderInterface,
     *,
     unit_plans: UnitPlanCatalog = UNIT_PLANS,
@@ -83,14 +84,14 @@ def build_agent_billing(
 
 
 def build_agent_billing_purge(
-    storage: StorageInterface, managers: Managers
+    storage: StorageInterface, managers: PlatformManagers
 ) -> AgentBillingPurgeInterface:
     """Agent agent billing's part of a deleted tenant's purge, for the maintenance
     worker: the spend account goes, and the ledger stays."""
     return AgentBillingPurgeImpl(storage.get_spend_account_storage(), managers.tenancy)
 
 
-def refuse_open_money(environment: str, managers: Managers) -> None:
+def refuse_open_money(environment: str, managers: PlatformManagers) -> None:
     """Outside `local`, a root whose budget gate is not agent billing's is refused
     at boot: the engine's gate holds a call on its limits alone, and never
     asks who pays, so a tenant with no spend account would spend on the

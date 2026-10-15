@@ -29,7 +29,7 @@ from acme.om.context import (
     TenantContext,
 )
 from acme.om.exceptions import NotAuthorized, NotFound
-from acme.om.root import Managers, build_managers
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.steps.rules import control_step, message_step
 from acme.om.steps.types.header import (
     ControlCommand,
@@ -57,7 +57,7 @@ class Engine:
 
     def __init__(self, tmp_path: Path) -> None:
         self.storage = StorageMemoryImpl()
-        self.managers: Managers = build_managers(
+        self.managers: PlatformManagers = build_platform_managers(
             self.storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS
         )
 

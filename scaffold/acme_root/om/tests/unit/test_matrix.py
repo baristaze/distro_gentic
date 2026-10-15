@@ -77,10 +77,10 @@ from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.types.share import FairShare
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_root import ProductKinds
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention import rules as retention_rules
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.root import ProductKinds
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, SwitchedHeader
 from acme.om.steps.types.step import StepType
 from acme.om.tools.types.toolset import Toolset
@@ -376,11 +376,11 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
             MatrixRow(fills=(SONNET,)),
         )
     )
-    current = await agent_fleet.loop.managers.retention.get_policy(agent_fleet.owner)
+    current = await agent_fleet.loop.platform.retention.get_policy(agent_fleet.owner)
     kept = RetentionPolicy(
         storage_mode=StorageMode.MEMORY_ONLY, zero_retention=True, region="eu-central-1"
     )
-    await agent_fleet.loop.managers.retention.write_policy(
+    await agent_fleet.loop.platform.retention.write_policy(
         agent_fleet.owner, current.model_copy(update={"policy": kept})
     )
     session_id = await agent_fleet.loop.start()
@@ -433,7 +433,7 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
 
     # The tenant now keeps nothing and stays in one region, and the sweep
     # folds it into the session's snapshot.
-    retention = agent_fleet.loop.managers.retention
+    retention = agent_fleet.loop.platform.retention
     current = await retention.get_policy(agent_fleet.owner)
     kept = RetentionPolicy(
         storage_mode=StorageMode.MEMORY_ONLY, zero_retention=True, region="eu-central-1"
@@ -468,11 +468,11 @@ async def test_a_session_that_resolves_nothing_is_pinned_to_nothing(tmp_path: Pa
     version, and its loop ends; the next version answers it."""
     agent_fleet = await agent_fleet_over(tmp_path)
     await agent_fleet.publish()
-    current = await agent_fleet.loop.managers.retention.get_policy(agent_fleet.owner)
+    current = await agent_fleet.loop.platform.retention.get_policy(agent_fleet.owner)
     kept = RetentionPolicy(
         storage_mode=StorageMode.MEMORY_ONLY, zero_retention=True, region="eu-central-1"
     )
-    await agent_fleet.loop.managers.retention.write_policy(
+    await agent_fleet.loop.platform.retention.write_policy(
         agent_fleet.owner, current.model_copy(update={"policy": kept})
     )
     session_id = await agent_fleet.loop.start()

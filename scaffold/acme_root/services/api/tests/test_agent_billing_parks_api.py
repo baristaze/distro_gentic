@@ -57,7 +57,7 @@ from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.budgets.types.hold import Billed, HoldRequest
 from acme.om.context import OperatorRole, Role, TenantContext
 from acme.om.models.types.fill import MAIN
-from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Response
 
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
-from acme.services.api.gateway.resolve import ValidationsService
+from acme.services.api.gateway.platform_resolve import ValidationsService
 from acme.services.api.types.validations import StartValidationRequest, ValidationSessionView
 
 router = APIRouter(prefix="/validation-sessions", tags=["platform_agents"])

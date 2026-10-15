@@ -26,8 +26,8 @@ from acme.om.base import new_id
 from acme.om.budgets.types.amount import Amount
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, TenantMismatch
+from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy
-from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
 DELIVERY = AgentKind(
@@ -52,8 +52,8 @@ TOOLS = stand_ins(*DELIVERY.tools, *ASSISTANT.tools)
 
 
 @pytest.fixture
-def managers(tmp_path: Path) -> Managers:
-    return build_managers(
+def managers(tmp_path: Path) -> PlatformManagers:
+    return build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY, ASSISTANT),
@@ -66,13 +66,13 @@ def a_start(kind: str = "delivery") -> Start:
 
 
 async def an_agent_project(
-    managers: Managers, ctx: TenantContext, path: str = "octo/reports"
+    managers: PlatformManagers, ctx: TenantContext, path: str = "octo/reports"
 ) -> AgentProject:
     return await managers.agent_projects.create_agent_project(ctx, make_agent_project(path))
 
 
 async def test_an_agent_project_is_its_tenants_and_written_by_who_configures_it(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
@@ -109,7 +109,9 @@ def test_a_repository_is_one_value_in_any_case_and_a_bad_one_is_refused() -> Non
             Repository(host=host, path=path)
 
 
-async def test_a_session_started_under_an_agent_project_belongs_to_it(managers: Managers) -> None:
+async def test_a_session_started_under_an_agent_project_belongs_to_it(
+    managers: PlatformManagers,
+) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
     agent_project = await an_agent_project(managers, admin)
@@ -126,7 +128,7 @@ async def test_a_session_started_under_an_agent_project_belongs_to_it(managers: 
     assert await managers.agent_projects.work_repository(member, started.id) is None
 
 
-async def test_another_tenants_agent_project_starts_nothing(managers: Managers) -> None:
+async def test_another_tenants_agent_project_starts_nothing(managers: PlatformManagers) -> None:
     """A session is created only under an agent project of its own tenant: another
     tenant's agent project is not found, and no session and no row are left."""
     theirs = await an_agent_project(managers, context(Role.ADMIN))
@@ -139,7 +141,7 @@ async def test_another_tenants_agent_project_starts_nothing(managers: Managers) 
     assert await managers.agent_projects.agent_project_of(ours, start.id) is None
 
 
-async def test_a_sessions_agent_project_never_moves(managers: Managers) -> None:
+async def test_a_sessions_agent_project_never_moves(managers: PlatformManagers) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
     first, second = (
@@ -162,7 +164,7 @@ async def test_a_sessions_agent_project_never_moves(managers: Managers) -> None:
 
 
 async def test_a_spawned_or_handed_over_session_belongs_where_it_came_from(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
@@ -181,7 +183,9 @@ async def test_a_spawned_or_handed_over_session_belongs_where_it_came_from(
     assert await managers.agent_projects.agent_project_of(member, handed.id) == agent_project
 
 
-async def test_a_child_of_no_agent_project_takes_none_named_for_it(managers: Managers) -> None:
+async def test_a_child_of_no_agent_project_takes_none_named_for_it(
+    managers: PlatformManagers,
+) -> None:
     """A session spawned from one of no agent project belongs to none, even when an
     agent project row was written under its id before it was made."""
     org = make_org()
@@ -199,7 +203,7 @@ async def test_a_child_of_no_agent_project_takes_none_named_for_it(managers: Man
 
 
 async def test_an_agent_projects_retention_narrowing_reaches_its_sessions(
-    managers: Managers,
+    managers: PlatformManagers,
 ) -> None:
     """Retention asks the agent projects which agent project a new session belongs to:
     a session of the narrowing agent project, and the child it spawns, take the
@@ -232,7 +236,7 @@ async def test_an_agent_projects_retention_narrowing_reaches_its_sessions(
     assert (await snapshot(member, loose.id)).policy == tenant
 
 
-async def test_only_the_bound_repository_is_work_product(managers: Managers) -> None:
+async def test_only_the_bound_repository_is_work_product(managers: PlatformManagers) -> None:
     """Each session's work product lands on its own agent project's repository:
     never on a sibling agent project's, never on another tenant's, and never on
     any for a session of no agent project."""
@@ -256,7 +260,7 @@ async def test_only_the_bound_repository_is_work_product(managers: Managers) -> 
 async def test_a_sessions_row_goes_with_its_purge_and_a_living_tenant_keeps_all(
     tmp_path: Path,
 ) -> None:
-    managers = build_managers(
+    managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY,),

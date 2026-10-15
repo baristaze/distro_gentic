@@ -1,57 +1,23 @@
 """The business-layer root: constructs every manager in dependency order and
 hands back one frozen object with a field per manager."""
 
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
-from acme.infra.transports import SecretVia, TransportInterface
-from acme.integrations.events import IntegrationAbsentImpl
+from acme.infra.transports import SecretVia
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.root import IntegrationsInterface
-from acme.om.agent_automations import AgentAutomationsManagerInterface
-from acme.om.agent_automations.actions import AgentAutomationActionInterface
-from acme.om.agent_billing.gate import MoneyGateInterface
-from acme.om.agent_billing.impl.gate import MoneyCallGateImpl
-from acme.om.agent_billing.impl.prices import PriceBookTableImpl
-from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
-from acme.om.agent_projects import AgentProjectsManagerInterface
-from acme.om.agent_projects.impl.manager import AgentProjectsManagerImpl, AgentProjectsOptions
-from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
-from acme.om.agent_projects.impl.retention import SessionAgentProjectBoundImpl
-from acme.om.agent_projects.impl.sessions import AgentSessionsInAgentProjectImpl
-from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
-from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
-from acme.om.agent_workspaces import rules as workspace_rules
-from acme.om.agent_workspaces.agent_projects import (
-    PullRequestsInterface,
-    SourceControlInterface,
-    WorkspaceAgentProjectsInterface,
-)
-from acme.om.agent_workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
-from acme.om.agent_workspaces.impl.agent_projects import (
-    PullRequestsNullImpl,
-    WorkspaceAgentProjectsBoundImpl,
-)
-from acme.om.agent_workspaces.impl.executor import ExecutorAgentWorkspacesImpl, ExecutorOptions, Pin
-from acme.om.agent_workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
-from acme.om.agent_workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
-from acme.om.agent_workspaces.impl.manager import AgentWorkspacesManagerImpl, AgentWorkspacesOptions
-from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
-from acme.om.agent_workspaces.impl.sessions import AgentSessionsPinnedImpl
-from acme.om.agent_workspaces.impl.tools import HeldWorkspaces, ToolsManagerAgentWorkspacesImpl
-from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
-from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
+from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.manager import AgentsManagerImpl, AgentsOptions
 from acme.om.agents.impl.sink import StreamSinkNullImpl
@@ -66,8 +32,6 @@ from acme.om.attribution.impl.manager import (
     members_context,
 )
 from acme.om.base import utcnow
-from acme.om.benchmarks import BenchmarksManagerInterface
-from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.budgets import (
     BudgetGateInterface,
     BudgetsManagerInterface,
@@ -78,40 +42,16 @@ from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
 from acme.om.budgets.impl.operator import BudgetsOperatorManagerImpl, BudgetsOperatorOptions
 from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
-from acme.om.cloud_pool import CloudPoolManagerInterface
-from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
-from acme.om.evidence import (
-    EvidenceManagerInterface,
-    ExecutorInterface,
-    Executors,
-    WorkProductInterface,
-)
-from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
-from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
-from acme.om.evidence.impl.ports import ExecutorAbsentImpl
-from acme.om.evidence.rules import PROTECTED_CEILING
-from acme.om.exceptions import NotFound, Unavailable, UnsafeConfiguration
-from acme.om.exec_relay import ExecRelayManagerInterface
-from acme.om.exec_relay.impl.instances import PlacedInstancesRelayedImpl
-from acme.om.exec_relay.impl.manager import ExecRelayManagerImpl, ExecRelayOptions
-from acme.om.exec_relay.impl.placement import PlacementClaimsRelayedImpl
-from acme.om.exec_relay.impl.transport import TransportRelayImpl
-from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
-from acme.om.hosts import HostsManagerInterface
-from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
-from acme.om.hosts.impl.placement import inside_wall
-from acme.om.hosts.rules import ENROLLMENT_PREFIX
+from acme.om.exceptions import NotFound, UnsafeConfiguration
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
-from acme.om.intake import IntakeManagerInterface
 from acme.om.leases import LeasesManagerInterface
 from acme.om.leases.impl.kinds import NoopResourceKindImpl, OrchestrationWaiterImpl
 from acme.om.leases.impl.manager import LeasesManagerImpl, LeasesOptions
-from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
-from acme.om.leases.types.request import ASK_PAYLOADS, WaiterKind
+from acme.om.leases.types.request import WaiterKind
 from acme.om.leases.types.resource import ResourceKind
 from acme.om.media import MediaManagerInterface
 from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
@@ -126,37 +66,6 @@ from acme.om.orchestrations import OrchestrationsManagerInterface
 from acme.om.orchestrations.impl.manager import OrchestrationsManagerImpl, OrchestrationsOptions
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.impl.relay import OutboxRelayImpl
-from acme.om.park_alerts.impl.manager import ParkAlertsOptions
-from acme.om.park_alerts.storage import ParkAlertStorageInterface
-from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
-from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
-from acme.om.placement.impl.operator import (
-    PlacementOperatorManagerImpl,
-    PlacementOperatorOptions,
-)
-from acme.om.placement.kinds import (
-    ClaimantKinds,
-    ClaimantKindSpec,
-    platform_claimant_kinds,
-    platform_work_kinds,
-)
-from acme.om.platform_agents import PlatformAgentsManagerInterface
-from acme.om.platform_agents.catalog import (
-    PlatformAgents,
-    refuse_reach,
-    with_assistant_tools,
-    with_shipped,
-)
-from acme.om.platform_agents.impl.gate import ResultGateReviewImpl
-from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
-from acme.om.platform_agents.kinds import (
-    GRACES,
-    PROMPT_CACHE_LIFE,
-    SHIPPED,
-    TOOLSETS,
-    WARM_GRACE,
-    WORKSPACE_BASE_KINDS,
-)
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -167,16 +76,7 @@ from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.impl.snapshots import SnapshotSealKeysImpl
 from acme.om.privacy.keys import SessionKeysInterface
-from acme.om.retention import RetentionManagerInterface
-from acme.om.retention.agent_projects import SessionAgentProjectInterface
-from acme.om.retention.impl.keys import (
-    KeyServiceByTenantImpl,
-    KeyServiceLocalImpl,
-    TenantKeysImpl,
-)
-from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
-from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
-from acme.om.retention.keys import TenantKeysInterface
+from acme.om.root_hooks import RootHooksInterface, RootHooksNullImpl
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -189,7 +89,6 @@ from acme.om.tenancy.impl.members import TenancyMembersManagerImpl
 from acme.om.tenancy.impl.operator import TenancyOperatorManagerImpl, TenancyOperatorOptions
 from acme.om.tenancy.impl.org import TenancyOrgManagerImpl
 from acme.om.tenancy.impl.sign_in import TenancySignInManagerImpl
-from acme.om.tenancy.rules import CREDENTIAL_PREFIXES
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools import ToolRegistry, ToolsManagerInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
@@ -206,15 +105,9 @@ from acme.om.tools.native.wait_for_sub_agents import WaitForSubAgentsToolImpl
 from acme.om.tools.native.write_plan import WritePlanToolImpl
 from acme.om.tools.seal import RecordSealInterface, SnapshotSealInterface
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
-from acme.om.tools.types.tool import ToolClass
-from acme.om.tools.types.toolset import Toolset
-from acme.om.trust.owners import SecretOwnerInterface
-from acme.om.watch.kinds import StreamKind
 from acme.om.windows import WindowsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
 from acme.om.windows.impl.hashes import PromptHashPrivacyImpl
 from acme.om.windows.impl.manager import WindowsManagerImpl, WindowsOptions
 from acme.om.windows.seal import ArtifactSealInterface
@@ -222,7 +115,6 @@ from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
-from acme.om.work.kinds import WorkKindSpec
 
 
 @dataclass(frozen=True)
@@ -240,7 +132,6 @@ class Managers:
     steps: StepsManagerInterface
     agent_sessions: AgentSessionsManagerInterface
     privacy: PrivacyManagerInterface
-    retention: RetentionManagerInterface
     budgets: BudgetsManagerInterface
     budgets_operator: BudgetsOperatorManagerInterface
     budget_gate: BudgetGateInterface
@@ -251,204 +142,17 @@ class Managers:
     agents: AgentsManagerInterface
     tools: ToolsManagerInterface
     loop: LoopManagerInterface
-    evidence: EvidenceManagerInterface
-    placement: PlacementManagerInterface
-    placement_operator: PlacementOperatorManagerInterface
-    agent_workspaces: AgentWorkspacesManagerInterface
-    hosts: HostsManagerInterface
-    exec_relay: ExecRelayManagerInterface
-    cloud_pool: CloudPoolManagerInterface
-    platform_agents: PlatformAgentsManagerInterface
-    agent_projects: AgentProjectsManagerInterface
-    benchmarks: BenchmarksManagerInterface
-    kinds: AgentKindCatalog
-    """The kinds every session starts on, each version they run: what a
-    text a person writes for them, such as an agent playbook, reaches."""
 
-
-ProductTools = Callable[[Callable[[], Managers]], tuple[ToolInterface, ...]]
-"""A product's tools, built over the managers as the root answers them once
-it has built them: a tool keeps the callable and reads a manager through it
-when it is called, as the platform's own tools do."""
-
-
-def no_tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
-    """A product with no tools of its own."""
-    return ()
-
-
-ProductActions = Callable[[Callable[[], Managers]], tuple[AgentAutomationActionInterface, ...]]
-"""A product's own kinds of agent automation action, built over the managers as
-the root answers them, as a product's tools are."""
-
-
-def no_actions(managers: Callable[[], Managers]) -> tuple[AgentAutomationActionInterface, ...]:
-    """A product with no agent automation action of its own."""
-    return ()
-
-
-ProductResources = Callable[[Callable[[], Managers]], tuple[ResourceKindSpec, ...]]
-"""A product's own resource kinds, each with the shape of its ask, its
-hooks, and its check of an ask if it has one, built over the managers as
-the root answers them, as a product's tools are."""
-
-
-def no_resources(managers: Callable[[], Managers]) -> tuple[ResourceKindSpec, ...]:
-    """A product with no resource kind of its own."""
-    return ()
-
-
-@dataclass(frozen=True)
-class ProductKinds:
-    """What a product adds to the platform's kinds: its agent kinds, every
-    version it still runs; its tools, and the authorization classes they
-    declare beside the platform's, with the ceiling any of those classes
-    holds whatever a tenant's layer says; its work kinds, each with its payload,
-    its permission, its lane, and the claimant kind that takes it through
-    the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
-    its stream kinds, each with its bounds (`watch.root.build_stream`) and the
-    claimant kinds of its own that write and read it, if any; its executors, each by
-    the name a check's `executor` gives; and its kinds of agent automation
-    action, each acting in a firing, saying when the run it started
-    ended, and checking the person who writes one (`agent_automations.actions`);
-    and its resource kinds, each with the shape of its ask, the hooks a
-    grant asks, and its check of an ask if it has one (`leases.kinds`).
-    Its toolsets join the platform's (`platform_agents.kinds.TOOLSETS`),
-    and each toolset its kinds name is one of the two; a name the
-    platform's toolsets hold is refused. Each of its agent kinds may name
-    its warm grace, how long its workspace stays held after a loop, at
-    most the prompt cache's life; one it names none for takes the
-    default (`warm_grace`). It names, by name and version, the agent kinds
-    of its own whose workspace starts from the workspace base its session's
-    agent project names (`workspace_bases`), as the platform names its software engineer
-    (`platform_agents.kinds.WORKSPACE_BASE_KINDS`); a pair that is no agent
-    kind of its own is refused.
-    Its agent kinds join the platform's catalog, which refuses a version
-    declared twice, and its tools the
-    platform's, where a registry refuses two of one name. Every other kind
-    registers beside the platform's own, which go through the same registries,
-    and a name the platform holds is refused, so a product adds kinds and
-    never changes one of the platform's. A product's ceiling names a class
-    of its own, and the platform holds none for it, so it never loosens or
-    doubles one of the platform's (`product_ceilings`). A product's work
-    kind names its claimant kind, since no worker of the platform's runs
-    it."""
-
-    agents: tuple[AgentKind, ...] = ()
-    tools: ProductTools = no_tools
-    classes: tuple[str, ...] = ()
-    ceilings: Mapping[str, Decision] = field(default_factory=lambda: {})
-    work: tuple[WorkKindSpec, ...] = ()
-    claimants: tuple[ClaimantKindSpec, ...] = ()
-    secret_owners: tuple[SecretOwnerInterface, ...] = ()
-    streams: tuple[StreamKind, ...] = ()
-    executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
-    actions: ProductActions = no_actions
-    assistant_tools: tuple[str, ...] = ()
-    resources: ProductResources = no_resources
-    toolsets: tuple[Toolset, ...] = ()
-    graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
-    workspace_bases: frozenset[tuple[str, int]] = frozenset()
-
-    def __post_init__(self) -> None:
-        platform = {toolset.name for toolset in TOOLSETS}
-        declared = {(toolset.name, toolset.version): toolset for toolset in self.toolsets}
-        if len(declared) != len(self.toolsets):
-            raise ValueError("the product declares a version of a toolset twice")
-        for toolset in self.toolsets:
-            if toolset.name in platform:
-                raise ValueError(
-                    f"toolset {toolset.name} is the platform's, which no product changes"
-                )
-        declared.update({(toolset.name, toolset.version): toolset for toolset in TOOLSETS})
-        own = {kind.name for kind in self.agents}
-        for kind in self.agents:
-            for toolset in (*kind.toolsets, *kind.deferred):
-                if declared.get((toolset.name, toolset.version)) != toolset:
-                    raise ValueError(
-                        f"{kind.name} v{kind.version} names toolset {toolset.name} at version "
-                        f"{toolset.version}, which neither the platform nor the product declares"
-                    )
-        for name, grace in self.graces.items():
-            if name not in own:
-                raise ValueError(
-                    f"a warm grace names {name}, which is no agent kind of the product's"
-                )
-            if not timedelta(0) <= grace <= PROMPT_CACHE_LIFE:
-                raise ValueError(
-                    f"{name}'s warm grace of {grace} runs outside the prompt cache's life "
-                    f"of {PROMPT_CACHE_LIFE}"
-                )
-        versions = {(kind.name, kind.version) for kind in self.agents}
-        for name, version in sorted(self.workspace_bases):
-            if (name, version) not in versions:
-                raise ValueError(
-                    f"the kinds that take their agent project's workspace base name {name} v{version}, "
-                    "which is no agent kind of the product's"
-                )
-        for spec in self.work:
-            if spec.claimant is None:
-                raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
-        # A stream a claimant writes or reads is bound to an item it holds,
-        # and only a product's claimant holds one: the host's items are the
-        # exec relay's.
-        own = {claimant.name for claimant in self.claimants}
-        for stream in self.streams:
-            for role, kind in (("written", stream.claimant), ("read", stream.reader)):
-                if kind is not None and kind not in own:
-                    raise ValueError(
-                        f"stream kind {stream.name} is {role} by {kind}, "
-                        "which is no claimant kind of the product's"
-                    )
-
-    def warm_grace(self, kind: str) -> timedelta:
-        """How long a session of `kind` keeps its workspace held after a
-        loop, for a follow-up to find it warm: the grace the product names
-        for one of its kinds, the platform's for one it ships, and the
-        default for any other."""
-        if kind in self.graces:
-            return self.graces[kind]
-        return GRACES.get(kind, WARM_GRACE)
-
-
-@dataclass(frozen=True)
-class PlatformPorts:
-    """The platform's ports a product hands each of its roots, each None for
-    the platform's own: agent billing's money gate as the budget gate, the
-    evidence's result gate over the work product, the platform's executor
-    (the loud null in `local`), the workspaces' work product, and the
-    agent projects' rows for a session's agent project, which its workspace binds and
-    its retention narrows by. Outside `local`, a root refuses a quiet null
-    for any of them. `kinds` is what the product adds to the platform's
-    kinds, so every root reads the one registry: none adds nothing. Each
-    process's entry point hands its root `PRODUCT_KINDS`
-    (`acme.om.product_kinds`), where a product declares them once."""
-
-    budget_gate: BudgetGateInterface | None = None
-    result_gate: ResultGateInterface | None = None
-    executor: ExecutorInterface | None = None
-    work_product: WorkProductInterface | None = None
-    agent_session_projects: SessionAgentProjectInterface | None = None
-    workspace_agent_projects: WorkspaceAgentProjectsInterface | None = None
-    kinds: ProductKinds = field(default_factory=ProductKinds)
-
-
-PLATFORM_PREFIXES = (*CREDENTIAL_PREFIXES, ENROLLMENT_PREFIX, workspace_rules.PUSH_TOKEN_PREFIX)
-"""The prefixes of the platform's credentials that are no claimant's: a
-person's and an operator's, an enrollment token's, and a push token's. A
-claimant kind's prefix is none of them, so a prefix names one kind."""
 
 LOCAL = "local"
-"""The one environment a root accepts a quiet null budget gate, ledger,
-result gate, or platform port in."""
+"""The one environment a root accepts a quiet null budget gate or ledger in."""
 
 
-def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
-    """Outside `local`, a root refuses a quiet null budget gate, ledger,
-    result gate, or platform port at boot: every model call would pass a
-    gate that holds nothing, and spend outside every budget, every success
-    would end unverified, and a policy keyed by a session's agent project would
-    never apply. A loud null is no such risk: it refuses each call itself."""
+def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
+    """Outside `local`, a root refuses a quiet null budget gate or ledger at
+    boot: every model call would pass a gate that holds nothing, and spend
+    outside every budget. A loud null is no such risk: it refuses each call
+    itself."""
     if environment == LOCAL:
         return
     for capability in capabilities:
@@ -459,68 +163,16 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
             )
 
 
-def product_ceilings(platform: PolicyLayer, product: ProductKinds) -> PolicyLayer:
-    """The platform's ceilings with the product's beside them, one rule per
-    class the product declares a ceiling for. A ceiling of a class the
-    platform's engine knows, of a class the product does not declare, or of
-    a class a platform ceiling already names is refused at boot, so a
-    product caps its own classes and never touches the platform's."""
-    platform_classes = {rule.authorization_class for rule in platform.rules}
-    rules: list[PolicyRule] = []
-    for name, decision in product.ceilings.items():
-        if name in {known.value for known in ToolClass}:
-            raise ValueError(f"{name} is a platform class, and its ceiling is the platform's")
-        if name not in product.classes:
-            raise ValueError(f"a ceiling names {name}, which is no class of the product's")
-        if name in platform_classes:
-            raise ValueError(f"the platform already holds a ceiling for {name}")
-        rules.append(PolicyRule(authorization_class=name, decision=decision))
-    return PolicyLayer(rules=(*platform.rules, *rules))
-
-
-def intake_absent() -> IntakeManagerInterface:
-    """No intake in this process: a loud null, so a tool that binds its
-    session's work refuses rather than act where no event can find it."""
-    raise Unavailable("no intake binds a session's work in this process")
-
-
-def agent_automations_absent() -> AgentAutomationsManagerInterface:
-    """No agent automations in this process: a loud null, so a tool that reads
-    the tenant's agent automations refuses rather than answer that it has none."""
-    raise Unavailable("no agent automations are read in this process")
-
-
-def agent_knowledge_absent() -> AgentKnowledgeManagerInterface:
-    """No agent knowledge in this process: a loud null, so a tool that searches,
-    reads, or suggests agent knowledge refuses rather than answer that none is
-    kept."""
-    raise Unavailable("no agent knowledge is kept in this process")
-
-
 async def purge_held(
-    managers: Managers,
-    park_alerts: ParkAlertStorageInterface,
-    org_id: UUID,
-    session_id: UUID,
-    tree_id: UUID | None,
+    managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, the exec relay, attribution, the evidence, the
-    agent projects, the park alerts, and the agents hold of a session the sweep
-    purges: its artifacts, its workspace with its transport's records, and
-    its relayed exec items with their output, which go with its history,
-    its authority, its runs, its agent project's row, who was told it waits, and
-    its tree when it was the tree's last session. The park alerts are
-    built over these managers by the processes that tell, so their rows are
-    reached through their storage."""
+    """What the windows, the tools, attribution, and the agents hold of a
+    session the sweep purges: its artifacts, and its workspace with its
+    transport's records, which go with its history, its authority, and its
+    tree when it was the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
-    await managers.exec_relay.purge_session(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
-    await managers.evidence.purge_session(org_id, session_id)
-    await managers.agent_projects.purge_session(org_id, session_id)
-    batch = ParkAlertsOptions().purge_batch
-    while await park_alerts.purge_session(org_id, session_id, batch):
-        pass
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
 
@@ -626,44 +278,14 @@ def build_managers(
     principal_context: PrincipalContext | None = None,
     result_gate: ResultGateInterface | None = None,
     tools_options: ToolsOptions | None = None,
-    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
-    agents_layer: Callable[[AgentsManagerInterface], AgentsManagerInterface] | None = None,
     budget_gate: BudgetGateInterface | None = None,
     stream_sink: StreamSinkInterface | None = None,
     tool_catalog: tuple[ToolInterface, ...] = (),
     attachment_reader: AttachmentReaderInterface | None = None,
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
-    placement_options: PlacementOptions | None = None,
-    agent_workspaces_options: AgentWorkspacesOptions | None = None,
-    workspace_host: HostOffer | None = None,
-    workspace_agent_projects: WorkspaceAgentProjectsInterface | None = None,
-    pull_requests: PullRequestsInterface | None = None,
-    source_control: SourceControlInterface | None = None,
-    workspace_git: WorkspaceGitInterface | None = None,
-    workspace_reader: RepositoryReaderInterface | None = None,
-    hosts_options: HostsOptions | None = None,
-    relay_options: ExecRelayOptions | None = None,
-    cloud_pool_options: CloudPoolOptions | None = None,
-    cloud_pool_stage: Callable[[], RequestContext] | None = None,
-    transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
-    platform_agents_options: PlatformAgentsOptions | None = None,
-    platform_agents: PlatformAgents | None = None,
-    intake: Callable[[], IntakeManagerInterface] | None = None,
-    agent_knowledge: Callable[[], AgentKnowledgeManagerInterface] | None = None,
-    agent_automations: Callable[[], AgentAutomationsManagerInterface] | None = None,
     environment: str = LOCAL,
-    tenant_keys: TenantKeysInterface | None = None,
-    agent_session_projects: SessionAgentProjectInterface | None = None,
-    session_policies: SessionAgentProjectsInterface | None = None,
-    retention_options: RetentionOptions | None = None,
-    evidence_options: EvidenceOptions | None = None,
-    executor: ExecutorInterface | None = None,
-    executor_options: ExecutorOptions | None = None,
-    work_product: WorkProductInterface | None = None,
-    agent_projects_options: AgentProjectsOptions | None = None,
-    product_kinds: ProductKinds | None = None,
-    attached_toolsets: AttachedToolsetsInterface | None = None,
+    hooks: RootHooksInterface | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -689,10 +311,8 @@ def build_managers(
     compaction's, and `prompt_hash` the key service's hash a request's
     header records. None wires the budgets' gate behind the one, and the
     privacy namespace's keyed hash behind the other. `budget_gate` None is
-    the gate over the ledger; agent billing's money gate puts agent billing's call gate
-    behind the one, priced from the price book by version. Outside
-    `environment` `local`, a quiet null gate or ledger is refused at boot
-    (`UnsafeConfiguration`).
+    the gate over the ledger; outside `environment` `local`, a quiet null
+    gate or ledger is refused at boot (`UnsafeConfiguration`).
     `artifact_seal` is what seals an artifact's text under its session's
     key, `record_seal` what seals a command's output in its transport's
     record, and `snapshot_seal` what seals a workspace's snapshot; None
@@ -705,9 +325,7 @@ def build_managers(
     every tool call asks; and `result_gate`, the gate a result passes. None
     wires the tenancy manager's own, which answers for a person by the
     membership they hold at the call and for no service principal, and the
-    evidence's gate over `work_product`. Outside `environment` `local`, a
-    quiet null result gate or work product is refused at boot
-    (`UnsafeConfiguration`).
+    null gate, which accepts a result and marks it unverified.
 
     The loop takes the rest: `tool_catalog`, the adopter's tools, after the
     engine's own (`engine_tools`), of which a session's registry holds those
@@ -719,146 +337,14 @@ def build_managers(
     `loop_options`. Its outage signal is infra's, and its model providers
     the integrations'.
 
-    The evidence takes the platform's two ports: `executor`, the fresh
-    executor validation runs on, and `work_product`, which reads what a
-    session delivered, and which the result gate reads too. None wires the
-    platform's executor, a fresh instance of the cloud's for each run, made
-    and recorded as `executor_options` say, the image the process's
-    workspaces run among them, or in `local` the loud null, which refuses
-    every validation; and the
-    workspaces' work product, the session's branch as its repository holds it, with the
-    workspace this process holds for the session telling what was not
-    delivered; one it does not hold, or one of no bound repository, is
-    refused, so no success counts on a guess. Whatever
-    `tools_options` names, the tools take the platform's ceiling on a
-    protected path beside its ceilings, and the product's on its own
-    classes.
-
-    `tools_layer` wraps the tools manager before the loop and the root take
-    it: a layer above the engine holds its own rules around every call, and
-    sees each call the engine runs. None takes the tools manager as it is.
-    `agents_layer` wraps the agents manager before anything that makes a
-    session takes it: the agent projects, the platform's agents, the spawn tool,
-    and the root's own. A layer above the engine sees each session made, a
-    start, a spawn, or a hand-off, before the engine makes it. None takes
-    the agents manager as it is.
-
-    `product_kinds` is what a product adds to the platform's kinds
-    (`PlatformPorts.kinds`): its agent kinds, tools, classes, and their
-    ceilings, which join `agent_kinds`, `tool_catalog`, `domain_classes`,
-    and the tools' ceilings, each tool
-    reading the managers built here at call time; its work kinds and
-    claimant kinds, which the work queue and placement read beside the
-    platform's; its executors, which run a check that names
-    them; its kinds whose workspace starts from their agent project's
-    workspace base, which the workspaces read beside the platform's
-    (`WORKSPACE_BASE_KINDS`); and its resource kinds, which the leases manager
-    reads beside `noop`. A name the platform holds is refused at boot. None
-    adds nothing.
-
-    `attached_toolsets` answers the toolsets a session holds beyond its
-    kind, a tenant's own: the loop folds them into the session's kind at
-    each run. None attaches nothing.
-
-    `placement_options` is the plan tier of a tenant no operator gave one,
-    and each tier's share, the cap its lane passes to the claim; None keeps
-    the defaults.
-    `hosts_options` is the lives of a host's credentials, the window a host
-    counts as online, and its claim's lease; None keeps the defaults.
-    `relay_options` is the lease a host renews on an `exec` item and the
-    bounds of its output; None keeps the defaults. `transport_layer` wraps
-    the transport infra chose before the tools and the checkout take it:
-    the session runner puts the exec relay behind it for a session inside its
-    tenant's wall, whose workspace is then the one a host of its pool
-    prepared and holds. None takes infra's transport as it is, and makes
-    every workspace on this machine.
-
-    `platform_agents` ships the platform's agents, with the corpus its
-    assistant answers from: their kinds join `agent_kinds` and their tools
-    join `tool_catalog`, ahead of the adopter's, and the product's
-    `assistant_tools` join the assistant's. A catalog that holds two
-    tools of one name, or lets the assistant reach past reading and handing
-    work on, or a slot that names a tool the catalog does not hold, is
-    refused at boot (`UnsafeConfiguration`). None ships none.
-    `intake` answers the intake the process builds over these managers,
-    where the software engineer's pull request is bound to its session; None binds
-    nothing, so that tool opens none. `agent_knowledge` answers the agent knowledge the
-    process builds over them, which the agents search, read, and suggest
-    to; None keeps none, so those tools refuse. `agent_automations` answers the
-    agent automations the process builds over them, which the assistant reads;
-    None reads none, so those readers refuse.
-
-    The platform's retention takes three. `tenant_keys` says whose key
-    service holds each tenant's keys; None is infra's for every tenant, and
-    in `local` the local key service over it, which destroys a session's key
-    and reports it as a tenant's own service does. Elsewhere infra's holds
-    the tenant's key alone, and the engine's revocation is the
-    destruction. `agent_session_projects` names a new session's agent project; None
-    reads the row the agent projects' start wrote, and a session with no row
-    takes its tenant's policy unnarrowed (a quiet null one is refused
-    outside `local`); and
-    `retention_options` the sweep's batches.
-
-    The platform's agent projects take `agent_projects_options`, the purges' batch.
-    `session_policies` answers a session's agent project to the gate's budgets
-    and to the evidence's policy; None reads the agent projects' rows, and a
-    session with no row is charged to no agent project and judged by no policy.
-
-    The workspaces take six. `workspace_host` is what this process, the
-    host its tools run on, offers beyond its provider; None offers nothing
-    more, as a host of the platform's cloud. `workspace_agent_projects` answers a
-    session's agent project and the repository it binds (a quiet null one is
-    refused outside `local`), and `pull_requests` why a session's branch is
-    gone; None reads the agent projects' rows for the one,
-    and knows no pull request, so a branch gone for any reason fails
-    loudly. `source_control` opens a session's branch and pull request;
-    None writes through the forge integration, and with no integrations,
-    nowhere. `workspace_git` runs the checkout; None runs it in the
-    workspace through the transport the tools take, so a workspace inside
-    a tenant's wall is checked out there, from bundles the reader brings
-    and source control pushes. `workspace_reader` reads what a
-    session delivered from its repository; None fetches it into a fresh
-    repository of this process's own, with the agent project's fetch credential,
-    never from a network no workspace reaches, and from disk in `local`
-    alone. `agent_workspaces_options` names those networks, and the sweep's
-    batch."""
-    # The kinds every manager reads through: the platform's own, and the
-    # product's beside them. A product's tools read the managers built
-    # below, as the platform's own do, so each edge is bound at call time.
-    product = product_kinds or ProductKinds()
-    agent_kinds = (*agent_kinds, *product.agents)
-    tool_catalog = (*tool_catalog, *product.tools(lambda: managers))
-    domain_classes = (*domain_classes, *product.classes)
-    if platform_agents is not None:
-        # Their tools read the managers built below, so each edge is bound
-        # at call time.
-        agent_kinds = (*with_assistant_tools(SHIPPED, product.assistant_tools), *agent_kinds)
-        tool_catalog = with_shipped(
-            platform_agents,
-            tool_catalog,
-            domain_classes,
-            sessions=lambda: managers.agent_sessions,
-            steps=lambda: managers.steps,
-            agent_projects=lambda: managers.agent_projects,
-            work=lambda: managers.work,
-            hosts=lambda: managers.hosts,
-            exec_relay=lambda: managers.exec_relay,
-            agent_automations=agent_automations or agent_automations_absent,
-            policies=lambda: managers.tools,
-            agents=lambda: managers.agents,
-            evidence=lambda: managers.evidence,
-            agent_workspaces=lambda: managers.agent_workspaces,
-            intake=intake or intake_absent,
-            agent_knowledge=agent_knowledge or agent_knowledge_absent,
-            integrations=IntegrationAbsentImpl
-            if integrations is None
-            else integrations.get_integration,
-            budgets=lambda: managers.budgets,
-        )
+    `hooks` is where a layer above the engine reaches the graph, each hook
+    called once as the root builds (`acme.om.root_hooks`). None reaches
+    nothing."""
+    hooks = hooks or RootHooksNullImpl()
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
-    # manager, which needs this exec relay, so that one edge is bound at call time
+    # manager, which needs this relay, so that one edge is bound at call time
     # and the graph the root hands back is still whole.
     outbox = OutboxRelayImpl(
         storage.get_outbox_storage(),
@@ -880,21 +366,14 @@ def build_managers(
     events = EventsManagerImpl(
         storage.get_event_storage(), tenancy, events_options or EventsOptions()
     )
-    work_kinds = platform_work_kinds().extended(product.work)
-    claimant_kinds = ClaimantKinds(
-        (*platform_claimant_kinds(), *product.claimants), reserved=PLATFORM_PREFIXES
-    )
     work = WorkManagerImpl(
         storage.get_work_storage(),
         tenancy,
         events,
         infra.get_topics(),
         work_options or WorkOptions(),
-        work_kinds,
-        # Every item goes to the lane where its environment is, which
-        # placement answers. Placement claims through this manager, so it is
-        # built below and the edge is bound at call time.
-        lanes=lambda org_id, item: managers.placement.lane_for(org_id, item),
+        hooks.work_kinds,
+        lanes=hooks.lanes,
     )
     media = MediaManagerImpl(
         storage.get_media_storage(),
@@ -910,27 +389,18 @@ def build_managers(
         outbox,
         orchestrations_options or OrchestrationsOptions(),
     )
-    # The resource kinds the leases read through: the mechanism's own, and
-    # the product's beside it, each with its ask's shape, its hooks, and its
-    # check of an ask if it has one; a name registered twice is refused. A
-    # product's kinds read the managers built below, so each edge is bound
-    # at call time.
-    resource_kinds = ResourceKinds(
-        (
-            ResourceKindSpec(
-                ResourceKind.NOOP, ASK_PAYLOADS[ResourceKind.NOOP], NoopResourceKindImpl()
-            ),
-            *product.resources(lambda: managers),
-        )
-    )
+    # A product registers its resource kinds and its waiter kinds here, each
+    # with its hooks, as a work kind's handler is registered in the worker,
+    # and, for a kind that refuses some asks, its check (`asks`).
+    resources = hooks.resource_kinds({ResourceKind.NOOP: NoopResourceKindImpl()})
     leases = LeasesManagerImpl(
         storage.get_lease_storage(),
         tenancy,
         outbox,
         leases_options or LeasesOptions(),
-        kinds=resource_kinds.hooks(),
-        asks=resource_kinds.checks(),
-        payloads=resource_kinds.asks(),
+        kinds=resources.hooks(),
+        asks=resources.checks(),
+        payloads=resources.asks(),
         # A session waits in line too: its sessions manager is built below,
         # so that edge is bound at call time.
         waiters={
@@ -941,14 +411,9 @@ def build_managers(
     )
     # The history first: a session's status is read off its steps. What a
     # step says reaches it through the sealing layer, by the session's policy.
-    # Each tenant's keys in its own key service: the platform's, or the one
-    # the tenant brought. In `local`, the platform's is the local key service
-    # over infra's, which holds each session's key in this process.
-    keys = tenant_keys or TenantKeysImpl(
-        KeyServiceLocalImpl(infra.get_keys()) if environment == LOCAL else infra.get_keys()
+    session_keys = SessionKeysImpl(
+        storage.get_privacy_storage(), hooks.key_service(infra.get_keys())
     )
-    session_keys = SessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(keys))
-    records = record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage())
     steps = StepsManagerImpl(
         private_history(storage, session_keys, StepStorageMemoryImpl()),
         tenancy,
@@ -961,76 +426,24 @@ def build_managers(
         steers=lambda ctx, session_id: managers.attribution.steers(ctx, session_id),
         opens=lambda ctx, session_id: opens(managers, ctx, session_id),
     )
-    kinds = AgentKindCatalog(kinds=agent_kinds)
-    # A session's agent project, which its workspace binds and its retention
-    # narrows by: outside `local`, a port that answers none for every session
-    # is refused, so no per-agent-project policy silently never applies.
-    bound = workspace_agent_projects or WorkspaceAgentProjectsBoundImpl(
-        storage.get_agent_project_storage()
-    )
-    narrowed = agent_session_projects or SessionAgentProjectBoundImpl(
-        storage.get_agent_project_storage()
-    )
-    refuse_quiet_nulls(environment, bound, narrowed)
-    # The transport infra chose, and the one the tools and the checkout
-    # take: for a session inside its tenant's wall, the exec relay to its host.
-    transport = infra.get_transport()
-    placed = transport if transport_layer is None else transport_layer(transport)
-    # Each session's workspace, pinned as the session is created: a
-    # decorator below pins it before the session is written. Its checkout
-    # runs in the workspace through the transport the tools take, under the
-    # session's epoch. Source control writes only through an installation of
-    # the forge the session's tenant connected, read from intake's rows.
-    writes = source_control or (
-        SourceControlAbsentImpl()
-        if integrations is None
-        else SourceControlForgeImpl(
-            integrations.get_integration, storage.get_intake_storage().read_installation_org
-        )
-    )
-    # What a session delivered is read from its repository, and what it has
-    # not from the workspace this process holds for it.
-    held = HeldWorkspaces()
-    agent_workspaces_options = agent_workspaces_options or AgentWorkspacesOptions()
-    agent_workspaces = AgentWorkspacesManagerImpl(
-        storage.get_agent_workspace_storage(),
-        tenancy,
-        outbox,
-        kinds,
-        bound,
-        pull_requests or PullRequestsNullImpl(),
-        workspace_git or WorkspaceGitTransportImpl(placed, records, GitOptions(), writes),
-        workspace_reader
-        or RepositoryReaderGitImpl(
-            walled=workspace_rules.NEVER_REACHED
-            + workspace_rules.networks(agent_workspaces_options.internal_networks),
-            on_disk=environment == LOCAL,
-        ),
-        agent_workspaces_options,
-        infra.get_secrets(),
-        writes,
-        held,
-        workspace_bases=WORKSPACE_BASE_KINDS | product.workspace_bases,
-    )
-    park_alert_storage = storage.get_park_alert_storage()
-    engine_sessions = AgentSessionsManagerImpl(
+    agent_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         steps,
         tenancy,
         outbox,
         agent_sessions_options or AgentSessionsOptions(),
-        # What attribution, the agents, and the park alerts hold of a
-        # purged session goes with it. The managers are built below on this
-        # one, so the edge is bound at call time.
-        purged=lambda org_id, session_id, tree_id: purge_held(
-            managers, park_alert_storage, org_id, session_id, tree_id
+        # What attribution and the agents hold of a purged session goes with
+        # it. Both are built below on this manager, so the edge is bound at
+        # call time.
+        purged=hooks.purged(
+            lambda org_id, session_id, tree_id: purge_held(managers, org_id, session_id, tree_id)
         ),
     )
     privacy = PrivacyManagerImpl(
         storage.get_privacy_storage(),
         session_keys,
         steps,
-        engine_sessions,
+        agent_sessions,
         tenancy,
         outbox,
         PrivacyOptions(),
@@ -1039,31 +452,8 @@ def build_managers(
         # call time.
         revoked=lambda ctx, session_id: managers.tools.erase_snapshots(ctx, session_id),
     )
-    # Each session's retention: the snapshot it takes as it is created, and
-    # the sweep that destroys its key when its content expires and marks it
-    # when its shape does, through the engine's own sessions. Every other
-    # namespace reaches the sessions through the decorator, so no session is
-    # created without its snapshot.
-    retention = RetentionManagerImpl(
-        storage.get_retention_storage(),
-        keys,
-        privacy,
-        engine_sessions,
-        tenancy,
-        events,
-        outbox,
-        narrowed,
-        retention_options or RetentionOptions(),
-    )
-    retained = AgentSessionsRetainedImpl(engine_sessions, retention, privacy)
-    # Each session's agent project: a session spawned or handed over belongs to
-    # the agent project of the session it came from. And each session's workspace
-    # pinned once its agent project row stands, before its snapshot. Every other
-    # namespace reaches the sessions through the decorators, so no such
-    # session stands outside its origin's agent project, or unpinned.
-    agent_sessions = AgentSessionsInAgentProjectImpl(
-        AgentSessionsPinnedImpl(retained, agent_workspaces, retention.keeps_at_rest),
-        storage.get_agent_project_storage(),
+    agent_sessions = hooks.agent_sessions(
+        agent_sessions, steps=steps, privacy=privacy, tenancy=tenancy, events=events, outbox=outbox
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
@@ -1076,14 +466,10 @@ def build_managers(
     gate = budget_gate or BudgetGateImpl(
         storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
     )
-    refuse_quiet_nulls(
-        environment, gate, storage.get_ledger_storage(), storage.get_spend_ledger_storage()
-    )
+    refuse_quiet_spend(environment, gate, storage.get_ledger_storage())
     # The one source of prices, which the resolver asks before it answers a
-    # fill and the gate prices every call by. Behind agent billing's gate it is the
-    # price book, read by version, so a call held at one is billed at it.
-    book = PriceBookTableImpl() if isinstance(gate, MoneyGateInterface) else None
-    pricing: PricingInterface = book or PricingTableImpl()
+    # fill and the gate prices every call by.
+    pricing = hooks.pricing(gate) or PricingTableImpl()
     # A session's fills. The resolver refuses a model with no price row of
     # its own.
     prices = model_prices or ModelPricesFromPricingImpl(pricing)
@@ -1109,20 +495,7 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    products = work_product or WorkProductAgentWorkspacesImpl(agent_workspaces, held)
-    # A budget and a validation policy set per agent project are read through the
-    # session's agent project.
-    session_policies = session_policies or SessionAgentProjectsBoundImpl(
-        storage.get_agent_project_storage()
-    )
-    results = result_gate or ResultGateEvidenceImpl(
-        storage.get_evidence_storage(), products, session_policies
-    )
-    refuse_quiet_nulls(environment, results, products)
-    if platform_agents is not None:
-        # A reviewer's result is judged by the reads and findings it cites;
-        # every other result passes the gate above, unchanged.
-        results = ResultGateReviewImpl(results, agent_sessions, steps)
+    kinds = AgentKindCatalog(kinds=agent_kinds)
     reader = attachment_reader or AttachmentReaderNullImpl()
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
@@ -1136,20 +509,8 @@ def build_managers(
         if models_layer is None
         else models_layer.credentials(providers)
     )
-    # The one gate every model call passes, priced from the one source, and
-    # the place each call's tokens and spend are counted and its usage
-    # recorded.
-    version = None if models_layer is None else models_layer.version
-    tier = None if models_layer is None else models_layer.tier
-    calls = call_gate or (
-        CallGateBudgetImpl(
-            gate, pricing, agent_sessions, budgets, session_policies, version=version, tier=tier
-        )
-        if book is None or not isinstance(gate, MoneyGateInterface)
-        else MoneyCallGateImpl(
-            gate, book, agent_sessions, budgets, session_policies, version=version, tier=tier
-        )
-    )
+    # The one gate every model call passes, priced from the one source.
+    calls = call_gate or hooks.call_gate(gate, pricing, agent_sessions, budgets, models_layer)
     windows = WindowsManagerImpl(
         storage.get_window_storage(),
         steps,
@@ -1172,10 +533,7 @@ def build_managers(
         engine_tools(steps, agent_sessions, reader, windows, lambda: managers.agents) + tool_catalog
     )
     ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
-    if platform_agents is not None:
-        # The kinds that may only read are held to it over the whole
-        # catalog, the engine's tools included.
-        refuse_reach(agent_kinds, catalog)
+    hooks.catalog(catalog)
     # Where the engine touches the world: the session's history for a
     # person's decisions, the events for the audit of each secret a call
     # uses, the workspace and the transport infra chose, and attribution,
@@ -1185,168 +543,49 @@ def build_managers(
     # of its workspace, which holds no secret a tool of the catalog may be
     # given. A workspace base is the tenant's: built once, its claim on the
     # cache every worker shares, and scanned as a snapshot is.
-    # The ceilings: the options' own, the platform's on a protected path,
-    # and the product's on its own classes.
-    tool_options = tools_options or ToolsOptions()
-    ceilings = tool_options.ceilings
-    if PROTECTED_CEILING not in ceilings.rules:
-        ceilings = PolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
-    ceilings = product_ceilings(ceilings, product)
-    tool_options = tool_options.model_copy(update={"ceilings": ceilings})
+    tools_settings = tools_options or ToolsOptions()
     snapshots = SnapshotStore(
         infra.get_buckets(),
         snapshot_seal or SnapshotSealKeysImpl(session_keys, storage.get_privacy_storage()),
         privacy.keyed_hash,
         infra.get_secrets(),
         injected_secrets(catalog),
-        tool_options.purge_batch,
+        tools_settings.purge_batch,
     )
-    # The tenant's workspace bases: a session's workspace starts from one, and
-    # so does the instance its checks run on.
-    bases = WorkspaceBases(
-        infra.get_buckets(),
-        infra.get_workspaces(),
-        infra.get_transport(),
-        infra.get_cache(CacheScope.WORKSPACE_BASE),
-        snapshots.scan,
-        tool_options.base_build_limit,
-        tool_options.purge_batch,
-        utcnow,
-    )
-    engine_tools_manager = ToolsManagerImpl(
+    tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
         tenancy,
         events,
         outbox,
         infra.get_workspaces(),
-        placed,
-        tool_options,
+        hooks.transport(infra.get_transport()),
+        tools_settings,
         keyed_hash=privacy.keyed_hash,
-        record_seal=records,
+        record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
         attribution=attribution,
         broker=infra.get_broker(),
         snapshots=snapshots,
-        bases=bases,
-        # A fork of a workspace a host holds is taken by that host; the pins
-        # are built below, so the edge is bound at call time.
-        fork_points=lambda ctx, request, workspace, epoch: held_to_pins.fork_point(
-            ctx, request, workspace, epoch
-        ),
-    )
-    # A session inside its tenant's wall finds its workspace on its host,
-    # where only the relayed transport reaches. The exec relay and the hosts are
-    # built below, so the edges are bound at call time.
-    placed_workspaces = PlacedWorkspacesRelayedImpl(
-        lambda: managers.exec_relay, lambda: managers.hosts
-    )
-    # The cloud pool: a machine per session of the cloud whose workspace is
-    # a VM, its host reached through the exec relay as any host is. Every process
-    # builds it: the gateway trades a machine's key, the sweep lets its
-    # machines go, and the runner starts them, on the machines infra chose.
-    sessions_rows = storage.get_agent_session_storage()
-    orgs_rows = storage.get_tenancy_storage()
-
-    async def session_gone(org_id: UUID, session_id: UUID) -> bool:
-        # A deleted tenant's machines go at the next sweep, never at its
-        # purge alone: a machine bills while it runs.
-        org = await orgs_rows.read_org(org_id)
-        if org is None or org.deleted_at is not None:
-            return True
-        session = await sessions_rows.read_session(org_id, session_id)
-        return session is None or session.deleted_at is not None
-
-    cloud_pool = CloudPoolManagerImpl(
-        storage.get_cloud_pool_storage(),
-        infra.get_machines(),
-        infra.get_seeds(),
-        lambda: managers.hosts,
-        lambda: placed_workspaces,
-        lambda: managers.exec_relay,
-        cloud_pool_options or CloudPoolOptions(),
-        session_gone=session_gone,
-        expired=tenancy.tenant_expired,
-        stage=cloud_pool_stage,
-    )
-    # Each workspace is held to its session's pin, refused by this host where
-    # it cannot give it, brought up to the session's branch, kept before it
-    # goes, and let go by the run that holds it alone.
-    held_to_pins = ToolsManagerAgentWorkspacesImpl(
-        engine_tools_manager,
-        agent_workspaces,
-        steps,
-        workspace_host or HostOffer(),
-        local=environment == LOCAL,
-        held=held,
-        placed=None if transport_layer is None else placed_workspaces,
-        snapshots=snapshots,
-        # A snapshot a host keeps is named by the digest it declared, keyed
-        # by the session; its revoked key asks the host to let it go.
-        keyed_hash=privacy.keyed_hash,
-        erase_on_host=lambda ctx, session_id, host_id: managers.exec_relay.ask_erase(
-            ctx, session_id, host_id
-        ),
-        # So does the session's purge, which runs for no principal.
-        erase_purged=lambda org_id, session_id, host_id: managers.exec_relay.erase_purged(
-            org_id, session_id, host_id
-        ),
-        cloud=cloud_pool,
-    )
-    tools: ToolsManagerInterface = held_to_pins
-    # What makes a result: the runs, the policies, and validation on the
-    # executor, apart from every agent's workspace. Outside `local`, it is
-    # the platform's own: an instance made for each run. For a session of
-    # the cloud, it is the cloud's, on the provider and the transport infra
-    # chose. For a session inside its tenant's wall, a host of its pool
-    # makes it to the session's pinned isolation, and the exec relay reaches it;
-    # the exec relay is built below, so the edge is bound at call time. Either way,
-    # a session pinned to a base has its checks run on that base.
-    if executor is None and environment != LOCAL:
-        hosts_storage = storage.get_hosts_storage()
-        sessions_storage = storage.get_agent_session_storage()
-
-        async def pinned(ctx: TenantContext, session_id: UUID) -> Pin | None:
-            if await inside_wall(hosts_storage, sessions_storage, ctx.org_id, session_id):
-                return Pin(
-                    (await agent_workspaces.get_workspace(ctx, session_id)).spec(), walled=True
-                )
-            try:
-                kept = await agent_workspaces.get_workspace(ctx, session_id)
-            except NotFound:
-                return None
-            return Pin(kept.spec(), walled=False)
-
-        executor = ExecutorAgentWorkspacesImpl(
+        bases=WorkspaceBases(
+            infra.get_buckets(),
             infra.get_workspaces(),
-            transport,
-            agent_workspaces.checks_tree,
-            pinned,
-            PlacedInstancesRelayedImpl(
-                lambda: managers.exec_relay,
-                lambda stage: TransportRelayImpl(lambda: managers.exec_relay, stage),
-            ),
-            executor_options,
-            bases=bases.archive,
-        )
-    evidence = EvidenceManagerImpl(
-        storage.get_evidence_storage(),
-        tenancy,
-        outbox,
-        Executors(executor or ExecutorAbsentImpl(), product.executors),
-        products,
-        session_policies,
-        evidence_options or EvidenceOptions(),
+            infra.get_transport(),
+            infra.get_cache(CacheScope.WORKSPACE_BASE),
+            snapshots.scan,
+            tools_settings.base_build_limit,
+            tools_settings.purge_batch,
+            utcnow,
+        ),
+        fork_points=hooks.fork_points,
     )
-    if tools_layer is not None:
-        tools = tools_layer(tools)
-    # A child's report reaches its parent through windows, which bounds it,
-    # and a fork's copy of its parent's workspace is taken through the tools.
-    agents: AgentsManagerInterface = AgentsManagerImpl(
+    tools = hooks.tools(tools, snapshots=snapshots)
+    # A child's report reaches its parent through windows, which bounds it.
+    agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
         steps,
         attribution,
-        results,
+        hooks.result_gate(result_gate) or ResultGateNullImpl(),
         kinds,
         tenancy,
         outbox,
@@ -1357,8 +596,7 @@ def build_managers(
         secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
         tools=tools,
     )
-    if agents_layer is not None:
-        agents = agents_layer(agents)
+    agents = hooks.agents(agents)
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
     )
@@ -1368,61 +606,16 @@ def build_managers(
         outbox,
         operator_options or TenancyOperatorOptions(),
     )
-    placement = PlacementManagerImpl(
-        storage.get_placement_storage(),
-        work,
-        tenancy,
-        placement_options or PlacementOptions(),
-        work_kinds,
-        claimant_kinds,
-    )
-    # A host's credential, its claims through placement, and where each
-    # session runs. An exec item a claim takes is started by the exec relay before
-    # it reaches a host, and the work that waits on a revoked host is ended
-    # by it; the exec relay is built below, so both edges are bound at call time.
-    hosts = HostsManagerImpl(
-        storage.get_hosts_storage(),
-        PlacementClaimsRelayedImpl(placement, lambda: managers.exec_relay),
-        agent_sessions,
-        tenancy,
-        outbox,
-        hosts_options or HostsOptions(),
-        claimant_kinds,
-        revoked=lambda rctx, org_id, host_id: managers.exec_relay.end_host(rctx, org_id, host_id),
-    )
-    # The validation sessions: platform work on the queue, with no agent.
-    platform = PlatformAgentsManagerImpl(
-        storage.get_platform_agents_storage(),
-        tenancy,
-        outbox,
-        evidence,
-        platform_agents_options or PlatformAgentsOptions(),
-    )
-    # The agent projects start a root session through the agents, under an agent project
-    # of the caller's tenant, and answer each session's agent project to the
-    # namespaces that key a policy by it.
-    agent_projects = AgentProjectsManagerImpl(
-        storage.get_agent_project_storage(),
-        agent_sessions,
-        agents,
-        tenancy,
-        outbox,
-        agent_projects_options or AgentProjectsOptions(),
-    )
-    # The work queue's operator plane: a requeue, and a tenant's own cap on
-    # a lane, which placement's operator plane writes for a share too.
-    work_operator = WorkOperatorManagerImpl(
-        storage.get_work_storage(),
-        storage.get_tenancy_storage(),
-        storage.get_event_storage(),
-        infra.get_topics(),
-    )
-    placing = placement_options or PlacementOptions()
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
         work=work,
-        work_operator=work_operator,
+        work_operator=WorkOperatorManagerImpl(
+            storage.get_work_storage(),
+            storage.get_tenancy_storage(),
+            storage.get_event_storage(),
+            infra.get_topics(),
+        ),
         media=media,
         idempotency=idempotency,
         events=events,
@@ -1432,7 +625,6 @@ def build_managers(
         steps=steps,
         agent_sessions=agent_sessions,
         privacy=privacy,
-        retention=retention,
         budgets=budgets,
         budgets_operator=BudgetsOperatorManagerImpl(
             storage.get_ledger_storage(), storage.get_tenancy_storage(), BudgetsOperatorOptions()
@@ -1464,49 +656,8 @@ def build_managers(
             loop_options or LoopOptions(),
             leases=leases,
             domain_classes=domain_classes,
-            attached=attached_toolsets or AttachedToolsetsNoneImpl(),
+            attached=hooks.attached,
         ),
-        evidence=evidence,
-        placement=placement,
-        placement_operator=PlacementOperatorManagerImpl(
-            storage.get_placement_storage(),
-            storage.get_tenancy_storage(),
-            storage.get_event_storage(),
-            infra.get_topics(),
-            storage.get_agent_session_storage(),
-            storage.get_work_storage(),
-            storage.get_hosts_storage(),
-            work_operator,
-            PlacementOperatorOptions(
-                default_tier=placing.default_tier,
-                tier_shares=placing.tier_shares,
-                default_share=placing.default_share,
-                online_window=(hosts_options or HostsOptions()).online_window,
-            ),
-        ),
-        agent_workspaces=agent_workspaces,
-        hosts=hosts,
-        cloud_pool=cloud_pool,
-        # A tool call into a customer's wall as keyed exec work: its items,
-        # their output sealed under the session's key as its commands' records
-        # are, and the control messages that stop them.
-        exec_relay=ExecRelayManagerImpl(
-            storage.get_exec_relay_storage(),
-            work,
-            steps,
-            tenancy,
-            hosts,
-            agent_projects,
-            outbox,
-            records,
-            relay_options or ExecRelayOptions(),
-            # A snapshot a host answers is recorded where it lives.
-            kept=held_to_pins.keep_on_host,
-        ),
-        platform_agents=platform,
-        agent_projects=agent_projects,
-        benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
-        kinds=kinds,
     )
     return managers
 

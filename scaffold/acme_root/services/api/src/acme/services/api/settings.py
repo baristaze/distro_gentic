@@ -11,13 +11,20 @@ from acme.infra.impl.settings import CLOUD_ENVIRONMENTS, InfraSettings
 from acme.integrations.settings import IntegrationsSettings
 from acme.om.platform_agents.settings import PlatformAgentsSettings
 from acme.om.storage.settings import StorageSettings
+from acme.services.api.platform.settings import PlatformApiSettings
 
 DEV_SIGN_IN_ENVIRONMENTS = frozenset({"local", "test"})
 """Where the sign-in by address alone may be on. Anywhere else it is
 refused at boot, the way a local backend is."""
 
 
-class ApiSettings(StorageSettings, InfraSettings, IntegrationsSettings, PlatformAgentsSettings):
+class ApiSettings(
+    StorageSettings,
+    InfraSettings,
+    IntegrationsSettings,
+    PlatformAgentsSettings,
+    PlatformApiSettings,
+):
     model_config = SettingsConfigDict(env_prefix="ACME_", env_file=".env", extra="ignore")
 
     service_name: str = "api"
@@ -106,11 +113,6 @@ class ApiSettings(StorageSettings, InfraSettings, IntegrationsSettings, Platform
     # sign-in that presents a code, and says so; one of the wrong shape
     # refuses to start.
     totp_encryption_key: SecretStr | None = None
-    # The key a live-read handle is signed with, the same in every API
-    # process, so any of them reads a handle another issued: at least 32
-    # characters, a process credential injected at start like the TOTP key.
-    # No default: a process without it refuses every live read, and says so.
-    live_read_key: SecretStr | None = None
     # Where a sign-in at the identity provider may come back to: this
     # environment's portal callback. A deployed environment names its own
     # and nothing else, over https, never a local address; the local stack
@@ -223,13 +225,6 @@ class ApiSettings(StorageSettings, InfraSettings, IntegrationsSettings, Platform
             raise ValueError("edge_secret is set and trusted_proxies is empty; the edge needs both")
         if self.edge_secret is not None and len(self.edge_secret.get_secret_value()) < 32:
             raise ValueError("edge_secret is shorter than 32 characters")
-        return self
-
-    @model_validator(mode="after")
-    def a_live_read_key_is_long_enough(self) -> ApiSettings:
-        """A short key is guessed: a process with one refuses to start."""
-        if self.live_read_key is not None and len(self.live_read_key.get_secret_value()) < 32:
-            raise ValueError("live_read_key is shorter than 32 characters")
         return self
 
     @field_validator("trusted_proxies")
