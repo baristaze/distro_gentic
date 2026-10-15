@@ -6,13 +6,13 @@
 
 A baseline comes first, so "fixed" has something to be compared with,
 and a success counts only when validation passed at the version
-delivered. The gate
+delivered. Two readers judge a baseline: the gate
 ([ADR 2009](2009-the-gate-judges-every-run-the-executor-wrote-at-the-head.md))
-read the validations at the head alone, so a success with no baseline
-counted. It matched a run to a requirement by the check's name, so a
-run of a check whose version the policy has since changed counted too.
-The baseline's rule lived in acceptance alone
-([ADR 2018](2018-acceptance-judges-records-and-a-sequential-test-stops-only-at-its-boundary.md)).
+and acceptance
+([ADR 2018](2018-acceptance-judges-records-and-a-sequential-test-stops-only-at-its-boundary.md)),
+and two rules could judge one chain two ways. A check's version changes
+when its policy does, and a run at the old version measured another
+check.
 
 ## Decision
 
@@ -52,5 +52,5 @@ The baseline's rule lived in acceptance alone
   before a success counts.
 - A check whose version the policy changes is unmet until a validation
   runs it at the head, as a check the policy adds is.
-- A failed run at a check's old version no longer holds back a pass at
-  its new one.
+- A failed run at a check's old version holds back no pass at its new
+  one.

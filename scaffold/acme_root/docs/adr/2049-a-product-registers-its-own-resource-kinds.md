@@ -18,13 +18,13 @@ while every other kind it adds goes through a registry
 ## Decision
 
 **A resource kind is a registry, and the mechanism's own goes through
-it.** A kind is a `ResourceKindSpec` (`leases/kinds.py`): its name, the
-shape of its ask, its `LeasableResourceKindInterface`, and its
-`AskCheckInterface` when it refuses some asks. `ProductKinds.resources`
-builds a product's over the managers, as its tools and its actions are
-built. Every root builds one `ResourceKinds` from `noop` and the
-product's, and hands the leases manager each kind's hooks, the shape of
-its ask, and its check.
+it.** A product's kind is a `ProductResourceKind` (`platform_root.py`):
+its name, its `LeasableResourceKindInterface`, whose `ASK` is the shape
+of its ask, and its `AskCheckInterface` when it refuses some asks.
+`ProductKinds.resources` builds a product's over the managers, as its
+tools and its actions are built. The platform's root hooks hand the
+leases manager each one below the root's marker, beside `noop`, with its
+check.
 
 **A kind is a name.** A resource's kind and a request's are a registered
 name in lower case, as a work kind's is a registered name in capitals.
@@ -38,10 +38,9 @@ registered twice, is refused at boot.
 
 ## Consequences
 
-- No migration. A kind is stored by name in a text column with no
-  check, as it already was.
+- No migration: a kind is stored by name in a text column with no
+  check.
 - The API reads and writes a kind as a string of that shape, so the
-  clients no longer carry a `LeasableResourceKind` enum.
-- A leases manager built with no shapes takes `ASK_PAYLOADS`, the
-  mechanism's own, so one that registers `noop` alone is built as
-  before.
+  clients carry no `LeasableResourceKind` enum.
+- A leases manager built with no product kind holds `noop` alone, with
+  its own ask.

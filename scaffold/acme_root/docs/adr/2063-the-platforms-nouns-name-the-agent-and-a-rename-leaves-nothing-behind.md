@@ -57,15 +57,15 @@ lens group `workspaces` and its two skills keep their names.
 
 ## Consequences
 
-- A rollback across this release is not supported. The release before
-  reads the names this release renames, so its integration tests that
-  read them are left out of the release-before run
+- A rollback across a rename is not supported. The release before reads
+  the names a rename moves, so its integration tests that read them are
+  left out of the release-before run
   (`scripts/release_before_deselect.txt`).
 - A secret's value is kept in its tenant's store under its owner kind,
-  its owner, and its name. No migration reaches the store, so a value an
-  agent project declared before this release stays under the old owner
-  kind. Its owner puts it again after the upgrade; a downgrade reads the
-  old one again.
+  its owner, and its name. No migration reaches the store, so a value
+  declared under an owner kind a rename moves stays under the old one.
+  Its owner puts it again after the upgrade; a downgrade reads the old
+  one again.
 - A host's ceilings file names `agent_projects`.
 - The change stream keeps each past event's payload as it was written.
   Only its kind moves.

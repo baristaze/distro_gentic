@@ -1,7 +1,6 @@
 # ADR 2031: A product adds its own kind of agent automation action
 
-**Status**: accepted (2026-10-03), amended by [ADR
-2032](2032-a-products-agent-automation-action-checks-its-writer-when-the-agent-automation-is-written.md)
+**Status**: accepted (2026-10-03)
 
 ## Context
 
@@ -44,19 +43,18 @@ session and no work.
 **Its name is never the platform's.** A kind named as one of the
 platform's actions, or twice, is refused at boot. An agent automation
 whose action names a kind no product declares, or params off its kind's
-shape, is `ValidationFailed` when it is written. One whose kind left the
-product since it was written is refused at each firing, with the
-refusal `action`.
+shape, is `ValidationFailed` when it is written, and a product's kind
+checks its writer then too
+([ADR 2032](2032-a-products-agent-automation-action-checks-its-writer-when-the-agent-automation-is-written.md)).
+One whose kind left the product since it was written is refused at each
+firing, with the refusal `action`.
 
 ## Consequences
 
 - The action's kind is a name, not an enum. A session's action carries
   the creator's brief and no params, and a product's carries its params
   and no brief, agent project, or session.
-- The run gains `work_id` and `outcome`, both nullable, in one
-  migration. Its down migration removes the agent automations of a
-  product's kind, with their runs, since the previous release reads them
-  as malformed.
+- The run holds `work_id` and `outcome`, both nullable.
 - The portal's form edits the platform's two actions. It shows a
   product's by its kind and offers no form for it: the product writes
   its own.

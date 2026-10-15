@@ -129,7 +129,7 @@ connector's toolset is loaded in a tenth of the sessions that stall.
 - A cloud server serves no session inside the wall, and a host server
   none in the cloud.
 - A host runs only the servers its owner names. One that names none
-  refuses every `mcp_call`, and a host from before this release refuses
-  the operation.
+  refuses every `mcp_call`, and a host whose release predates the
+  operation refuses it.
 - A cloud server's credential is rotated in place: a session's next call
   carries the value written last.

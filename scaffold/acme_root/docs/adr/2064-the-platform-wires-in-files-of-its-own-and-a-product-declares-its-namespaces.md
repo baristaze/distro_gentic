@@ -108,6 +108,6 @@ with the row's prefix.
 - A process the platform's tests build without its half gets the engine's
   graph: a suite of the platform's builds through
   `build_platform_managers` or `contracts.platform_loops`.
-- `build_managers` no longer takes the platform's keywords: a caller hands
-  them to `PlatformRootOptions`. `acme.om.root` no longer exports
-  `ProductKinds` or `PlatformPorts`.
+- `build_managers` takes none of the platform's keywords: a caller hands
+  them to `PlatformRootOptions`. `ProductKinds` and `PlatformPorts` live
+  in `acme.om.platform_root`, never in `acme.om.root`.

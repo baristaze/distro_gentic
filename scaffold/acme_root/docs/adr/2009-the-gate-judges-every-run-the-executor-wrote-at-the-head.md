@@ -1,6 +1,6 @@
 # ADR 2009: The gate judges every run the executor wrote at the head
 
-**Status**: accepted (2026-10-02), amended by [ADR 2053](2053-the-gate-counts-a-success-after-a-baseline-and-a-run-at-the-check-version-that-governs.md)
+**Status**: accepted (2026-10-02)
 
 ## Context
 
@@ -32,6 +32,9 @@ stored to trust. A check that failed once at the head still counts after
 a later pass, and a rate is judged one validation's batch at a time, so
 running validation again until it passes does not pass. A run that
 passed no case is no passing run.
+A run counts only at the check version the policy declares now, and a
+success counts only after a baseline at the base
+([ADR 2053](2053-the-gate-counts-a-success-after-a-baseline-and-a-run-at-the-check-version-that-governs.md)).
 
 **A run is written once.** Runs, validations, and hypotheses and
 findings are append-only in `activity`, as the history is (ADR 1002),
