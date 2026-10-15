@@ -85,7 +85,7 @@ FOUND = (
     "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt && "
     "echo @ENVIRONMENT@ && "
     "tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value acme-host)/environ "
-    "| cut -d= -f1 && echo @SEED@ && cat /run/acme-VM/seed.json && echo @END@"
+    "| cut -d= -f1 && echo @SEED@ && cat /run/acme-vm/seed.json && echo @END@"
 )
 """What the next loop's command reads: the file and the image the first one
 made, the names in the host program's environment, as its process holds

@@ -5,7 +5,7 @@ given, from which every VM of the pool starts
 (`ACME_CLOUD_POOL_IMAGE`). The image holds no secret: the pool hands each
 VM its seed as it starts.
 
-    uv run python deployment/VMs/lima_image.py acme-vm-image
+    uv run python deployment/vms/lima_image.py acme-vm-image
 
 Run from the repository's root, with Lima installed and a hypervisor. The
 name must not start with the VMs' prefix and `p`, which are the pool's

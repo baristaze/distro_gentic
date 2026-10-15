@@ -4,7 +4,7 @@ A session of the platform's cloud whose workspace is a VM runs on a
 VM of its own: the cloud pool starts one per session, runs the
 workspace host ([apps/host/](../../apps/host/README.md)) inside it, and
 lets it go when the session is done with it
-([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-VM-per-session-whose-host-pulls-its-work.md)).
+([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)).
 The files here make the image every such VM starts from.
 
 ## What a VM holds
@@ -32,7 +32,7 @@ instance role.
 On Lima, from the repository's root, with a hypervisor:
 
 ```bash
-make VM-image NAME=acme-vm-image
+make vm-image NAME=acme-vm-image
 ```
 
 It starts a VM from the Lima template `ACME_VM_IMAGE` names,

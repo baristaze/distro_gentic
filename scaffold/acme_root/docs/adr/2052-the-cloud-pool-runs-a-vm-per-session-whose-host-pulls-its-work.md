@@ -32,7 +32,7 @@ the session's wall.
 **The host's credential is the VM's alone.** The pool hands each
 VM, as it starts, one seed: where the platform answers, and a
 one-use key. Only the key's digest is kept. The VM's host trades the
-key once (`POST /v1/hosts/VM-enrollments`) for a host's credential
+key once (`POST /v1/hosts/vm-enrollments`) for a host's credential
 of the session's pool of one, a pool the platform makes for the session,
 which the tenant does not list, place a session on, or issue a token for.
 The host carries the session in its identity, and placement fails for

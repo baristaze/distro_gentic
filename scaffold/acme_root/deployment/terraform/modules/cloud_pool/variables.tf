@@ -19,7 +19,7 @@ variable "gateway_security_group_id" {
 }
 
 variable "image_id" {
-  description = "The AMI every new VM boots: a Linux with Docker and the host program installed by deployment/VMs/install.sh. A VM started from a session's snapshot boots that snapshot's image instead."
+  description = "The AMI every new VM boots: a Linux with Docker and the host program installed by deployment/vms/install.sh. A VM started from a session's snapshot boots that snapshot's image instead."
   type        = string
 }
 
