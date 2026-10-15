@@ -27,7 +27,7 @@ as the host's dedicated workspace user, never as the host's own".
   `om/src/<name>/om/hosts/types/host.py` that `probe.py` probes and
   `host_transports` does not run: `vm` or `directory`. The transport is
   keyed by the engine's mode for it, `IsolationMode` in
-  `infra/src/<name>/infra/workspaces/__init__.py`, as `HOST_ISOLATION`
+  `infra/src/<name>/infra/agent_workspaces/__init__.py`, as `HOST_ISOLATION`
   in `om/src/<name>/om/exec_relay/rules.py` maps them. A mode in neither
   list is a change to the platform's wire types, not this skill's: stop
   and say so.

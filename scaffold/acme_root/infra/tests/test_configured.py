@@ -93,8 +93,8 @@ async def test_local_environment_builds_local_impls(tmp_path: Path) -> None:
         f"buckets=local({tmp_path / 'buckets'})",
         "queues=memory",
         f"secrets=local({tmp_path / 'secrets.env'})",
-        *AGENT_INFRA_NONE,
         "streams=memory",
+        *AGENT_INFRA_NONE,
         f"flags=memory({tmp_path / 'flags.json'})",
     ]
     await infra.start()
@@ -110,9 +110,9 @@ def test_cloud_backends_are_constructed_without_connecting(tmp_path: Path) -> No
         "buckets=s3(us-east-1)",
         "queues=sqs(us-east-1)",
         "secrets=aws(us-east-1)",
+        "streams=valkey+breaker(3/30s)",
         "keys=kms(us-east-1)",
         *AGENT_INFRA_NONE[1:],
-        "streams=valkey+breaker(3/30s)",
         "flags=none(every flag reads its default)",
     ]
     assert (

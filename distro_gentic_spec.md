@@ -281,7 +281,7 @@ resolves only to fills eligible for its policy.
 `core`
 
 A **workspace host** prepares workspaces and runs tool calls in them.
-The platform runs a pool of them in its cloud, a machine per session
+The platform runs a pool of them in its cloud, a VM per session
 ([The Cloud Pool](#the-cloud-pool)), and a customer installs the same
 program inside their wall. A host outside the cloud is a client
 of the gateway, like the CLI, never a process of the platform's
@@ -328,40 +328,40 @@ in.
 `default`
 
 A session of the platform's cloud whose workspace is a VM runs on a
-machine of its own, from the **cloud pool**: one virtual machine per
+VM of its own, from the **cloud pool**: one VM per
 session, which boots the pool's image, named by the id its cloud gives
 it, and runs the same host program a customer installs, with a
 container engine inside. The runner reaches it through the exec relay,
-as it reaches any host: the machine pulls, and the platform never calls
+as it reaches any host: the VM pulls, and the platform never calls
 in.
 
-- **Its own credential, for one session.** The pool hands each machine,
+- **Its own credential, for one session.** The pool hands each VM,
   as it starts, a one-use key, and its host trades the key once for a
   credential of the session's own pool. That host is handed the
   session's work and no other session's, whatever lane it reaches.
-- **Nothing to steal.** A machine holds no database credential, no model
+- **Nothing to steal.** A VM holds no database credential, no model
   key, no history, and no role in the cloud. Its key and its credential
-  live in its memory, never on its disk. Its commands hold the machine
-  whole: the machine is the session's wall.
-- **Closed at its network.** A machine's egress is closed outside its
+  live in its memory, never on its disk. Its commands hold the VM
+  whole: the VM is the session's wall.
+- **Closed at its network.** A VM's egress is closed outside its
   guest, to the gateway and what its session's egress allows, never by a
   rule its own commands could undo.
 - **Its whole disk is its snapshot.** For a session kept by snapshots,
   the run's end pushes what the workspace holds, ends the host's
-  credential, stops the machine, and keeps its disk. The next loop starts
-  a machine from that disk: its files, its packages, and its images
+  credential, stops the VM, and keeps its disk. The next loop starts
+  a VM from that disk: its files, its packages, and its images
   stand, and its processes start again.
-- **No host, no compute; its disk stays.** A machine whose host never
+- **No host, no compute; its disk stays.** A VM whose host never
   enrolled, was ended, or went silent is stopped, its disk kept, and the
   session's next loop starts it again under a new key, its host with it.
-  The sweep destroys no disk a live session's machine ran on: the
+  The sweep destroys no disk a live session's VM ran on: the
   session's release, its purge, or its end does.
-- **Warm, and always let go.** A few machines may stand started ahead of
-  demand, and a new session claims one. Every path that starts a machine
+- **Warm, and always let go.** A few VMs may stand started ahead of
+  demand, and a new session claims one. Every path that starts a VM
   has the one that lets it go: the run's release, the sweep past the
   grace, a session or a tenant that is gone, a purge, and a key's
-  revocation, since a machine left running is money. A revocation the
-  API takes reaches no machine, so the sweep destroys its disks.
+  revocation, since a VM left running is money. A revocation the
+  API takes reaches no VM, so the sweep destroys its disks.
 
 ### The Exec Relay Transport
 
@@ -441,7 +441,7 @@ workspace itself stays a cache.
   brought over it. A person who takes control gets that tree too.
 - **Where it lives follows the wall.** A workspace in the platform's
   cloud keeps its snapshots in the platform's own stores: the object
-  store, sealed under the session's key, or, for a machine of the cloud
+  store, sealed under the session's key, or, for a VM of the cloud
   pool, the cloud's disk snapshots, encrypted at rest. A workspace on a
   customer's host keeps them in that host's own store, inside the wall.
   Their bytes never cross: the platform records the reference and the
@@ -512,7 +512,7 @@ Snapshots][e-snapshots]), as an agent project names it.
 
 | Level | Separates | Typical use |
 |---|---|---|
-| A microVM or VM per session | Filesystem, processes, network, and kernel, across sessions and tenants | The cloud's level, on a machine of the cloud pool |
+| A microVM or VM per session | Filesystem, processes, network, and kernel, across sessions and tenants | The cloud's level, on a VM of the cloud pool |
 | A container per session | Processes and filesystem; the host kernel is shared, unless a user-space kernel stands between | Validation executors; a customer's laptop |
 | A directory on the host | Only what a dedicated user and the directory separate | Work that needs the host itself: GUI tools, GPU drivers |
 | A twin | Nothing; it plays the lifecycle for tests and says so | `local` only |

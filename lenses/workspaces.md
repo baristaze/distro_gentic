@@ -250,7 +250,7 @@ that fetches a URL the agent wrote.
 
 **Principle.** A workspace in the platform's cloud keeps its snapshots in
 the platform's own stores: the object store, sealed under the session's
-key, or, for a machine of the cloud pool, the cloud's disk snapshots,
+key, or, for a VM of the cloud pool, the cloud's disk snapshots,
 encrypted at rest. A workspace on a customer's host keeps them in that
 host's own store, inside the wall. Their bytes never cross: the platform
 records the reference and the hash alone, and a host of the same pool

@@ -81,7 +81,7 @@ block below does. Never print a token.
    share of the prompt written to a cache,
    `cache_write / (input + cache_read + cache_write)`; and the spend's
    share of the whole. The price of a cache write against an uncached
-   token is the price table's, in `om/src/acme/om/budgets/` (read it
+   token is the price table's, in `om/src/acme/om/spend_budgets/` (read it
    with `Read`), so the cost of rebuilt caches is the cache writes at
    the write rate's premium over the input rate, per pair, as an
    estimate the report labels so. Each version's total across its tiers

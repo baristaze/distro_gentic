@@ -21,7 +21,7 @@ for where a kind lives.
 and what the kind's agent does and may never do, in the arguments or
 in the conversation.
 
-Example: `triage --done answer --tools read_file,list_files,read_session --authority steady --workspace container --classes read`,
+Example: `triage --done answer --tools read_file,list_files,read_agent_session --authority steady --workspace container --classes read`,
 for "reads a failed run's logs in its workspace and answers which
 session should take it".
 
@@ -104,7 +104,7 @@ The shape of a kind is the four profiles in
    `agentic-scaffold-tool` says for a class. Its container
    test holds instead that the kind declared in `PRODUCT_KINDS.agents`
    reaches each container's `build`, shape
-   `workers/session_runner/tests/test_product_parts.py`: the API's
+   `workers/agent_session_runner/tests/test_product_parts.py`: the API's
    container starts a session of it, the session runner runs it, and
    the maintenance worker knows it.
    `tools` takes the managers late, as a callable, and returns the
