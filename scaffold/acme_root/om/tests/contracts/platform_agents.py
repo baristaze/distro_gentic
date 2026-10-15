@@ -24,6 +24,7 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import build_agent_automations
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
@@ -213,9 +214,6 @@ def platform_over(
         storage,
         InfraLocalImpl(tmp_path),
         integrations=integrations,
-        principal_context=live,
-        loop_options=LoopOptions(control_poll=timedelta(milliseconds=1)),
-        agent_kinds=kinds,
         platform_root_options=PlatformRootOptions(
             platform_agents=PlatformAgents(corpus=corpus),
             executor=executor,
@@ -223,6 +221,11 @@ def platform_over(
             product_kinds=product_kinds,
             agent_automations=lambda: agent_automations[0],
             intake=None if forge is None else lambda: intakes[0],
+        ),
+        agent_root_options=AgentRootOptions(
+            principal_context=live,
+            loop_options=LoopOptions(control_poll=timedelta(milliseconds=1)),
+            agent_kinds=kinds,
         ),
     )
     agent_automations.append(

@@ -15,6 +15,7 @@ from acme.om.agent_automations.root import agent_automation_principals, build_ag
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
@@ -41,7 +42,7 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.root import LOCAL
+from acme.om.agent_root import LOCAL
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -197,18 +198,8 @@ def build_runner_platform(
         storage,
         infra,
         integrations=integrations,
-        environment=settings.environment,
-        tool_catalog=acts,
-        attachment_reader=attachment_reader,
-        spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
-        result_gate=ports.result_gate,
-        language_models_layer=matrix.layer,
         # A call of a session the tenant's agent automation principal started
         # runs on that principal's grant; every other on a member's place.
-        principal_context=agent_automation_principals(
-            storage.get_agent_automation_storage(), members
-        ),
-        stream_sink=stream,
         platform_root_options=PlatformRootOptions(
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
@@ -228,7 +219,19 @@ def build_runner_platform(
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
             cloud_pool_stage=stage,
-            attached_toolsets=connectors.attached,
+            loop_hooks=connectors.loop_hooks,
+        ),
+        agent_root_options=AgentRootOptions(
+            environment=settings.environment,
+            tool_catalog=acts,
+            attachment_reader=attachment_reader,
+            spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
+            language_models_layer=matrix.layer,
+            principal_context=agent_automation_principals(
+                storage.get_agent_automation_storage(), members
+            ),
+            stream_sink=stream,
         ),
     )
     built.append(managers)

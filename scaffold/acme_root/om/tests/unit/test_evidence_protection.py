@@ -13,6 +13,7 @@ import pytest
 
 from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.base import OmBase, new_id
 from acme.om.context import Role, TenantContext
@@ -208,7 +209,9 @@ async def test_the_root_keeps_the_protected_ceiling_whatever_options_it_is_given
 ) -> None:
     for options in (None, ToolsOptions(purge_batch=5)):
         managers = build_platform_managers(
-            StorageMemoryImpl(), InfraLocalImpl(tmp_path), tools_options=options
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            agent_root_options=AgentRootOptions(tools_options=options),
         )
         # The engine's tools manager, beneath the layers the root puts on it.
         tools: object = managers.tools

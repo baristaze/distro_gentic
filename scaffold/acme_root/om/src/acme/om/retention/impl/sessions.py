@@ -40,7 +40,7 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
         self._retention = retention
         self._privacy = privacy
 
-    async def create_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
+    async def create_agent_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
         """The snapshot, then the session, then its storage. Each step is safe
         to take again, so a create retried under the same id finishes what
         the first left."""
@@ -70,7 +70,7 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
     ) -> tuple[AgentRef, ...]:
         return await self._inner.get_ancestors(ctx, agent_session_id)
 
-    async def get_sessions(
+    async def get_agent_sessions(
         self,
         ctx: TenantContext,
         status: AgentSessionStatus | None,

@@ -28,10 +28,10 @@ from acme.om.agent_billing.types.unit_plan import (
     SpendUnitScale,
     UnitPlanCatalog,
 )
+from acme.om.agent_root import LOCAL
 from acme.om.base import utcnow
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.platform_root import PlatformManagers
-from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
 
 

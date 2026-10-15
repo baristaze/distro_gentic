@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_projects.exceptions import AgentProjectFixed
 from acme.om.agent_projects.types.agent_project import AgentProject, Repository
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Handoff, Spawn, Start
@@ -57,8 +58,7 @@ def managers(tmp_path: Path) -> PlatformManagers:
     return build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
-        agent_kinds=(DELIVERY, ASSISTANT),
-        tool_catalog=TOOLS,
+        agent_root_options=AgentRootOptions(agent_kinds=(DELIVERY, ASSISTANT), tool_catalog=TOOLS),
     )
 
 
@@ -264,9 +264,11 @@ async def test_a_sessions_row_goes_with_its_purge_and_a_living_tenant_keeps_all(
     managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
-        agent_kinds=(DELIVERY,),
-        tool_catalog=TOOLS,
-        agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(DELIVERY,),
+            tool_catalog=TOOLS,
+            agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
+        ),
     )
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)

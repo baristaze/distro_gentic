@@ -29,8 +29,8 @@ from acme.services.api.services.agent_projects import AgentProjectsServiceInterf
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
+from acme.services.api.services.change_events import ChangeEventsServiceInterface
 from acme.services.api.services.connectors import ConnectorsServiceInterface
-from acme.services.api.services.events import ChangeEventsServiceInterface
 from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.exec_relay import ExecRelayServiceInterface
 from acme.services.api.services.flags import FlagsServiceInterface

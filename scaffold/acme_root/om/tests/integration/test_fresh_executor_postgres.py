@@ -96,6 +96,7 @@ a new file beside the base's fixture."""
 REPLACES = """\
 import os
 from acme.om.platform_agents.kinds import ValidationWorkKind
+from acme.om.agent_root import AgentRootOptions
 
 os.remove("checks/expected.txt")
 with open("checks/expected.txt", "w") as fixture:
@@ -186,13 +187,15 @@ class Delivered:
         self.managers: PlatformManagers = build_platform_managers(
             storage,
             self.infra,
-            agent_kinds=(DELIVERY,),
-            tool_catalog=stand_ins(*DELIVERY.tools),
-            environment="production",
             platform_root_options=PlatformRootOptions(
                 work_product=self.work,
                 workspace_agent_projects=OnDisk(self.repository),
                 workspace_reader=RepositoryReaderGitImpl(on_disk=True),
+            ),
+            agent_root_options=AgentRootOptions(
+                agent_kinds=(DELIVERY,),
+                tool_catalog=stand_ins(*DELIVERY.tools),
+                environment="production",
             ),
         )
 

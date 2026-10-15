@@ -43,7 +43,7 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   interrupted, never repeated.
 - **The sweep** takes back the expired leases and relays the outbox a crash
   left. Then it reads the workspace instances this host holds for its
-  deployment (`ACME_WORKSPACE_DEPLOYMENT`). One whose session has no loop
+  deployment (`ACME_AGENT_WORKSPACE_DEPLOYMENT`). One whose session has no loop
   item queued or claimed is no run's; once a pass finds it so past its
   grace, the warm grace of its session's kind and never past the prompt
   cache's life (`ProductKinds.warm_grace`), it is released the way a run

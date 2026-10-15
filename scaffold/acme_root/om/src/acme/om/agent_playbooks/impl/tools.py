@@ -22,7 +22,7 @@ from acme.om.exceptions import NotFound
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import approver_roles, response, strictest, verdict
-from acme.om.tools.tool import TakenSnapshot
+from acme.om.tools.tool import TakenSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
 from acme.om.tools.types.policy import Decision, ToolPolicy, ToolPolicyLayer
 
@@ -196,9 +196,10 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
         *,
         epoch: int,
         loop_id: UUID,
+        tools: Sequence[ToolInterface],
     ) -> AgentStep:
         return await self._inner.snapshot_agent_workspace(
-            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
         )
 
     async def fork_snapshot(

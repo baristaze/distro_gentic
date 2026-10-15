@@ -15,7 +15,7 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.streams import StreamsInterface
 from acme.infra.topics import TopicsInterface
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
-from acme.infra.vms import VmsInterface
+from acme.infra.vms import SeedsInterface, VmsInterface
 
 
 class InfraInterface(ABC):

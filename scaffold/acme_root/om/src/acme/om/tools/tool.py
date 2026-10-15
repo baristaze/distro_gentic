@@ -110,7 +110,7 @@ class ToolRuntime:
         return self._session_id
 
     @property
-    def workspace(self) -> Workspace:
+    def workspace(self) -> AgentWorkspace:
         """The workspace the call is made in: what a tool names to reach the
         machine that holds it by an operation of its own, as a tool of a
         server inside a customer's wall does."""

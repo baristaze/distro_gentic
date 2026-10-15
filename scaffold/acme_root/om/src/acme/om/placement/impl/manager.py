@@ -10,7 +10,14 @@ from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.base import EMPTY_UUID, OmBase, derived_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
-from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
+from acme.om.placement.kinds import (
+    HOST,
+    ClaimantKinds,
+    claimed_by,
+    claims_of,
+    held_to,
+    placed_lane,
+)
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, another_session, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
@@ -157,7 +164,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         if (
             item.status is not WorkStatus.CLAIMED
             or item.claimed_by != claimant.worker_id
-            or item.kind not in self._kinds.claimed_by(claimant.kind)
+            or item.kind not in claimed_by(self._kinds, claimant.kind)
         ):
             raise missing
         if item.claim_token != claim_token:

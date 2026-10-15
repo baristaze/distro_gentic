@@ -107,6 +107,7 @@ from acme.om.placement.impl.operator import (
 from acme.om.placement.kinds import (
     ClaimantKinds,
     ClaimantKindSpec,
+    PlacedKindSpec,
     platform_claimant_kinds,
 )
 from acme.om.platform_agents import PlatformAgentsManagerInterface
@@ -320,7 +321,7 @@ class ProductKinds:
                     "which is no agent kind of the product's"
                 )
         for spec in self.work:
-            if spec.claimant is None:
+            if not isinstance(spec, PlacedKindSpec):
                 raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
         # A stream a claimant writes or reads is bound to an item it holds,
         # and only a product's claimant holds one: the host's items are the

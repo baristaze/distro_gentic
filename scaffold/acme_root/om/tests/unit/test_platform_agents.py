@@ -19,6 +19,7 @@ from unit.platform_tools import REVIEWED, reviewing, unbound
 from acme.infra.agent_workspaces import IsolationMode
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers.calls import ModelCall
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agent_steps.types.header import LoopOutcome, ParkReason, ToolFailure
@@ -81,7 +82,7 @@ from acme.om.platform_agents.kinds import (
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
-from acme.om.root import engine_tools
+from acme.om.agent_root import native_tools
 from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
@@ -123,7 +124,7 @@ APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 def shipped_catalog() -> tuple[ToolInterface, ...]:
     """The engine's tools and the platform's, as the root offers them."""
-    engine = engine_tools(
+    engine = native_tools(
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
@@ -817,10 +818,10 @@ def test_an_assistant_with_a_workspace_or_steady_authority_is_refused_at_boot(
         build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            agent_kinds=(with_workspace,),
             platform_root_options=PlatformRootOptions(
                 platform_agents=PlatformAgents(corpus=CORPUS),
             ),
+            agent_root_options=AgentRootOptions(agent_kinds=(with_workspace,)),
         )
 
 
@@ -1468,8 +1469,8 @@ async def test_every_tool_the_ops_analyst_holds_reads(tmp_path: Path) -> None:
         build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            agent_kinds=(acting,),
             platform_root_options=PlatformRootOptions(
                 platform_agents=PlatformAgents(corpus=CORPUS),
             ),
+            agent_root_options=AgentRootOptions(agent_kinds=(acting,)),
         )

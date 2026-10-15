@@ -23,7 +23,7 @@ from acme.om.attribution.rules import principal_authored
 from acme.om.context import TenantContext
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.tool import TakenSnapshot
+from acme.om.tools.tool import TakenSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
 
@@ -182,9 +182,10 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         *,
         epoch: int,
         loop_id: UUID,
+        tools: Sequence[ToolInterface],
     ) -> AgentStep:
         return await self._inner.snapshot_agent_workspace(
-            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
         )
 
     async def fork_snapshot(

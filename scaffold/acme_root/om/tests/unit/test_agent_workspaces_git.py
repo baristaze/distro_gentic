@@ -44,6 +44,7 @@ from acme.infra.transports.twin import TransportNullImpl
 from acme.integrations.events.twin import FORGE, IntegrationTwinImpl
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.agent_workspaces.types.source import PullRequestFate
@@ -156,13 +157,13 @@ class Checkout:
         return build_platform_managers(
             self.storage,
             infra,
-            agent_kinds=(WORKER,),
             platform_root_options=PlatformRootOptions(
                 workspace_agent_projects=self.agent_projects,
                 pull_requests=self.pull_requests,
                 source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
                 transport_layer=self.transport_layer,
             ),
+            agent_root_options=AgentRootOptions(agent_kinds=(WORKER,)),
         )
 
     async def tenant_of(self, integration: str, installation: str) -> UUID | None:

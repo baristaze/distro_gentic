@@ -61,7 +61,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "agent_workspace_account": "the account workspace backend only",
     "agent_workspace_protected_hardlinks": "the account workspace backend only",
     "agent_workspace_image": "the container workspace backend only",
-    "workspace_deployment": "the container workspace backend only",
+    "agent_workspace_deployment": "the container workspace backend only",
     "docker_timeout_seconds": "the container workspace backend only",
     "docker_pull_timeout_seconds": "the container workspace backend only",
     # The VMs: the sweep's purge lets the cloud pool's go, and a deployment
@@ -93,7 +93,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "llm_providers": "no process here calls a model; none until a process that runs a loop is deployed",
     "anthropic_api_key": "no process here calls a model",
     "llm_script": "the scripted twin's only, which a deployed process refuses",
-    "model_script_pace_seconds": "the scripted twin's only, which a deployed process refuses",
+    "llm_script_pace_seconds": "the scripted twin's only, which a deployed process refuses",
     "integrations": "none until a process that runs a loop is deployed; the twin is refused deployed",
     "forge_integration": "follows integrations until a process that runs a loop is deployed",
     "chat_integration": "follows integrations until a process that runs a loop is deployed",

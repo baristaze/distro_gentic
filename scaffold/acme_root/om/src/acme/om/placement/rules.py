@@ -7,15 +7,15 @@ the lanes and kinds a claimant's identity claims, are the kinds' registry's
 from datetime import timedelta
 from uuid import UUID
 
-from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.agent_sessions.kinds import LOOP_LANE
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import FairShare, TierShare
-from acme.om.work.types.work_item import WorkItem, relayed_lane
+from acme.om.work.types.work_item import WorkItem
 
 DEFAULT_TIER = "standard"
 """The plan tier of a tenant no operator has given one."""
 
-LOOP_LANE_PREFIX = f"{relayed_lane(AgentSessionWorkKind.LOOP)}:"
+LOOP_LANE_PREFIX = f"{LOOP_LANE}:"
 """The stem of every loop lane: the loop's own lane in the work registry
 (`WORK_LANES`), split by plan tier, or by tenant for one moved apart."""
 

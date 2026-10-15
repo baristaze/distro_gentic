@@ -32,7 +32,6 @@ from acme.om.agent_steps.types.header import (
     LoopOutcome,
     ParkReason,
 )
-from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.hooks import LoopHooksInterface
 from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -476,7 +475,6 @@ def loop_over(
         leases=managers.leases,
         hooks=hooks or LoopHooksNullImpl(),
         jitter=jitter,
-        attached=attached or AttachedToolsetsNoneImpl(),
     )
     owner = owner or context(Role.OWNER, make_org())
     return Loop(

@@ -82,7 +82,7 @@ async def list_agent_sessions(
     """The org's root sessions in a status, or in any, newest first, a page
     at a time: the ones the caller made or takes part in (`mine`), or every
     one they see (`visible`)."""
-    return await sessions.get_sessions(ctx, among, status, cursor, limit)
+    return await sessions.list_agent_sessions(ctx, among, status, cursor, limit)
 
 
 @router.get("/{agent_session_id}", response_model=AgentSessionView)

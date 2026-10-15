@@ -28,6 +28,7 @@ from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CommandSpec, RecordSeal, StaleCommand
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
@@ -138,11 +139,11 @@ async def watched(tmp_path: Path) -> Watched:
     managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
-        tool_catalog=TOOLS,
         platform_root_options=PlatformRootOptions(
             hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
             relay_options=ExecRelayOptions(lease=timedelta(seconds=30)),
         ),
+        agent_root_options=AgentRootOptions(tool_catalog=TOOLS),
     )
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
     now = utcnow()

@@ -56,7 +56,7 @@ class AgentSessionsInAgentProjectImpl(AgentSessionsManagerInterface):
         self._inner = inner
         self._storage = storage
 
-    async def create_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
+    async def create_agent_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
         """The origin's agent project row for the new session, then the session.
         An origin of no agent project, or one the tenant does not hold, writes
         nothing here, and the engine answers for the origin; a new session
@@ -98,7 +98,7 @@ class AgentSessionsInAgentProjectImpl(AgentSessionsManagerInterface):
     ) -> tuple[AgentRef, ...]:
         return await self._inner.get_ancestors(ctx, agent_session_id)
 
-    async def get_sessions(
+    async def get_agent_sessions(
         self,
         ctx: TenantContext,
         status: AgentSessionStatus | None,

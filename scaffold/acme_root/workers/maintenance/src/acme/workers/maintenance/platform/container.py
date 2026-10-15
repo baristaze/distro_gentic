@@ -25,6 +25,7 @@ from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_projects.impl.manager import AgentProjectsOptions
+from acme.om.agent_root import LOCAL
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
 from acme.om.base import new_id
@@ -45,7 +46,6 @@ from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformManagers, PlatformPorts, PlatformRootOptions, ProductKinds
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.impl.manager import TrustOptions

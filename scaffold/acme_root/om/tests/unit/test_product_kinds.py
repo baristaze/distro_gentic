@@ -17,6 +17,7 @@ from pydantic import Field, ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import OmBase, new_id, utcnow
@@ -406,10 +407,10 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
         managers = build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            tools_options=options,
             platform_root_options=PlatformRootOptions(
                 product_kinds=product,
             ),
+            agent_root_options=AgentRootOptions(tools_options=options),
         )
         ceilings = engine_ceilings(managers)
         assert decide(render, ToolPolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
@@ -454,10 +455,10 @@ def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
             build_platform_managers(
                 StorageMemoryImpl(),
                 InfraLocalImpl(tmp_path),
-                tools_options=options,
                 platform_root_options=PlatformRootOptions(
                     product_kinds=product,
                 ),
+                agent_root_options=AgentRootOptions(tools_options=options),
             )
 
 

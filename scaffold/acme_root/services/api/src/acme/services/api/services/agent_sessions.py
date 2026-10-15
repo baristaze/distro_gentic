@@ -50,7 +50,7 @@ class AgentSessionsServiceInterface(ABC):
     ) -> AgentSessionView: ...
 
     @abstractmethod
-    async def get_sessions(
+    async def list_agent_sessions(
         self,
         ctx: TenantContext,
         among: Among,

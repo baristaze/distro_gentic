@@ -23,6 +23,7 @@ from sqlalchemy.exc import DBAPIError
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_projects.exceptions import AgentProjectFixed
 from acme.om.agent_projects.types.agent_project import AgentProject
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
@@ -73,8 +74,9 @@ def managers(storage: StoragePostgresImpl, tmp_path: Path) -> PlatformManagers:
     return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        agent_kinds=(DELIVERY,),
-        tool_catalog=stand_ins(*DELIVERY.tools),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(DELIVERY,), tool_catalog=stand_ins(*DELIVERY.tools)
+        ),
     )
 
 

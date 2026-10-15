@@ -26,7 +26,6 @@ from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agents import AgentsManagerInterface
-from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.report import Report
 from acme.om.agents.types.request import (
     MAX_STANDING,
@@ -82,9 +81,6 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
 
     async def tree_of(self, ctx: TenantContext, agent_session_id: UUID) -> AgentTree:
         return await self._inner.tree_of(ctx, agent_session_id)
-
-    async def kind_of(self, ctx: TenantContext, agent_session_id: UUID) -> AgentKind:
-        return await self._inner.kind_of(ctx, agent_session_id)
 
     async def set_deadline(
         self, ctx: TenantContext, agent_session_id: UUID, deadline: datetime | None

@@ -126,7 +126,7 @@ is registered only when `ACME_CORPUS_ROOT` is set:
 ```bash
 uv run --package acme-api python services/api/tests/portal_check.py script .local/model-script.json
 # start the runner with ACME_LLM_PROVIDERS=scripted, ACME_LLM_SCRIPT,
-# ACME_MODEL_SCRIPT_PACE_SECONDS=0.15, and ACME_CORPUS_ROOT set
+# ACME_LLM_SCRIPT_PACE_SECONDS=0.15, and ACME_CORPUS_ROOT set
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e
 ```
 

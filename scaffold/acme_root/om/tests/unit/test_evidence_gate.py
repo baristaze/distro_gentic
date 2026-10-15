@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.manager import AgentsManagerImpl
@@ -600,11 +601,14 @@ def test_a_deployed_root_refuses_a_quiet_null_result_gate(environment: str, tmp_
         build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            result_gate=ResultGateNullImpl(),
-            environment=environment,
+            agent_root_options=AgentRootOptions(
+                result_gate=ResultGateNullImpl(), environment=environment
+            ),
         )
     local = build_platform_managers(
-        StorageMemoryImpl(), InfraLocalImpl(tmp_path), result_gate=ResultGateNullImpl()
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_root_options=AgentRootOptions(result_gate=ResultGateNullImpl()),
     )
     assert isinstance(local.agents, AgentsManagerImpl)
 
@@ -615,9 +619,9 @@ async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate
     managers = build_platform_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
-        agent_kinds=(DELIVERY,),
-        tool_catalog=stand_ins(*DELIVERY.tools),
-        environment="staging",
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(DELIVERY,), tool_catalog=stand_ins(*DELIVERY.tools), environment="staging"
+        ),
     )
     ctx = context(Role.MEMBER)
     session = await managers.agents.start_agent_session(

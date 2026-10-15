@@ -19,11 +19,11 @@ from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_root import private_history
 from acme.om.agent_steps.storage.impl.memory import AgentStepStorageMemoryImpl
 from acme.om.base import utcnow
 from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.privacy.impl.keys import AgentSessionKeysImpl
-from acme.om.root import private_history
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.trust.impl.keys import ProviderClientsCachedImpl

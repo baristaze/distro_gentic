@@ -20,6 +20,7 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, price_park
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agent_steps.rules import message_step
@@ -266,9 +267,11 @@ async def test_a_purged_session_takes_its_park_alerts_and_leaves_the_others(
     managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        agent_kinds=(STEADY,),
-        tool_catalog=(Lookup(), Command("call_api")),
-        agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(STEADY,),
+            tool_catalog=(Lookup(), Command("call_api")),
+            agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
+        ),
     )
     member = context(Role.MEMBER, make_org())
     gone, kept = [

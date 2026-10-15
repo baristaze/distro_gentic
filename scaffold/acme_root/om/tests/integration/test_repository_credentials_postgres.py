@@ -35,6 +35,7 @@ from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
@@ -264,12 +265,12 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
-        agent_kinds=(WORKER,),
         platform_root_options=PlatformRootOptions(
             workspace_agent_projects=agent_projects,
             workspace_git=GitTwin(),
             workspace_reader=on_loopback(),
         ),
+        agent_root_options=AgentRootOptions(agent_kinds=(WORKER,)),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -344,13 +345,13 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
-        agent_kinds=(SOFTWARE_ENGINEER,),
         platform_root_options=PlatformRootOptions(
             platform_agents=PlatformAgents(corpus=CORPUS),
             workspace_agent_projects=agent_projects,
             workspace_reader=on_loopback(),
             source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
         ),
+        agent_root_options=AgentRootOptions(agent_kinds=(SOFTWARE_ENGINEER,)),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),

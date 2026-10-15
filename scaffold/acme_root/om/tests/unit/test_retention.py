@@ -22,6 +22,7 @@ from acme.infra.exceptions import KeyRefused
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys import KeyServiceInterface, WrappedKey
 from acme.infra.keys.memory import KeyServiceMemoryImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
@@ -109,12 +110,11 @@ class Roots:
         self.managers: PlatformManagers = build_platform_managers(
             self.storage,
             InfraLocalImpl(tmp_path),
-            tool_catalog=TOOLS,
-            agent_kinds=(KIND,),
             platform_root_options=PlatformRootOptions(
                 tenant_keys=self.keys,
                 agent_session_projects=self.agent_projects,
             ),
+            agent_root_options=AgentRootOptions(tool_catalog=TOOLS, agent_kinds=(KIND,)),
         )
         self.options = options or RetentionOptions()
         self.now = utcnow()

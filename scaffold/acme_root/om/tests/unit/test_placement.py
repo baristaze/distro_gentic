@@ -16,6 +16,7 @@ import pytest
 
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
@@ -95,7 +96,9 @@ def storage() -> StorageMemoryImpl:
 
 @pytest.fixture
 def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
-    return build_platform_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
+    return build_platform_managers(
+        storage, InfraLocalImpl(tmp_path), agent_root_options=AgentRootOptions(tool_catalog=TOOLS)
+    )
 
 
 async def an_owner(managers: PlatformManagers, slug: str = "ajax") -> TenantContext:
@@ -361,8 +364,8 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_
     managers = build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        tool_catalog=TOOLS,
         platform_root_options=PlatformRootOptions(placement_options=options),
+        agent_root_options=AgentRootOptions(tool_catalog=TOOLS),
     )
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     lane = tier_lane("standard")

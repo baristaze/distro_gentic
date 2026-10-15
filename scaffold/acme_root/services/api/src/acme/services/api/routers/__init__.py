@@ -19,11 +19,8 @@ from fastapi import APIRouter
 
 from acme.services.api.realtime import socket
 from acme.services.api.routers import (
-    admin,
     agent_sessions,
     change_events,
-    events,
-    flags,
     leases,
     media,
     tenancy,

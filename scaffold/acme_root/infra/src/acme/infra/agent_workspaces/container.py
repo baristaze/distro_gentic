@@ -50,6 +50,10 @@ image holds what runs in the workspace: Python for its tools, and `git`,
 which checks out and pushes a session's repository inside it."""
 
 DEFAULT_PULL_TIMEOUT = timedelta(seconds=900)
+
+DEFAULT_DEPLOYMENT = "acme-local"
+"""The deployment a container workspace carries when its root names none:
+a runner lets go only of the containers that carry its own."""
 """How long `docker pull` of the image may run. It is longer than any other
 command's limit: an image is hundreds of megabytes, and Docker discards the
 layers of a pull that is killed, so a limit too short for a slow link never
@@ -221,7 +225,7 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         self,
         image: str,
         timeout: timedelta,
-        deployment: str,
+        deployment: str = DEFAULT_DEPLOYMENT,
         pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT,
         network: HostNetwork = NO_HOST_NETWORK,
     ) -> None:

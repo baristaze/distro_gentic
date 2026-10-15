@@ -12,7 +12,7 @@ from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import Park, ParkReason
 from acme.om.agents import AgentsManagerInterface
-from acme.om.agents.impl.loop import HANDOVER_UNLOCK
+from acme.om.agents.impl.loop_take_over import HANDOVER_UNLOCK
 from acme.om.agents.loop_rules import open_loop
 from acme.om.attribution import AttributionManagerInterface, PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind

@@ -29,8 +29,9 @@ from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.agent_step import AgentStep
-from acme.om.agents.attached import AttachedToolsetsNoneImpl
+from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKindCatalog
@@ -62,7 +63,7 @@ from acme.om.platform_root import (
     build_platform_managers,
     no_actions,
 )
-from acme.om.root import engine_tools
+from acme.om.agent_root import native_tools
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
@@ -323,12 +324,12 @@ def wired(
         storage,
         infra,
         integrations=integrations,
-        agent_kinds=KINDS,
-        principal_context=principals,
-        tool_catalog=catalog,
         platform_root_options=PlatformRootOptions(
             tools_layer=layers,
             agents_layer=agent_playbooks.agents,
+        ),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=KINDS, principal_context=principals, tool_catalog=catalog
         ),
     )
     trust.build(managers)
@@ -356,7 +357,7 @@ def wired(
         credentials(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
-        engine_tools(
+        native_tools(
             managers.agent_steps,
             managers.agent_sessions,
             AttachmentReaderNullImpl(),
@@ -368,7 +369,7 @@ def wired(
         clock,
         sleep,
         leases=managers.leases,
-        attached=AttachedToolsetsNoneImpl(),
+        hooks=LoopHooksNullImpl(),
     )
     intake = build_intake(storage, managers, principal_context=members, clock=clock)
     return Wired(

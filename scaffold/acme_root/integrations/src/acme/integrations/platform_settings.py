@@ -15,7 +15,7 @@ class PlatformIntegrationsSettings(BaseSettings):
 
     # The time the scripted twin waits before each part it streams, so a
     # suite can watch a stream while it is open. Zero streams at once.
-    model_script_pace_seconds: float = Field(default=0, ge=0)
+    llm_script_pace_seconds: float = Field(default=0, ge=0)
 
     # What serves the integrations whose events reach a session and through
     # which a person is told what waits on them (`events.INTEGRATIONS`): their

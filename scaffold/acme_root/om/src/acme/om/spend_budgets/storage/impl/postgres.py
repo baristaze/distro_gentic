@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
@@ -28,7 +29,7 @@ from acme.om.spend_budgets.types.spend_hold import (
     SpendTally,
 )
 from acme.om.spend_budgets.types.usage import LoopUsage, UsageRecord, UsageRollup
-from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
+from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 

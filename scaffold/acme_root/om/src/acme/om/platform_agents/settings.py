@@ -7,9 +7,9 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from acme.om.agent_root import LOCAL
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
-from acme.om.root import LOCAL
 
 
 class PlatformAgentsSettings(BaseSettings):

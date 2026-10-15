@@ -32,6 +32,7 @@ from acme.om.agent_steps.types.header import (
 )
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
+from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.request import Start
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.base import utcnow
@@ -277,6 +278,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         agent_projects: AgentProjectsManagerInterface,
         *,
         agent_project_required: bool,
+        kinds: AgentKindCatalog,
     ) -> None:
         """`agent_project_required` refuses a session started in no agent project: what
         every stack but a local one sets, so no per-agent-project policy is
@@ -291,6 +293,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self._spend_budgets_operator = spend_budgets_operator
         self._agent_projects = agent_projects
         self._project_required = agent_project_required
+        self._kinds = kinds
 
     async def start_agent_session(
         self, ctx: TenantContext, body: StartAgentSessionRequest, agent_session_id: UUID
@@ -311,7 +314,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
     ) -> AgentSessionView:
         return agent_session_view(await self._sessions.get_agent_session(ctx, agent_session_id))
 
-    async def get_sessions(
+    async def list_agent_sessions(
         self,
         ctx: TenantContext,
         among: Among,
@@ -538,7 +541,8 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         return tree
 
     async def get_bounds(self, ctx: TenantContext, agent_session_id: UUID) -> BoundsView:
-        kind = await self._agents.kind_of(ctx, agent_session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        kind = self._kinds.get(session.kind, session.kind_version)
         return bounds_of(kind, await self._agents.tree_of(ctx, agent_session_id))
 
     async def get_tool_calls(

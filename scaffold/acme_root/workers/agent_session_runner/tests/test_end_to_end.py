@@ -933,7 +933,7 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     the step holds the answer whole, and the stream's opening and
     completion are in the tenant's event stream."""
     person = await owner_of(stack)
-    stack.runner("runner-live", [answers(ANSWER)], ACME_MODEL_SCRIPT_PACE_SECONDS=PACE)
+    stack.runner("runner-live", [answers(ANSWER)], ACME_LLM_SCRIPT_PACE_SECONDS=PACE)
     agent_session_id = await started(stack, person)
     opened = await stack.client.post(
         f"/v1/agent-sessions/{agent_session_id}/live", headers=person.headers
@@ -1207,7 +1207,7 @@ async def test_an_agent_projects_workspace_base_is_built_once_and_its_software_e
         "runner-workspace-base",
         [*sealed, *sealed],
         ACME_AGENT_WORKSPACE_BACKEND="container",
-        ACME_WORKSPACE_DEPLOYMENT=deployment,
+        ACME_AGENT_WORKSPACE_DEPLOYMENT=deployment,
         E2E_CONTAINERS="1",
     )
     workspaces = shipped.container.managers.agent_workspaces

@@ -17,6 +17,7 @@ from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_root import LOCAL, AgentRootOptions
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
@@ -35,7 +36,7 @@ from acme.om.platform_root import (
     PlatformRootOptions,
     build_platform_managers,
 )
-from acme.om.root import LOCAL, TenancyOperatorOptions, TenancyOptions
+from acme.om.root import TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.root import StorageInterface
 from acme.om.trust import KeyProbeInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl, KeyProbeTwinImpl
@@ -112,10 +113,6 @@ def build_platform_api(
         tenancy,
         operator,
         integrations,
-        environment=settings.environment,
-        tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
-        spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
-        result_gate=ports.result_gate,
         platform_root_options=PlatformRootOptions(
             platform_agents=platform_agents,
             executor=ports.executor,
@@ -125,6 +122,12 @@ def build_platform_api(
             workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
             agents_layer=agent_playbooks.agents,
+        ),
+        agent_root_options=AgentRootOptions(
+            environment=settings.environment,
+            tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
+            spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
         ),
     )
     refuse_open_money(settings.environment, managers)
@@ -165,6 +168,7 @@ def build_platform_api(
         intake=intake,
         agent_projects=managers.agent_projects,
         agent_project_required=agent_project_required,
+        kinds=managers.kinds,
     )
     services = build_platform_services(
         engine,

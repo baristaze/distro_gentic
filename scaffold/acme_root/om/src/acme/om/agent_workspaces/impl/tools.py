@@ -72,7 +72,7 @@ from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import named_snapshot, snapshotted_step
-from acme.om.tools.tool import TakenSnapshot, TakeSnapshot
+from acme.om.tools.tool import TakenSnapshot, TakeSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
 
@@ -337,6 +337,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         *,
         epoch: int,
         loop_id: UUID,
+        tools: Sequence[ToolInterface],
     ) -> AgentStep:
         if agent_session_id in self._hosted:
             # Its host holds it: the host takes the snapshot, and its bytes
@@ -350,7 +351,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
             )
         step = await self._inner.snapshot_agent_workspace(
-            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
         )
         taken = named_snapshot(step)
         if taken is not None:

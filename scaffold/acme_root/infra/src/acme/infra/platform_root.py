@@ -44,10 +44,10 @@ def cloud_machines(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterfa
         region=settings.aws_region,
         timeout=timedelta(seconds=settings.aws_timeout_seconds),
         boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
-        template=settings.machine_launch_template,
-        subnets=tuple(s for s in settings.machine_subnets.split(",") if s),
-        closed=settings.machine_closed_group,
-        open_=settings.machine_open_group,
+        template=settings.vm_launch_template,
+        subnets=tuple(s for s in settings.vm_subnets.split(",") if s),
+        closed=settings.vm_closed_group,
+        open_=settings.vm_open_group,
         encrypted=settings.vm_store_encrypted,
     )
 

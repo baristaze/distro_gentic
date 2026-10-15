@@ -17,8 +17,13 @@ from pydantic_settings import BaseSettings
 
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl
-from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
+from acme.infra.agent_workspaces.container import (
+    DEFAULT_DEPLOYMENT,
+    DEFAULT_PULL_TIMEOUT,
+    AgentWorkspaceContainerImpl,
+)
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 from acme.infra.agent_workspaces.twin import AgentWorkspaceNullImpl, AgentWorkspaceTwinImpl
 from acme.infra.agent_workspaces.vm import AgentWorkspaceVmImpl
 from acme.infra.keys import KeyServiceInterface
@@ -77,7 +82,7 @@ class AgentInfraSettings(BaseSettings):
     # snapshot is its disk, kept in the backend's store;
     # `vm_store_encrypted` declares that store encrypted at rest, and
     # without it a VM workspace keeps no snapshot.
-    vms_backend: Literal["none", "lima"] = "none"
+    vms_backend: Literal["none", "lima", "ec2"] = "none"
     vm_image: str = "template:_images/ubuntu-lts"
     vm_prefix: str = Field(default="acme-vm-", pattern=r"^[a-z][a-z0-9-]*-$", max_length=21)
     vm_store_encrypted: bool = False
@@ -147,10 +152,17 @@ class AgentInfra:
         region: str,
         aws_timeout: timedelta,
         secrets: SecretsInterface,
+        vms: VmsInterface | None = None,
+        network: HostNetwork = NO_HOST_NETWORK,
+        deployment: str = DEFAULT_DEPLOYMENT,
+        pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT,
     ) -> AgentInfra:
         """What `settings` selects, built now and connected at start. No
         credential broker runs here, so a brokered secret is refused rather
-        than injected."""
+        than injected. A layer above may hand in `vms` of its own, the host's
+        proxy and CA file (`network`) its commands see under open egress, the
+        deployment each container workspace carries, and the image pull's
+        limit."""
         if settings.keys_backend == "kms":
             keys: KeyServiceInterface = KeyServiceKmsImpl(
                 aws, region=region, key_id=settings.kms_key_id, timeout=aws_timeout
@@ -159,8 +171,10 @@ class AgentInfra:
             root = settings.keys_root_key
             keys = KeyServiceMemoryImpl(None if root is None else root_key(root.get_secret_value()))
         broker = BrokerNullImpl()
-        vms = _vms(settings)
-        agent_workspaces, transport = _runtime(settings, vms, secrets, broker)
+        vms = vms or _vms(settings)
+        agent_workspaces, transport = _runtime(
+            settings, vms, secrets, broker, network, deployment, pull_timeout
+        )
         return cls(
             keys=keys,
             vms=vms,
@@ -207,14 +221,18 @@ def _runtime(
     vms: VmsInterface,
     secrets: SecretsInterface,
     broker: CredentialBrokerInterface,
+    network: HostNetwork,
+    deployment: str,
+    pull_timeout: timedelta,
 ) -> tuple[AgentWorkspaceProviderInterface, TransportInterface]:
     """The provider and the transport that runs in what it prepares, as a
-    pair."""
+    pair. Both take the host's proxy and CA file, which a command sees under
+    open egress alone."""
     records = settings.agent_workspaces_root / ".records"
     if settings.agent_workspace_backend == "host":
         return (
             AgentWorkspaceHostImpl(settings.agent_workspaces_root),
-            TransportLocalImpl(records, secrets, broker),
+            TransportLocalImpl(records, secrets, broker, network=network),
         )
     if settings.agent_workspace_backend == "account":
         account = settings.agent_workspace_account
@@ -224,13 +242,15 @@ def _runtime(
                 account,
                 protected_hardlinks=settings.agent_workspace_protected_hardlinks,
             ),
-            TransportLocalImpl(records, secrets, broker, account=account),
+            TransportLocalImpl(records, secrets, broker, network=network, account=account),
         )
     if settings.agent_workspace_backend == "container":
         timeout = timedelta(seconds=settings.docker_timeout_seconds)
         return (
-            AgentWorkspaceContainerImpl(settings.agent_workspace_image, timeout),
-            TransportContainerImpl(records, secrets, broker, timeout),
+            AgentWorkspaceContainerImpl(
+                settings.agent_workspace_image, timeout, deployment, pull_timeout, network
+            ),
+            TransportContainerImpl(records, secrets, broker, timeout, network),
         )
     if settings.agent_workspace_backend == "vm":
         timeout = timedelta(seconds=settings.vm_timeout_seconds)

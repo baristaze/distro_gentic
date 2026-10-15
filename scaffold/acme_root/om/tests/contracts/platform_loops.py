@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
-from acme.om.root import LOCAL
+from acme.om.agent_root import LOCAL
 from acme.om.storage.root import StorageInterface
 
 from contracts.loops import Loop, loop_over
@@ -43,10 +44,11 @@ def platform_loop_over(
         managers = build_platform_managers(
             storage,
             *args,
-            result_gate=result_gate or ResultGateNullImpl(),
-            environment=environment,
             platform_root_options=platform,
             **engine,
+            agent_root_options=AgentRootOptions(
+                result_gate=result_gate or ResultGateNullImpl(), environment=environment
+            ),
         )
         built.append(managers)
         return managers

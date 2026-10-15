@@ -1,11 +1,13 @@
 """The infra root that picks impls from settings and refuses combinations
 that are only safe locally."""
 
+import os
 from datetime import timedelta
 
 import aioboto3
 
 from acme.infra.agent_root import AGENT_UNSAFE_IN_CLOUD, AgentInfra, AgentInfraRoot
+from acme.infra.agent_workspaces.network import HostNetwork
 from acme.infra.breaker import Breaker
 from acme.infra.buckets import BucketsInterface
 from acme.infra.buckets.local import BucketsLocalImpl
@@ -27,6 +29,7 @@ from acme.infra.outages.null import OutageSignalNullImpl
 from acme.infra.platform_root import (
     PlatformInfra,
     PlatformInfraRoot,
+    cloud_machines,
     unsafe_on_platform,
 )
 from acme.infra.queues import QueuesInterface
@@ -177,6 +180,10 @@ class InfraConfiguredImpl(PlatformInfraRoot, AgentInfraRoot, InfraInterface):
             region=settings.aws_region,
             aws_timeout=aws_timeout,
             secrets=self._secrets,
+            vms=cloud_machines(settings, self._aws),
+            network=HostNetwork.of(os.environ),
+            deployment=settings.agent_workspace_deployment,
+            pull_timeout=timedelta(seconds=settings.docker_pull_timeout_seconds),
         )
         self._platform_infra = PlatformInfra.configured(
             settings, self._valkey, self._valkey_breaker, self._agent_infra.vms

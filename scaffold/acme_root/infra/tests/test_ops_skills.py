@@ -396,10 +396,10 @@ def test_the_ontology_audit_names_each_layer_and_only_reads_the_checkout() -> No
     """The report's chain names each layer by its title, so the audit
     carries the titles; and the audit reads the product's checkout it
     judges, so it never moves the checkout's head or its files."""
-    text = _skill("audit-ontology-drift")
+    text = text_of("audit-ontology-drift")
     for row in ONTOLOGY_LAYERS:
         assert row in text, f"audit-ontology-drift no longer names: {row}"
-    prose = _prose("audit-ontology-drift")
+    prose = prose_of("audit-ontology-drift")
     assert "It never fetches, switches, or checks out here." in prose
     assert "Run `git status --porcelain` here again. It prints what step 1 printed." in prose
 
@@ -541,10 +541,10 @@ def test_a_platform_skill_names_its_role_and_ops_readme_gives_it_the_same(
     """The skill says which role it holds before anything else of its
     credential, and `ops/README.md` gives it the same one, so a reader who
     trusts either grants the same credential."""
-    section = _prose(name).split("## Role and credential", 1)[1].strip()
+    section = prose_of(name).split("## Role and credential", 1)[1].strip()
     assert section.lower().startswith((f"the {role}", role)), section[:80]
     assert _readme_needs(name) == role
-    assert "Refuse any profile wider than the investigate role." in _prose(name)
+    assert "Refuse any profile wider than the investigate role." in prose_of(name)
 
 
 @pytest.mark.parametrize("name", [*PLATFORM])
@@ -552,7 +552,7 @@ def test_a_platform_skill_checks_its_profile_before_any_other_command(name: str)
     """Role and credential puts the profile's check before any other
     command, so the first step runs it, before the size and before any
     read of the operator plane."""
-    first = _prose(name).split("## Procedure", 1)[1].split(" 2. ", 1)[0]
+    first = prose_of(name).split("## Procedure", 1)[1].split(" 2. ", 1)[0]
     check = first.find("1. In the cloud, check the profile as Role and credential states")
     assert check != -1, first[:120]
     assert check < first.find("acme-ops size"), first[:120]
@@ -570,7 +570,7 @@ STANDING = {
 def test_a_supporter_reads_who_it_is_and_one_standing_of_the_tenant_it_names(name: str) -> None:
     """The operator's own role first, then the tenant's standing alone,
     whose `jq` keeps none of the words a tenant writes."""
-    reads = list(OPERATOR_READ.finditer(_skill(name)))
+    reads = list(OPERATOR_READ.finditer(text_of(name)))
     assert [read["route"] for read in reads] == ["me", STANDING[name]]
     kept = set(re.findall(r"[a-z_]+", reads[1]["kept"]))
     assert not kept & {"name", "slug", "display_name", "email", "text", "content"}, reads[1][0]
@@ -580,7 +580,7 @@ def test_a_supporter_reads_who_it_is_and_one_standing_of_the_tenant_it_names(nam
 def test_no_platform_skill_opens_content_or_reads_an_operator_plane_list(name: str) -> None:
     """Shape is an operator's to read and content is not: no skill names the
     route that opens a session's content, and none reads a list of orgs."""
-    text = _skill(name)
+    text = text_of(name)
     assert "/content" not in text
     routes = [read["route"] for read in OPERATOR_READ.finditer(text)]
     assert "orgs" not in routes and not [r for r in routes if r.endswith("/members")]
@@ -591,7 +591,7 @@ def test_no_platform_skill_opens_content_or_reads_an_operator_plane_list(name: s
 def test_the_platform_requires_the_two_audits_the_guideline_leaves_optional() -> None:
     readme = README.read_text()
     for name in REQUIRED_AUDITS:
-        assert name in _own("audit-*")
+        assert name in own("audit-*")
         row = re.search(rf"^\| `{name}` \|[^\n]*$", readme, re.MULTILINE)
         assert row and "optional" not in row[0].lower(), name
     assert "requires two audits the guideline leaves optional" in " ".join(readme.split())

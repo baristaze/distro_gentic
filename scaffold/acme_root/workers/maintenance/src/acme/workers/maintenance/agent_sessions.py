@@ -22,6 +22,7 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.kinds import (
     AgentSessionWorkKind,
     LeaseNoticePayload,
+    LoopPayload,
     WakeAgentSessionPayload,
     WakeAgentSessionsPayload,
 )

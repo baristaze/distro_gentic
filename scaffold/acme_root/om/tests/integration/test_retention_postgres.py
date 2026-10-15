@@ -19,6 +19,7 @@ from sqlalchemy import text
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
@@ -73,10 +74,10 @@ def managers(
     return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        tool_catalog=TOOLS,
         platform_root_options=PlatformRootOptions(
             tenant_keys=TenantKeysImpl(keys),
         ),
+        agent_root_options=AgentRootOptions(tool_catalog=TOOLS),
     )
 
 

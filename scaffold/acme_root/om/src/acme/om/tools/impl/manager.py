@@ -27,7 +27,7 @@ from acme.infra.transports import (
 )
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.rules import actor_of, origin_of
-from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import UNPARSED, Content, TextBlock
 from acme.om.agent_steps.types.header import (
     AgentWorkspaceSnapshot,
@@ -113,7 +113,7 @@ CREATED = "tools.tool_policy.created"
 UPDATED = "tools.tool_policy.updated"
 SECRET_USED = "tools.secret.used"
 
-ForkPoints = Callable[[TenantContext, AgentStep, Workspace, int], TakeSnapshot | None]
+ForkPoints = Callable[[TenantContext, AgentStep, AgentWorkspace, int], TakeSnapshot | None]
 """A platform's own fork point for a call's workspace, given the call's
 request, its workspace, and its run's epoch: one for a workspace that a
 machine of the platform's takes elsewhere, such as a host inside a
@@ -869,7 +869,12 @@ class ToolsManagerImpl(ToolsManagerInterface):
         )
 
     async def _fork(
-        self, ctx: TenantContext, request: AgentStep, workspace: Workspace, epoch: int
+        self,
+        ctx: TenantContext,
+        registry: ToolRegistry,
+        request: AgentStep,
+        workspace: AgentWorkspace,
+        epoch: int,
     ) -> TakenSnapshot:
         """The call's workspace taken for a spawn: through the platform's own
         fork point when it answers one, else through this process's
@@ -878,7 +883,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
             elsewhere = self._fork_points(ctx, request, workspace, epoch)
             if elsewhere is not None:
                 return await elsewhere()
-        return await self._fork_point(ctx, request, workspace, epoch)
+        return await self._fork_point(ctx, registry, request, workspace, epoch)
 
     def _sealing(self, ctx: TenantContext, request: AgentStep) -> RecordSeal:
         """The seal the call's command goes to the transport with: its

@@ -20,8 +20,9 @@ from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_projects.types.agent_project import AgentProject
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.agent_step import AgentStep
-from acme.om.agents.attached import AttachedToolsetsNoneImpl
+from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -253,12 +254,12 @@ def trusted(
         storage,
         infra,
         integrations=IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
-        agent_kinds=(STEADY,),
-        principal_context=transition,
-        tool_catalog=catalog,
         platform_root_options=PlatformRootOptions(
             tools_layer=layer.tools,
             product_kinds=product_kinds,
+        ),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(STEADY,), principal_context=transition, tool_catalog=catalog
         ),
     )
     trust = layer.build(managers)
@@ -292,7 +293,7 @@ def trusted(
         clock,
         sleep,
         leases=managers.leases,
-        attached=AttachedToolsetsNoneImpl(),
+        hooks=LoopHooksNullImpl(),
     )
     return Trusted(
         infra=infra,

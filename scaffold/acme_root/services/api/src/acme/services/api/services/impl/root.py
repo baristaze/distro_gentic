@@ -6,6 +6,7 @@ from datetime import timedelta
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
+from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.intake import IntakeManagerInterface
 from acme.om.root import Managers
 from acme.services.api.services import (
@@ -95,11 +96,13 @@ def build_services(
     intake: IntakeManagerInterface,
     agent_projects: AgentProjectsManagerInterface,
     agent_project_required: bool,
+    kinds: AgentKindCatalog,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`. A
-    delivery from an integration reaches `intake`, and a session starts in
-    one of `agent_projects`, as `agent_project_required` says."""
+    delivery from an integration reaches `intake`, a session starts in one
+    of `agent_projects`, as `agent_project_required` says, and its kind's
+    bounds are read from `kinds`."""
     return ServicesImpl(
         admin=AdminServiceImpl(managers.tenancy_operator, managers.work_operator),
         change_events=ChangeEventsServiceImpl(managers.change_events),
@@ -128,5 +131,6 @@ def build_services(
             managers.spend_budgets_operator,
             agent_projects,
             agent_project_required=agent_project_required,
+            kinds=kinds,
         ),
     )
