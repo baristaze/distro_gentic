@@ -1,7 +1,10 @@
 """The platform's money behind the engine's gate: the gate a root hands the
 engine's root as its budget gate, and the refusal of a root that did not.
 
-    managers = build_platform_managers(storage, infra, ..., spend_budget_gate=build_money_gate(storage))
+    managers = build_platform_managers(
+        storage, infra, ...,
+        agent_root_options=AgentRootOptions(..., spend_budget_gate=build_money_gate(storage)),
+    )
     refuse_open_money(environment, managers)
 
 Handed a money gate, the engine's root puts agent billing's call gate in front of

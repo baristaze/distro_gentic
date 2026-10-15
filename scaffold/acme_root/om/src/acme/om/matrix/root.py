@@ -3,7 +3,10 @@ engine's root, and the matrix managers built over the managers it returns.
 
     matrix = MatrixLayer(storage, options=MatrixOptions(environment=...),
                          clients=lambda: trust.managers.provider_clients)
-    managers = build_platform_managers(storage, infra, ..., language_models_layer=matrix.layer)
+    managers = build_platform_managers(
+        storage, infra, ...,
+        agent_root_options=AgentRootOptions(..., language_models_layer=matrix.layer),
+    )
     built = matrix.build(managers)
 
 The layer gives the engine four things: the matrix as its resolver, a face
