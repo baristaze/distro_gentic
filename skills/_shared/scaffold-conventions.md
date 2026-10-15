@@ -33,6 +33,20 @@ tool, a model role, or a model provider's adapter, is the engine's: its
 `agentic-scaffold-*` skills. A skill here names the one it hands a part
 to, and runs that skill's steps without its gates.
 
+A product's own namespace, one no other product built on the platform
+would hold, keeps what `arch-scaffold-namespace` and
+`arch-scaffold-entity` write in its own package, the storage roots, its
+tables, and the documents, and none of their wiring, as a product's own
+kind keeps none of the engine's (`distro-scaffold-agent-kind`, step 1).
+Its managers and its purges are one `ProductNamespace` in
+`PRODUCT_NAMESPACES`, in `om/src/<name>/om/product_namespaces.py`, and
+its routers and its service one `ProductApiNamespace` in `PRODUCT_API`,
+in `services/api/src/<name>/services/api/product_api.py`. Nothing of it
+goes in `om/src/<name>/om/root.py` or `platform_root.py`, the API's
+registry, services root, resolver, or container, or the maintenance
+worker's purges. The shape is `om/tests/contracts/product_namespace.py`
+and `services/api/tests/test_product_api.py`.
+
 ## Before writing anything
 
 1. Read `version` in `../../.claude-plugin/plugin.json`, from the

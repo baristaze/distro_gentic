@@ -6,6 +6,18 @@ thing has a page of its own one level down, which says what can happen
 to it and which rules always hold. A product built on Acme adds its own
 kinds beside these.
 
+<!-- agents-only
+A product's own namespace keeps what the guideline's
+`arch-scaffold-namespace` and `arch-scaffold-entity` write in its own
+package, the storage roots, its tables, and this page, and none of their
+wiring. Its managers and its purges, each with the purge it runs before,
+are one `ProductNamespace` in `PRODUCT_NAMESPACES`
+(`src/acme/om/product_namespaces.py`). Nothing of it goes in `root.py`,
+`platform_root.py`, or the maintenance worker's `purges`, `across`, and
+container. Its routers and its service go beside the API, as the API's
+README says. Shape: `tests/contracts/product_namespace.py`; ADR 2064 has
+the reasons. -->
+
 ## The org and the people in it
 
 An **organization**, org for short, is one tenant: a company, a team, a
