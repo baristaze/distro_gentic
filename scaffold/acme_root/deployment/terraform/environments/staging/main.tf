@@ -11,13 +11,13 @@ module "environment" {
   environment = var.environment
 
   # What the deploy workflow passes per run.
-  api_image            = var.api_image
-  maintenance_image    = var.maintenance_image
-  session_runner_image = var.session_runner_image
-  api_domain_name      = var.api_domain_name
-  app_domain_name      = var.app_domain_name
-  site_domain_name     = var.site_domain_name
-  cors_origins         = var.cors_origins
+  api_image                  = var.api_image
+  maintenance_image          = var.maintenance_image
+  agent_session_runner_image = var.agent_session_runner_image
+  api_domain_name            = var.api_domain_name
+  app_domain_name            = var.app_domain_name
+  site_domain_name           = var.site_domain_name
+  cors_origins               = var.cors_origins
   # The Acme App application of this environment's WorkOS environment
   # (variables.tf). A client id is public; the application's own API key is
   # its secret.
@@ -53,19 +53,19 @@ module "environment" {
   maintenance_memory           = 512
   # The runner holds a few loops at once on pools of its own size, and git
   # makes a session's bundles in its memory.
-  session_runner_desired_count      = 1
-  session_runner_cpu                = 512
-  session_runner_memory             = 1024
-  session_runner_database_pool_size = 4
+  agent_session_runner_desired_count      = 1
+  agent_session_runner_cpu                = 512
+  agent_session_runner_memory             = 1024
+  agent_session_runner_database_pool_size = 4
 
   # Operations. `autoscaling_enabled` is the one flip: every lever below it
   # is on, so true scales the whole environment, and the flip is a pull
   # request a person reads. Off by default because an unattended scale-out
   # is a bill nobody approved. Each lever's floor is the desired count above.
-  alarm_email                = var.alarm_email
-  autoscaling_enabled        = false
-  api_autoscaling            = { max = 2 }
-  maintenance_autoscaling    = { max = 1 }
-  session_runner_autoscaling = { max = 1 }
-  destroyable                = var.destroyable
+  alarm_email                      = var.alarm_email
+  autoscaling_enabled              = false
+  api_autoscaling                  = { max = 2 }
+  maintenance_autoscaling          = { max = 1 }
+  agent_session_runner_autoscaling = { max = 1 }
+  destroyable                      = var.destroyable
 }

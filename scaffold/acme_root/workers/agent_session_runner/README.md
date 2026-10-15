@@ -102,7 +102,7 @@ rest as every process does (`.env.example`).
 
 Locally it is a host process (`scripts/dev.sh`). In staging and
 production it is a service of its own, from
-`deployment/docker/session-runner.Dockerfile`, rolled after the API's
+`deployment/docker/agent-session-runner.Dockerfile`, rolled after the API's
 migration with a count and a ceiling. There it prepares no workspace: a
 session's tools run on a host of its tenant's pool, and a session that
 asks the runner for one is refused before its first model call. Its role

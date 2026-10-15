@@ -16,7 +16,7 @@ names that rule without restating it.
 
 | Group id     | Prefix | File            | Covers |
 |--------------|--------|-----------------|--------|
-| `placement`  | `PLC`  | `placement.md`  | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
+| `placement`  | `PLC`  | `placement.md`  | Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts |
 | `workspaces` | `WSP`  | `workspaces.md` | Workspaces and Isolation |
 | `watch`      | `WAT`  | `watch.md`      | Watching and Steering |
 | `intake`     | `INT`  | `intake.md`     | Work In, Results Out |

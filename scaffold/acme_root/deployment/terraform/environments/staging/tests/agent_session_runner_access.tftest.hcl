@@ -86,19 +86,19 @@ override_resource {
 }
 
 variables {
-  api_image            = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  maintenance_image    = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-maintenance@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  session_runner_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-session-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  api_domain_name      = "api.staging.example.test"
-  app_domain_name      = "app.staging.example.test"
-  alarm_email          = "alarms@example.test"
+  api_image                  = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  maintenance_image          = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-maintenance@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  agent_session_runner_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-agent-session-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  api_domain_name            = "api.staging.example.test"
+  app_domain_name            = "app.staging.example.test"
+  alarm_email                = "alarms@example.test"
 }
 
 run "the_runner_holds_its_own_reads_and_no_queue" {
   command = plan
 
   assert {
-    condition = toset(module.environment.session_runner_access.policy_arns) == toset([
+    condition = toset(module.environment.agent_session_runner_access.policy_arns) == toset([
       "arn:aws:iam::123456789012:policy/buckets",
       "arn:aws:iam::123456789012:policy/keys",
       "arn:aws:iam::123456789012:policy/secrets-runner",
@@ -107,17 +107,17 @@ run "the_runner_holds_its_own_reads_and_no_queue" {
   }
 
   assert {
-    condition     = !contains(module.environment.session_runner_access.policy_arns, "arn:aws:iam::123456789012:policy/queues")
+    condition     = !contains(module.environment.agent_session_runner_access.policy_arns, "arn:aws:iam::123456789012:policy/queues")
     error_message = "the runner reaches no inbound queue: its work is a work item on its loop lane"
   }
 
   assert {
-    condition     = !contains(module.environment.session_runner_access.policy_arns, "arn:aws:iam::123456789012:policy/secrets")
+    condition     = !contains(module.environment.agent_session_runner_access.policy_arns, "arn:aws:iam::123456789012:policy/secrets")
     error_message = "the runner never holds the application grant, which writes and deletes a tenant's secrets"
   }
 
   assert {
-    condition = module.environment.session_runner_access.secret_names == tolist([
+    condition = module.environment.agent_session_runner_access.secret_names == tolist([
       "ACME_ANTHROPIC_API_KEY",
       "ACME_DATABASE_SYSTEM_URL",
       "ACME_DATABASE_URL",

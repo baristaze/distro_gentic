@@ -186,7 +186,7 @@ jobs:
       fail-fast: false
       matrix:
         # The list in scaffold/acme_root/.github/workflows/ci.yml.
-        image: [api, maintenance, session-runner, portal]
+        image: [api, maintenance, agent-session-runner, portal]
     env:
       COPY: ${{ github.workspace }}/../distro
     steps:

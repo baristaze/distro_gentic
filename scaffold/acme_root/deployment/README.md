@@ -10,7 +10,7 @@ Terraform. Nothing is clicked into place in either.
 | Path | What it holds |
 |------|---------------|
 | `local/` | The compose stack: the backing services, the app containers, and the developer dashboards. [local/README.md](local/README.md) |
-| `docker/` | One Dockerfile per process (`api`, `maintenance`, `session-runner`, `portal`): two stages, a non-root user, a liveness probe |
+| `docker/` | One Dockerfile per process (`api`, `maintenance`, `agent-session-runner`, `portal`): two stages, a non-root user, a liveness probe |
 | `host/` | The workspace host's installers, for a tenant's Linux (systemd) or macOS (launchd) machine, and the check that holds its unit's walls. [host/README.md](host/README.md) |
 | `terraform/` | The bootstrap roots (one per AWS account), the environment roots (staging, production), and the modules they call. [terraform/modules/README.md](terraform/modules/README.md) |
 | `cloud/` | `environments.json`, the values of one deployment; the first-time AWS setup; the sizes and what they cost. [cloud/README.md](cloud/README.md) |

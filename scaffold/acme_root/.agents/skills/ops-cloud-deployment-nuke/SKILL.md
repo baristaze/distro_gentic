@@ -52,7 +52,7 @@ remains; removing them is the person's call.
 
 ## Procedure
 
-The processes are `api`, `maintenance`, and `session-runner`, the ECS
+The processes are `api`, `maintenance`, and `agent-session-runner`, the ECS
 services of the cluster `acme-<env>`, as `deployment/README.md` lists
 them.
 
@@ -90,7 +90,7 @@ them.
 
    ```bash
    aws ecs describe-services --cluster acme-<env> \
-     --services api maintenance session-runner --profile <admin_profile>
+     --services api maintenance agent-session-runner --profile <admin_profile>
    aws s3api list-buckets --query 'Buckets[?starts_with(Name, `acme-<env>-`)].Name' \
      --profile <admin_profile>
    aws secretsmanager list-secrets --filters Key=name,Values=acme/<env>/app/org/ \

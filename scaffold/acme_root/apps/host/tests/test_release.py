@@ -63,7 +63,7 @@ from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 from contracts.agent_workspaces import AgentProjectsTwin
 
 GIT = shutil.which("git")
-APP = AppContext(type=AppType.WORKER, version="session-runner@test")
+APP = AppContext(type=AppType.WORKER, version="agent-session-runner@test")
 GRACE = WARM_GRACE
 KIND = assistant()
 SETTINGS = AgentSessionRunnerSettings.model_validate(

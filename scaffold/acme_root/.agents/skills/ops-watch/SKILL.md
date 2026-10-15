@@ -148,8 +148,8 @@ after its wait.
    ```
 
    The read, cloud, one query per process (`api`, `maintenance`, and
-   `session-runner`, the log groups `/acme/<env>/api`,
-   `/acme/<env>/maintenance`, and `/acme/<env>/session-runner`),
+   `agent-session-runner`, the log groups `/acme/<env>/api`,
+   `/acme/<env>/maintenance`, and `/acme/<env>/agent-session-runner`),
    bounded by the batch's start and end in epoch milliseconds, never
    `--follow`:
 

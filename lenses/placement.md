@@ -1,6 +1,6 @@
 # Placement
 
-Group id: `placement`. Covers Sessions Are Work, Session Runners, and
+Group id: `placement`. Covers Sessions Are Work, Agent Session Runners, and
 Placement and Workspace Hosts of `distro_gentic_spec.md`, and the rule
 At a Glance states for every connection that crosses a customer's wall.
 
@@ -78,7 +78,7 @@ and hosts the engine while it runs a session's loop. It runs in the
 platform's cloud, always. Model keys, the history, and the budget gate
 never leave it, and a runner never runs inside the sandbox it drives.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where the session runner is deployed and which process
 hosts the engine; every path that sends a model key, the history, or the
@@ -100,7 +100,7 @@ made from a host.
 versioned, and policy-checked there; no host carries one, and no
 customer install runs its own.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where an agent kind is defined and versioned, and where its
 policy is checked; what a host's install ships and what it can load.
@@ -120,7 +120,7 @@ or its policy check.
 storage, so any runner resumes any session. A session's first run and
 its second, a week later, rarely share a machine.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** What a runner keeps in memory or on disk between runs;
 whether a session's loop is routed to a particular runner.
@@ -139,7 +139,7 @@ another.
 engine adds the writer epoch, which refuses a stale run's steps and
 commands. A lost claim stops a runner's writes, whatever its clock says.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** The runner's lease and its renewal; where a run takes its
 writer epoch; every write and command a runner sends, and whether it
@@ -161,7 +161,7 @@ placement: a direct transport to a cloud workspace, or an exec relay
 transport to a host inside a customer's wall. The engine sees one
 transport interface either way.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where the runner picks a transport; any code in the engine
 or in a tool that branches on where the workspace is.

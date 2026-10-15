@@ -84,12 +84,12 @@ read from the line each one writes.
    the runner writes, `outage reported: provider <p>, credential <c>,
    org <org>, until <retry_at>`. With `--log-file`, search it with `Grep`
    for `outage reported:`. In the cloud, the runner's log group,
-   `/acme/<env>/session-runner`, holds the lines once an environment
+   `/acme/<env>/agent-session-runner`, holds the lines once an environment
    runs it; a group that does not exist is written as "not read":
 
    ```bash
    aws logs filter-log-events --profile acme-<env>-investigate \
-     --log-group-name /acme/<env>/session-runner \
+     --log-group-name /acme/<env>/agent-session-runner \
      --start-time <start ms> --filter-pattern '"outage reported:"' \
      --query 'events[].message' --output text
    ```

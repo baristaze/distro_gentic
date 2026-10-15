@@ -13,7 +13,7 @@ In `deployment/terraform/environments/<staging|prod>/main.tf`:
   autoscaling_enabled        = false
   api_autoscaling            = { max = 2 }
   maintenance_autoscaling    = { max = 1 }
-  session_runner_autoscaling = { max = 1 }
+  agent_session_runner_autoscaling = { max = 1 }
 ```
 
 A pull request that sets `autoscaling_enabled = true` scales the
@@ -21,7 +21,7 @@ environment. Each service's object is on by default, with its ceiling
 (`max`) and the CPU it tracks (`target_cpu`, 60 percent). One service
 stays out with `enabled = false` in its object. The floor is the
 desired count already in the root (`api_desired_count`,
-`maintenance_desired_count`, `session_runner_desired_count`), so the
+`maintenance_desired_count`, `agent_session_runner_desired_count`), so the
 flip changes nothing until load
 does. The sizes in
 [deployment/cloud/README.md](../../deployment/cloud/README.md) name a
@@ -60,7 +60,7 @@ Under the investigate profile ([operate.md](operate.md)):
 ```bash
 export AWS_PROFILE=acme-staging-investigate
 aws application-autoscaling describe-scalable-targets --service-namespace ecs \
-  --resource-ids service/acme-staging/api service/acme-staging/maintenance service/acme-staging/session-runner \
+  --resource-ids service/acme-staging/api service/acme-staging/maintenance service/acme-staging/agent-session-runner \
   --query 'ScalableTargets[].{service:ResourceId,min:MinCapacity,max:MaxCapacity}' --output table
 aws application-autoscaling describe-scaling-activities --service-namespace ecs \
   --resource-id service/acme-staging/api --max-results 10 \
