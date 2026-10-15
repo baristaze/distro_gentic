@@ -74,7 +74,7 @@ class LoopStandingView(BaseModel):
     status: work.WorkStatus
 
 
-class SessionStandingView(BaseModel):
+class AgentSessionStandingView(BaseModel):
     """
     Why a session is or is not moving. `changed_at` is its last change:
     when it parked, for a parked one. `concurrency` is the cap the claim

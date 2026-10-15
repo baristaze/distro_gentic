@@ -48,8 +48,10 @@ async def save_key(
     return await service.save_key(ctx, provider, body)
 
 
-@operator.get("/orgs/{org_id}/sessions/{agent_session_id}/shape", response_model=ShapePageView)
-async def session_shape(
+@operator.get(
+    "/orgs/{org_id}/agent-sessions/{agent_session_id}/shape", response_model=ShapePageView
+)
+async def agent_session_shape(
     admin: OperatorCtx,
     service: AgentFleetService,
     org_id: UUID,
@@ -63,9 +65,9 @@ async def session_shape(
 
 
 @operator.get(
-    "/orgs/{org_id}/sessions/{agent_session_id}/content", response_model=AgentStepPageView
+    "/orgs/{org_id}/agent-sessions/{agent_session_id}/content", response_model=AgentStepPageView
 )
-async def session_content(
+async def agent_session_content(
     admin: OperatorCtx,
     service: AgentFleetService,
     org_id: UUID,

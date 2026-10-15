@@ -211,21 +211,6 @@ class QuestionView(BaseModel):
     unlock: Annotated[str, Field(title='Unlock')]
 
 
-class SessionModelUsageView(BaseModel):
-    """
-    What a session's model calls used, as each provider reported it, per
-    model and in total.
-    """
-
-    cache_read: Annotated[int, Field(title='Cache Read')]
-    cache_write: Annotated[int, Field(title='Cache Write')]
-    calls: Annotated[int, Field(title='Calls')]
-    fills: Annotated[list[FillUsageView], Field(title='Fills')]
-    input: Annotated[int, Field(title='Input')]
-    output: Annotated[int, Field(title='Output')]
-    thinking: Annotated[int, Field(title='Thinking')]
-
-
 class SnapshotView(BaseModel):
     """
     A workspace's snapshot a step names: its id, which a restore names,
@@ -377,6 +362,21 @@ class WaitLineParkView(BaseModel):
     leasable_resource_id: Annotated[UUID | None, Field(title='Leasable Resource Id')]
     place: Annotated[int | None, Field(title='Place')]
     request_id: Annotated[UUID, Field(title='Request Id')]
+
+
+class AgentSessionModelUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
 
 
 class ApprovalPageView(BaseModel):

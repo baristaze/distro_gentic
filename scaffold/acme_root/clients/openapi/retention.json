@@ -39,6 +39,101 @@
         "title": "AgentProjectRetentionView",
         "type": "object"
       },
+      "AgentSessionRetentionView": {
+        "description": "One session's snapshot: the policy it took, when its content and its\nshape expire, and when each did. `destruction` is the key service's\nreport of the key it destroyed, none when the service holds the tenant's\nkey alone and the platform's revocation is the destruction.",
+        "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
+          "agent_session_id": {
+            "format": "uuid",
+            "title": "Agent Session Id",
+            "type": "string"
+          },
+          "content_expired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Expired At"
+          },
+          "content_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Expires At"
+          },
+          "destruction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KeyDestructionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyView"
+          },
+          "shape_expired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Expired At"
+          },
+          "shape_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Expires At"
+          }
+        },
+        "required": [
+          "agent_session_id",
+          "agent_project_id",
+          "policy",
+          "content_expires_at",
+          "shape_expires_at",
+          "content_expired_at",
+          "destruction",
+          "shape_expired_at"
+        ],
+        "title": "AgentSessionRetentionView",
+        "type": "object"
+      },
       "CrossingKind": {
         "enum": [
           "enrollment",
@@ -250,101 +345,6 @@
         ],
         "title": "RetentionView",
         "type": "object"
-      },
-      "SessionRetentionView": {
-        "description": "One session's snapshot: the policy it took, when its content and its\nshape expire, and when each did. `destruction` is the key service's\nreport of the key it destroyed, none when the service holds the tenant's\nkey alone and the platform's revocation is the destruction.",
-        "properties": {
-          "agent_project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agent Project Id"
-          },
-          "agent_session_id": {
-            "format": "uuid",
-            "title": "Agent Session Id",
-            "type": "string"
-          },
-          "content_expired_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Expired At"
-          },
-          "content_expires_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Expires At"
-          },
-          "destruction": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/KeyDestructionView"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "policy": {
-            "$ref": "#/components/schemas/RetentionPolicyView"
-          },
-          "shape_expired_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Shape Expired At"
-          },
-          "shape_expires_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Shape Expires At"
-          }
-        },
-        "required": [
-          "agent_session_id",
-          "agent_project_id",
-          "policy",
-          "content_expires_at",
-          "shape_expires_at",
-          "content_expired_at",
-          "destruction",
-          "shape_expired_at"
-        ],
-        "title": "SessionRetentionView",
-        "type": "object"
       }
     }
   },
@@ -354,6 +354,98 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/retention/agent-sessions/{agent_session_id}/erase": {
+      "post": {
+        "description": "Erases what the session said, for good: its key is revoked and\ndestroyed, and the audit holds the destruction. Its steps keep their\nplace, type, and shape, and read as saying nothing; the session takes no\ncontent again. A session marked deleted is erased too. Once: a second\ncall answers as the first left it. `404 not_found` for a session the\ntenant does not hold, which is how another tenant's reads.",
+        "operationId": "erase_content",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionRetentionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Erase Content",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
     "/v1/retention/policy": {
       "get": {
         "operationId": "get_policy",
@@ -538,98 +630,6 @@
           }
         },
         "summary": "Write Policy",
-        "tags": [
-          "retention"
-        ]
-      }
-    },
-    "/v1/retention/sessions/{agent_session_id}/erase": {
-      "post": {
-        "description": "Erases what the session said, for good: its key is revoked and\ndestroyed, and the audit holds the destruction. Its steps keep their\nplace, type, and shape, and read as saying nothing; the session takes no\ncontent again. A session marked deleted is erased too. Once: a second\ncall answers as the first left it. `404 not_found` for a session the\ntenant does not hold, which is how another tenant's reads.",
-        "operationId": "erase_content",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "agent_session_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Agent Session Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionRetentionView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "common.json#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Erase Content",
         "tags": [
           "retention"
         ]

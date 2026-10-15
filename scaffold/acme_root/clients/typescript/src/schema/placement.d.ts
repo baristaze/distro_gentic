@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/standing": {
+    "/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/standing": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,11 +12,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Session Standing
+         * Agent Session Standing
          * @description Why the session is or is not moving: its park, its loop's lease and
          *     lane, its place in line, its tenant's share, and where it runs.
          */
-        get: operations["session_standing"];
+        get: operations["agent_session_standing"];
         put?: never;
         post?: never;
         delete?: never;
@@ -53,6 +53,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentSessionStandingView
+         * @description Why a session is or is not moving. `changed_at` is its last change:
+         *     when it parked, for a parked one. `concurrency` is the cap the claim
+         *     holds its tenant to on the lane its loop stands on, or, with no loop,
+         *     the lane its next goes to: its own where `own_cap`, else the lane's.
+         *     `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
+         *     false is the default tier.
+         */
+        AgentSessionStandingView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+            /** Concurrency */
+            concurrency: number;
+            /** Hosts Online */
+            hosts_online: number | null;
+            loop: components["schemas"]["LoopStandingView"] | null;
+            /** Own Cap */
+            own_cap: boolean;
+            /** Own Lane */
+            own_lane: boolean;
+            park: components["schemas"]["ParkView"] | null;
+            /** Pending Input */
+            pending_input: boolean;
+            /** Plan Tier */
+            plan_tier: string;
+            /** Pool Id */
+            pool_id: string | null;
+            /** Share Set */
+            share_set: boolean;
+            status: components["schemas"]["AgentSessionStatus"];
+        };
         /**
          * LoopStandingView
          * @description The session's loop item made last, and its place in line:
@@ -92,46 +132,6 @@ export interface components {
          * @enum {string}
          */
         ReportOutcome: "done" | "failed";
-        /**
-         * SessionStandingView
-         * @description Why a session is or is not moving. `changed_at` is its last change:
-         *     when it parked, for a parked one. `concurrency` is the cap the claim
-         *     holds its tenant to on the lane its loop stands on, or, with no loop,
-         *     the lane its next goes to: its own where `own_cap`, else the lane's.
-         *     `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
-         *     false is the default tier.
-         */
-        SessionStandingView: {
-            /**
-             * Agent Session Id
-             * Format: uuid
-             */
-            agent_session_id: string;
-            /**
-             * Changed At
-             * Format: date-time
-             */
-            changed_at: string;
-            /** Concurrency */
-            concurrency: number;
-            /** Hosts Online */
-            hosts_online: number | null;
-            loop: components["schemas"]["LoopStandingView"] | null;
-            /** Own Cap */
-            own_cap: boolean;
-            /** Own Lane */
-            own_lane: boolean;
-            park: components["schemas"]["ParkView"] | null;
-            /** Pending Input */
-            pending_input: boolean;
-            /** Plan Tier */
-            plan_tier: string;
-            /** Pool Id */
-            pool_id: string | null;
-            /** Share Set */
-            share_set: boolean;
-            status: components["schemas"]["AgentSessionStatus"];
-        };
         /**
          * SetShareRequest
          * @description A tenant's fair share: the plan tier whose lane its loops run in,
@@ -268,7 +268,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    session_standing: {
+    agent_session_standing: {
         parameters: {
             query?: never;
             header?: {
@@ -290,7 +290,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionStandingView"];
+                    "application/json": components["schemas"]["AgentSessionStandingView"];
                 };
             };
             /** @description Validation Error */

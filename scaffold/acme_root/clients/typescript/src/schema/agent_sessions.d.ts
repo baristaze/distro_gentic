@@ -560,6 +560,27 @@ export interface components {
          */
         AgentSessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock" | "restore";
         /**
+         * AgentSessionModelUsageView
+         * @description What a session's model calls used, as each provider reported it, per
+         *     model and in total.
+         */
+        AgentSessionModelUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fills */
+            fills: components["schemas"]["FillUsageView"][];
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
+        /**
          * AgentSessionPageView
          * @description One page of root sessions, newest first. `next_cursor` fetches the
          *     next page and is null on the last one.
@@ -995,27 +1016,6 @@ export interface components {
             seq: number;
             /** Unlock */
             unlock: string;
-        };
-        /**
-         * SessionModelUsageView
-         * @description What a session's model calls used, as each provider reported it, per
-         *     model and in total.
-         */
-        SessionModelUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Calls */
-            calls: number;
-            /** Fills */
-            fills: components["schemas"]["FillUsageView"][];
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
         };
         /**
          * SnapshotView
@@ -2308,7 +2308,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionModelUsageView"];
+                    "application/json": components["schemas"]["AgentSessionModelUsageView"];
                 };
             };
             /** @description Validation Error */

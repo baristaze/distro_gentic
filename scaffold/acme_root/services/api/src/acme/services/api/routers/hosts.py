@@ -47,8 +47,8 @@ from acme.services.api.types.hosts import (
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
+    PlaceAgentSessionRequest,
     PlacementView,
-    PlaceSessionRequest,
     PoolView,
 )
 from acme.services.api.types.watch import ItemPageView
@@ -116,7 +116,7 @@ async def placement_of(ctx: Ctx, hosts: HostsService, agent_session_id: UUID) ->
 
 @router.put("/agent-sessions/{agent_session_id}/placement", response_model=PlacementView)
 async def place_session(
-    ctx: Ctx, hosts: HostsService, agent_session_id: UUID, body: PlaceSessionRequest
+    ctx: Ctx, hosts: HostsService, agent_session_id: UUID, body: PlaceAgentSessionRequest
 ) -> PlacementView:
     """A principal pins the session to a pool, or moves it to the cloud."""
     return await hosts.place_session(ctx, agent_session_id, body)

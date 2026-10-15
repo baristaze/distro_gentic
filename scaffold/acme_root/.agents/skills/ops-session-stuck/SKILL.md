@@ -70,7 +70,7 @@ and name the refresh the preamble gives.
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
-   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/sessions/<agent_session_id>/standing" \
+   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/agent-sessions/<agent_session_id>/standing" \
      | jq '{status, park, changed_at, pending_input, plan_tier, own_lane, concurrency, own_cap, share_set, pool_id, hosts_online, loop, error: .error.code}'
    ```
 

@@ -25,8 +25,8 @@ from acme.services.api.types.hosts import (
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
+    PlaceAgentSessionRequest,
     PlacementView,
-    PlaceSessionRequest,
     PoolView,
 )
 
@@ -72,7 +72,7 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def place_session(
-        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceAgentSessionRequest
     ) -> PlacementView: ...
 
     @abstractmethod

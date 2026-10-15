@@ -41,8 +41,8 @@ from acme.services.api.types.hosts import (
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
+    PlaceAgentSessionRequest,
     PlacementView,
-    PlaceSessionRequest,
     PoolView,
 )
 
@@ -186,7 +186,7 @@ class HostsServiceImpl(HostsServiceInterface):
         return claimant_view(await self._hosts.revoke_claimant(ctx, claimant_id))
 
     async def place_session(
-        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceAgentSessionRequest
     ) -> PlacementView:
         await self._hosts.place_session(ctx, agent_session_id, body.pool_id)
         return await self.placement_of(ctx, agent_session_id)

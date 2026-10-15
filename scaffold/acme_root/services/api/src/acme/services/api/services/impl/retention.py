@@ -6,9 +6,9 @@ from acme.om.retention.types.policy import TenantRetention
 from acme.services.api.services.impl.built import built
 from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.types.retention import (
+    AgentSessionRetentionView,
     RetentionRequest,
     RetentionView,
-    SessionRetentionView,
 )
 
 
@@ -34,7 +34,7 @@ class RetentionServiceImpl(RetentionServiceInterface):
 
     async def erase_content(
         self, ctx: TenantContext, agent_session_id: UUID
-    ) -> SessionRetentionView:
-        return SessionRetentionView.model_validate(
+    ) -> AgentSessionRetentionView:
+        return AgentSessionRetentionView.model_validate(
             await self._retention.erase_content(ctx, agent_session_id)
         )

@@ -135,7 +135,7 @@ export function workProductLines(workProduct: evidence.WorkProductView): WorkPro
 }
 
 /** "3 model calls: 1,200 tokens in, 340 out". */
-export function usageLine(usage: agent_sessions.SessionModelUsageView): string {
+export function usageLine(usage: agent_sessions.AgentSessionModelUsageView): string {
   const count = (n: number) => n.toLocaleString("en-US");
   return `${count(usage.calls)} model ${usage.calls === 1 ? "call" : "calls"}: ${count(usage.input)} tokens in, ${count(usage.output)} out`;
 }

@@ -58,7 +58,7 @@ class LoopStandingView(View):
     running_ahead: int
 
 
-class SessionStandingView(View):
+class AgentSessionStandingView(View):
     """Why a session is or is not moving. `changed_at` is its last change:
     when it parked, for a parked one. `concurrency` is the cap the claim
     holds its tenant to on the lane its loop stands on, or, with no loop,

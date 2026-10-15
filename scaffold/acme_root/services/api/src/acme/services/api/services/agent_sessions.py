@@ -10,6 +10,7 @@ from uuid import UUID
 from acme.om.agent_sessions.types.agent_session import AgentSessionStatus, Among
 from acme.om.context import OperatorContext, TenantContext
 from acme.services.api.types.agent_sessions import (
+    AgentSessionModelUsageView,
     AgentSessionPageView,
     AgentSessionUsageView,
     AgentSessionView,
@@ -26,7 +27,6 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     PrincipalRequest,
     QuestionView,
-    SessionModelUsageView,
     StartAgentSessionRequest,
     ToolCallPageView,
     ToolOutputPageView,
@@ -239,7 +239,7 @@ class AgentSessionsServiceInterface(ABC):
     @abstractmethod
     async def get_usage(
         self, ctx: TenantContext, agent_session_id: UUID
-    ) -> SessionModelUsageView: ...
+    ) -> AgentSessionModelUsageView: ...
 
     @abstractmethod
     async def get_agent_session_usage(

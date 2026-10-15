@@ -57,6 +57,7 @@ from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
     MAX_SHOWN,
     AgentRefView,
+    AgentSessionModelUsageView,
     AgentSessionPageView,
     AgentSessionUsageView,
     AgentSessionView,
@@ -75,7 +76,6 @@ from acme.services.api.types.agent_sessions import (
     ParkView,
     PrincipalRequest,
     QuestionView,
-    SessionModelUsageView,
     SnapshotView,
     StartAgentSessionRequest,
     StopReason,
@@ -557,7 +557,9 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         bounded = clamp_limit(limit)
         return ToolCallPageView(items=calls[:bounded], has_more=len(calls) > bounded)
 
-    async def get_usage(self, ctx: TenantContext, agent_session_id: UUID) -> SessionModelUsageView:
+    async def get_usage(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionModelUsageView:
         await self._sessions.get_agent_session(ctx, agent_session_id)
         return usage_of(await self._history(ctx, agent_session_id))
 

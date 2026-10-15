@@ -1,90 +1,7 @@
 {
   "components": {
     "schemas": {
-      "LoopStandingView": {
-        "description": "The session's loop item made last, and its place in line:\n`ready_ahead` items of any tenant are ready before it on its lane, and\n`running_ahead` of its tenant's loops run ahead of it on that lane,\nwhich the claim holds to the tenant's cap there.",
-        "properties": {
-          "attempts": {
-            "title": "Attempts",
-            "type": "integer"
-          },
-          "available_at": {
-            "format": "date-time",
-            "title": "Available At",
-            "type": "string"
-          },
-          "claimed_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Claimed By"
-          },
-          "item_id": {
-            "format": "uuid",
-            "title": "Item Id",
-            "type": "string"
-          },
-          "lane": {
-            "title": "Lane",
-            "type": "string"
-          },
-          "lease_expires_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lease Expires At"
-          },
-          "max_attempts": {
-            "title": "Max Attempts",
-            "type": "integer"
-          },
-          "ready_ahead": {
-            "title": "Ready Ahead",
-            "type": "integer"
-          },
-          "running_ahead": {
-            "title": "Running Ahead",
-            "type": "integer"
-          },
-          "status": {
-            "$ref": "work.json#/components/schemas/WorkStatus"
-          }
-        },
-        "required": [
-          "item_id",
-          "status",
-          "lane",
-          "attempts",
-          "max_attempts",
-          "available_at",
-          "claimed_by",
-          "lease_expires_at",
-          "ready_ahead",
-          "running_ahead"
-        ],
-        "title": "LoopStandingView",
-        "type": "object"
-      },
-      "ReportOutcome": {
-        "enum": [
-          "done",
-          "failed"
-        ],
-        "title": "ReportOutcome",
-        "type": "string"
-      },
-      "SessionStandingView": {
+      "AgentSessionStandingView": {
         "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `concurrency` is the cap the claim\nholds its tenant to on the lane its loop stands on, or, with no loop,\nthe lane its next goes to: its own where `own_cap`, else the lane's.\n`pool_id` null is the cloud, where `hosts_online` is null; `share_set`\nfalse is the default tier.",
         "properties": {
           "agent_session_id": {
@@ -183,8 +100,91 @@
           "hosts_online",
           "loop"
         ],
-        "title": "SessionStandingView",
+        "title": "AgentSessionStandingView",
         "type": "object"
+      },
+      "LoopStandingView": {
+        "description": "The session's loop item made last, and its place in line:\n`ready_ahead` items of any tenant are ready before it on its lane, and\n`running_ahead` of its tenant's loops run ahead of it on that lane,\nwhich the claim holds to the tenant's cap there.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "ready_ahead": {
+            "title": "Ready Ahead",
+            "type": "integer"
+          },
+          "running_ahead": {
+            "title": "Running Ahead",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "work.json#/components/schemas/WorkStatus"
+          }
+        },
+        "required": [
+          "item_id",
+          "status",
+          "lane",
+          "attempts",
+          "max_attempts",
+          "available_at",
+          "claimed_by",
+          "lease_expires_at",
+          "ready_ahead",
+          "running_ahead"
+        ],
+        "title": "LoopStandingView",
+        "type": "object"
+      },
+      "ReportOutcome": {
+        "enum": [
+          "done",
+          "failed"
+        ],
+        "title": "ReportOutcome",
+        "type": "string"
       },
       "SetShareRequest": {
         "additionalProperties": false,
@@ -280,10 +280,10 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/standing": {
+    "/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/standing": {
       "get": {
         "description": "Why the session is or is not moving: its park, its loop's lease and\nlane, its place in line, its tenant's share, and where it runs.",
-        "operationId": "session_standing",
+        "operationId": "agent_session_standing",
         "parameters": [
           {
             "in": "path",
@@ -359,7 +359,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionStandingView"
+                  "$ref": "#/components/schemas/AgentSessionStandingView"
                 }
               }
             },
@@ -376,7 +376,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Session Standing",
+        "summary": "Agent Session Standing",
         "tags": [
           "placement"
         ]
