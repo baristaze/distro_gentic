@@ -569,10 +569,10 @@ paths:
   open stream from the part it last saw.
 
 A live part is a cache whose loss costs nothing, because the step or
-artifact it adds up to is the record. The stream service holds a bounded
+tool output it adds up to is the record. The stream service holds a bounded
 buffer per open stream, which is all the state a lightly stateful service
 may hold ([Stateless vs Stateful Services][g-stateful]). A late viewer of
-an artifact reads its bytes so far; a late viewer of a model stream sees
+a tool output reads its bytes so far; a late viewer of a model stream sees
 the buffered tail. A video stream is an index of encoded segments, and a
 slow viewer drops the oldest, never the newest. The live view is a
 window onto the evidence, never a second world beside it.

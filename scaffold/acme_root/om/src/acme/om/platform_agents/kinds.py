@@ -168,8 +168,8 @@ HANDOFF_TOOLSET = Toolset(
     summary="Hand engineering work to a software engineer, in a session of its own.",
     tools=(HAND_OFF,),
 )
-ARTIFACTS_TOOLSET = Toolset(
-    name="artifacts",
+TOOL_OUTPUTS_TOOLSET = Toolset(
+    name="tool_outputs",
     version=1,
     summary="Read back a result kept outside your window, by the handle its notice names.",
     tools=(READ_TOOL_OUTPUT,),
@@ -199,7 +199,7 @@ TOOLSETS: tuple[Toolset, ...] = (
     SUB_AGENTS_TOOLSET,
     RECORDS_TOOLSET,
     HANDOFF_TOOLSET,
-    ARTIFACTS_TOOLSET,
+    TOOL_OUTPUTS_TOOLSET,
     REVIEW_TOOLSET,
     OPERATIONS_TOOLSET,
 )
@@ -410,7 +410,7 @@ SOFTWARE_ENGINEER_V6 = SOFTWARE_ENGINEER_V5.model_copy(
 kept while a session may still run it."""
 
 SOFTWARE_ENGINEER_V7 = revised(
-    SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET)
+    SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, TOOL_OUTPUTS_TOOLSET)
 )
 """The software engineer before its workspace started from its agent project's
 workspace base: kept while a session may still run it."""
@@ -509,7 +509,7 @@ ANALYSIS_V3 = revised(
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, ARTIFACTS_TOOLSET))
+ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET))
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way a software engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with
@@ -635,7 +635,7 @@ REVIEWER_KIND = AgentKind(
     # person approves each comment: the platform's ceiling holds every
     # outward call, and its own layer runs no integration unattended.
     tools=(COMMENT,),
-    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, TOOL_OUTPUTS_TOOLSET),
     asks=REVIEWER_ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_REVIEW,
@@ -669,7 +669,7 @@ OPS_ANALYST_PROMPT = (
 OPS_ANALYST_KIND = AgentKind(
     name=OPS_ANALYST,
     version=1,
-    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, TOOL_OUTPUTS_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,

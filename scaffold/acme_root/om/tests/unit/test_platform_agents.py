@@ -1267,13 +1267,13 @@ def test_the_reviewer_and_the_ops_analyst_are_built_from_toolsets_and_ask_sizes(
     assert REVIEWER_KIND.toolsets == (
         kinds.REVIEW_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
-        kinds.ARTIFACTS_TOOLSET,
+        kinds.TOOL_OUTPUTS_TOOLSET,
     )
     assert OPS_ANALYST_KIND.toolsets == (
         kinds.RECORDS_TOOLSET,
         kinds.OPERATIONS_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
-        kinds.ARTIFACTS_TOOLSET,
+        kinds.TOOL_OUTPUTS_TOOLSET,
     )
     for kind in (REVIEWER_KIND, OPS_ANALYST_KIND):
         assert set(kind.toolsets) <= set(kinds.TOOLSETS), kind.name

@@ -32,7 +32,7 @@ a workspace. `code` edits and writes its files and runs commands.
 `agent_knowledge` searches and reads what the team knows. `work_product`
 validates, opens the pull request, and submits the result. `sub_agents`
 starts sub-agents and waits for them. `records` holds the assistant's
-readers, `handoff` the hand-off to a software engineer, and `artifacts`
+readers, `handoff` the hand-off to a software engineer, and `tool_outputs`
 the read of a result kept outside the window.
 
 **Every shipped kind is rebuilt from them, at every version.** A kind

@@ -731,7 +731,7 @@ LOOKUPS = Toolset(
 TRIAGE = AgentKind(
     name="triage",
     version=1,
-    toolsets=(LOOKUPS, kinds.ARTIFACTS_TOOLSET),
+    toolsets=(LOOKUPS, kinds.TOOL_OUTPUTS_TOOLSET),
     asks=(ModelAsk(role=MAIN, size=ModelSize.L),),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,

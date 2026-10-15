@@ -255,7 +255,7 @@ async def test_a_reviewer_that_cannot_read_its_pull_request_fails_citing_that_re
 
 async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) -> tuple[str, str]:
     """What the window shows at once of a long answer to the call `use_id`,
-    its head, and the whole answer it keeps as an artifact."""
+    its head, and the whole answer it keeps as a tool output."""
     for step in await platform.history(agent_session_id):
         header = step.header
         if not isinstance(header, ToolResponseHeader) or header.tool_output is None:
@@ -278,7 +278,7 @@ async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) ->
             pages.append(page.text)
             if not page.has_more:
                 return head.text, "".join(pages)
-    raise AssertionError(f"no answer to {use_id} kept as an artifact")
+    raise AssertionError(f"no answer to {use_id} kept as a tool output")
 
 
 async def test_a_pull_request_too_large_for_one_answer_keeps_its_id_and_head_whole(

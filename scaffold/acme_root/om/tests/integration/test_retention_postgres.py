@@ -169,7 +169,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     history = await rows(
         pg_sessions,
         DatabaseRole.ACTIVITY,
-        "SELECT content::text AS content FROM activity.steps"
+        "SELECT content::text AS content FROM activity.agent_steps"
         " WHERE org_id = :org AND agent_session_id = :session",
         org,
         session=session,
@@ -182,7 +182,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     (audit,) = await rows(
         pg_sessions,
         DatabaseRole.ACTIVITY,
-        "SELECT target_id, payload::text AS payload FROM activity.events"
+        "SELECT target_id, payload::text AS payload FROM activity.change_events"
         " WHERE org_id = :org AND kind = :kind",
         org,
         kind=KEY_DESTROYED,

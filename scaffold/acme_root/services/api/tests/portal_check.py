@@ -550,7 +550,7 @@ async def write_tree(slug: str) -> None:
                 status=AgentSessionStatus.RUNNING,
             )
             sessions = container.storage.get_agent_session_storage()
-            await sessions.create_session(owner.org_id, child, ())
+            await sessions.create_agent_session(owner.org_id, child, ())
             await managers.attribution.open_authority(owner, child_id, AuthorityMode.STEADY)
             work = story(child, person, began)
             parent = AgentRef(kind=root.kind, version=root.kind_version, agent_session_id=root.id)

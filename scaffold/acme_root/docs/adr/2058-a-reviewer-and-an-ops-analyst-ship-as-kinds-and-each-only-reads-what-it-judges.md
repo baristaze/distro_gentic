@@ -34,7 +34,7 @@ it, and the chat and an absent integration refuse.
 
 **The reviewer ships.** It is built from the `review` toolset
 (`read_pull_request`, `read_pull_request_file`, `note_finding`,
-`submit_review`), `agent_knowledge`, and `artifacts`, and names the
+`submit_review`), `agent_knowledge`, and `tool_outputs`, and names the
 forge's `comment` alone. It asks XL of its main role, since a review is
 worth the defects it finds, and S of its summarizer. Its authority is
 steady, and it names a share, so a lead may start it as a sub-agent.
@@ -80,7 +80,7 @@ for a person's approval, and the reviewer's own layer runs reads alone.
 **The ops analyst ships.** It is built from `records`, a new
 `operations` toolset (`list_hosts`, the tenant's hosts with what each
 offers, and `read_spend`, its budgets with what each spent),
-`agent_knowledge`, and `artifacts`. Its authority is delegated, it has
+`agent_knowledge`, and `tool_outputs`. Its authority is delegated, it has
 no workspace, and it asks what the others ask. Every tool it holds
 reads. It holds no hand-off, a spawn: a fix it finds leaves as a
 self-contained objective, which a person hands to a software engineer.

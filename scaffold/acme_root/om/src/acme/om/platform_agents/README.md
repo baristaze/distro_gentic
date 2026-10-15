@@ -19,7 +19,7 @@ calls, and holds its workspace warm for a while after a loop.
   team knows; `work_product` validates, opens the pull request, and
   submits the result; `sub_agents` starts sub-agents and waits for them;
   `records` is the assistant's readers; `handoff` hands work to an
-  software engineer; `artifacts` reads back a result kept outside the
+  software engineer; `tool_outputs` reads back a result kept outside the
   window; `review` reads a pull request and its files at its head, notes
   findings, and submits a review; and `operations` reads the tenant's
   hosts and its budgets' spend. Every shipped
