@@ -879,7 +879,7 @@
         "title": "LaneLoadView",
         "type": "object"
       },
-      "PlaceSessionRequest": {
+      "PlaceAgentSessionRequest": {
         "additionalProperties": false,
         "description": "One of the tenant's pools, or None for the cloud.",
         "properties": {
@@ -899,7 +899,7 @@
         "required": [
           "pool_id"
         ],
-        "title": "PlaceSessionRequest",
+        "title": "PlaceAgentSessionRequest",
         "type": "object"
       },
       "PlacementView": {
@@ -1255,7 +1255,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PlaceSessionRequest"
+                "$ref": "#/components/schemas/PlaceAgentSessionRequest"
               }
             }
           },

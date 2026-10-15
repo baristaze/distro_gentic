@@ -154,7 +154,7 @@ class ClaimView(View):
     item: ClaimedWorkView | None
 
 
-class PlaceSessionRequest(RequestBody):
+class PlaceAgentSessionRequest(RequestBody):
     """One of the tenant's pools, or None for the cloud."""
 
     pool_id: UUID | None

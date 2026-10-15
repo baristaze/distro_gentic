@@ -321,7 +321,7 @@ class FillUsageView(View):
     thinking: int
 
 
-class SessionModelUsageView(View):
+class AgentSessionModelUsageView(View):
     """What a session's model calls used, as each provider reported it, per
     model and in total."""
 

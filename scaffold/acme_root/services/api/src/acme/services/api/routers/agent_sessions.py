@@ -33,6 +33,7 @@ from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.resolve import AgentSessionsService
 from acme.services.api.types.agent_sessions import (
+    AgentSessionModelUsageView,
     AgentSessionPageView,
     AgentSessionUsageView,
     AgentSessionView,
@@ -49,7 +50,6 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     PrincipalRequest,
     QuestionView,
-    SessionModelUsageView,
     StartAgentSessionRequest,
     ToolCallPageView,
     ToolOutputPageView,
@@ -339,10 +339,10 @@ async def get_tool_calls(
     return await sessions.get_tool_calls(ctx, agent_session_id, after_seq, limit)
 
 
-@router.get("/{agent_session_id}/usage", response_model=SessionModelUsageView)
+@router.get("/{agent_session_id}/usage", response_model=AgentSessionModelUsageView)
 async def get_usage(
     ctx: Ctx, sessions: AgentSessionsService, agent_session_id: UUID
-) -> SessionModelUsageView:
+) -> AgentSessionModelUsageView:
     """The tokens the session's model calls used, per model and in total."""
     return await sessions.get_usage(ctx, agent_session_id)
 

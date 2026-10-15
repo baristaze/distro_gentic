@@ -257,7 +257,7 @@ export function useStepsBeforeAnswer(id: string, enabled: boolean) {
 export const useQuestions = (id: string, enabled = true) => useRead<agent_sessions.QuestionView[]>(id, "questions", "questions", enabled);
 export const useApprovals = (id: string, enabled = true) => useRead<agent_sessions.ApprovalView[]>(id, "approvals", "approvals", enabled);
 export const useBounds = (id: string, enabled = true) => useRead<agent_sessions.BoundsView>(id, "bounds", "bounds", enabled);
-export const useUsage = (id: string, enabled = true) => useRead<agent_sessions.SessionModelUsageView>(id, "usage", "usage", enabled);
+export const useUsage = (id: string, enabled = true) => useRead<agent_sessions.AgentSessionModelUsageView>(id, "usage", "usage", enabled);
 export const useWorkProduct = (id: string, enabled = true) => useRead<evidence.WorkProductView>(id, "work_product", "work-product", enabled);
 export const useValidations = (id: string, enabled = true) =>
   useRead<evidence.ValidationView[]>(id, "validations", "validations", enabled);

@@ -923,10 +923,10 @@ export interface components {
             ready: number;
         };
         /**
-         * PlaceSessionRequest
+         * PlaceAgentSessionRequest
          * @description One of the tenant's pools, or None for the cloud.
          */
-        PlaceSessionRequest: {
+        PlaceAgentSessionRequest: {
             /** Pool Id */
             pool_id: string | null;
         };
@@ -1154,7 +1154,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlaceSessionRequest"];
+                "application/json": components["schemas"]["PlaceAgentSessionRequest"];
             };
         };
         responses: {

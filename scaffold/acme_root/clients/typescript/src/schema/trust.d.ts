@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/content": {
+    "/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/content": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,12 +12,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Session Content
+         * Agent Session Content
          * @description The session's steps past `after_seq`, opened: only under a live
          *     content grant of the operator in that tenant, and each opening is an
          *     entry in the tenant's stream.
          */
-        get: operations["session_content"];
+        get: operations["agent_session_content"];
         put?: never;
         post?: never;
         delete?: never;
@@ -26,7 +26,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/shape": {
+    "/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/shape": {
         parameters: {
             query?: never;
             header?: never;
@@ -34,11 +34,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Session Shape
+         * Agent Session Shape
          * @description The session's steps past `after_seq` as `read` sees them: what each
          *     is and who wrote it, never what it says.
          */
-        get: operations["session_shape"];
+        get: operations["agent_session_shape"];
         put?: never;
         post?: never;
         delete?: never;
@@ -484,7 +484,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    session_content: {
+    agent_session_content: {
         parameters: {
             query?: {
                 after_seq?: number;
@@ -523,7 +523,7 @@ export interface operations {
             };
         };
     };
-    session_shape: {
+    agent_session_shape: {
         parameters: {
             query?: {
                 after_seq?: number;

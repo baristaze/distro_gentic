@@ -134,7 +134,9 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
     assert before[0]["text"] == SAID
     assert before[2]["thinking"] and before[2]["tool_uses"] and before[4]["tool_use_id"]
 
-    erased = await client.post(f"/v1/retention/sessions/{agent_session_id}/erase", headers=admin)
+    erased = await client.post(
+        f"/v1/retention/agent-sessions/{agent_session_id}/erase", headers=admin
+    )
 
     assert erased.status_code == 200, erased.text
     assert erased.json()["agent_session_id"] == agent_session_id
@@ -147,7 +149,9 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
         await org_of(container), UUID(agent_session_id)
     )
     assert ring.keys and ring.revoked and all(key.is_destroyed() for key in ring.keys)
-    again = await client.post(f"/v1/retention/sessions/{agent_session_id}/erase", headers=owner)
+    again = await client.post(
+        f"/v1/retention/agent-sessions/{agent_session_id}/erase", headers=owner
+    )
     assert again.status_code == 200, again.text
     assert again.json() == erased.json()
 
@@ -163,7 +167,7 @@ async def test_an_erasure_answers_with_the_report_of_a_service_that_holds_each_k
         agent_session_id = await session_saying(client, container, owner)
 
         erased = await client.post(
-            f"/v1/retention/sessions/{agent_session_id}/erase", headers=owner
+            f"/v1/retention/agent-sessions/{agent_session_id}/erase", headers=owner
         )
 
         assert erased.status_code == 200, erased.text
@@ -226,7 +230,7 @@ async def test_a_member_erases_and_writes_nothing(
     for role in (Role.MEMBER, Role.VIEWER):
         headers = await person(client, container, await org_of(container), role)
         erased = await client.post(
-            f"/v1/retention/sessions/{agent_session_id}/erase", headers=headers
+            f"/v1/retention/agent-sessions/{agent_session_id}/erase", headers=headers
         )
         refused(erased, 403, "not_authorized")
         written = await client.put(
@@ -247,9 +251,11 @@ async def test_another_tenant_reaches_neither_the_session_nor_the_policy(
     bravo = await tenant(client, container, "bravo")
 
     crossed = await client.post(
-        f"/v1/retention/sessions/{agent_session_id}/erase", headers=bravo.owner
+        f"/v1/retention/agent-sessions/{agent_session_id}/erase", headers=bravo.owner
     )
-    missing = await client.post(f"/v1/retention/sessions/{UUID(int=7)}/erase", headers=bravo.owner)
+    missing = await client.post(
+        f"/v1/retention/agent-sessions/{UUID(int=7)}/erase", headers=bravo.owner
+    )
     refused(crossed, 404, "not_found")
     refused(missing, 404, "not_found")
     written = await client.put(

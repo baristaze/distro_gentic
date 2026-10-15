@@ -20,8 +20,8 @@ from acme.services.api.types.common import clamp_limit
 from acme.services.api.types.hosts import AdvertisementView, HostStandingView, LaneLoadView
 from acme.services.api.types.levers import LeverReadingView
 from acme.services.api.types.placement import (
+    AgentSessionStandingView,
     LoopStandingView,
-    SessionStandingView,
     SetShareRequest,
     ShareView,
 )
@@ -83,10 +83,10 @@ class AgentFleetServiceImpl(AgentFleetServiceInterface):
 
     async def get_session_standing(
         self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
-    ) -> SessionStandingView:
+    ) -> AgentSessionStandingView:
         standing = await self._placement.get_session_standing(admin, org_id, agent_session_id)
         loop = standing.loop
-        return SessionStandingView(
+        return AgentSessionStandingView(
             agent_session_id=standing.agent_session_id,
             status=standing.status,
             park=park_view(standing.park),

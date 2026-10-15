@@ -26,12 +26,12 @@ from acme.om.agents.types.tree import AgentTree
 from acme.om.park_alerts.rules import held_calls, needs_person, parked_step
 from acme.om.tools.types.call import Verdict
 from acme.services.api.types.agent_sessions import (
+    AgentSessionModelUsageView,
     ApprovalView,
     BoundsView,
     FillUsageView,
     LoopLimitsView,
     QuestionView,
-    SessionModelUsageView,
     ToolCallView,
     TreeBoundsView,
 )
@@ -130,7 +130,7 @@ def verdict_of(decided: ControlHeader, now: datetime) -> Verdict:
     return Verdict.EXPIRED if expires is not None and expires <= now else Verdict.APPROVED
 
 
-def usage_of(history: Sequence[AgentStep]) -> SessionModelUsageView:
+def usage_of(history: Sequence[AgentStep]) -> AgentSessionModelUsageView:
     """The usage every model response reported, summed per model by the
     request it answers, and in total. A response with no usage reported
     counts as a call and adds no tokens."""
@@ -165,7 +165,7 @@ def usage_of(history: Sequence[AgentStep]) -> SessionModelUsageView:
         )
         for fill, row in sorted(totals.items())
     ]
-    return SessionModelUsageView(
+    return AgentSessionModelUsageView(
         calls=sum(f.calls for f in per_fill),
         input=sum(f.input for f in per_fill),
         cache_read=sum(f.cache_read for f in per_fill),

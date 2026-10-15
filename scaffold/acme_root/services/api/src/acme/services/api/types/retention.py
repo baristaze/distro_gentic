@@ -78,7 +78,7 @@ class KeyDestructionView(View):
     receipt: str
 
 
-class SessionRetentionView(View):
+class AgentSessionRetentionView(View):
     """One session's snapshot: the policy it took, when its content and its
     shape expire, and when each did. `destruction` is the key service's
     report of the key it destroyed, none when the service holds the tenant's

@@ -561,7 +561,7 @@ def test_a_platform_skill_checks_its_profile_before_any_other_command(name: str)
 # The one route each supporter reads of its tenant: an aggregate of what
 # the platform knows, never a list, never the tenant's own words.
 STANDING = {
-    "ops-session-stuck": "orgs/<org_id>/sessions/<agent_session_id>/standing",
+    "ops-session-stuck": "orgs/<org_id>/agent-sessions/<agent_session_id>/standing",
     "ops-host-idle": "orgs/<org_id>/hosts/<host_id>/standing",
 }
 

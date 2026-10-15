@@ -66,7 +66,24 @@ class RetentionPolicyView(BaseModel):
     zero_retention: Annotated[bool, Field(title='Zero Retention')]
 
 
-class SessionRetentionView(BaseModel):
+class AgentProjectRetentionBody(BaseModel):
+    """
+    What one agent project of the tenant narrows; it never widens the tenant's.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyBody
+
+
+class AgentProjectRetentionView(BaseModel):
+    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
+    policy: RetentionPolicyView
+
+
+class AgentSessionRetentionView(BaseModel):
     """
     One session's snapshot: the policy it took, when its content and its
     shape expire, and when each did. `destruction` is the key service's
@@ -86,23 +103,6 @@ class SessionRetentionView(BaseModel):
     policy: RetentionPolicyView
     shape_expired_at: Annotated[AwareDatetime | None, Field(title='Shape Expired At')]
     shape_expires_at: Annotated[AwareDatetime | None, Field(title='Shape Expires At')]
-
-
-class AgentProjectRetentionBody(BaseModel):
-    """
-    What one agent project of the tenant narrows; it never widens the tenant's.
-    """
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
-    policy: RetentionPolicyBody
-
-
-class AgentProjectRetentionView(BaseModel):
-    agent_project_id: Annotated[UUID, Field(title='Agent Project Id')]
-    policy: RetentionPolicyView
 
 
 class RetentionRequest(BaseModel):

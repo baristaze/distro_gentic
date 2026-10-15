@@ -187,7 +187,7 @@ class LaneLoadView(BaseModel):
     ready: Annotated[int, Field(title='Ready')]
 
 
-class PlaceSessionRequest(BaseModel):
+class PlaceAgentSessionRequest(BaseModel):
     """
     One of the tenant's pools, or None for the cloud.
     """

@@ -1261,6 +1261,12 @@ story; the rest is its planned shape:
   (`product_api.py`). So a base move meets the layer below only where
   that layer's own lines change.
 
+**Its names.** A noun a product could own is named for the agent or the
+mechanism it serves, on every surface a copy shares: `agent_automations`,
+`agent_playbooks`, `agent_knowledge`, `agent_billing`, `park_alerts`. The
+bare word stays the product's, as the guideline's naming rule holds of
+every noun a scaffold brings ([Naming Entities][g-naming], OM-19).
+
 **Its first commit.** `distro_gentic` takes its base from
 `agentic_core`'s first stable release, by its tag, as [`agentic_core`
 Being Adopted][e-adopted] describes, and main
@@ -1278,30 +1284,31 @@ price table; and the threat model each deployment writes.
 
 `rodeo` is the reference product built on `distro_gentic`.
 
-[g]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md
-[g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-work-queue
-[g-lro]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#long-running-orchestrations
-[g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#leases-on-a-resource
-[g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#shape-of-a-worker
-[g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#worker-roles
-[g-scale]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#scalability-by-design
-[g-gateway]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-gateway
-[g-public]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#public-types
-[g-ids]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#identifiers
-[g-realtime]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#realtime-at-the-edge
-[g-client]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#client-rendering
-[g-stateful]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#stateless-vs-stateful-services
-[g-queues]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#queues
-[g-twins]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#twins-for-external-services
-[g-tests]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#tests
-[g-operator]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-operator-context
-[g-kmap]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-knowledge-map
-[g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#maintenance-without-a-scheduler
-[g-decoration]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#composition-by-decoration
-[g-opskills]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#operational-skills
-[g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-telemetry-round-trip
-[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/lenses/README.md
-[g-adopting]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/docs/adopting.md#upgrade-a-copy-of-the-scaffold
+[g]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md
+[g-naming]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#naming-entities
+[g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-work-queue
+[g-lro]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#long-running-orchestrations
+[g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#leases-on-a-leasable-resource
+[g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#shape-of-a-worker
+[g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#worker-roles
+[g-scale]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#scalability-by-design
+[g-gateway]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-gateway
+[g-public]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#public-types
+[g-ids]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#identifiers
+[g-realtime]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#realtime-at-the-edge
+[g-client]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#client-rendering
+[g-stateful]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#stateless-vs-stateful-services
+[g-queues]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#queues
+[g-twins]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#twins-for-external-services
+[g-tests]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#tests
+[g-operator]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-operator-context
+[g-kmap]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-knowledge-map
+[g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#maintenance-without-a-scheduler
+[g-decoration]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#composition-by-decoration
+[g-opskills]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#operational-skills
+[g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-telemetry-round-trip
+[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/lenses/README.md
+[g-adopting]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/docs/adopting.md#upgrade-a-copy-of-the-scaffold
 [e]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md
 [e-read]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#how-to-read-this
 [e-durable]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#durable-by-default

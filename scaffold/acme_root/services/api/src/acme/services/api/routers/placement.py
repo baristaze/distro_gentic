@@ -13,7 +13,7 @@ from fastapi import APIRouter
 
 from acme.services.api.gateway.admin import OperatorCtx
 from acme.services.api.gateway.platform_resolve import AgentFleetService
-from acme.services.api.types.placement import SessionStandingView, SetShareRequest, ShareView
+from acme.services.api.types.placement import AgentSessionStandingView, SetShareRequest, ShareView
 
 operator = APIRouter(prefix="/admin", tags=["placement"])
 
@@ -31,11 +31,12 @@ async def set_share(
 
 
 @operator.get(
-    "/orgs/{org_id}/sessions/{agent_session_id}/standing", response_model=SessionStandingView
+    "/orgs/{org_id}/agent-sessions/{agent_session_id}/standing",
+    response_model=AgentSessionStandingView,
 )
-async def session_standing(
+async def agent_session_standing(
     admin: OperatorCtx, service: AgentFleetService, org_id: UUID, agent_session_id: UUID
-) -> SessionStandingView:
+) -> AgentSessionStandingView:
     """Why the session is or is not moving: its park, its loop's lease and
     lane, its place in line, its tenant's share, and where it runs."""
     return await service.get_session_standing(admin, org_id, agent_session_id)

@@ -23,7 +23,7 @@ only what the engine's layer and the platform's add.
 
 `<pin>` is the guideline release this plugin's scaffold pins: `pinned
 at release` in `../../scaffold/acme_root/specs/architecture.md`, which
-already holds the `v` (`v0.60.0`). Read the guideline's skill at that
+already holds the `v` (`v0.61.0`). Read the guideline's skill at that
 release,
 `curl -fsSL https://raw.githubusercontent.com/baristaze/swe_guidelines/<pin>/skills/arch-upgrade-scaffold/SKILL.md`,
 and follow it, with the differences below. Its `<base.py>` is the
@@ -95,8 +95,11 @@ read as the guideline's skill reads them, with these differences.
 - **Migrations** (its step 6). The platform's migrations sit in the
   guideline's four role chains, after the engine's, which sit after the
   guideline's, and all three are the scaffold's. A role's scaffold head
-  is the render's: the platform's last migration of that role where it
-  has one, else the engine's, else the guideline's.
+  is the head of the render's chain for that role: the one revision no
+  other revision of it names as its `down_revision`, which `head(<role>)`
+  in `<root>`'s `storage/migrate.py` returns. It is read by the parents,
+  never by the file name: a folded revision sorts below the parents it
+  follows.
 - **A layer's gates** (its step 8). A layer runs its scaffold's gates in
   a copy, as the platform's CI does, never in `<root>`. From the
   checkout's root, `python3 scaffold/new.py <dir>/<name>` copies it into

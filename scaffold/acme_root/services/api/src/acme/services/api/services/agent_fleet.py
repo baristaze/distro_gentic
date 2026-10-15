@@ -13,7 +13,7 @@ from acme.om.context import OperatorContext
 from acme.services.api.types.agent_sessions import AgentStepPageView
 from acme.services.api.types.hosts import HostStandingView
 from acme.services.api.types.levers import LeverReadingView
-from acme.services.api.types.placement import SessionStandingView, SetShareRequest, ShareView
+from acme.services.api.types.placement import AgentSessionStandingView, SetShareRequest, ShareView
 from acme.services.api.types.trust import ShapePageView
 
 
@@ -26,7 +26,7 @@ class AgentFleetServiceInterface(ABC):
     @abstractmethod
     async def get_session_standing(
         self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
-    ) -> SessionStandingView: ...
+    ) -> AgentSessionStandingView: ...
 
     @abstractmethod
     async def get_host_standing(

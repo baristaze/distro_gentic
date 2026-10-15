@@ -4,6 +4,31 @@
  */
 
 export interface paths {
+    "/v1/retention/agent-sessions/{agent_session_id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase Content
+         * @description Erases what the session said, for good: its key is revoked and
+         *     destroyed, and the audit holds the destruction. Its steps keep their
+         *     place, type, and shape, and read as saying nothing; the session takes no
+         *     content again. A session marked deleted is erased too. Once: a second
+         *     call answers as the first left it. `404 not_found` for a session the
+         *     tenant does not hold, which is how another tenant's reads.
+         */
+        post: operations["erase_content"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/retention/policy": {
         parameters: {
             query?: never;
@@ -23,31 +48,6 @@ export interface paths {
          */
         put: operations["write_policy"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/retention/sessions/{agent_session_id}/erase": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Erase Content
-         * @description Erases what the session said, for good: its key is revoked and
-         *     destroyed, and the audit holds the destruction. Its steps keep their
-         *     place, type, and shape, and read as saying nothing; the session takes no
-         *     content again. A session marked deleted is erased too. Once: a second
-         *     call answers as the first left it. `404 not_found` for a session the
-         *     tenant does not hold, which is how another tenant's reads.
-         */
-        post: operations["erase_content"];
         delete?: never;
         options?: never;
         head?: never;
@@ -78,6 +78,32 @@ export interface components {
              */
             agent_project_id: string;
             policy: components["schemas"]["RetentionPolicyView"];
+        };
+        /**
+         * AgentSessionRetentionView
+         * @description One session's snapshot: the policy it took, when its content and its
+         *     shape expire, and when each did. `destruction` is the key service's
+         *     report of the key it destroyed, none when the service holds the tenant's
+         *     key alone and the platform's revocation is the destruction.
+         */
+        AgentSessionRetentionView: {
+            /** Agent Project Id */
+            agent_project_id: string | null;
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /** Content Expired At */
+            content_expired_at: string | null;
+            /** Content Expires At */
+            content_expires_at: string | null;
+            destruction: components["schemas"]["KeyDestructionView"] | null;
+            policy: components["schemas"]["RetentionPolicyView"];
+            /** Shape Expired At */
+            shape_expired_at: string | null;
+            /** Shape Expires At */
+            shape_expires_at: string | null;
         };
         /**
          * CrossingKind
@@ -170,32 +196,6 @@ export interface components {
             version: number;
         };
         /**
-         * SessionRetentionView
-         * @description One session's snapshot: the policy it took, when its content and its
-         *     shape expire, and when each did. `destruction` is the key service's
-         *     report of the key it destroyed, none when the service holds the tenant's
-         *     key alone and the platform's revocation is the destruction.
-         */
-        SessionRetentionView: {
-            /** Agent Project Id */
-            agent_project_id: string | null;
-            /**
-             * Agent Session Id
-             * Format: uuid
-             */
-            agent_session_id: string;
-            /** Content Expired At */
-            content_expired_at: string | null;
-            /** Content Expires At */
-            content_expires_at: string | null;
-            destruction: components["schemas"]["KeyDestructionView"] | null;
-            policy: components["schemas"]["RetentionPolicyView"];
-            /** Shape Expired At */
-            shape_expired_at: string | null;
-            /** Shape Expires At */
-            shape_expires_at: string | null;
-        };
-        /**
          * StorageMode
          * @description Where a session's content lives.
          * @enum {string}
@@ -228,6 +228,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    erase_content: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionRetentionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_policy: {
         parameters: {
             query?: never;
@@ -287,41 +322,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetentionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    erase_content: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                agent_session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionRetentionView"];
                 };
             };
             /** @description Validation Error */

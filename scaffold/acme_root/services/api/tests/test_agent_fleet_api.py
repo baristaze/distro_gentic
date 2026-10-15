@@ -209,7 +209,7 @@ async def test_content_opens_only_under_a_grant_the_grant_job_writes_and_ends(
 ) -> None:
     org_id = await org_of(client, owner)
     agent_session_id = await a_session_that_was_told(client, owner)
-    base = f"/v1/admin/orgs/{org_id}/sessions/{agent_session_id}"
+    base = f"/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}"
 
     shape = await client.get(f"{base}/shape", headers=reader)
     assert shape.status_code == 200, shape.text
@@ -262,7 +262,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
 ) -> None:
     org_id = await org_of(client, owner)
     agent_session_id = await a_session_that_was_told(client, owner)
-    path = f"/v1/admin/orgs/{org_id}/sessions/{agent_session_id}/standing"
+    path = f"/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/standing"
 
     waiting = await client.get(path, headers=reader)
     assert waiting.status_code == 200, waiting.text
@@ -304,7 +304,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     ) == ("pro", True, "loop:standard", 8, False)
 
     elsewhere = await client.get(
-        f"/v1/admin/orgs/{new_id()}/sessions/{agent_session_id}/standing", headers=reader
+        f"/v1/admin/orgs/{new_id()}/agent-sessions/{agent_session_id}/standing", headers=reader
     )
     assert elsewhere.status_code == 404
     assert (await client.get(path, headers=owner)).status_code == 401
