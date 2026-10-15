@@ -1,2 +1,0 @@
--- Nothing to put back: the deleted station items are not restored, and
--- the schema did not change.
