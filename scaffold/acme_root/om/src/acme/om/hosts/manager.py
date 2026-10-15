@@ -38,7 +38,7 @@ class HostsManagerInterface(ABC):
         """A pool under the caller's tenant, its provenance stamped from the
         context. A retry under the same id answers the row as stored.
         Requires the members permission, an owner's or an admin's: a pool is
-        where machines join the tenant's work, as a member joins its people."""
+        where VMs join the tenant's work, as a member joins its people."""
         ...
 
     @abstractmethod
@@ -91,8 +91,8 @@ class HostsManagerInterface(ABC):
         """Ends the host and every credential it holds at once: its next call
         is refused, and it is handed no more work. Requires the members
         permission. NotFound for a claimant of another kind;
-        `ValidationFailed` for the host of a machine of the cloud pool, which
-        is the platform's and ends with its machine."""
+        `ValidationFailed` for the host of a VM of the cloud pool, which
+        is the platform's and ends with its VM."""
         ...
 
     @abstractmethod
@@ -122,7 +122,7 @@ class HostsManagerInterface(ABC):
         ...
 
     # The cloud pool's side: the pool of one each session that runs on a
-    # machine of the platform's cloud gets, and its machine's host.
+    # VM of the platform's cloud gets, and its VM's host.
 
     @abstractmethod
     async def work_placement(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
@@ -145,7 +145,7 @@ class HostsManagerInterface(ABC):
 
     @abstractmethod
     @transition
-    async def admit_machine(
+    async def admit_vm(
         self,
         rctx: RequestContext,
         org_id: UUID,
@@ -154,21 +154,21 @@ class HostsManagerInterface(ABC):
         enrolled_with: UUID,
         enrollment: Enrollment,
     ) -> IssuedCredential:
-        """System-internal: the cloud pool enrolls the host of a machine it
+        """System-internal: the cloud pool enrolls the host of a VM it
         started for a session, which calls from the request stage as every
         host does, into the session's pool of one, and gives it its first
         credential: its tenant, its pool, and its session are the
         platform's, never the host's to name. A pool that is the tenant's
         own is refused. The
-        machine handed its key over once (`enrolled_with`), and the person
+        VM handed its key over once (`enrolled_with`), and the person
         its session's work is for answers for it (`created_by`). Its claims
         are its session's work alone."""
         ...
 
     @abstractmethod
     @transition
-    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
-        """System-internal: the host of a machine of the cloud pool,
+    async def vm_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
+        """System-internal: the host of a VM of the cloud pool,
         revoked or not, as the pool's sweep reads it for no principal: when
         it last called, and whether it was ended. None when the tenant holds
         no such host."""
@@ -179,8 +179,8 @@ class HostsManagerInterface(ABC):
     async def retire_host(
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
     ) -> None:
-        """System-internal: the cloud pool ends its machine's host and every
-        credential it holds as it lets the machine go, from its sweep and
+        """System-internal: the cloud pool ends its VM's host and every
+        credential it holds as it lets the VM go, from its sweep and
         its purge as from a run: a disk kept after this holds no credential
         that answers. One gone or ended already ends nothing more."""
         ...
@@ -227,7 +227,7 @@ class HostsManagerInterface(ABC):
     async def authenticate(self, rctx: RequestContext, credential: str) -> HostIdentity:
         """System-internal: the host behind a host credential. Refuses any
         other kind of credential, an expired one, and a revoked host's. A
-        rotated credential presented past its grace means two machines hold
+        rotated credential presented past its grace means two VMs hold
         the host's identity: it is refused, and the host and every
         credential it holds are revoked."""
         ...
@@ -251,7 +251,7 @@ class HostsManagerInterface(ABC):
         product's, in the clear once. The one it called with ends after a
         short grace, so a call in flight with it lands, and every older one
         ends now. A credential rotates once: a second rotation of it means
-        two machines hold it, so it is refused with CredentialExpired, and
+        two VMs hold it, so it is refused with CredentialExpired, and
         the claimant and every credential it holds are revoked."""
         ...
 

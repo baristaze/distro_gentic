@@ -8,8 +8,8 @@ from acme.om.storage.tables.base import Base, CreatedMixin, GlobalIdentifiableMi
 
 
 class PoolVms(GlobalIdentifiableMixin, CreatedMixin, Base):
-    """The machines the cloud pool started, the platform's own rows: a warm
-    machine names no tenant until a session claims it. Read by the session
+    """The VMs the cloud pool started, the platform's own rows: a warm
+    VM names no tenant until a session claims it. Read by the session
     it serves, by the key it was handed, and all at once by the sweep."""
 
     __tablename__ = "pool_vms"

@@ -1,7 +1,7 @@
 """An instance a run makes inside a pinned session's wall: a new workspace
 under an id of its own, made by a host of the session's pool, reached
 through the exec relay, and destroyed when the run ends. The fresh executor
-runs a pinned session's checks on one, never on the platform's machines
+runs a pinned session's checks on one, never on the platform's VMs
 and never in the session's own workspace."""
 
 import asyncio

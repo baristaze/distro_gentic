@@ -2,7 +2,7 @@
 pool that prepared it, and nowhere else. Until one holds it, a host of the
 pool is asked to prepare it, and the loop waits on the resource: each
 refusal here clears once a host comes, so nothing is made on one of the
-platform's machines in its stead, and no call is spent on a loop that
+platform's VMs in its stead, and no call is spent on a loop that
 cannot run.
 
 A workspace kept by snapshots keeps them in the store of a host inside its

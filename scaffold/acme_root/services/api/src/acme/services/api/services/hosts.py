@@ -86,10 +86,10 @@ class HostsServiceInterface(ABC):
     ) -> IssuedHostCredentialView: ...
 
     @abstractmethod
-    async def enroll_machine(
+    async def enroll_vm(
         self, rctx: RequestContext, key: str, body: EnrollRequest
     ) -> IssuedHostCredentialView:
-        """The host of a machine of the cloud pool trades its key, once."""
+        """The host of a VM of the cloud pool trades its key, once."""
         ...
 
     @abstractmethod

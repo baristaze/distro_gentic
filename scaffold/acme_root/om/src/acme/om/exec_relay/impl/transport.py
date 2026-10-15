@@ -387,7 +387,7 @@ class TransportRelayImpl(TransportInterface):
 
 class TransportPlacedImpl(TransportInterface):
     """The runner's one transport: per session, the exec relay when its placement
-    is inside its tenant's wall, or when its workspace runs on a machine of
+    is inside its tenant's wall, or when its workspace runs on a VM of
     the cloud pool (`pooled`), and the direct transport otherwise. The
     engine and its tools see this alone, and never what is behind it."""
 

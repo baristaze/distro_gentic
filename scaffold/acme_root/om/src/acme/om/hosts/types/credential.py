@@ -33,7 +33,7 @@ class HostCredential(Identifiable, Created):
     `host_id` is the claimant's id. It rotates once: the rotation mints the
     next, marks this one rotated, and moves its end to a short grace, so a
     call in flight with it still lands. A second rotation of it means two
-    machines hold it, and ends the claimant."""
+    VMs hold it, and ends the claimant."""
 
     host_id: UUID
     digest: str

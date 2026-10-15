@@ -1,6 +1,6 @@
 output "launch_template_id" {
   description = "ACME_VM_LAUNCH_TEMPLATE."
-  value       = aws_launch_template.machine.id
+  value       = aws_launch_template.vm.id
 }
 
 output "closed_security_group_id" {
@@ -19,6 +19,6 @@ output "subnet_ids" {
 }
 
 output "operate_policy_arn" {
-  description = "The policy the runner's and the sweep's task roles take to hold the pool's machines."
+  description = "The policy the runner's and the sweep's task roles take to hold the pool's VMs."
   value       = aws_iam_policy.operate.arn
 }

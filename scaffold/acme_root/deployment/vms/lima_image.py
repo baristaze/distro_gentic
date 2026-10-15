@@ -1,14 +1,14 @@
-"""Builds the cloud pool's image on Lima: a machine from the Lima template
+"""Builds the cloud pool's image on Lima: a VM from the Lima template
 `ACME_VM_IMAGE` names, Docker inside it, the host program installed in
 it from this checkout by `install.sh`, then stopped and kept under the name
-given, from which every machine of the pool starts
+given, from which every VM of the pool starts
 (`ACME_CLOUD_POOL_IMAGE`). The image holds no secret: the pool hands each
-machine its seed as it starts.
+VM its seed as it starts.
 
-    uv run python deployment/machines/lima_image.py acme-vm-image
+    uv run python deployment/VMs/lima_image.py acme-vm-image
 
 Run from the repository's root, with Lima installed and a hypervisor. The
-name must not start with the machines' prefix and `p`, which are the pool's
+name must not start with the VMs' prefix and `p`, which are the pool's
 own names. A name that stands already is kept as it is."""
 
 import asyncio
@@ -38,7 +38,7 @@ LEFT_OUT = frozenset(
         ".env",
     }
 )
-"""What a build in the machine never needs, or must never see."""
+"""What a build in the VM never needs, or must never see."""
 
 SOURCE = "/tmp/acme-source"
 
@@ -60,31 +60,31 @@ def source_tarball(root: Path) -> bytes:
 async def build(name: str, root: Path, settings: InfraSettings) -> None:
     timeout = timedelta(seconds=settings.vm_timeout_seconds)
     boot = timedelta(seconds=settings.vm_boot_timeout_seconds)
-    machines = VmsLimaImpl(timeout, boot, encrypted=settings.vm_store_encrypted)
-    missing = await machines.probe(name)
+    vms = VmsLimaImpl(timeout, boot, encrypted=settings.vm_store_encrypted)
+    missing = await vms.probe(name)
     if missing is not None:
-        raise SystemExit(f"no machine runs here: {missing}")
-    if await machines.state(name) is not VmState.ABSENT:
+        raise SystemExit(f"no VM runs here: {missing}")
+    if await vms.state(name) is not VmState.ABSENT:
         print(f"{name} stands already")
         return
-    await machines.launch(name, VmSpec(image=settings.vm_image, egress_open=True))
+    await vms.launch(name, VmSpec(image=settings.vm_image, egress_open=True))
     try:
         steps = (
             (("sh", "-c", f"rm -rf {SOURCE} && mkdir -p {SOURCE} && tar -xz -C {SOURCE}"), True),
-            (("sudo", "-n", "sh", f"{SOURCE}/deployment/machines/install.sh", SOURCE), False),
+            (("sudo", "-n", "sh", f"{SOURCE}/deployment/vms/install.sh", SOURCE), False),
             (("rm", "-rf", SOURCE), False),
         )
         for argv, sends in steps:
             stdin = source_tarball(root) if sends else None
-            reply = await machines.run(name, argv, bound=boot, stdin=stdin)
+            reply = await vms.run(name, argv, bound=boot, stdin=stdin)
             if not reply.ok:
                 raise SystemExit(
                     f"{argv[0]} failed in {name}: {reply.reason()}\n"
                     + reply.stdout.decode(errors="replace")[-2000:]
                 )
-        await machines.stop(name)
+        await vms.stop(name)
     except BaseException:
-        await machines.destroy(name)
+        await vms.destroy(name)
         raise
     print(f"{name} holds the host program; set ACME_CLOUD_POOL_IMAGE={name}")
 

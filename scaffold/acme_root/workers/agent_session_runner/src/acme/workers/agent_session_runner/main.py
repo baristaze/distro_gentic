@@ -99,7 +99,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         work=managers.work,
         outbox=managers.outbox,
         purges={},
-        # And the cloud pool's machines: a start that died, a host that never
+        # And the cloud pool's VMs: a start that died, a host that never
         # came, a gone session's, and the warm ones it keeps standing.
         across={"workspaces": held, "cloud_pool": managers.cloud_pool.sweep},
         kinds=KINDS,

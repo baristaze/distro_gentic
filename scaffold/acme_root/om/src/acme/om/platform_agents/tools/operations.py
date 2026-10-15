@@ -54,7 +54,7 @@ class ListHostsImpl(NativeToolImpl):
     """Lists the tenant's own pools of hosts, each with its live hosts and
     what each offers: its operating system and shell, its capabilities, the
     isolation it can give, and the version of work it reads, as the host
-    advertised them. A machine the cloud pool runs for one session is the
+    advertised them. A VM the cloud pool runs for one session is the
     platform's, never listed."""
 
     SPEC = ToolSpec(

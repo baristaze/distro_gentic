@@ -1,6 +1,6 @@
-"""The workspace of the machine this process runs in, when the machine is a
-session's own: a machine of the platform's cloud pool, where the host
-program runs and the pool started the machine for one session. The machine
+"""The workspace of the VM this process runs in, when the VM is a
+session's own: a VM of the platform's cloud pool, where the host
+program runs and the pool started the VM for one session. The VM
 is the session's wall, so its workspace is a folder in it, at the VM's
 level, and its commands hold the guest whole, as a VM workspace's do
 (ADR 2052)."""
@@ -19,14 +19,14 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 
-KEPT_BY_THE_POOL = "the cloud pool keeps this machine's whole disk, and the host takes none"
+KEPT_BY_THE_POOL = "the cloud pool keeps this VM's whole disk, and the host takes none"
 
 
-class WorkspaceMachineImpl(AgentWorkspaceHostImpl):
+class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
     """A folder under `root`, at the VM's level. It holds open egress and
-    none alike, which the machine's network enforces, and no allowlist and
+    none alike, which the VM's network enforces, and no allowlist and
     no limit of its own. It keeps no snapshot and starts from none, nor from
-    a base: the pool keeps the machine's whole disk, and starts the machine
+    a base: the pool keeps the VM's whole disk, and starts the VM
     again from it. Its release ends what its commands left running and keeps
     its files, as a host directory's does."""
 
@@ -44,10 +44,7 @@ class WorkspaceMachineImpl(AgentWorkspaceHostImpl):
             spec, mode=IsolationMode.VM, egress={EgressMode.OPEN, EgressMode.NONE}, limits=()
         )
         if why is None and (snapshot is not None or base is not None or spec.base is not None):
-            why = (
-                "a machine's workspace starts from the machine as its pool started it: "
-                + KEPT_BY_THE_POOL
-            )
+            why = "a VM's workspace starts from the VM as its pool started it: " + KEPT_BY_THE_POOL
         if why is not None:
             raise IsolationRefused(why)
         directory = self._directory(org_id, agent_workspace_id)
@@ -61,4 +58,4 @@ class WorkspaceMachineImpl(AgentWorkspaceHostImpl):
         raise SnapshotRefused(KEPT_BY_THE_POOL)
 
     def describe(self) -> str:
-        return f"workspaces=machine({self._root})"
+        return f"workspaces=vm({self._root})"

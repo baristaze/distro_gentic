@@ -7,7 +7,7 @@ they were; a branch the remote lost with no known fate fails loudly and
 nothing is checked out from the default branch; one gone after its pull
 request merged is cut again from it. A pinned session's checkout runs on
 the host of its pool that holds its workspace, and none of it on the
-platform's machine."""
+platform's VM."""
 
 import shutil
 import subprocess
@@ -715,7 +715,7 @@ async def test_a_replacement_the_agent_made_still_delivers_the_protected_edit(
 
 
 class Outside(TransportNullImpl):
-    """Infra's own transport, on the platform's machine: a pinned session's
+    """Infra's own transport, on the platform's VM: a pinned session's
     command that reaches it ran outside its placement."""
 
     def __init__(self) -> None:
@@ -755,7 +755,7 @@ class OnItsHost(TransportLocalImpl):
 
 
 class PinnedInfra(InfraLocalImpl):
-    """The platform's machine, whose own transport runs nothing of a pinned
+    """The platform's VM, whose own transport runs nothing of a pinned
     session's."""
 
     def __init__(self, root: Path) -> None:
@@ -830,7 +830,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     (ref,) = checkout.snapshots(branch)
     assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done", "bundled on its host"
     assert host.ran and set(host.ran) == {session.id}
-    assert infra.outside.ran == [], "nothing ran on the platform's machine"
+    assert infra.outside.ran == [], "nothing ran on the platform's VM"
     assert git(here, "status", "--porcelain") == "?? notes.txt", "its host still holds it"
 
 

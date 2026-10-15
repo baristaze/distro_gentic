@@ -162,8 +162,8 @@ class ExecutorRelayImpl(ExecutorInterface):
     """`transports` names the transport that runs each isolation mode this
     host gives; an item at any other mode is refused, with nothing run.
     `kept_whole` names the modes a workspace kept by snapshots is held at
-    with no snapshot of the host's: a machine of the cloud pool, whose pool
-    keeps the machine's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
+    with no snapshot of the host's: a VM of the cloud pool, whose pool
+    keeps the VM's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
     sent as a part, and the lease is renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts

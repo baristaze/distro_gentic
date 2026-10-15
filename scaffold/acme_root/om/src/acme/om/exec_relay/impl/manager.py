@@ -566,7 +566,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if binding is None:
             raise NoWorkspaceHost(
                 f"session {call.agent_session_id} is pinned to its tenant's hosts, and no host "
-                "holds its workspace yet; its calls never run on the platform's machines"
+                "holds its workspace yet; its calls never run on the platform's VMs"
             )
         if not await self._holds(
             ctx, binding.instance_of or call.agent_session_id, binding.host_id

@@ -1,5 +1,5 @@
 """The platform's infra: the streams read live while they are written, how a
-machine of the cloud pool is handed its seed, and the machines of the
+VM of the cloud pool is handed its seed, and the VMs of the
 platform's cloud account. Each infra root builds it with one call, names it
 once where it describes, starts, and closes its capabilities, and serves its
 getters through `PlatformInfraRoot`. Its settings are
@@ -18,28 +18,28 @@ from acme.infra.streams.breaker import StreamsBreakerImpl
 from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.streams.valkey import StreamsValkeyImpl
 from acme.infra.vms import SeedsInterface, VmsInterface
-from acme.infra.vms.ec2 import MachinesEc2Impl
+from acme.infra.vms.ec2 import VmsEc2Impl
 from acme.infra.vms.seeded import PLAIN_WRITE, SeedsChannelImpl, SeedsNullImpl
 
 
 def unsafe_on_platform(settings: InfraSettings) -> str | None:
     """Why the platform refuses these settings at boot, or None: a VM
-    workspace on the platform's cloud machines, since a machine of the cloud
+    workspace on the platform's cloud VMs, since a VM of the cloud
     takes no command from outside, and its host pulls."""
     if settings.agent_workspace_backend == "vm" and settings.vms_backend == "ec2":
         return (
             "ACME_AGENT_WORKSPACE_BACKEND=vm is refused with ACME_VMS_BACKEND=ec2: "
-            "a machine of the cloud takes no command from outside, and its host pulls"
+            "a VM of the cloud takes no command from outside, and its host pulls"
         )
     return None
 
 
-def cloud_machines(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterface | None:
-    """The machines of the platform's cloud account, when the settings name
+def cloud_vms(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterface | None:
+    """The VMs of the platform's cloud account, when the settings name
     them; None for any other backend, which the root builds itself."""
     if settings.vms_backend != "ec2":
         return None
-    return MachinesEc2Impl(
+    return VmsEc2Impl(
         aws,
         region=settings.aws_region,
         timeout=timedelta(seconds=settings.aws_timeout_seconds),
@@ -55,18 +55,18 @@ def cloud_machines(settings: InfraSettings, aws: aioboto3.Session) -> VmsInterfa
 @dataclass(frozen=True)
 class PlatformInfra:
     """The platform's capabilities over one root's: its streams, and its
-    seeds over the root's machines."""
+    seeds over the root's VMs."""
 
     streams: StreamsInterface
     seeds: SeedsInterface
 
     @classmethod
-    def local(cls, machines: VmsInterface) -> PlatformInfra:
+    def local(cls, vms: VmsInterface) -> PlatformInfra:
         """In this process: the memory streams, and seeds handed through the
-        twin machines' channel."""
+        twin VMs' channel."""
         return cls(
             StreamsMemoryImpl(),
-            SeedsChannelImpl(machines, timedelta(seconds=30), PLAIN_WRITE),
+            SeedsChannelImpl(vms, timedelta(seconds=30), PLAIN_WRITE),
         )
 
     @classmethod
@@ -75,19 +75,19 @@ class PlatformInfra:
         settings: InfraSettings,
         valkey: ValkeyConnection | None,
         breaker: Breaker | None,
-        machines: VmsInterface,
+        vms: VmsInterface,
     ) -> PlatformInfra:
         """As the settings pick them: the live streams follow the cache, behind
-        the same breaker; a machine of the cloud is handed its seed as it
+        the same breaker; a VM of the cloud is handed its seed as it
         starts, and one of Lima's through the hypervisor's channel."""
         streams: StreamsInterface = StreamsMemoryImpl()
         if valkey is not None and breaker is not None:
             streams = StreamsBreakerImpl(StreamsValkeyImpl(valkey), breaker)
         seeds: SeedsInterface = SeedsNullImpl()
-        if isinstance(machines, MachinesEc2Impl):
-            seeds = machines
+        if isinstance(vms, VmsEc2Impl):
+            seeds = vms
         elif settings.vms_backend == "lima":
-            seeds = SeedsChannelImpl(machines, timedelta(seconds=settings.vm_timeout_seconds))
+            seeds = SeedsChannelImpl(vms, timedelta(seconds=settings.vm_timeout_seconds))
         return cls(streams, seeds)
 
     def describe(self) -> list[str]:

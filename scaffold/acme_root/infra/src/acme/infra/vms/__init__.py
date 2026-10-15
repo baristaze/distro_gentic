@@ -207,8 +207,8 @@ class VmsInterface(ABC):
         ...
 
 
-SEED_FOLDER = "run/acme-machine"
-"""Where the seed lives, from the machine's root: the guest's `/run`."""
+SEED_FOLDER = "run/acme-vm"
+"""Where the seed lives, from the VM's root: the guest's `/run`."""
 
 SEED_FILE = f"{SEED_FOLDER}/seed.json"
 
@@ -221,10 +221,10 @@ class SeedsInterface(ABC):
     async def launch_seeded(
         self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
     ) -> None:
-        """The machine under `name` running to `spec`, as the machines'
+        """The VM under `name` running to `spec`, as the VMs'
         `launch` makes or starts it, with `seed` at `SEED_FILE` for its host
         alone, a seed handed before replaced. A start that fails part way
-        leaves no machine it made."""
+        leaves no VM it made."""
         ...
 
     @abstractmethod

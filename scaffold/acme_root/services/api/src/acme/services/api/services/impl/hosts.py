@@ -211,7 +211,7 @@ class HostsServiceImpl(HostsServiceInterface):
         )
         return credential_view(await self._hosts.enroll(rctx, token, enrollment))
 
-    async def enroll_machine(
+    async def enroll_vm(
         self, rctx: RequestContext, key: str, body: EnrollRequest
     ) -> IssuedHostCredentialView:
         enrollment = Enrollment(

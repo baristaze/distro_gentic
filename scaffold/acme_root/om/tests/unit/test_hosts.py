@@ -313,7 +313,7 @@ async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
     # The copy rotates first, at half the credential's life, for a fresh hour.
     clock.advance(timedelta(minutes=30))
     forked = await hosts.rotate(request(), await hosts.authenticate(request(), copy))
-    # The host rotates the same credential: two machines hold it, and both end.
+    # The host rotates the same credential: two VMs hold it, and both end.
     with pytest.raises(CredentialExpired):
         await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
     with pytest.raises(CredentialExpired):
@@ -440,7 +440,7 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
     assert from_another_tenant.id not in handed
 
 
-# A session of the cloud pool runs on a machine of its own, whose host
+# A session of the cloud pool runs on a VM of its own, whose host
 # enrolls into the session's pool of one and claims that session's work.
 
 
@@ -466,7 +466,7 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     assert (await hosts.placement_of(owner, session.id)).pool is None
 
 
-async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions_work(
+async def test_a_vms_host_names_its_session_and_is_handed_no_other_sessions_work(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
@@ -478,21 +478,21 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
     pool = await hosts.session_pool(service, mine.id, "cloud")
     tenants = await hosts.create_pool(owner, a_pool())
     with pytest.raises(InvalidCredential):
-        await hosts.admit_machine(
+        await hosts.admit_vm(
             request(),
             owner.org_id,
             tenants.id,
             owner.user_id,
             new_id(),
-            Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+            Enrollment(name="vm", advertisement=PROBED, exec_version=1),
         )
-    issued = await hosts.admit_machine(
+    issued = await hosts.admit_vm(
         request(),
         owner.org_id,
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
     )
     identity = await hosts.authenticate(request(), issued.credential)
     assert (identity.pool_id, identity.agent_session_id) == (pool.id, mine.id)
@@ -515,34 +515,34 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)  # once is all
 
 
-async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ended(
+async def test_no_person_revokes_a_vms_host_and_the_pool_reads_when_it_ended(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
-    issued = await hosts.admit_machine(
+    issued = await hosts.admit_vm(
         request(),
         owner.org_id,
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
     )
     host_id = issued.claimant_id
-    # Its machine would run on with no host: the host ends with its machine.
+    # Its VM would run on with no host: the host ends with its VM.
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.revoke_host(owner, host_id)
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.revoke_claimant(owner, host_id)
     await hosts.authenticate(request(), issued.credential)
-    read = await hosts.machine_host(request(), owner.org_id, host_id)
+    read = await hosts.vm_host(request(), owner.org_id, host_id)
     assert read is not None and read.revoked_at is None and read.agent_session_id == session.id
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
-    ended = await hosts.machine_host(request(), owner.org_id, host_id)
+    ended = await hosts.vm_host(request(), owner.org_id, host_id)
     assert ended is not None and ended.revoked_at is not None
-    assert await hosts.machine_host(request(), owner.org_id, new_id()) is None
+    assert await hosts.vm_host(request(), owner.org_id, new_id()) is None
 
 
 async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(

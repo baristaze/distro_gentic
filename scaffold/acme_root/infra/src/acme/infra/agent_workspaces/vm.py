@@ -195,8 +195,8 @@ class AgentWorkspaceVmImpl(AgentWorkspaceProviderInterface):
                 await self._vms.destroy(found)
 
     async def held_instances(self) -> list[HeldInstance]:
-        """None: a machine is named by a hash of its workspace's id, so no
-        name says which workspace, or which tenant, it holds. A machine
+        """None: a VM is named by a hash of its workspace's id, so no
+        name says which workspace, or which tenant, it holds. A VM
         whose run died before its release runs until its workspace's next
         prepare and release, or its purge."""
         return []

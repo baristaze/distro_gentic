@@ -86,8 +86,8 @@ of it where there is none, and the share's mark."""
 
 
 def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
-    """The cloud pool as the settings name it, on the machines infra chose:
-    the runner starts its machines, and the sweep lets them go."""
+    """The cloud pool as the settings name it, on the VMs infra chose:
+    the runner starts its VMs, and the sweep lets them go."""
     return CloudPoolOptions(
         prefix=settings.vm_prefix,
         image=settings.cloud_pool_image,
@@ -105,7 +105,7 @@ def worker_platform_options(
     platform_agents: PlatformAgents | None,
 ) -> PlatformRootOptions:
     """What the worker sets on the platform's managers: each one's batch, the
-    retention sweep's, the cloud pool's machines with the request stage a
+    retention sweep's, the cloud pool's VMs with the request stage a
     purge of them runs under, minted here at the worker's edge, and the
     product's ports."""
     batch = settings.worker_purge_batch

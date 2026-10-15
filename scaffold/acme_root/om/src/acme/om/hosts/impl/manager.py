@@ -283,10 +283,10 @@ class HostsManagerImpl(HostsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         host = await self._storage.read_host(ctx.org_id, claimant_id)
         if host is not None and host.agent_session_id is not None:
-            # Its machine runs on: it would bill with no host to work for.
+            # Its VM runs on: it would bill with no host to work for.
             raise ValidationFailed(
                 f"host {claimant_id} is the platform's, for session {host.agent_session_id} alone: "
-                "it ends with its machine, when the session ends"
+                "it ends with its VM, when the session ends"
             )
         rows = (outbox_row(ctx, HOST_REVOKED_KIND, claimant_id, {}),)
         revoked = await self._storage.revoke_claimant(
@@ -358,7 +358,7 @@ class HostsManagerImpl(HostsManagerInterface):
             version=placed.version,
         )
 
-    # The cloud pool's side: a pool of one per session, and its machine's host.
+    # The cloud pool's side: a pool of one per session, and its VM's host.
 
     async def session_pool(
         self, ctx: TenantContext, agent_session_id: UUID, region: str
@@ -388,7 +388,7 @@ class HostsManagerImpl(HostsManagerInterface):
             raise NotFound(f"the cloud pool of session {agent_session_id} not found")
         return stored
 
-    async def admit_machine(
+    async def admit_vm(
         self,
         rctx: RequestContext,
         org_id: UUID,
@@ -399,7 +399,7 @@ class HostsManagerImpl(HostsManagerInterface):
     ) -> IssuedCredential:
         pool = await self._storage.read_pool(org_id, pool_id)
         if pool is None or pool.agent_session_id is None:
-            raise InvalidCredential("a machine enrolls only into its session's cloud pool")
+            raise InvalidCredential("a VM enrolls only into its session's cloud pool")
         self._at_or_above_floor(enrollment.exec_version)
         now = self._clock()
         host = Host(
@@ -419,7 +419,7 @@ class HostsManagerImpl(HostsManagerInterface):
         )
         return await self._admit(rctx, org_id, host)
 
-    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
+    async def vm_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
         return await self._storage.read_host(org_id, host_id)
 
     async def retire_host(
@@ -430,7 +430,7 @@ class HostsManagerImpl(HostsManagerInterface):
                 provenance(rctx, org_id, by),
                 HOST_REVOKED_KIND,
                 host_id,
-                {"reason": "machine_let_go"},
+                {"reason": "vm_let_go"},
             ),
         )
         now = self._clock()
@@ -662,7 +662,7 @@ class HostsManagerImpl(HostsManagerInterface):
         is its prefix's, and its tenant and its pool are its enrollment's.
         Refuses an unknown credential, an expired one, and a revoked
         claimant's. A rotated credential presented past its grace means two
-        machines hold the claimant's identity: it is refused, and the
+        VMs hold the claimant's identity: it is refused, and the
         claimant and every credential it holds are revoked."""
         spec = self._claimants.of_credential(credential)
         if spec is None:
@@ -676,9 +676,9 @@ class HostsManagerImpl(HostsManagerInterface):
             raise CredentialExpired(f"{claimant.kind} revoked")
         if held.expires_at <= now:
             if held.rotated_at is not None:
-                # A rotated credential past its grace: the machine that
+                # A rotated credential past its grace: the VM that
                 # rotated it holds the next one, so whoever presents this
-                # one is a second machine, or the first is.
+                # one is a second VM, or the first is.
                 await self._reused(rctx, org_id, claimant, now)
                 raise CredentialExpired(
                     f"{claimant.kind} credential rotated already; "
@@ -716,7 +716,7 @@ class HostsManagerImpl(HostsManagerInterface):
         self, rctx: RequestContext, org_id: UUID, claimant: EnrolledClaimant, at: datetime
     ) -> None:
         """A credential that rotated already, presented to rotate again or
-        after its grace: two machines hold the claimant's identity, the
+        after its grace: two VMs hold the claimant's identity, the
         claimant and a copy. Neither can be told from the other, so the
         claimant and every credential it holds end, and its owner reads it
         revoked and enrolls it again. The person who let it in answers for

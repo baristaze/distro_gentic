@@ -17,6 +17,6 @@ class VersionBelowFloor(HostsException):
 class PinnedToHosts(HostsException, NotAuthorized):
     """A call of a session pinned to a host pool, with no host of the pool
     named to run it. It is refused, so the model reads why, and it is never
-    run on one of the platform's own machines instead."""
+    run on one of the platform's own VMs instead."""
 
     code = "pinned_to_hosts"

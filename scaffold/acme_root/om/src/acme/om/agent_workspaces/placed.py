@@ -1,7 +1,7 @@
 """Where a session's workspace is made when the session runs inside its
 tenant's wall: on a host of its pool, which prepares it and holds it from
 then on. The exec relay answers it (`acme.om.exec_relay.impl.workspaces`); a root
-that wires none makes every workspace on the machine it runs on.
+that wires none makes every workspace on the VM it runs on.
 
 A run that validates such a session's delivery makes an instance of its
 own on a host of the same pool, and destroys it when the run ends. The
@@ -40,7 +40,7 @@ class PlacedWorkspacesInterface(ABC):
         pool that holds it; None for a session of the cloud, which this
         process prepares itself. With `pooled`, the session's pool of one in
         the cloud pool, it is the workspace the host of the session's
-        machine holds: the pool keeps the machine's snapshots, never its
+        VM holds: the pool keeps the VM's snapshots, never its
         host, so no host of it is asked to advertise any. `IsolationRefused` while no live host of
         its pool holds it: a host of the pool is asked to prepare it, and
         the loop waits on the resource with no call spent. A workspace kept

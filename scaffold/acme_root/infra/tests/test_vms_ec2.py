@@ -1,9 +1,9 @@
-"""The cloud's machines over a fake EC2 and EBS: a machine is an instance of
+"""The cloud's VMs over a fake EC2 and EBS: a VM is an instance of
 the cloud pool's launch template, in the security group of its egress, with
 no instance role of its own to hand out; its seed is its first-boot data,
 and its metadata endpoint is closed once sealed. A snapshot is an image of
 the stopped instance, held to a digest of the ids that name its bytes, and
-read back block by block. Nothing calls into a machine: `run` and `channel`
+read back block by block. Nothing calls into a VM: `run` and `channel`
 refuse."""
 
 from collections.abc import AsyncIterator
@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.vms import SnapshotNotFound, VmSpec, VmState
-from acme.infra.vms.ec2 import TAG, MachinesEc2Impl
+from acme.infra.vms.ec2 import TAG, VmsEc2Impl
 
 TEMPLATE = "lt-0pool"
 CLOSED, OPEN = "sg-closed", "sg-open"
@@ -182,9 +182,9 @@ async def no_wait(_: float) -> None:
 
 
 @pytest.fixture
-async def cloud() -> AsyncIterator[tuple[MachinesEc2Impl, Ec2]]:
+async def cloud() -> AsyncIterator[tuple[VmsEc2Impl, Ec2]]:
     ec2 = Ec2()
-    machines = MachinesEc2Impl(
+    vms = VmsEc2Impl(
         Session(ec2),  # type: ignore[arg-type]
         region="eu-west-1",
         timeout=timedelta(seconds=10),
@@ -196,23 +196,23 @@ async def cloud() -> AsyncIterator[tuple[MachinesEc2Impl, Ec2]]:
         encrypted=True,
         sleep=no_wait,
     )
-    await machines.start()
-    yield machines, ec2
-    await machines.close()
+    await vms.start()
+    yield vms, ec2
+    await vms.close()
 
 
 def spec(*, egress_open: bool = False) -> VmSpec:
     return VmSpec(image=AMI, egress_open=egress_open)
 
 
-async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with_its_seed(
-    cloud: tuple[MachinesEc2Impl, Ec2],
+async def test_a_vm_starts_from_the_pools_template_in_its_egress_group_with_its_seed(
+    cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:
-    machines, ec2 = cloud
-    assert await machines.probe("acme-vm-p0123") is None
-    assert machines.closes_egress() and machines.limits() == frozenset()
-    await machines.launch_seeded("acme-vm-pclosed", spec(), None, b'{"key":"hmk_x"}')
-    await machines.launch("acme-vm-popen", spec(egress_open=True))
+    vms, ec2 = cloud
+    assert await vms.probe("acme-vm-p0123") is None
+    assert vms.closes_egress() and vms.limits() == frozenset()
+    await vms.launch_seeded("acme-vm-pclosed", spec(), None, b'{"key":"hmk_x"}')
+    await vms.launch("acme-vm-popen", spec(egress_open=True))
     runs = [request for name, request in ec2.calls if name == "run_instances"]
     closed, opened = runs
     assert closed["LaunchTemplate"] == {"LaunchTemplateId": TEMPLATE}
@@ -221,37 +221,37 @@ async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with
     assert closed["UserData"] == b'{"key":"hmk_x"}', "as it stands: botocore encodes it once"
     assert "UserData" not in opened
     assert closed["MetadataOptions"]["HttpTokens"] == "required"
-    assert "IamInstanceProfile" not in closed, "a machine holds no role to hand out"
-    assert await machines.state("acme-vm-pclosed") is VmState.RUNNING
-    assert await machines.state("acme-vm-pnone") is VmState.ABSENT
+    assert "IamInstanceProfile" not in closed, "a VM holds no role to hand out"
+    assert await vms.state("acme-vm-pclosed") is VmState.RUNNING
+    assert await vms.state("acme-vm-pnone") is VmState.ABSENT
 
-    await machines.seal("acme-vm-pclosed")
+    await vms.seal("acme-vm-pclosed")
     (instance,) = [i for i in ec2.instances.values() if i["SecurityGroups"][0]["GroupId"] == CLOSED]
     assert instance["MetadataOptions"]["HttpEndpoint"] == "disabled"
 
 
-async def test_a_new_machine_boots_the_pools_image_named_by_its_ami_id(
-    cloud: tuple[MachinesEc2Impl, Ec2],
+async def test_a_new_vm_boots_the_pools_image_named_by_its_ami_id(
+    cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:
-    machines, ec2 = cloud
+    vms, ec2 = cloud
     pools = "ami-0123456789abcdef0"
     ec2.images[pools] = {"ImageId": pools, "State": "available", "Tags": []}
-    await machines.launch_seeded("acme-vm-pa", spec(), pools, b"seed")
+    await vms.launch_seeded("acme-vm-pa", spec(), pools, b"seed")
     (run,) = [request for name, request in ec2.calls if name == "run_instances"]
     assert run["ImageId"] == pools, "the module's image_id, as the operator gives it"
-    assert await machines.names("acme-vm-p") == ["acme-vm-pa"], "the image is no name of the pool's"
+    assert await vms.names("acme-vm-p") == ["acme-vm-pa"], "the image is no name of the pool's"
     with pytest.raises(SnapshotNotFound):
-        await machines.launch_seeded("acme-vm-pb", spec(), "ami-0fffffffffffffff0", b"seed")
-    assert await machines.state("acme-vm-pb") is VmState.ABSENT
+        await vms.launch_seeded("acme-vm-pb", spec(), "ami-0fffffffffffffff0", b"seed")
+    assert await vms.state("acme-vm-pb") is VmState.ABSENT
 
 
-async def test_a_running_machine_handed_a_new_seed_is_stopped_reseeded_and_started(
-    cloud: tuple[MachinesEc2Impl, Ec2],
+async def test_a_running_vm_handed_a_new_seed_is_stopped_reseeded_and_started(
+    cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:
-    machines, ec2 = cloud
-    await machines.launch_seeded("acme-vm-pa", spec(), None, b"first")
-    await machines.seal("acme-vm-pa")
-    await machines.launch_seeded("acme-vm-pa", spec(), None, b"second")
+    vms, ec2 = cloud
+    await vms.launch_seeded("acme-vm-pa", spec(), None, b"first")
+    await vms.seal("acme-vm-pa")
+    await vms.launch_seeded("acme-vm-pa", spec(), None, b"second")
     (instance,) = ec2.instances.values()
     assert instance["UserData"] == b"second"
     assert instance["MetadataOptions"]["HttpEndpoint"] == "enabled", "open again to read it"
@@ -261,45 +261,45 @@ async def test_a_running_machine_handed_a_new_seed_is_stopped_reseeded_and_start
 
 
 async def test_a_snapshot_is_an_image_of_the_stopped_disk_held_to_its_digest_and_read_back(
-    cloud: tuple[MachinesEc2Impl, Ec2],
+    cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:
-    machines, ec2 = cloud
-    await machines.launch("acme-vm-pa", spec())
+    vms, ec2 = cloud
+    await vms.launch("acme-vm-pa", spec())
     with pytest.raises(SnapshotNotFound):
-        await machines.snapshot("acme-vm-pa", "acme-vm-pxx-0001")  # still running
-    await machines.stop("acme-vm-pa")
-    digest = await machines.snapshot("acme-vm-pa", "acme-vm-pxx-0001")
+        await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001")  # still running
+    await vms.stop("acme-vm-pa")
+    digest = await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001")
     assert digest.startswith("sha256:") and len(digest) == len("sha256:") + 64
-    assert await machines.digest("acme-vm-pxx-0001") == digest
-    assert await machines.snapshot("acme-vm-pa", "acme-vm-pxx-0001") == digest, "kept as it is"
-    assert [part async for part in machines.read("acme-vm-pxx-0001")] == [
+    assert await vms.digest("acme-vm-pxx-0001") == digest
+    assert await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001") == digest, "kept as it is"
+    assert [part async for part in vms.read("acme-vm-pxx-0001")] == [
         b"disk-block-0",
         b"disk-block-1",
     ]
-    await machines.destroy("acme-vm-pa")
-    await machines.launch("acme-vm-pb", spec(), "acme-vm-pxx-0001")
+    await vms.destroy("acme-vm-pa")
+    await vms.launch("acme-vm-pb", spec(), "acme-vm-pxx-0001")
     _, restored = [r for n, r in ec2.calls if n == "run_instances"]
     assert restored["ImageId"] != AMI, "started from the snapshot's image"
-    assert sorted(await machines.names("acme-vm-p")) == ["acme-vm-pb", "acme-vm-pxx-0001"]
+    assert sorted(await vms.names("acme-vm-p")) == ["acme-vm-pb", "acme-vm-pxx-0001"]
 
-    await machines.destroy("acme-vm-pxx-0001")
-    assert await machines.digest("acme-vm-pxx-0001") is None
+    await vms.destroy("acme-vm-pxx-0001")
+    assert await vms.digest("acme-vm-pxx-0001") is None
     assert ("delete_snapshot", {"SnapshotId": "snap-0000"}) in ec2.calls
     with pytest.raises(SnapshotNotFound):
-        await machines.launch("acme-vm-pc", spec(), "acme-vm-pxx-0001")
+        await vms.launch("acme-vm-pc", spec(), "acme-vm-pxx-0001")
 
 
-async def test_nothing_calls_into_a_machine(cloud: tuple[MachinesEc2Impl, Ec2]) -> None:
-    machines, _ = cloud
-    await machines.launch("acme-vm-pa", spec())
-    reply = await machines.run("acme-vm-pa", ("true",), bound=timedelta(seconds=1))
+async def test_nothing_calls_into_a_vm(cloud: tuple[VmsEc2Impl, Ec2]) -> None:
+    vms, _ = cloud
+    await vms.launch("acme-vm-pa", spec())
+    reply = await vms.run("acme-vm-pa", ("true",), bound=timedelta(seconds=1))
     assert not reply.ok and "pulls" in reply.reason()
     with pytest.raises(InfraValidationFailed):
-        machines.channel("acme-vm-pa")
+        vms.channel("acme-vm-pa")
 
 
 async def test_a_probe_names_the_template_and_groups_it_misses() -> None:
-    machines = MachinesEc2Impl(
+    vms = VmsEc2Impl(
         Session(Ec2()),  # type: ignore[arg-type]
         region="eu-west-1",
         timeout=timedelta(seconds=10),
@@ -310,4 +310,4 @@ async def test_a_probe_names_the_template_and_groups_it_misses() -> None:
         open_="",
         encrypted=True,
     )
-    assert "launch template" in str(await machines.probe("acme-vm-p0"))
+    assert "launch template" in str(await vms.probe("acme-vm-p0"))

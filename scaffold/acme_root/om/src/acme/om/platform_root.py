@@ -580,8 +580,8 @@ class PlatformRootOptions:
     the checkout take it: the session runner puts the exec relay behind it
     for a session inside its tenant's wall, whose workspace is then the one
     a host of its pool prepared and holds. None takes infra's transport as
-    it is, and makes every workspace on this machine. `cloud_pool_options`
-    and `cloud_pool_stage` are the cloud pool's machines and the request
+    it is, and makes every workspace on this VM. `cloud_pool_options`
+    and `cloud_pool_stage` are the cloud pool's VMs and the request
     stage its purge runs under.
 
     The platform's retention takes three. `tenant_keys` says whose key
@@ -1022,17 +1022,17 @@ class RootHooksPlatformImpl(RootHooksInterface):
         placed_workspaces = PlacedWorkspacesRelayedImpl(
             lambda: self.managers.exec_relay, lambda: self.managers.hosts
         )
-        # The cloud pool: a machine per session of the cloud whose workspace
+        # The cloud pool: a VM per session of the cloud whose workspace
         # is a VM, its host reached through the exec relay as any host is.
-        # Every process builds it: the gateway trades a machine's key, the
-        # sweep lets its machines go, and the runner starts them, on the
-        # machines infra chose.
+        # Every process builds it: the gateway trades a VM's key, the
+        # sweep lets its VMs go, and the runner starts them, on the
+        # VMs infra chose.
         sessions_rows = storage.get_agent_session_storage()
         orgs_rows = storage.get_tenancy_storage()
 
         async def session_gone(org_id: UUID, agent_session_id: UUID) -> bool:
-            # A deleted tenant's machines go at the next sweep, never at its
-            # purge alone: a machine bills while it runs.
+            # A deleted tenant's VMs go at the next sweep, never at its
+            # purge alone: a VM bills while it runs.
             org = await orgs_rows.read_org(org_id)
             if org is None or org.deleted_at is not None:
                 return True

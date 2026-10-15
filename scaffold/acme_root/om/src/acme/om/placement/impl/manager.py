@@ -87,7 +87,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
                 foreign = claimant.org_id is not None and ctx.org_id != claimant.org_id
                 if not foreign and not another_session(claimant, item):
                     return claimed
-                # Routed into another tenant's wall, or to a machine that
+                # Routed into another tenant's wall, or to a VM that
                 # serves another session: never handed over, and never
                 # claimed again, since no claimant of that lane may run it.
                 OUTCOMES.labels(subsystem="placement", outcome="foreign_claim").inc()

@@ -355,30 +355,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/hosts/machine-enrollments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Enroll Machine
-         * @description The host of a machine the platform's cloud pool started trades the key
-         *     the pool handed the machine, once, as its bearer, for a credential of
-         *     its own. A 409 while the machine is warm and serves no session yet: it
-         *     asks again. A retry after the trade is refused, so it takes no
-         *     Idempotency-Key.
-         */
-        post: operations["enroll_machine"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/hosts/me/claims": {
         parameters: {
             query?: never;
@@ -432,6 +408,30 @@ export interface paths {
         put?: never;
         /** Heartbeat */
         post: operations["heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/vm-enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Vm
+         * @description The host of a VM the platform's cloud pool started trades the key
+         *     the pool handed the VM, once, as its bearer, for a credential of
+         *     its own. A 409 while the VM is warm and serves no session yet: it
+         *     asks again. A retry after the trade is refused, so it takes no
+         *     Idempotency-Key.
+         */
+        post: operations["enroll_vm"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1759,43 +1759,6 @@ export interface operations {
             };
         };
     };
-    enroll_machine: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnrollRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedHostCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     claim: {
         parameters: {
             query?: never;
@@ -1890,6 +1853,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_vm: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedHostCredentialView"];
                 };
             };
             /** @description Validation Error */

@@ -1,6 +1,6 @@
-# A machine of the cloud pool reaches nothing but the gateway, and what its
+# A VM of the cloud pool reaches nothing but the gateway, and what its
 # session's policy opened; nothing reaches in; it holds no role; its disk is
-# encrypted under the pool's key; and the platform's hold on the machines
+# encrypted under the pool's key; and the platform's hold on the VMs
 # starts them from the template alone and passes no role. The mock image
 # boots from /dev/sda1, as many Linux images do.
 # Runs offline: `terraform test` in this folder.
@@ -34,7 +34,7 @@ variables {
   image_id                  = "ami-0host"
 }
 
-run "a_closed_machine_reaches_the_gateway_alone" {
+run "a_closed_vm_reaches_the_gateway_alone" {
   command = plan
 
   assert {
@@ -53,7 +53,7 @@ run "a_closed_machine_reaches_the_gateway_alone" {
   }
 }
 
-run "an_open_machine_adds_open_egress_and_nothing_reaches_in" {
+run "an_open_vm_adds_open_egress_and_nothing_reaches_in" {
   # Applied against the mock provider, so the groups' rules as built read.
   command = apply
 
@@ -68,50 +68,50 @@ run "an_open_machine_adds_open_egress_and_nothing_reaches_in" {
   }
 }
 
-run "a_machine_holds_no_role_and_its_disk_is_sealed_under_the_pools_key" {
+run "a_vm_holds_no_role_and_its_disk_is_sealed_under_the_pools_key" {
   command = plan
 
   assert {
-    condition     = length(aws_launch_template.machine.iam_instance_profile) == 0
-    error_message = "a machine holds no instance role: its metadata endpoint hands out no credential"
+    condition     = length(aws_launch_template.vm.iam_instance_profile) == 0
+    error_message = "a VM holds no instance role: its metadata endpoint hands out no credential"
   }
 
   assert {
-    condition     = aws_launch_template.machine.metadata_options[0].http_tokens == "required" && aws_launch_template.machine.metadata_options[0].http_put_response_hop_limit == 1
+    condition     = aws_launch_template.vm.metadata_options[0].http_tokens == "required" && aws_launch_template.vm.metadata_options[0].http_put_response_hop_limit == 1
     error_message = "the metadata endpoint answers a session token alone, and nothing past the guest"
   }
 
   assert {
-    condition     = aws_launch_template.machine.block_device_mappings[0].ebs[0].encrypted == "true" && aws_launch_template.machine.block_device_mappings[0].ebs[0].kms_key_id == "arn:aws:kms:us-west-2:123456789012:key/disks"
+    condition     = aws_launch_template.vm.block_device_mappings[0].ebs[0].encrypted == "true" && aws_launch_template.vm.block_device_mappings[0].ebs[0].kms_key_id == "arn:aws:kms:us-west-2:123456789012:key/disks"
     error_message = "the disk, and every snapshot of it, is encrypted under the pool's key"
   }
 
   assert {
-    condition     = length(aws_launch_template.machine.block_device_mappings) == 1 && aws_launch_template.machine.block_device_mappings[0].device_name == "/dev/sda1"
+    condition     = length(aws_launch_template.vm.block_device_mappings) == 1 && aws_launch_template.vm.block_device_mappings[0].device_name == "/dev/sda1"
     error_message = "the one disk mapped is the image's own root, so no second disk is added and the root is the one encrypted"
   }
 
   assert {
-    condition     = aws_launch_template.machine.vpc_security_group_ids == null || length(aws_launch_template.machine.vpc_security_group_ids) == 0
+    condition     = aws_launch_template.vm.vpc_security_group_ids == null || length(aws_launch_template.vm.vpc_security_group_ids) == 0
     error_message = "the group is the start's to name, by the session's egress"
   }
 }
 
-run "the_platforms_hold_starts_machines_from_the_template_and_passes_no_role" {
+run "the_platforms_hold_starts_vms_from_the_template_and_passes_no_role" {
   command = plan
 
   assert {
     condition     = length([for statement in data.aws_iam_policy_document.operate.statement : statement if contains(statement.actions, "iam:PassRole")]) == 0
-    error_message = "the runner and the sweep pass no role to a machine"
+    error_message = "the runner and the sweep pass no role to a VM"
   }
 
   assert {
-    condition     = contains(one([for statement in data.aws_iam_policy_document.operate.statement : statement.resources if statement.sid == "StartFromTheTemplate"]), aws_launch_template.machine.arn) || aws_launch_template.machine.arn == null
-    error_message = "a machine starts from the pool's launch template"
+    condition     = contains(one([for statement in data.aws_iam_policy_document.operate.statement : statement.resources if statement.sid == "StartFromTheTemplate"]), aws_launch_template.vm.arn) || aws_launch_template.vm.arn == null
+    error_message = "a VM starts from the pool's launch template"
   }
 
   assert {
-    condition     = [for condition in one([for statement in data.aws_iam_policy_document.operate.statement : statement.condition if statement.sid == "OperateItsOwn"]) : condition.variable] == ["aws:ResourceTag/acme:machine"]
-    error_message = "only what carries a machine's name is stopped, snapshotted, or ended"
+    condition     = [for condition in one([for statement in data.aws_iam_policy_document.operate.statement : statement.condition if statement.sid == "OperateItsOwn"]) : condition.variable] == ["aws:ResourceTag/acme:vm"]
+    error_message = "only what carries a VM's name is stopped, snapshotted, or ended"
   }
 }

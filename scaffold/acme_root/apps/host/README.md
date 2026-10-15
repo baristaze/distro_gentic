@@ -191,14 +191,14 @@ refused. What the item runs it reads from the gateway while it holds it
   its workspaces' snapshots and its tenants' bases are kept in; hosts of a
   pool that share it restore one another's snapshots and start from one
   another's bases.
-- `ACME_HOST_MACHINE_SEED` names the seed of a machine of the platform's
-  cloud pool ([deployment/machines/](../../deployment/machines/README.md)):
-  set, the host runs as that machine's. It reads where the platform
+- `ACME_HOST_VM_SEED` names the seed of a VM of the platform's
+  cloud pool ([deployment/vms/](../../deployment/vms/README.md)):
+  set, the host runs as that VM's. It reads where the platform
   answers and a one-use key from the seed, trades the key once for its
-  credential, asking again while the machine is warm, and makes its one
-  session's workspace under `ACME_HOST_MACHINE_WORKSPACE` (default
+  credential, asking again while the VM is warm, and makes its one
+  session's workspace under `ACME_HOST_VM_WORKSPACE` (default
   `/workspace`), at the VM's level, which its pool keeps whole
-  ([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-machine-per-session-whose-host-pulls-its-work.md)).
+  ([ADR 2052](../../docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)).
 
 ## Test
 

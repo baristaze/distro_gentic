@@ -47,8 +47,8 @@ parent's next run end keeps its own, as it always does.
 rest is refused before any host is asked. With no live host that holds
 the workspace, or a host that takes no snapshot of it, the fork is
 refused with the reason, before the tree's slot is taken or the child is
-made. A workspace on a machine of the cloud pool is still taken through
-the engine's provider, which refuses it: the pool keeps the machine's
+made. A workspace on a VM of the cloud pool is still taken through
+the engine's provider, which refuses it: the pool keeps the VM's
 whole disk, and its host takes no snapshot.
 
 ## Consequences

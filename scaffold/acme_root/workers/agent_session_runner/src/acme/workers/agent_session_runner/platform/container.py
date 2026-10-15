@@ -183,8 +183,8 @@ def build_runner_platform(
         # The exec relay is the managers', built below on this transport, so
         # the edge is bound at call time.
         relayed = TransportRelayImpl(lambda: built[0].exec_relay, stage)
-        # A session on a machine of the cloud pool runs its calls on that
-        # machine's host, through the exec relay too.
+        # A session on a VM of the cloud pool runs its calls on that
+        # VM's host, through the exec relay too.
         return TransportPlacedImpl(
             direct, relayed, placement, lambda spec: built[0].cloud_pool.runs(spec)
         )

@@ -1,10 +1,10 @@
 #!/bin/sh
 # Writes the cloud's first-boot data, the seed the cloud pool handed this
-# machine, to /run/acme-machine/seed.json for the host's user alone. It asks
+# VM, to /run/acme-vm/seed.json for the host's user alone. It asks
 # the metadata endpoint with a session token (IMDSv2), and does nothing when
 # the endpoint does not answer.
 set -eu
-dir=/run/acme-machine
+dir=/run/acme-vm
 endpoint=http://169.254.169.254/latest
 token=$(curl -sf -m 5 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
   "$endpoint/api/token") || exit 0

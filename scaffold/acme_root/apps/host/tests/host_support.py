@@ -174,7 +174,7 @@ def failing(name: str) -> Probe:
 
 
 def probes(*modes: IsolationMode, metadata_answers: bool = False) -> Probes:
-    """The startup's own probes of the machine, each passing, and the
+    """The startup's own probes of the VM, each passing, and the
     platform's real one; the isolation probes pass for `modes` alone, and
     the metadata probe fails only when `metadata_answers`."""
     return Probes(

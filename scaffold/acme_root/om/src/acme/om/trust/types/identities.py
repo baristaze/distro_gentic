@@ -20,7 +20,7 @@ from acme.om.base import OmBase
 class ExecutorKind(StrEnum):
     """What kind of machine holds the credential that ran an act."""
 
-    CLOUD = "cloud"  # a machine of the platform's own pool, in its cloud
+    CLOUD = "cloud"  # a VM of the platform's own pool, in its cloud
     HOST = "host"  # a workspace host inside a customer's wall
 
 

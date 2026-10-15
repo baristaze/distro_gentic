@@ -319,23 +319,21 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     assert claimed[0].org_id == beta.org_id
 
 
-async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work(
+async def test_a_vm_of_the_cloud_pool_is_never_handed_another_sessions_work(
     managers: PlatformManagers,
 ) -> None:
-    """A machine the cloud pool started for one session claims that session's
+    """A VM the cloud pool started for one session claims that session's
     work and no other, even routed to its own lane: the stray item fails for
     good, a dead letter, and is never claimed again, while its own
     session's item is handed over."""
     ajax = await an_owner(managers)
-    machine_id, pool, mine, other = new_id(), new_id(), new_id(), new_id()
-    machine = Claimant(
-        kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, agent_session_id=mine
-    )
+    vm_id, pool, mine, other = new_id(), new_id(), new_id(), new_id()
+    vm = Claimant(kind=HOST, id=vm_id, org_id=ajax.org_id, pool_id=pool, agent_session_id=mine)
     stray = await managers.work.enqueue(
-        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(machine_id, other))
+        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(vm_id, other))
     )
 
-    assert await managers.placement.claim_for(request(), machine, LEASE) is None
+    assert await managers.placement.claim_for(request(), vm, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, EVERY_KIND, "x", LEASE)
     assert failed is None, "never claimed again"
     events = await managers.change_events.get_change_events(ajax, after_seq=0, limit=10)
@@ -343,9 +341,9 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     assert dead.target_id == stray.id and "another session" in str(dead.payload["last_error"])
 
     own = await managers.work.enqueue(
-        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(machine_id, mine))
+        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(vm_id, mine))
     )
-    claimed = await managers.placement.claim_for(request(), machine, LEASE)
+    claimed = await managers.placement.claim_for(request(), vm, LEASE)
     assert claimed is not None and claimed[1].id == own.id
 
 

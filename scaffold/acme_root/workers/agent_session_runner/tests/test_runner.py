@@ -334,7 +334,7 @@ def test_the_runner_passes_its_lanes_share_to_the_claim(tmp_path: Path) -> None:
 def test_the_runners_sweep_lets_go_of_what_its_host_holds(tmp_path: Path) -> None:
     """Beside recovery, the two duties the runner's sweep carries: the
     instances its host holds that no run accounts for, and the cloud pool's
-    machines, which it starts and lets go."""
+    VMs, which it starts and lets go."""
     runner = runner_over(tmp_path)
     duties = build_runner(runner)._across  # pyright: ignore[reportPrivateUsage]
     assert set(duties) == {"workspaces", "cloud_pool"}

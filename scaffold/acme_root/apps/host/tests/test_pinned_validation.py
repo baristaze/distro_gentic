@@ -3,7 +3,7 @@ validates any: the runner's root, as it boots, and hosts of the tenant's
 pools, each the host's own agent against the API in process. The checks
 run on a host of the session's pool, in an instance made for the run alone
 under an id of its own, never in the session's workspace and never on the
-platform's machines. Its results stream is read back through the exec relay and
+platform's VMs. Its results stream is read back through the exec relay and
 hashed, the gate confirms the success it shows, and the instance goes with
 its files and its records once the run ends, whatever ended it. A host of
 another pool of the tenant, or of another tenant, is handed nothing.

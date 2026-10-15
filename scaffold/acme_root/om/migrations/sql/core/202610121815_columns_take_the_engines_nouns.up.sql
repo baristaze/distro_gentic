@@ -1,5 +1,5 @@
 -- Every column of the platform's own that names an agent session, an agent
--- step, a spend hold, a spend budget, or an agent workspace says so, as
+-- step, a spend hold, a spend budget, an agent workspace, or a VM says so, as
 -- the engine's own columns do, and so does every index over one. Every
 -- row stays.
 
@@ -17,6 +17,7 @@ ALTER INDEX core.uq_agent_session_retention_org_id_session_id RENAME TO uq_agent
 ALTER TABLE core.agent_workspace_bindings RENAME COLUMN session_id TO agent_session_id;
 ALTER INDEX core.uq_agent_workspace_bindings_org_id_session_id RENAME TO uq_agent_workspace_bindings_org_id_agent_session_id;
 ALTER TABLE core.agent_workspace_snapshots RENAME COLUMN session_id TO agent_session_id;
+ALTER TABLE core.agent_workspace_snapshots RENAME COLUMN machine TO vm;
 ALTER INDEX core.ix_agent_workspace_snapshots_org_id_session_id RENAME TO ix_agent_workspace_snapshots_org_id_agent_session_id;
 ALTER TABLE core.exec_controls RENAME COLUMN session_id TO agent_session_id;
 ALTER INDEX core.ix_exec_controls_org_id_session_id RENAME TO ix_exec_controls_org_id_agent_session_id;
@@ -199,7 +200,7 @@ ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_created_by_not_null TO agent_workspace_snapshots_created_by_not_null;
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_hash_not_null TO agent_workspace_snapshots_hash_not_null;
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_id_not_null TO agent_workspace_snapshots_id_not_null;
-ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_machine_not_null TO agent_workspace_snapshots_machine_not_null;
+ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_machine_not_null TO agent_workspace_snapshots_vm_not_null;
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_org_id_not_null TO agent_workspace_snapshots_org_id_not_null;
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_reference_not_null TO agent_workspace_snapshots_reference_not_null;
 ALTER TABLE core.agent_workspace_snapshots RENAME CONSTRAINT workspace_snapshots_session_id_not_null TO agent_workspace_snapshots_agent_session_id_not_null;

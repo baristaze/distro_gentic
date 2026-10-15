@@ -67,19 +67,19 @@ def host_issued(view: IssuedHostCredentialView) -> Issued:
     )
 
 
-MACHINE_KEY = "hmk_"
-"""The prefix of the key the cloud pool hands a machine of its own."""
+VM_KEY = "hmk_"
+"""The prefix of the key the cloud pool hands a VM of its own."""
 
 UNBOUND = 409
-"""What a warm machine's key is answered with until a session claims the
-machine: its host asks again."""
+"""What a warm VM's key is answered with until a session claims the
+VM: its host asks again."""
 
 
 class RoutesHostImpl(RoutesInterface):
     """The host's own enrollment, with what it probed and the version of
-    `exec` work it reads, at `/hosts/...`. A machine of the cloud pool trades
+    `exec` work it reads, at `/hosts/...`. A VM of the cloud pool trades
     its key instead of an enrollment token, and asks again, after a wait
-    that grows to `most_wait` seconds, while its machine serves no session
+    that grows to `most_wait` seconds, while its VM serves no session
     yet."""
 
     def __init__(
@@ -93,7 +93,7 @@ class RoutesHostImpl(RoutesInterface):
         self._most_wait = most_wait
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
-        if enrollment_token.startswith(MACHINE_KEY):
+        if enrollment_token.startswith(VM_KEY):
             return await self._vm(client, enrollment_token, name)
         issued = await client.enroll_host(
             enrollment_token, name, self._advertisement(), EXEC_VERSION
@@ -104,11 +104,11 @@ class RoutesHostImpl(RoutesInterface):
         wait = 1.0
         while True:
             try:
-                issued = await client.enroll_machine(key, name, self._advertisement(), EXEC_VERSION)
+                issued = await client.enroll_vm(key, name, self._advertisement(), EXEC_VERSION)
             except ApiError as error:
                 if error.status != UNBOUND:
                     raise
-                log.info("this machine serves no session yet; it asks again")
+                log.info("this VM serves no session yet; it asks again")
                 await self._sleep(wait)
                 wait = min(wait * 2, self._most_wait)
                 continue

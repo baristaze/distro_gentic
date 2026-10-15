@@ -21,7 +21,7 @@ from acme.om.work.types.work_item import WorkItem
 class PlacementRelayedImpl(PlacementInterface):
     """A session pinned to its tenant's hosts runs each call on the host that
     holds its workspace, its executor. Until one does, `inner` answers, and
-    refuses the call: it never runs on one of the platform's machines."""
+    refuses the call: it never runs on one of the platform's VMs."""
 
     def __init__(self, inner: PlacementInterface, storage: ExecRelayStorageInterface) -> None:
         self._inner = inner

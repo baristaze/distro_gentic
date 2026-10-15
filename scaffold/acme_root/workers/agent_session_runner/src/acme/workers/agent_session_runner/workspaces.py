@@ -99,7 +99,7 @@ class HeldWorkspacesSweep:
     """Lets go of each instance this host holds that no run accounts for,
     once a pass finds it so past its session's kind's grace (`graces`), and
     of each such instance a tenant's host holds when `exec_relay` is given, or a
-    machine of the cloud pool holds when `cloud` is. When each one may go,
+    VM of the cloud pool holds when `cloud` is. When each one may go,
     counted from the pass that first found it so, is held in memory: a
     runner that restarts counts the grace again, so it lets go later, never
     sooner."""
@@ -301,7 +301,7 @@ class HeldWorkspacesSweep:
                 self._refuse(ctx, agent_session_id, cursor.head, refused)
                 return False
         if self._cloud is not None and await self._cloud.holds(ctx, agent_session_id):
-            # A machine of the cloud pool is the instance: it goes, its disk
+            # A VM of the cloud pool is the instance: it goes, its disk
             # with it, and the session's next loop starts another.
             await self._cloud.release(ctx, agent_session_id)
         else:

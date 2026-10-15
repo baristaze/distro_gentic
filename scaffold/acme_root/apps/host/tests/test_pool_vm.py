@@ -1,8 +1,8 @@
-"""The host as a machine of the cloud pool runs it: its settings come from
-the seed the pool handed the machine, and from a file that names nothing
-secret; it trades the seed's key once, asking again while its machine is
+"""The host as a VM of the cloud pool runs it: its settings come from
+the seed the pool handed the VM, and from a file that names nothing
+secret; it trades the seed's key once, asking again while its VM is
 warm, and forgets the key once traded; its workspace is a folder of the
-machine at the VM's level, which it neither snapshots nor starts from one,
+VM at the VM's level, which it neither snapshots nor starts from one,
 and its commands run there as its own user."""
 
 import base64
@@ -42,24 +42,24 @@ from acme.infra.agent_workspaces import (
     IsolationSpec,
     SnapshotRefused,
 )
-from acme.infra.agent_workspaces.machine import WorkspaceMachineImpl
+from acme.infra.agent_workspaces.pool_vm import AgentWorkspacePoolVmImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.broker import BrokerNullImpl
-from acme.infra.transports.machine import TransportMachineImpl
+from acme.infra.transports.pool_vm import TransportPoolVmImpl
 from acme.infra.transports.twin import RecordSealTwin
 from acme.infra.vms import VmSpec
-from acme.infra.vms.ec2 import MachinesEc2Impl
+from acme.infra.vms.ec2 import VmsEc2Impl
 from acme.infra.vms.seeded import GUEST_WRITE
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.rules import new_key, seed
-from acme.om.cloud_pool.types.machine import PoolVm
+from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.tenancy.rules import hash_token
 
 from contracts.agent_session_storage import make_agent_session
 
 ROOT = Path(__file__).resolve().parents[3]
-MACHINES = ROOT / "deployment" / "machines"
+VMS = ROOT / "deployment" / "vms"
 KEPT = IsolationSpec(
     mode=IsolationMode.VM,
     egress=EgressPolicy(mode=EgressMode.NONE),
@@ -71,24 +71,24 @@ NOTHING_OF_THE_PLATFORMS = re.compile(
     r"DATABASE|POSTGRES|VALKEY|REDIS|S3_|AWS_|KMS|SECRET|PASSWORD|ANTHROPIC|OPENAI|GEMINI|"
     r"MODEL|PROVIDER|LAUNCHDARKLY|SENTRY|ENROLLMENT_TOKEN|_KEY\b",
 )
-"""What the platform holds that a machine never does: a database's or a
+"""What the platform holds that a VM never does: a database's or a
 cache's login, a cloud credential, a model's key, a vendor's key, or a
 tenant's enrollment token."""
 
 
-def test_a_machine_names_nothing_secret_in_its_settings_and_its_seed_holds_two_things() -> None:
+def test_a_vm_names_nothing_secret_in_its_settings_and_its_seed_holds_two_things() -> None:
     names = [
         line.split("=", 1)[0]
-        for line in (MACHINES / "host.env").read_text().splitlines()
+        for line in (VMS / "host.env").read_text().splitlines()
         if line and not line.startswith("#")
     ]
-    assert names == ["ACME_HOST_MACHINE_SEED", "ACME_HOST_HOME", "ACME_HOST_MACHINE_WORKSPACE"]
+    assert names == ["ACME_HOST_VM_SEED", "ACME_HOST_HOME", "ACME_HOST_VM_WORKSPACE"]
     assert not [name for name in names if NOTHING_OF_THE_PLATFORMS.search(name)]
-    unit = (MACHINES / "acme-host.service").read_text()
+    unit = (VMS / "acme-host.service").read_text()
     assert re.findall(r"^Environment\w*=(.*)$", unit, flags=re.MULTILINE) == [
         "/etc/acme-host/host.env"
     ], "the unit reads that file and sets nothing more"
-    assert "/run/acme-host" in (MACHINES / "host.env").read_text(), "its home is in memory"
+    assert "/run/acme-host" in (VMS / "host.env").read_text(), "its home is in memory"
     assert "seed.json" in GUEST_WRITE and "systemctl restart acme-host" in GUEST_WRITE
 
 
@@ -119,9 +119,9 @@ def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path
 
 
 class Ec2Wire:
-    """The cloud as a new machine's start reaches it: each call's parameters
+    """The cloud as a new VM's start reaches it: each call's parameters
     through botocore's own parameter-build handlers and its serializer, as
-    a client runs them before it sends, and the user data the machine reads
+    a client runs them before it sends, and the user data the VM reads
     as EC2 decodes it from the query."""
 
     def __init__(self) -> None:
@@ -174,11 +174,11 @@ async def _no_wait(_: float) -> None:
     return None
 
 
-async def test_a_new_ec2_machine_reads_its_seed_whole_from_its_first_boot_data(
+async def test_a_new_ec2_vm_reads_its_seed_whole_from_its_first_boot_data(
     tmp_path: Path,
 ) -> None:
     ec2 = Ec2Wire()
-    machines = MachinesEc2Impl(
+    vms = VmsEc2Impl(
         _Cloud(ec2),  # type: ignore[arg-type]
         region="eu-west-1",
         timeout=timedelta(seconds=10),
@@ -191,48 +191,48 @@ async def test_a_new_ec2_machine_reads_its_seed_whole_from_its_first_boot_data(
         sleep=_no_wait,
     )
     key = new_key()
-    await machines.start()
+    await vms.start()
     try:
         spec = VmSpec(image="ami-0123456789abcdef0", egress_open=False)
-        await machines.launch_seeded("acme-vm-p0", spec, None, seed("http://gateway.test", key))
+        await vms.launch_seeded("acme-vm-p0", spec, None, seed("http://gateway.test", key))
     finally:
-        await machines.close()
+        await vms.close()
     assert ec2.user_data is not None
-    # The machine's seed unit writes the endpoint's user data as it stands.
+    # The VM's seed unit writes the endpoint's user data as it stands.
     written = tmp_path / "seed.json"
     written.write_bytes(ec2.user_data)
     assert read_seed(written) == ("http://gateway.test", key)
 
 
-def test_a_machines_settings_take_the_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_vms_settings_take_the_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seed = write_seed(tmp_path / "seed.json")
-    monkeypatch.setenv("ACME_HOST_MACHINE_SEED", str(seed))
-    monkeypatch.setenv("ACME_HOST_MACHINE_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("ACME_HOST_VM_SEED", str(seed))
+    monkeypatch.setenv("ACME_HOST_VM_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.delenv("ACME_ENROLLMENT_TOKEN", raising=False)
     settings = settings_from_env()
-    assert settings.machine and settings.api_url == "http://gateway.test"
+    assert settings.vm and settings.api_url == "http://gateway.test"
     assert settings.enrollment_token == "hmk_the-key"
-    assert settings.machine_workspace == tmp_path / "workspace"
+    assert settings.vm_workspace == tmp_path / "workspace"
     forget_key(seed)
     assert settings_from_env().enrollment_token is None
-    monkeypatch.delenv("ACME_HOST_MACHINE_SEED")
-    assert not settings_from_env().machine
+    monkeypatch.delenv("ACME_HOST_VM_SEED")
+    assert not settings_from_env().vm
 
 
 class Client:
-    """The gateway's answers to a machine's key: unbound twice, then a
+    """The gateway's answers to a VM's key: unbound twice, then a
     credential."""
 
     def __init__(self, unbound: int) -> None:
         self.unbound = unbound
         self.asked: list[str] = []
 
-    async def enroll_machine(
+    async def enroll_vm(
         self, key: str, name: str, advertisement: AdvertisementBody, exec_version: int
     ) -> IssuedHostCredentialView:
         self.asked.append(key)
         if len(self.asked) <= self.unbound:
-            raise ApiError(409, "machine_unbound", "serves no session yet", None)
+            raise ApiError(409, "vm_unbound", "serves no session yet", None)
         return IssuedHostCredentialView.model_validate(
             {
                 "token": "hst_the-credential",
@@ -244,7 +244,7 @@ class Client:
         )
 
 
-async def test_a_machines_host_asks_again_while_its_machine_is_warm(tmp_path: Path) -> None:
+async def test_a_vms_host_asks_again_while_its_vm_is_warm(tmp_path: Path) -> None:
     waits: list[float] = []
 
     async def sleep(seconds: float) -> None:
@@ -252,26 +252,26 @@ async def test_a_machines_host_asks_again_while_its_machine_is_warm(tmp_path: Pa
 
     routes = RoutesHostImpl(lambda: AdvertisementBody(os="Linux"), sleep=sleep, most_wait=1.5)
     client = Client(unbound=3)
-    issued = await routes.enroll(client, "hmk_the-key", "machine")  # type: ignore[arg-type]
+    issued = await routes.enroll(client, "hmk_the-key", "vm")  # type: ignore[arg-type]
     assert issued.claimant_id == UUID(int=4)
     assert client.asked == ["hmk_the-key"] * 4
     assert waits == [1.0, 1.5, 1.5], "a wait that grows to its most"
 
 
-async def test_a_machines_host_gives_up_on_any_other_refusal() -> None:
+async def test_a_vms_host_gives_up_on_any_other_refusal() -> None:
     class Refusing(Client):
-        async def enroll_machine(self, *args: object, **kwargs: object) -> IssuedHostCredentialView:
+        async def enroll_vm(self, *args: object, **kwargs: object) -> IssuedHostCredentialView:
             raise ApiError(401, "invalid_credential", "spent", None)
 
     routes = RoutesHostImpl(lambda: AdvertisementBody(os="Linux"))
     with pytest.raises(ApiError):
-        await routes.enroll(Refusing(0), "hmk_spent", "machine")  # type: ignore[arg-type]
+        await routes.enroll(Refusing(0), "hmk_spent", "vm")  # type: ignore[arg-type]
 
 
-async def test_a_machines_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
+async def test_a_vms_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
     tmp_path: Path,
 ) -> None:
-    provider = WorkspaceMachineImpl(tmp_path / "workspace")
+    provider = AgentWorkspacePoolVmImpl(tmp_path / "workspace")
     workspace = await provider.prepare(ORG, SESSION, KEPT)
     assert made_under(workspace.location, tmp_path / "workspace")
     opened = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
@@ -302,10 +302,10 @@ async def test_a_machines_workspace_is_a_folder_at_the_vms_level_kept_by_its_poo
     assert await provider.held_instances() == []
 
 
-async def test_a_machines_command_runs_in_its_workspace_as_the_host(tmp_path: Path) -> None:
-    provider = WorkspaceMachineImpl(tmp_path / "workspace")
+async def test_a_vms_command_runs_in_its_workspace_as_the_host(tmp_path: Path) -> None:
+    provider = AgentWorkspacePoolVmImpl(tmp_path / "workspace")
     workspace = await provider.prepare(ORG, SESSION, KEPT)
-    transport = TransportMachineImpl(
+    transport = TransportPoolVmImpl(
         tmp_path / "records", SecretsLocalImpl(tmp_path / "secrets"), BrokerNullImpl()
     )
     command = CommandSpec(
@@ -320,10 +320,10 @@ async def test_a_machines_command_runs_in_its_workspace_as_the_host(tmp_path: Pa
     assert made_under(str(resolved(workspace.location) / "made-here"), tmp_path / "workspace")
 
 
-async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_workspace(
+async def test_a_vms_host_enrolls_with_its_key_and_holds_its_sessions_workspace(
     api: Stack, tmp_path: Path
 ) -> None:
-    """Against the live app in process: the host of a machine the pool
+    """Against the live app in process: the host of a VM the pool
     started for a session trades its key, once, for a credential of the
     session's pool of one, and prepares the session's workspace, kept by
     snapshots, which its pool keeps whole."""
@@ -335,7 +335,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     pool = await managers.hosts.session_pool(service, session.id, "cloud")
     key = new_key()
     now = utcnow()
-    await api.container.storage.get_cloud_pool_storage().create_machine(
+    await api.container.storage.get_cloud_pool_storage().create_vm(
         PoolVm(
             id=new_id(),
             created_at=now,
@@ -351,8 +351,8 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     )
     settings = replace(
         api.settings(tmp_path / "home", key),
-        machine_seed=tmp_path / "seed.json",
-        machine_workspace=tmp_path / "workspace",
+        vm_seed=tmp_path / "seed.json",
+        vm_workspace=tmp_path / "workspace",
     )
     agents: list[HostAgent] = []
     executor = ExecutorRelayImpl(
@@ -385,5 +385,5 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     assert made_under(binding.location, tmp_path / "workspace")
 
     with pytest.raises(ApiError) as spent:
-        await api.client(None).enroll_machine(key, "again", AdvertisementBody(os="Linux"), 1)
+        await api.client(None).enroll_vm(key, "again", AdvertisementBody(os="Linux"), 1)
     assert spent.value.status == 401

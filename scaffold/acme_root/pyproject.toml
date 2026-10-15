@@ -190,7 +190,7 @@ reason = "a test machine with systemd first, run as root to install the host; ne
 [[tool.arch-check.exception]]
 rule = "OM-12"
 path = "om/src/acme/om/hosts/impl/manager.py"
-adr = "docs/adr/2052-the-cloud-pool-runs-a-machine-per-session-whose-host-pulls-its-work.md"
+adr = "docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md"
 reason = "a session's pool of one is named by its session, so concurrent prepares converge on one pool"
 
 # The root's hooks wire: the engine's root hands each hook what it built so

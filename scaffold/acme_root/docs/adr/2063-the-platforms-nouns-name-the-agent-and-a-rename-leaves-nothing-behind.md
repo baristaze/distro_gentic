@@ -49,9 +49,9 @@ and texts carry the renamed nouns, so its rendered bytes change and its
 pinned digest is re-pinned. Its version stays: the old names cannot be
 kept, so no version could hold them.
 
-**What another layer owns stays.** The engine's own identifiers move
-with the next base move: its budget scope value `project`, its
-workspace providers, and its machines. A run's results stream keeps its
+**What another layer owns stays as that layer names it.** The engine's
+budget scope value is `agent_project`, its workspace providers are its
+agent workspaces', and its machines its VMs. A run's results stream keeps its
 `environment` key, which a product's runner writes under schema 1. The
 lens group `workspaces` and its two skills keep their names.
 
@@ -70,6 +70,5 @@ lens group `workspaces` and its two skills keep their names.
 - The change stream keeps each past event's payload as it was written.
   Only its kind moves.
 - A lens group's id may carry a hyphen, as `agent-fleet` does.
-- At the next base move, the platform's `AgentWorkspaceBase` and the
-  engine's class of the same name meet in one module. A module-qualified
-  import keeps them apart.
+- An agent project's workspace base is `AgentProjectWorkspaceBase`,
+  apart from the engine's `AgentWorkspaceBase`.

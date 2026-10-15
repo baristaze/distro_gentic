@@ -690,7 +690,7 @@ async def stand_in_host(root: Path, slug: str, agent_session_id: UUID, api: str)
             enrolled = await client.post(
                 "/v1/hosts/enrollments",
                 headers=host_headers(issued.token),
-                json={"name": "this-machine", "advertisement": ADVERTISED, "exec_version": 1},
+                json={"name": "this-vm", "advertisement": ADVERTISED, "exec_version": 1},
             )
             enrolled.raise_for_status()
             host = enrolled.json()

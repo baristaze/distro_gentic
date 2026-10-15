@@ -1,17 +1,17 @@
-"""Vms in the platform's cloud account: each machine an EC2 instance
+"""Vms in the platform's cloud account: each VM an EC2 instance
 started from the cloud pool's launch template, each snapshot an image of a
 stopped instance, its disk kept by the cloud's own snapshots under the
-template's key. A machine and a snapshot are found by the tag that carries
-the name their caller chose; the image the pool's new machines boot is
+template's key. A VM and a snapshot are found by the tag that carries
+the name their caller chose; the image the pool's new VMs boot is
 named by its AMI id, as the module's `image_id` is.
 
-Nothing here reaches into a machine. The cloud closes its egress at its
+Nothing here reaches into a VM. The cloud closes its egress at its
 network, by the security group a start names: the closed group reaches the
 gateway alone, and the open group adds the open egress a session's policy
-chose. A machine holds no instance role, so its metadata endpoint has no
+chose. A VM holds no instance role, so its metadata endpoint has no
 credential to hand out; its seed, the first-boot data a start hands it, is
 read by the image at each boot, and the endpoint is closed once its host
-has read it (`seal`). The platform never calls into a machine: what runs
+has read it (`seal`). The platform never calls into a VM: what runs
 there, its host pulls, so `run` and `channel` refuse."""
 
 import asyncio
@@ -37,24 +37,24 @@ from acme.infra.vms import (
     VmState,
 )
 
-TAG = "acme:machine"
-"""The tag that carries a machine's name, or a snapshot's."""
+TAG = "acme:vm"
+"""The tag that carries a VM's name, or a snapshot's."""
 
 LIVE = ("pending", "running", "stopping", "stopped")
 """An instance in any other state is gone, or going."""
 
-REFUSED = "a machine of the cloud takes no command from outside: what runs there, its host pulls"
+REFUSED = "a VM of the cloud takes no command from outside: what runs there, its host pulls"
 
 AMI_ID = re.compile(r"ami-[0-9a-f]{8,17}")
 """An image named by its id, as the pool's own image is, rather than by its
 name's tag, as a snapshot is."""
 
 
-class MachinesEc2Impl(VmsInterface, SeedsInterface):
+class VmsEc2Impl(VmsInterface, SeedsInterface):
     """Vms through the EC2 API, each call bounded by the client's
     timeout, and each wait for a state by `boot`. `template` is the launch
     template the cloud pool's module makes: the instance's size, its
-    encrypted disk under the pool's key, and no instance role. A machine
+    encrypted disk under the pool's key, and no instance role. A VM
     starts in one of `subnets`, picked at each start, and in `closed` or
     `open`, the security group of its egress. `encrypted` declares the
     template's disks encrypted, which the module holds."""
@@ -94,7 +94,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
     async def probe(self, longest: str) -> str | None:
         if not (self._template and self._subnets and self._closed and self._open):
             return (
-                "the cloud's machines name no launch template, subnets, and security groups "
+                "the cloud's VMs name no launch template, subnets, and security groups "
                 "of the cloud pool's module"
             )
         try:
@@ -110,7 +110,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
         return True
 
     def limits(self) -> frozenset[str]:
-        # A machine is the launch template's size; it holds no other limit.
+        # A VM is the launch template's size; it holds no other limit.
         return frozenset()
 
     def encrypted_at_rest(self) -> bool:
@@ -233,7 +233,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
                     await self._ec2.client().delete_snapshot(SnapshotId=disk)
 
     def describe(self) -> str:
-        return f"machines=ec2({self._template})"
+        return f"vms=ec2({self._template})"
 
     async def start(self) -> None:
         await self._ec2.open()
@@ -243,7 +243,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
         await self._ebs.close()
         await self._ec2.close()
 
-    # Seeds: the machine's first-boot data, and the endpoint closed once read.
+    # Seeds: the VM's first-boot data, and the endpoint closed once read.
 
     async def launch_seeded(
         self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
@@ -264,7 +264,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
     async def _launch(
         self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes | None
     ) -> None:
-        """The machine under `name` running in the group of its egress, with
+        """The VM under `name` running in the group of its egress, with
         `seed` as its first-boot data when given. One that stands is started
         again, stopped first when it runs and must be handed a seed or move
         to another group; one made here that fails part way is
@@ -325,7 +325,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
         }
         if seed is not None:
             # As it stands: botocore encodes a start's user data to base64
-            # itself, so the machine reads the seed back whole.
+            # itself, so the VM reads the seed back whole.
             asked["UserData"] = seed
         try:
             with translated("ec2", "launch"):
@@ -336,7 +336,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
             raise
 
     async def _until(self, name: str, state: str) -> None:
-        """Waits for the machine to reach `state`, within the boot bound."""
+        """Waits for the VM to reach `state`, within the boot bound."""
         waited = 0.0
         while True:
             instance = await self._instance(name)
@@ -363,7 +363,7 @@ class MachinesEc2Impl(VmsInterface, SeedsInterface):
             waited += self._poll.total_seconds()
 
     async def _source(self, snapshot: str) -> dict[str, Any] | None:
-        """The image a new machine boots: the pool's own image by its AMI id,
+        """The image a new VM boots: the pool's own image by its AMI id,
         or a session's snapshot by its name's tag. None when none stands."""
         if not AMI_ID.fullmatch(snapshot):
             return await self._image(snapshot)

@@ -20,23 +20,23 @@ class PlatformInfraSettings(BaseSettings):
     # image is absent: the image is large, and a pull cut short leaves
     # nothing, so it has a limit of its own.
     docker_pull_timeout_seconds: float = 900.0
-    # `ec2` machines run as instances in the platform's cloud account, from
+    # `ec2` VMs run as instances in the platform's cloud account, from
     # the cloud pool's launch template (`vm_launch_template`), in one of
     # `vm_subnets` (comma separated), and in the security group of
     # their egress: `vm_closed_group` reaches the gateway alone, and
     # `vm_open_group` adds open egress. Their image is an AMI, and their
     # snapshots are the cloud's own, under the template's key. A process on
-    # `ec2` never calls into a machine, so no VM workspace runs on it.
+    # `ec2` never calls into a VM, so no VM workspace runs on it.
     vm_launch_template: str = ""
     vm_subnets: str = ""
     vm_closed_group: str = ""
     vm_open_group: str = ""
-    # The cloud pool: a machine per session of the cloud whose workspace is a
+    # The cloud pool: a VM per session of the cloud whose workspace is a
     # VM, each running the host program, which reaches the platform at
-    # `cloud_pool_api_url`. Every machine starts from `cloud_pool_image`, a
-    # snapshot of the machines that holds the host program: a stopped
-    # machine's name on Lima, the AMI id on ec2; empty runs no pool.
-    # `cloud_pool_warm` machines stand started ahead of demand.
+    # `cloud_pool_api_url`. Every VM starts from `cloud_pool_image`, a
+    # snapshot of the VMs that holds the host program: a stopped
+    # VM's name on Lima, the AMI id on ec2; empty runs no pool.
+    # `cloud_pool_warm` VMs stand started ahead of demand.
     cloud_pool_image: str = ""
     cloud_pool_api_url: str = ""
     cloud_pool_warm: int = Field(default=0, ge=0)

@@ -54,8 +54,8 @@ class InfraInterface(ABC):
 
     @abstractmethod
     def get_seeds(self) -> SeedsInterface:
-        """How a machine of the cloud pool is handed its seed as it starts,
-        on these machines."""
+        """How a VM of the cloud pool is handed its seed as it starts,
+        on these VMs."""
         ...
 
     @abstractmethod

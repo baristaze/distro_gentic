@@ -161,7 +161,7 @@ async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) 
     (audit,) = await audits(platform)
     (request,) = of_type(await platform.history(agent_session_id), AgentStepType.TOOL_REQUEST)
     assert audit.request_id == request.id and audit.tool == "lookup"
-    # The machine that ran it, whom it ran under, who paid, and who acted:
+    # The VM that ran it, whom it ran under, who paid, and who acted:
     # each from its own source, and no two the same.
     assert audit.executor == platform.placement.host
     assert audit.principal == person(steerer.user_id), "steady: its steerer's authority"
@@ -196,15 +196,13 @@ async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
         "actor": agent,
     }
     CallAudit.model_validate(whole)
-    machine_as_person = Executor(
-        kind=ExecutorKind.HOST, credential_id=payer.id, label="build-host-1"
-    )
+    vm_as_person = Executor(kind=ExecutorKind.HOST, credential_id=payer.id, label="build-host-1")
     principal_as_actor = ActorRef(actor=Actor.PERSON)
     elsewhere = ActorRef(
         actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, agent_session_id=new_id())
     )
     for conflated in (
-        {"executor": machine_as_person},
+        {"executor": vm_as_person},
         {"actor": principal_as_actor},
         {"actor": elsewhere},
     ):

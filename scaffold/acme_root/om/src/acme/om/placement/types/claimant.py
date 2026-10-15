@@ -1,4 +1,4 @@
-"""Who claims work through the gateway: a machine outside the platform's
+"""Who claims work through the gateway: a VM outside the platform's
 processes, such as a workspace host or a product's own. The gateway
 resolves one from the caller's own credential; nothing in the call names a
 lane or a kind."""
@@ -17,7 +17,7 @@ class Claimant(OmBase):
     the claimant kinds' registry knows (`placement.kinds`), its id, the
     tenant whose wall it sits in, and the pool it serves. `org_id` None is
     a claimant of the platform's own pool, which serves every tenant.
-    `agent_session_id` names the one session a machine of the cloud pool serves:
+    `agent_session_id` names the one session a VM of the cloud pool serves:
     it is handed that session's work and no other."""
 
     kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")

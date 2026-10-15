@@ -6,7 +6,7 @@ from uuid import UUID
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
-from acme.om.cloud_pool.types.machine import PoolVm
+from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.exceptions import UniqueKeyTaken
 
 
@@ -19,20 +19,20 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         self._vms: dict[UUID, PoolVm] = {}
         self._erasures: dict[tuple[UUID, UUID], PoolErasure] = {}
 
-    async def create_machine(self, machine: PoolVm) -> None:
+    async def create_vm(self, vm: PoolVm) -> None:
         async with self._lock:
-            self._add(machine)
+            self._add(vm)
 
     async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
         async with self._lock:
-            warm = sum(1 for machine in self._vms.values() if machine.warm)
+            warm = sum(1 for vm in self._vms.values() if vm.warm)
             written = list(made[: warm_to_start(wanted, warm)])
-            for machine in written:
-                self._add(machine)
+            for vm in written:
+                self._add(vm)
             return len(written)
 
-    async def read_machine(self, machine_id: UUID) -> PoolVm | None:
-        return self._vms.get(machine_id)
+    async def read_vm(self, vm_id: UUID) -> PoolVm | None:
+        return self._vms.get(vm_id)
 
     async def read_by_key(self, key_digest: str) -> PoolVm | None:
         return next(
@@ -56,7 +56,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolVm]:
         return [m for m in self._oldest_first() if m.tenant_id == tenant_id][:limit]
 
-    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolVm]:
+    async def read_vms(self, limit: int, after: UUID | None = None) -> list[PoolVm]:
         by_id = sorted(self._vms.values(), key=lambda m: m.id)
         return [m for m in by_id if after is None or m.id > after][:limit]
 
@@ -70,13 +70,9 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         at: datetime,
     ) -> PoolVm | None:
         async with self._lock:
-            for machine in self._oldest_first():
-                if (
-                    machine.warm
-                    and machine.started_at is not None
-                    and machine.egress_open == egress_open
-                ):
-                    claimed = machine.model_copy(
+            for vm in self._oldest_first():
+                if vm.warm and vm.started_at is not None and vm.egress_open == egress_open:
+                    claimed = vm.model_copy(
                         update={
                             "tenant_id": tenant_id,
                             "agent_session_id": agent_session_id,
@@ -85,32 +81,32 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                             "bound_at": at,
                         }
                     )
-                    self._vms[machine.id] = claimed
+                    self._vms[vm.id] = claimed
                     return claimed
             return None
 
-    async def mark_started(self, machine_id: UUID, at: datetime) -> None:
-        await self._update(machine_id, started_at=at)
+    async def mark_started(self, vm_id: UUID, at: datetime) -> None:
+        await self._update(vm_id, started_at=at)
 
-    async def spend_key(self, machine_id: UUID, key_digest: str) -> bool:
+    async def spend_key(self, vm_id: UUID, key_digest: str) -> bool:
         async with self._lock:
-            machine = self._vms.get(machine_id)
-            if machine is None or machine.key_digest != key_digest:
+            vm = self._vms.get(vm_id)
+            if vm is None or vm.key_digest != key_digest:
                 return False
-            self._vms[machine_id] = machine.model_copy(update={"key_digest": None})
+            self._vms[vm_id] = vm.model_copy(update={"key_digest": None})
             return True
 
-    async def mark_enrolled(self, machine_id: UUID, host_id: UUID) -> None:
-        await self._update(machine_id, host_id=host_id)
+    async def mark_enrolled(self, vm_id: UUID, host_id: UUID) -> None:
+        await self._update(vm_id, host_id=host_id)
 
-    async def mark_sealed(self, machine_id: UUID, at: datetime) -> None:
-        await self._update(machine_id, sealed_at=at)
+    async def mark_sealed(self, vm_id: UUID, at: datetime) -> None:
+        await self._update(vm_id, sealed_at=at)
 
     async def rekey(
-        self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
+        self, vm_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
     ) -> PoolVm | None:
         return await self._update(
-            machine_id,
+            vm_id,
             key_digest=key_digest,
             restored_from=restored_from,
             host_id=None,
@@ -118,9 +114,9 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
             sealed_at=None,
         )
 
-    async def delete_machine(self, machine_id: UUID) -> None:
+    async def delete_vm(self, vm_id: UUID) -> None:
         async with self._lock:
-            self._vms.pop(machine_id, None)
+            self._vms.pop(vm_id, None)
 
     async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
         async with self._lock:
@@ -136,21 +132,21 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                 if erasure.id == erasure_id:
                     del self._erasures[at]
 
-    def _add(self, machine: PoolVm) -> None:
+    def _add(self, vm: PoolVm) -> None:
         for held in self._vms.values():
-            if held.name == machine.name or (
-                machine.key_digest is not None and held.key_digest == machine.key_digest
+            if held.name == vm.name or (
+                vm.key_digest is not None and held.key_digest == vm.key_digest
             ):
-                raise UniqueKeyTaken(f"pool_vms {machine.id}: a unique key is taken")
-        self._vms[machine.id] = machine
+                raise UniqueKeyTaken(f"pool_vms {vm.id}: a unique key is taken")
+        self._vms[vm.id] = vm
 
-    async def _update(self, machine_id: UUID, **update: object) -> PoolVm | None:
+    async def _update(self, vm_id: UUID, **update: object) -> PoolVm | None:
         async with self._lock:
-            machine = self._vms.get(machine_id)
-            if machine is None:
+            vm = self._vms.get(vm_id)
+            if vm is None:
                 return None
-            changed = machine.model_copy(update=update)
-            self._vms[machine_id] = changed
+            changed = vm.model_copy(update=update)
+            self._vms[vm_id] = changed
             return changed
 
     def _oldest_first(self) -> list[PoolVm]:

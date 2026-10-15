@@ -75,7 +75,7 @@ class EnrolledClaimant(Identifiable, Trackable):
     last_seen_at: datetime
     revoked_at: datetime | None = None
     revoked_by: UUID | None = None
-    agent_session_id: UUID | None = None  # the one session a cloud pool's machine serves
+    agent_session_id: UUID | None = None  # the one session a cloud pool's VM serves
 
 
 class Host(Identifiable, Trackable):
@@ -92,13 +92,13 @@ class Host(Identifiable, Trackable):
     last_seen_at: datetime
     revoked_at: datetime | None = None
     revoked_by: UUID | None = None
-    agent_session_id: UUID | None = None  # the one session a cloud pool's machine serves
+    agent_session_id: UUID | None = None  # the one session a cloud pool's VM serves
 
 
 class ClaimantIdentity(OmBase):
     """Who a claimant is, read off its credential at the gateway and nowhere
     else: its kind, its id, the tenant whose wall it sits in, its pool, the
-    one session it serves when it is a machine of the cloud pool, and the
+    one session it serves when it is a VM of the cloud pool, and the
     credential it called with. Nothing in a claimant's call adds to it."""
 
     kind: str

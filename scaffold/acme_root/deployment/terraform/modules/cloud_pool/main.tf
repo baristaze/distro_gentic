@@ -1,8 +1,8 @@
-# The cloud pool's machines (ADR 2052): each one a VM a session of the
+# The cloud pool's VMs (ADR 2052): each one a VM a session of the
 # platform's cloud runs on, with Docker inside and the host program, which
 # pulls its session's work from the gateway. The platform never calls in.
 #
-# A machine holds nothing to steal. It starts with no instance role, so its
+# A VM holds nothing to steal. It starts with no instance role, so its
 # metadata endpoint hands out no credential, and the endpoint is closed once
 # its host has read the seed the pool handed it. Its egress is closed at the
 # network: the closed group reaches the gateway alone, and the open group
@@ -30,7 +30,7 @@ data "aws_ami" "image" {
 }
 
 resource "aws_kms_key" "disks" {
-  description         = "The cloud pool's machine disks and the snapshots kept of them"
+  description         = "The cloud pool's VM disks and the snapshots kept of them"
   enable_key_rotation = true
   tags                = local.tags
 }
@@ -42,7 +42,7 @@ resource "aws_kms_alias" "disks" {
 
 resource "aws_security_group" "closed" {
   name        = "${local.name}-closed"
-  description = "A machine that reaches nothing but the gateway."
+  description = "A VM that reaches nothing but the gateway."
   vpc_id      = var.vpc_id
   tags        = local.tags
 }
@@ -58,7 +58,7 @@ resource "aws_vpc_security_group_egress_rule" "closed_to_gateway" {
 
 resource "aws_security_group" "open" {
   name        = "${local.name}-open"
-  description = "A machine whose session's policy chose open egress."
+  description = "A VM whose session's policy chose open egress."
   vpc_id      = var.vpc_id
   tags        = local.tags
 }
@@ -77,13 +77,13 @@ resource "aws_vpc_security_group_egress_rule" "open_ipv6" {
   description       = "Open egress, the session's recorded choice."
 }
 
-resource "aws_launch_template" "machine" {
+resource "aws_launch_template" "vm" {
   name          = local.name
-  description   = "A machine of the cloud pool: no role, metadata by token alone, an encrypted disk"
+  description   = "A VM of the cloud pool: no role, metadata by token alone, an encrypted disk"
   image_id      = var.image_id
   instance_type = var.instance_type
 
-  # No iam_instance_profile: a machine holds no credential of the cloud's.
+  # No iam_instance_profile: a VM holds no credential of the cloud's.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -115,10 +115,10 @@ resource "aws_launch_template" "machine" {
   tags = local.tags
 }
 
-# What the platform's runner and its sweep may do to the pool's machines,
+# What the platform's runner and its sweep may do to the pool's VMs,
 # and nothing more: start one from the pool's template and only with its
 # name's tag, then stop, start, seal, snapshot, and end only what carries
-# one. It passes no role, so no machine ever holds one.
+# one. It passes no role, so no VM ever holds one.
 data "aws_iam_policy_document" "operate" {
   statement {
     sid       = "Read"
@@ -130,7 +130,7 @@ data "aws_iam_policy_document" "operate" {
     sid     = "StartFromTheTemplate"
     actions = ["ec2:RunInstances"]
     resources = [
-      aws_launch_template.machine.arn,
+      aws_launch_template.vm.arn,
       "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}::image/*",
       "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*",
     ]
@@ -165,7 +165,7 @@ data "aws_iam_policy_document" "operate" {
     resources = ["*"]
     condition {
       test     = "Null"
-      variable = "aws:ResourceTag/acme:machine"
+      variable = "aws:ResourceTag/acme:vm"
       values   = ["false"]
     }
   }
@@ -179,7 +179,7 @@ data "aws_iam_policy_document" "operate" {
 
 resource "aws_iam_policy" "operate" {
   name        = "${local.name}-operate"
-  description = "The runner's and the sweep's hold on the cloud pool's machines"
+  description = "The runner's and the sweep's hold on the cloud pool's VMs"
   policy      = data.aws_iam_policy_document.operate.json
   tags        = local.tags
 }

@@ -1,20 +1,20 @@
 """The cloud pool end to end, on Lima: a session of the cloud whose kind
 runs in a VM, over Postgres, as the session runner runs it, and the host
-program inside the session's own machine, which reaches the API over the
-network, as a machine of the cloud reaches the gateway.
+program inside the session's own VM, which reaches the API over the
+network, as a VM of the cloud reaches the gateway.
 
-The session's first loop starts a machine from the pool's image; its host
+The session's first loop starts a VM from the pool's image; its host
 trades the key it was handed for a credential of the session's pool of one,
 prepares the workspace, and runs the session's command there: a Docker
-image built and a container run of it. The loop's end keeps the machine
-whole: the host's credential ends, the machine stops, and its disk is kept
-as the session's snapshot; then the machine goes. The next loop starts a
-machine from that snapshot, whose new host finds the same file and the same
+image built and a container run of it. The loop's end keeps the VM
+whole: the host's credential ends, the VM stops, and its disk is kept
+as the session's snapshot; then the VM goes. The next loop starts a
+VM from that snapshot, whose new host finds the same file and the same
 image. The host's environment holds nothing of the platform's.
 
 Needs a migrated database (`make migrate`), Lima and a hypervisor, and the
 pool's image, which it builds when it is missing
-(`deployment/machines/lima_image.py`). Every machine it starts is named
+(`deployment/vms/lima_image.py`). Every VM it starts is named
 under `ACME_VM_PREFIX` and destroyed at the end; the image stays for
 the next run."""
 
@@ -85,11 +85,11 @@ FOUND = (
     "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt && "
     "echo @ENVIRONMENT@ && "
     "tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value acme-host)/environ "
-    "| cut -d= -f1 && echo @SEED@ && cat /run/acme-machine/seed.json && echo @END@"
+    "| cut -d= -f1 && echo @SEED@ && cat /run/acme-VM/seed.json && echo @END@"
 )
 """What the next loop's command reads: the file and the image the first one
 made, the names in the host program's environment, as its process holds
-them, and the machine's seed, which its commands can read too."""
+them, and the VM's seed, which its commands can read too."""
 
 NOTHING_OF_THE_PLATFORMS = re.compile(
     r"DATABASE|POSTGRES|VALKEY|S3_|AWS_|KMS|SECRET|PASSWORD|ANTHROPIC|OPENAI|GEMINI|"
@@ -113,7 +113,7 @@ def image() -> str:
     """The pool's image, built from this checkout when it is missing."""
     root = Path(__file__).resolve().parents[3]
     built = subprocess.run(
-        ["uv", "run", "python", "deployment/machines/lima_image.py", IMAGE],
+        ["uv", "run", "python", "deployment/vms/lima_image.py", IMAGE],
         cwd=root,
         capture_output=True,
         text=True,
@@ -152,18 +152,18 @@ async def api(tmp_path: Path) -> AsyncIterator[Stack]:
 
 
 @pytest.fixture
-def machines() -> VmsLimaImpl:
+def vms() -> VmsLimaImpl:
     return VmsLimaImpl(TIMEOUT, BOOT, encrypted=True)
 
 
 @pytest.fixture
-async def runner(api: Stack, image: str, machines: VmsLimaImpl) -> AsyncIterator[RunnerContainer]:
+async def runner(api: Stack, image: str, vms: VmsLimaImpl) -> AsyncIterator[RunnerContainer]:
     infra = api.container.infra
-    # The runner's machines are Lima's: its pool starts them, and hands each
+    # The runner's VMs are Lima's: its pool starts them, and hands each
     # its seed through the hypervisor's channel.
-    infra._vms = machines  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    infra._vms = vms  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
     infra._platform_infra = PlatformInfra(  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
-        infra.get_streams(), SeedsChannelImpl(machines, TIMEOUT)
+        infra.get_streams(), SeedsChannelImpl(vms, TIMEOUT)
     )
     settings = AgentSessionRunnerSettings.model_validate(
         {
@@ -193,8 +193,8 @@ def printed(model: ModelProviderScriptedImpl, call: int) -> str:
     return repr(model.calls[call])
 
 
-async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
-    api: Stack, runner: RunnerContainer, machines: VmsLimaImpl
+async def test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops(
+    api: Stack, runner: RunnerContainer, vms: VmsLimaImpl
 ) -> None:
     owner = api.owner
     managers = runner.managers
@@ -203,10 +203,10 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
     model = runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(model, ModelProviderScriptedImpl)
     session = await managers.agents.start_agent_session(
-        owner, Start(id=new_id(), kind=KIND.name, title="a machine of its own")
+        owner, Start(id=new_id(), kind=KIND.name, title="a VM of its own")
     )
     try:
-        # The first loop: a machine from the pool's image, its host, and a
+        # The first loop: a VM from the pool's image, its host, and a
         # command that builds an image and runs a container of it.
         said = message_step(new_id(), utcnow(), session.id, owner, "Build it.")
         await managers.agent_sessions.receive(owner, session.id, [said])
@@ -219,18 +219,18 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         assert digest is not None, state
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
 
-        # The loop's end kept the machine whole, and let it go.
+        # The loop's end kept the VM whole, and let it go.
         page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 200)
         snapshotted = [s for s in page.items if s.type is AgentStepType.SNAPSHOTTED]
         assert len(snapshotted) == 1
         (record,) = await managers.agent_workspaces.kept_snapshots(owner, session.id)
-        assert record.machine and record.reference.startswith(PREFIX + "p")
-        assert await machines.state(record.reference) is VmState.STOPPED
-        assert not await pool.holds(owner, session.id), "the machine went with the release"
-        running = [n for n in await machines.names(PREFIX + "p") if "-" not in n[len(PREFIX) :]]
-        assert running == [], "no machine of the pool runs between loops"
+        assert record.vm and record.reference.startswith(PREFIX + "p")
+        assert await vms.state(record.reference) is VmState.STOPPED
+        assert not await pool.holds(owner, session.id), "the VM went with the release"
+        running = [n for n in await vms.names(PREFIX + "p") if "-" not in n[len(PREFIX) :]]
+        assert running == [], "no VM of the pool runs between loops"
 
-        # The next loop: a machine from the snapshot, a new host, the same
+        # The next loop: a VM from the snapshot, a new host, the same
         # file and the same image.
         again = message_step(new_id(), utcnow(), session.id, owner, "Is it there?")
         await managers.agent_sessions.receive(owner, session.id, [again])
@@ -240,7 +240,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         if second.park is not None and second.park.unlock == "approval":
             # The session read what its first command printed, and its
             # egress is open: a person approves the call, and the loop goes
-            # on, on a machine started from the snapshot its park kept.
+            # on, on a VM started from the snapshot its park kept.
             page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 200)
             requests = [s for s in page.items if s.type is AgentStepType.TOOL_REQUEST]
             await managers.tools.decide_call(owner, session.id, requests[-1].seq, approve=True)
@@ -249,14 +249,14 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         found = printed(model, len(model.calls) - 1)
         assert found.count(digest.group(1)) >= 2, found
 
-        # The machine's host holds nothing of the platform's, and its key is
+        # The VM's host holds nothing of the platform's, and its key is
         # spent and gone from the seed.
         # What it printed follows the command's own text in the call.
         environment = found.rsplit("@ENVIRONMENT@", 1)[1].split("@SEED@", 1)[0]
         seed = found.rsplit("@SEED@", 1)[1].split("@END@", 1)[0]
-        assert "ACME_HOST_MACHINE_SEED" in environment, environment
+        assert "ACME_HOST_VM_SEED" in environment, environment
         assert not NOTHING_OF_THE_PLATFORMS.search(environment), environment
         assert "api_url" in seed and "hmk_" not in seed, seed
     finally:
         await pool.purge(owner.org_id, session.id)
-    assert await machines.names(PREFIX + "p") == [], "every machine and disk of the session"
+    assert await vms.names(PREFIX + "p") == [], "every VM and disk of the session"

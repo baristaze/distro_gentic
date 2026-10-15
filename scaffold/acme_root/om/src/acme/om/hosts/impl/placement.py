@@ -10,10 +10,10 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 class PlacementHostsImpl(PlacementInterface):
     """Trust's question of where a session runs, answered from the hosts'
     placement. A session no principal pinned runs in the cloud, on the one
-    machine this is built for. A pinned session runs inside its tenant's
+    VM this is built for. A pinned session runs inside its tenant's
     wall, on a host of its pool, which only the relay reaches: until a call
     names the host that holds its workspace, it is refused, and it never
-    runs on one of the platform's machines. A sub-agent runs where its
+    runs on one of the platform's VMs. A sub-agent runs where its
     tree's root runs: its placement is its root's."""
 
     def __init__(
@@ -23,7 +23,7 @@ class PlacementHostsImpl(PlacementInterface):
         cloud: Executor,
     ) -> None:
         if cloud.kind is not ExecutorKind.CLOUD:
-            raise ValueError("a session in the cloud runs on a machine of the cloud")
+            raise ValueError("a session in the cloud runs on a VM of the cloud")
         self._storage = storage
         self._sessions = sessions
         self._cloud = cloud
@@ -36,7 +36,7 @@ class PlacementHostsImpl(PlacementInterface):
             return self._cloud
         raise PinnedToHosts(
             f"session {agent_session_id} is pinned to its tenant's hosts, and no host holds "
-            "its workspace yet; its calls never run on the platform's machines"
+            "its workspace yet; its calls never run on the platform's VMs"
         )
 
 

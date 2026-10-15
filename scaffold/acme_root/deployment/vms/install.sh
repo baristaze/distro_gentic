@@ -1,14 +1,14 @@
 #!/bin/sh
-# Installs the host program in a machine of the cloud pool, as root, from the
-# source tree given: what the pool's image holds, so every machine the pool
-# starts from it runs the host. Run it once in a fresh Linux machine whose
-# packages hold Docker, then keep the machine's disk as the image: a Lima
-# machine stopped and kept (lima_image.py), or an AMI made from an instance.
+# Installs the host program in a VM of the cloud pool, as root, from the
+# source tree given: what the pool's image holds, so every VM the pool
+# starts from it runs the host. Run it once in a fresh Linux VM whose
+# packages hold Docker, then keep the VM's disk as the image: a Lima
+# VM stopped and kept (lima_image.py), or an AMI made from an instance.
 #
-#   sudo sh deployment/machines/install.sh /path/to/the/source
+#   sudo sh deployment/vms/install.sh /path/to/the/source
 #
 # It writes no secret: the host's settings name where its seed and its home
-# are, both on /run, and the pool hands each machine its seed as it starts.
+# are, both on /run, and the pool hands each VM its seed as it starts.
 set -eu
 
 SOURCE=${1:?the source tree, with its uv.lock}
@@ -31,7 +31,7 @@ command -v curl >/dev/null 2>&1 || apt-get install -y -q curl
 command -v git >/dev/null 2>&1 || apt-get install -y -q git
 
 # The host's own user, in Docker's group: its session's commands run as it,
-# and the machine is the session's wall.
+# and the VM is the session's wall.
 if ! id "$USER_NAME" >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/acme-host --create-home \
     --shell /usr/sbin/nologin "$USER_NAME"
@@ -64,9 +64,9 @@ install -m 0644 "$HERE/ceilings.toml" /etc/acme-host/ceilings.toml
 
 # Its units: the seed read from the cloud's first-boot data, and the host.
 install -d -m 0755 /usr/local/libexec
-install -m 0755 "$HERE/acme-machine-seed" /usr/local/libexec/acme-machine-seed
-install -m 0644 "$HERE/acme-machine-seed.service" /etc/systemd/system/
+install -m 0755 "$HERE/acme-vm-seed" /usr/local/libexec/acme-vm-seed
+install -m 0644 "$HERE/acme-vm-seed.service" /etc/systemd/system/
 install -m 0644 "$HERE/acme-host.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable acme-machine-seed.service acme-host.service
-echo "the host is installed; keep this machine's disk as the cloud pool's image"
+systemctl enable acme-vm-seed.service acme-host.service
+echo "the host is installed; keep this VM's disk as the cloud pool's image"

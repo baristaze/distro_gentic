@@ -213,13 +213,13 @@ A call the agent may not repeat runs once, whatever crashes. The host
 holds one **control stream** open to the platform, which stops a command
 at once.
 
-A session of the cloud whose agent works in a VM runs on a machine of
-the **cloud pool**: a virtual machine of its own, which the platform
-starts and runs the same host program in. The machine's host joins the
-session's **pool of one** with a one-use **machine key** the pool handed
-the machine, and claims that session's work alone. At the loop's end its
+A session of the cloud whose agent works in a VM runs on a VM of
+the **cloud pool**: a VM of its own, which the platform
+starts and runs the same host program in. The VM's host joins the
+session's **pool of one** with a one-use **VM key** the pool handed
+the VM, and claims that session's work alone. At the loop's end its
 whole disk is kept as the session's snapshot, and the next loop starts a
-machine from it. A few machines may stand **warm**, started ahead of the
+VM from it. A few VMs may stand **warm**, started ahead of the
 session that claims one.
 
 ## The agents the platform ships
@@ -348,10 +348,10 @@ the first one's answer.
   org asks for is read off it.
 - A pool, its tokens, its hosts, their credentials, and a session's
   placement name their org. A host is handed only the work of its own
-  pool, whatever it asks for. A session's pool of one, and its machine's
+  pool, whatever it asks for. A session's pool of one, and its VM's
   host, name its session too, and that host is handed no other session's
   work.
-- A machine of the cloud pool is the platform's, no org's, while it is
+- A VM of the cloud pool is the platform's, no org's, while it is
   warm, and names its org and its session once a session claims it.
 - An exec item, its output, its control messages, and a session's
   workspace binding name their org. A host reads and answers only the

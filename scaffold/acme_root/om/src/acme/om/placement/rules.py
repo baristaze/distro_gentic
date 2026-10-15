@@ -87,7 +87,7 @@ def pool_lane(pool_id: UUID) -> str:
 
 def another_session(claimant: Claimant, item: WorkItem) -> bool:
     """Whether an item is another session's than the one session its
-    claimant serves: a machine of the cloud pool runs its own session's
+    claimant serves: a VM of the cloud pool runs its own session's
     work and nothing else, whatever lane the item reached it on, so an item
     that names no session is not its session's either. A claimant that
     serves no one session takes any."""

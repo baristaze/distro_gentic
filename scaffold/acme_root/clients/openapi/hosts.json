@@ -2854,98 +2854,6 @@
         ]
       }
     },
-    "/v1/hosts/machine-enrollments": {
-      "post": {
-        "description": "The host of a machine the platform's cloud pool started trades the key\nthe pool handed the machine, once, as its bearer, for a credential of\nits own. A 409 while the machine is warm and serves no session yet: it\nasks again. A retry after the trade is refused, so it takes no\nIdempotency-Key.",
-        "operationId": "enroll_machine",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnrollRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssuedHostCredentialView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "common.json#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Enroll Machine",
-        "tags": [
-          "hosts"
-        ]
-      }
-    },
     "/v1/hosts/me/claims": {
       "post": {
         "description": "The next item pinned to this host or its pool, or none. The body\nstates the version the host reads, and nothing it is handed.",
@@ -3211,6 +3119,98 @@
         ]
       }
     },
+    "/v1/hosts/vm-enrollments": {
+      "post": {
+        "description": "The host of a VM the platform's cloud pool started trades the key\nthe pool handed the VM, once, as its bearer, for a credential of\nits own. A 409 while the VM is warm and serves no session yet: it\nasks again. A retry after the trade is refused, so it takes no\nIdempotency-Key.",
+        "operationId": "enroll_vm",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedHostCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Vm",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
     "/v1/hosts/{host_id}": {
       "delete": {
         "description": "Ends the host and its credentials at once; it is handed no more work.",
@@ -3306,7 +3306,7 @@
   },
   "tags": [
     {
-      "description": "Host routes. A tenant's: its pools, the tokens that enroll hosts into\nthem, its hosts, and where its sessions run. A host's own: enroll once with\nan enrollment token, or, for a machine of the platform's cloud pool, with\nthe key the pool handed it, then rotate its credential, beat, and claim\nwith it.\nEach function is one call into the hosts service.\n\nRoutes of a product's claimant, the way a host's are. A tenant's: list a\npool's, and revoke one. A claimant's own: enroll once with an enrollment token of its kind,\nthen rotate its credential, claim, and read, renew, and report the item\nit holds, and append to its kind's stream for it and read the streams its\nkind reads, with that credential alone. Each function is one call into the\nhosts service, or the watch service for a stream.\n\nOn the operator plane, an operator who may read reads why a host takes no\nwork, as ids, counts, times, and states.",
+      "description": "Host routes. A tenant's: its pools, the tokens that enroll hosts into\nthem, its hosts, and where its sessions run. A host's own: enroll once with\nan enrollment token, or, for a VM of the platform's cloud pool, with\nthe key the pool handed it, then rotate its credential, beat, and claim\nwith it.\nEach function is one call into the hosts service.\n\nRoutes of a product's claimant, the way a host's are. A tenant's: list a\npool's, and revoke one. A claimant's own: enroll once with an enrollment token of its kind,\nthen rotate its credential, claim, and read, renew, and report the item\nit holds, and append to its kind's stream for it and read the streams its\nkind reads, with that credential alone. Each function is one call into the\nhosts service, or the watch service for a stream.\n\nOn the operator plane, an operator who may read reads why a host takes no\nwork, as ids, counts, times, and states.",
       "name": "hosts"
     }
   ]

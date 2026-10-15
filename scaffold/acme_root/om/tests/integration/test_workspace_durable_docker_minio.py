@@ -273,7 +273,7 @@ async def test_a_kept_session_resumes_on_the_tree_it_left_after_the_runner_resta
         assert not shown.ok, "released once its snapshot held it"
 
         # The runner restarts: nothing of the first root is held, and the
-        # workspace's volume is gone with its machine.
+        # workspace's volume is gone with its VM.
         removed = await docker("volume", "rm", "-f", name, bound=timedelta(seconds=60))
         assert removed.ok
         second, _ = a_runner(tmp_path / "second", storage, owner, minio, infra.get_keys())
