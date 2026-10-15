@@ -86,7 +86,7 @@ from acme.om.watch.rules import signed, verified, verified_item
 from acme.om.watch.types.control import HandCommand
 from acme.om.watch.types.live import ItemGrant, Seen
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.loops import ASSISTANT, Clock, Lookup, reply, said, use
 from contracts.platform_loops import platform_loop_over
 from contracts.tools import stand_ins
@@ -96,7 +96,7 @@ RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 CONTAINER = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 PROBED = Advertisement(os="Linux 6.8", shell="/bin/bash", isolation_modes=(Mode.CONTAINER,))
 KEY = SecretStr("k" * 32)
-# What `make_session` names, so the agents manager classes every tool it
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 LIFE = timedelta(minutes=5)
@@ -164,7 +164,7 @@ async def watched(tmp_path: Path) -> Watched:
         request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
     )
     host = await managers.hosts.authenticate(request(), credential.credential)
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, host.host_id, "/srv/work/session")
     await managers.agent_workspaces.pinned(owner, session.id, CONTAINER)
@@ -214,7 +214,7 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
     watched: Watched,
 ) -> None:
     other = await watched.managers.agent_sessions.create_agent_session(
-        watched.owner, make_session()
+        watched.owner, make_agent_session()
     )
     mine, theirs = new_id(), new_id()
     for n in range(3):

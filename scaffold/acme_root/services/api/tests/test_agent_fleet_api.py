@@ -283,7 +283,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     sessions = container.storage.get_agent_session_storage()
     stored = await sessions.read_agent_session(UUID(org_id), UUID(agent_session_id))
     assert stored is not None
-    await sessions.write_session(
+    await sessions.write_agent_session(
         UUID(org_id), parked(stored, stored.version + 1), stored.version, ()
     )
     share = {"plan_tier": "pro", "own_lane": True, "concurrency": 2}

@@ -29,7 +29,7 @@ from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
-from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_root import AgentRootOptions, native_tools
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -63,7 +63,6 @@ from acme.om.platform_root import (
     build_platform_managers,
     no_actions,
 )
-from acme.om.agent_root import native_tools
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
@@ -352,7 +351,7 @@ def wired(
             managers.pricing,
             managers.agent_sessions,
             managers.spend_budgets,
-            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+            agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         credentials(providers),
         infra.get_outages(),

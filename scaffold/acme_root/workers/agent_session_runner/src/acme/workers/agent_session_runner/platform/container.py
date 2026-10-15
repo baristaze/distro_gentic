@@ -15,7 +15,7 @@ from acme.om.agent_automations.root import agent_automation_principals, build_ag
 from acme.om.agent_billing.root import build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
-from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_root import LOCAL, AgentRootOptions
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
@@ -42,7 +42,6 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.agent_root import LOCAL
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.manager import ToolsManagerInterface

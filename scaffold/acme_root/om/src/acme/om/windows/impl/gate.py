@@ -6,6 +6,7 @@ from uuid import UUID
 from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsNoneImpl
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal
@@ -177,17 +178,17 @@ class CallGateSpendBudgetImpl(CallGateInterface):
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
         budgets: SpendBudgetsManagerInterface,
-        agent_projects: SessionAgentProjectsInterface,
+        clock: Callable[[], datetime] = utcnow,
         *,
+        agent_projects: SessionAgentProjectsInterface | None = None,
         version: PinnedVersion | None = None,
         tier: PlanTierOf | None = None,
-        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._gate = gate
         self._pricing = pricing
         self._sessions = sessions
         self._budgets = budgets
-        self._agent_projects = agent_projects
+        self._agent_projects = agent_projects or SessionAgentProjectsNoneImpl()
         self._version = version
         self._tier = tier
         self._clock = clock

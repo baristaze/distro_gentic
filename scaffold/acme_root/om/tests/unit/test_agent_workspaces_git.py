@@ -63,7 +63,7 @@ from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_p
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.agent_workspaces import AgentProjectsTwin, PullRequestsTwin
 from contracts.doubles import context
 
@@ -172,7 +172,7 @@ class Checkout:
         return self.connected or self.ctx.org_id
 
     async def session(self) -> UUID:
-        made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
+        made = make_agent_session().model_copy(update={"kind": WORKER.name, "tools": ()})
         created = await self.managers.agent_sessions.create_agent_session(self.ctx, made)
         return created.id
 
@@ -812,7 +812,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
         request(), issued.token, Enrollment(name="host-1", advertisement=probed, exec_version=1)
     )
     holder = await managers.hosts.authenticate(request(), enrolled.credential)
-    made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
+    made = make_agent_session().model_copy(update={"kind": WORKER.name, "tools": ()})
     session = await managers.agent_sessions.create_agent_session(owner, made)
     await managers.hosts.place_session(owner, session.id, pool.id)
     # The host prepared its workspace, an empty directory, and holds it.

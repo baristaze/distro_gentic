@@ -100,7 +100,7 @@ class WatchedSearch(SearchCodeImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> base.Platform:
+    ) -> base.OmBase:
         self.runs += 1
         return await super().run(ctx, call_input, runtime)
 

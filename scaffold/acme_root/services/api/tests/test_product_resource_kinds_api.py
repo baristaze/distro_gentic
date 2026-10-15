@@ -17,12 +17,11 @@ from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
 from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
-from acme.om.leases.kinds import ResourceKindSpec
 from acme.om.leases.types.leasable_resource import LeasableResource
 from acme.om.leases.types.lease import Lease
 from acme.om.leases.types.request import LeaseRequest
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds, ProductResourceKind
 from acme.services.api.container import AppContainer
 
 DOCK = "dock"
@@ -37,6 +36,8 @@ class DockAsk(OmBase):
 class DockHooks(LeasableResourceKindInterface):
     """The product's hooks, built over the managers as its tools are. They
     keep what each grant asked of them."""
+
+    ASK = DockAsk
 
     def __init__(self, managers: Callable[[], PlatformManagers]) -> None:
         self.managers = managers
@@ -74,9 +75,11 @@ class Product:
         self.check = check
         self.hooks: DockHooks | None = None
 
-    def resources(self, managers: Callable[[], PlatformManagers]) -> tuple[ResourceKindSpec, ...]:
+    def resources(
+        self, managers: Callable[[], PlatformManagers]
+    ) -> tuple[ProductResourceKind, ...]:
         self.hooks = DockHooks(managers)
-        return (ResourceKindSpec(DOCK, DockAsk, self.hooks, self.check),)
+        return (ProductResourceKind(DOCK, self.hooks, self.check),)
 
     def container(self, tmp_path: Path) -> AppContainer:
         return build_container(

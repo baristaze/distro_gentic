@@ -16,7 +16,6 @@ import pytest
 
 from acme.integrations.model_providers.anthropic import request_body
 from acme.integrations.model_providers.calls import ModelCall
-from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock
 from acme.om.agent_steps.types.header import (
@@ -28,7 +27,6 @@ from acme.om.agent_steps.types.header import (
     ToolResponseHeader,
     ToolsetSwitch,
 )
-from acme.om.agents.attached import NOTHING, Attached, AttachedToolsetsInterface, with_attached
 from acme.om.agents.loop_rules import kind_prompts
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule
 from acme.om.agents.types.run import RunEnd
@@ -42,7 +40,7 @@ from acme.om.tools.types.toolset import LOAD_TOOLSET, Toolset
 from acme.om.windows.rules import render_main
 from acme.om.windows.types.policy import CompactionPolicy
 
-from contracts.loops import ALLOWED, Lookup, Loop, call, loop_over, reply, said, tools, use
+from contracts.loops import ALLOWED, Loop, call, loop_over, reply, said, tools, use
 
 READS = Toolset(name="reads", version=1, summary="Look the records up.", tools=("lookup", "slow"))
 WRITES = Toolset(
@@ -346,60 +344,3 @@ def test_kind_prompts_render_a_loads_tools_after_the_rest() -> None:
 TRACKER = Toolset(
     name="tracker", version=2, summary="Read the team's tickets.", tools=("tracker__find",)
 )
-
-
-class Attaching(AttachedToolsetsInterface):
-    """Attaches `TRACKER`, deferred, to every session, and keeps who asked."""
-
-    def __init__(self, tool: Lookup) -> None:
-        self.tool = tool
-        self.asked: list[UUID] = []
-
-    async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
-        self.asked.append(session.id)
-        return Attached(held=(), deferred=(TRACKER,), tools=(self.tool,))
-
-
-async def test_a_toolset_attached_to_a_session_loads_as_its_kinds_own_would(
-    tmp_path: Path,
-) -> None:
-    find = Lookup("tracker__find")
-    attaching = Attaching(find)
-    loop = loop_over(tmp_path, kinds=(BUILT,), attached=attaching)
-    agent_session_id = await loop.start("ops_analyst")
-    await loop.say(agent_session_id, "Find the ticket.")
-    loop.anthropic.add(
-        reply(use("tracker__find", use_id="use_early")),
-        reply(call("load_toolset", toolset="tracker")),
-        reply(use("tracker__find", use_id="use_late")),
-        reply(said("Found.")),
-    )
-
-    steps = await ran(loop, agent_session_id)
-
-    first, early, loaded, late = loop.anthropic.calls
-    assert names(first) == [LOAD_TOOLSET, "lookup", "note", "send"]
-    assert first.tools[0].description.splitlines()[1:] == ["- tracker: Read the team's tickets."]
-    responses = [step for step in steps if step.type is AgentStepType.TOOL_RESPONSE]
-    assert failure_of(responses[0]) is not None, "a waiting tool is not callable"
-    assert early.tools == first.tools
-    assert loaded.tools[: len(first.tools)] == first.tools, "the old block, byte for byte"
-    assert names(loaded)[len(first.tools) :] == ["tracker__find"]
-    assert late.tools == loaded.tools
-    assert failure_of(responses[2]) is None and find.ran_as, "callable once loaded"
-    session = await loop.managers.agent_sessions.get_agent_session(loop.owner, agent_session_id)
-    assert "tracker__find" not in session.tools, "the session's row keeps its kind's tools"
-    assert attaching.asked and set(attaching.asked) == {agent_session_id}
-
-
-def test_an_attached_toolset_names_each_of_its_tools_once() -> None:
-    with pytest.raises(ValueError, match="given once"):
-        Attached(held=(), deferred=(TRACKER,), tools=())
-    with pytest.raises(ValueError, match="given once"):
-        Attached(held=(TRACKER,), deferred=(TRACKER,), tools=(Lookup("tracker__find"),))
-    folded = with_attached(
-        BUILT, Attached(held=(), deferred=(TRACKER,), tools=(Lookup("tracker__find"),))
-    )
-    assert {"tracker__find", LOAD_TOOLSET} <= set(folded.tools)
-    assert folded.waiting == frozenset({"tracker__find"})
-    assert with_attached(BUILT, NOTHING) is BUILT

@@ -4,6 +4,7 @@ from pathlib import Path
 from worker_support import RecordingHandler, build_container, make_item, sign_in
 
 from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.placement.kinds import PlacedKindSpec
 from acme.om.root import KINDS
 from acme.om.tenancy.rules import ROLE_PERMISSIONS
 from acme.om.work.types.work_item import WorkKind
@@ -55,8 +56,12 @@ def test_every_kind_is_asked_for_by_a_permission_as_wide_as_its_handler(tmp_path
     loop = build_loop(build_container(tmp_path))
     handlers = loop._handlers  # pyright: ignore[reportPrivateUsage] (the worker's own table)
     # The loop's work is the session runner's, whose own suite holds its
-    # handler to the same rule.
-    served = [kind for kind in KINDS if kind.name != AgentSessionWorkKind.LOOP]
+    # handler to the same rule; a host's are claimed through the gateway.
+    served = [
+        kind
+        for kind in KINDS
+        if kind.name != AgentSessionWorkKind.LOOP and not isinstance(kind, PlacedKindSpec)
+    ]
     assert set(handlers) == {kind.name for kind in served}
     assert set(WorkKind) <= set(handlers)
     for kind in served:

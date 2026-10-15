@@ -21,7 +21,7 @@ from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode,
 from acme.om.base import new_id
 from acme.om.placement.kinds import PlacementWorkKind
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 SEALED = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -35,7 +35,7 @@ def made_in(location: str, root: Path) -> bool:
 
 async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     await managers.hosts.place_session(api.owner, session.id, pool_id)
     return session.id
 

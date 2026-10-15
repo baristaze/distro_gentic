@@ -22,7 +22,7 @@ from acme.om.exceptions import StaleWriter
 from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.watch.impl.manager import SENT
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 pytestmark = pytest.mark.integration
 
@@ -39,9 +39,9 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         host = await a_host(client, await a_token(client, owner, pool_id))
         ctx = await tenant_of(container, owner)
         # The session offers no tool: the stack's catalog classes none of
-        # the names `make_session` gives, and a control is checked against
+        # the names `make_agent_session` gives, and a control is checked against
         # the class of every tool the session offers.
-        offers_none = make_session().model_copy(update={"tools": ()})
+        offers_none = make_agent_session().model_copy(update={"tools": ()})
         session = await managers.agent_sessions.create_agent_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
         await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
@@ -111,8 +111,12 @@ async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_c
     async with over_the_stack(tmp_path, live_read_key=KEY) as (container, client, owner):
         assert container.infra.get_streams().describe().startswith("streams=valkey")
         ctx = await tenant_of(container, owner)
-        mine = await container.managers.agent_sessions.create_agent_session(ctx, make_session())
-        theirs = await container.managers.agent_sessions.create_agent_session(ctx, make_session())
+        mine = await container.managers.agent_sessions.create_agent_session(
+            ctx, make_agent_session()
+        )
+        theirs = await container.managers.agent_sessions.create_agent_session(
+            ctx, make_agent_session()
+        )
         my_step, their_step = new_id(), new_id()
         for n in range(3):
             container.stream.emit(

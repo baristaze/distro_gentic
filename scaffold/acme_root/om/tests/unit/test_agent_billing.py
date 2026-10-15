@@ -199,7 +199,9 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
         book,
         money.loop.managers.agent_sessions,
         money.loop.managers.spend_budgets,
-        SessionAgentProjectsBoundImpl(money.loop.storage.get_agent_project_storage()),
+        agent_projects=SessionAgentProjectsBoundImpl(
+            money.loop.storage.get_agent_project_storage()
+        ),
     )
     usage = Usage(input=120_000, output=3_000)
     # Another process never held the call, and its site names no labels, so
@@ -367,7 +369,7 @@ async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
             loop.managers.pricing,
             loop.managers.agent_sessions,
             loop.managers.spend_budgets,
-            SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
+            agent_projects=SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
         )
     ours, loose = await loop.start(), await loop.start()
     agent_project = await in_agent_project(
@@ -421,7 +423,7 @@ async def test_an_agent_projects_budget_refuses_a_job_its_tenants_has_room_for(
             loop.managers.pricing,
             loop.managers.agent_sessions,
             loop.managers.spend_budgets,
-            SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
+            agent_projects=SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
             clock=loop.clock,
         )
     ours, loose = await loop.start(), await loop.start()

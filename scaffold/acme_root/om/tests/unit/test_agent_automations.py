@@ -505,7 +505,7 @@ async def test_an_agent_automations_session_starts_in_its_agent_project_under_it
         platform.managers.pricing,
         platform.managers.agent_sessions,
         platform.managers.spend_budgets,
-        SessionAgentProjectsBoundImpl(platform.storage.get_agent_project_storage()),
+        agent_projects=SessionAgentProjectsBoundImpl(platform.storage.get_agent_project_storage()),
     )
     fills = await platform.managers.language_models.resolve_fill_set(
         platform.owner, run.agent_session_id, ASSISTANT.roles, Eligibility()

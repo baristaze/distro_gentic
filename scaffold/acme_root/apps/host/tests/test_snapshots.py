@@ -79,7 +79,7 @@ from acme.om.watch.types.control import HandCommand
 from acme.om.work.types.work_item import WorkStatus
 from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 KEPT = IsolationSpec(
     mode=IsolationMode.CONTAINER,
@@ -156,7 +156,7 @@ async def claimed(host: HostAgent) -> None:
 
 async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     await managers.hosts.place_session(api.owner, session.id, pool_id)
     return session.id
 

@@ -19,7 +19,7 @@ from unit.platform_tools import REVIEWED, reviewing, unbound
 from acme.infra.agent_workspaces import IsolationMode
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.model_providers.calls import ModelCall
-from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_root import AgentRootOptions, native_tools
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agent_steps.types.header import LoopOutcome, ParkReason, ToolFailure
@@ -82,7 +82,6 @@ from acme.om.platform_agents.kinds import (
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
-from acme.om.agent_root import native_tools
 from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of

@@ -29,7 +29,7 @@ from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 from acme.services.api.types.hosts import HostView
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 RUNNER = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
 
@@ -75,7 +75,7 @@ async def a_held_item(
     host = await a_host(client, await a_token(client, owner, pool_id))
     ctx = await tenant_of(container, owner)
     managers = container.managers
-    session = await managers.agent_sessions.create_agent_session(ctx, make_session())
+    session = await managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
     await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
     epoch = await managers.agent_steps.begin_run(ctx, session.id)

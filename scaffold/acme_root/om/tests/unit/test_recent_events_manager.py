@@ -2,7 +2,7 @@
 a time back to the floor, a tenant's own stream alone, and only with read."""
 
 import pytest
-from unit.test_events_manager import Retention, append_aged, context, keeping
+from unit.test_change_events_manager import Retention, append_aged, context, keeping
 
 from acme.om.change_events.impl.manager import ChangeEventsManagerImpl, ChangeEventsOptions
 from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl

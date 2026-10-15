@@ -39,9 +39,9 @@ from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 HOST_APP = AppContext(type=AppType.API, version="host@test")
@@ -128,7 +128,7 @@ def a_pool(name: str = "build") -> HostPool:
     )
 
 
-def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -> WorkItem:
+def an_item(ctx: TenantContext, kind: str, payload: Mapping[str, object]) -> WorkItem:
     now = utcnow()
     return WorkItem(
         id=new_id(),
@@ -448,7 +448,7 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
     assert pool.agent_session_id == session.id
@@ -471,8 +471,8 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
 ) -> None:
     owner = await an_owner(managers)
     mine, other = (
-        await managers.agent_sessions.create_agent_session(owner, make_session()),
-        await managers.agent_sessions.create_agent_session(owner, make_session()),
+        await managers.agent_sessions.create_agent_session(owner, make_agent_session()),
+        await managers.agent_sessions.create_agent_session(owner, make_agent_session()),
     )
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, mine.id, "cloud")
@@ -519,7 +519,7 @@ async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ende
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
     issued = await hosts.admit_machine(
@@ -602,7 +602,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     assert not (await hosts.placement_of(owner, session.id)).waiting  # the cloud, unplaced
     await hosts.place_session(owner, session.id, pool.id)
     state = await hosts.placement_of(owner, session.id)
@@ -638,7 +638,7 @@ async def test_only_a_principal_with_write_moves_a_session(
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
     # Org-wide, so the viewer sees it: what the viewer lacks is the write.
-    shared = make_session(visibility=Visibility.ORG_WIDE)
+    shared = make_agent_session(visibility=Visibility.ORG_WIDE)
     session = await managers.agent_sessions.create_agent_session(owner, shared)
     placed = await hosts.place_session(owner, session.id, pool.id)
     viewer = await a_member(managers, "ajax", Role.VIEWER)
@@ -652,7 +652,7 @@ async def test_only_a_principal_with_write_moves_a_session(
     other = await an_owner(managers, "fabrikam")
     with pytest.raises(NotFound):
         await hosts.place_session(other, session.id, None)
-    other_session = await managers.agent_sessions.create_agent_session(other, make_session())
+    other_session = await managers.agent_sessions.create_agent_session(other, make_agent_session())
     with pytest.raises(NotFound):
         await hosts.place_session(other, other_session.id, pool.id)
 
@@ -671,7 +671,7 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
     placement = PlacementHostsImpl(
         storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
@@ -694,10 +694,12 @@ async def test_a_sub_agent_runs_where_its_root_runs(
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    root = await managers.agent_sessions.create_agent_session(owner, make_session())
-    child = await managers.agent_sessions.create_agent_session(owner, make_session(parent=root))
+    root = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    child = await managers.agent_sessions.create_agent_session(
+        owner, make_agent_session(parent=root)
+    )
     grandchild = await managers.agent_sessions.create_agent_session(
-        owner, make_session(parent=child)
+        owner, make_agent_session(parent=child)
     )
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
     placement = PlacementHostsImpl(

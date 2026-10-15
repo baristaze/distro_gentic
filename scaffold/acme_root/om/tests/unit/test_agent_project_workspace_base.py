@@ -32,6 +32,7 @@ from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
+from acme.om.agent_projects.types.agent_project import AgentProjectWorkspaceBase
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER, WORKSPACE_BASE_KINDS
 from acme.om.platform_root import PlatformRootOptions, ProductKinds
@@ -56,7 +57,7 @@ READER = ASSISTANT.model_copy(update={"name": "reader", "isolation": SEALED})
 """A product's kind its slot does not name."""
 PRODUCT = ProductKinds(agents=(BUILDER, READER), workspace_bases=frozenset({("builder", 2)}))
 
-AGENT_WORKSPACE_BASE = AgentWorkspaceBase(
+AGENT_WORKSPACE_BASE = AgentProjectWorkspaceBase(
     image="python:3.14-slim",
     setup=("pip install acme-tools", "echo built >> /opt/count"),
     registries=("pypi.org", "files.pythonhosted.org"),
@@ -195,12 +196,14 @@ def test_a_workspace_base_names_a_setup_whose_egress_follows_its_registries() ->
     sealed = AGENT_WORKSPACE_BASE.model_copy(update={"registries": ()})
     assert sealed.base().egress.mode is EgressMode.NONE
     with pytest.raises(ValueError, match="registries only for a setup"):
-        AgentWorkspaceBase(image="python:3.14-slim", registries=("pypi.org",))
+        AgentProjectWorkspaceBase(image="python:3.14-slim", registries=("pypi.org",))
     with pytest.raises(ValueError, match="each registry once"):
-        AgentWorkspaceBase(image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io"))
+        AgentProjectWorkspaceBase(
+            image="python:3.14-slim", setup=("true",), registries=("a.io", "a.io")
+        )
     for image in ("--privileged", "-v/:/host", "python 3", ""):
         with pytest.raises(ValueError):
-            AgentWorkspaceBase(image=image)
+            AgentProjectWorkspaceBase(image=image)
 
 
 async def test_a_kind_that_takes_its_agent_projects_workspace_base_pins_its_base(

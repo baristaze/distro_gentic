@@ -56,7 +56,7 @@ from acme.om.tools.rules import snapshotted_step
 from acme.om.work.types.work_item import WorkItem
 from acme.workers.agent_session_runner.workspaces import Graces, HeldWorkspacesSweep
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.agent_step_storage import make_message
 from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, PullRequestsTwin, ReaderTwin
 
@@ -179,7 +179,7 @@ class Host:
         writer epoch taken, and its workspace prepared, never released."""
         managers, owner = self.managers, self.owner
         session = await managers.agent_sessions.create_agent_session(
-            owner, make_session().model_copy(update={"kind": kind, "tools": ()})
+            owner, make_agent_session().model_copy(update={"kind": kind, "tools": ()})
         )
         now = utcnow()
         queued = await managers.work.enqueue(

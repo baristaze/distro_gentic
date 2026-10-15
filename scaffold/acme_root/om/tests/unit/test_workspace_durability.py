@@ -479,7 +479,7 @@ async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_
     assert placed.restores == [None]
 
     step = await tools[0].snapshot_agent_workspace(
-        loop.owner, agent_session_id, workspace, epoch=epoch, loop_id=new_id()
+        loop.owner, agent_session_id, workspace, epoch=epoch, loop_id=new_id(), tools=()
     )
 
     assert step.type is AgentStepType.SNAPSHOTTED and step.header is not None
@@ -525,6 +525,6 @@ async def test_a_hosts_refusal_keeps_no_snapshot_and_a_bucket_snapshot_never_rea
     placed.refuses = "the workspace holds the secret 'SERVICE_TOKEN', so it is not kept"
     with pytest.raises(SnapshotRefused, match="SERVICE_TOKEN"):
         await tools[0].snapshot_agent_workspace(
-            loop.owner, agent_session_id, workspace, epoch=epoch, loop_id=new_id()
+            loop.owner, agent_session_id, workspace, epoch=epoch, loop_id=new_id(), tools=()
         )
     assert len(of_type(await loop.history(agent_session_id), AgentStepType.SNAPSHOTTED)) == 1

@@ -39,9 +39,9 @@ from acme.om.placement.kinds import (
     HOST,
     PLACED_KINDS,
     PlacementWorkKind,
+    claimed_by,
     claims_of,
     platform_claimant_kinds,
-    platform_work_kinds,
 )
 from acme.om.placement.rules import host_lane, own_lane, pool_lane, tier_lane
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
@@ -50,13 +50,14 @@ from acme.om.placement.types.share import TierShare
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
 from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
+from acme.om.root import KINDS
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.impl.manager import DEAD_LETTER_KIND
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.doubles import Members
 from contracts.loops import reply, said, use
 from contracts.placement_storage import make_share
@@ -66,7 +67,7 @@ from contracts.tools import stand_ins
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
-# What `make_session` names, so the agents manager classes every tool it
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
@@ -108,7 +109,7 @@ async def an_owner(managers: PlatformManagers, slug: str = "ajax") -> TenantCont
     return owner
 
 
-def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -> WorkItem:
+def an_item(ctx: TenantContext, kind: str, payload: Mapping[str, object]) -> WorkItem:
     now = utcnow()
     return WorkItem(
         id=new_id(),
@@ -214,7 +215,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
     await managers.placement_operator.set_share(
         operator(), owner.org_id, plan_tier="pro", own_lane=False, concurrency=4
     )
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does checkout time out?")
     await managers.agent_sessions.receive(owner, session.id, [said_now])
     (loop,) = [i for i in items_of(storage) if i.kind == AgentSessionWorkKind.LOOP]
@@ -276,13 +277,13 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
 def test_a_claimants_lanes_and_kinds_are_read_off_its_identity_alone() -> None:
     host_id, pool, org = new_id(), new_id(), new_id()
     host = Claimant(kind=HOST, id=host_id, org_id=org, pool_id=pool)
-    claimants, work = platform_claimant_kinds(), platform_work_kinds()
+    claimants, work = platform_claimant_kinds(), KINDS
     assert claims_of(claimants, work, host) == (
         (host_lane(host_id), (PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE)),
         (pool_lane(pool), (PlacementWorkKind.WORKSPACE,)),
     )
     claimed = {kind for _, kinds in claims_of(claimants, work, host) for kind in kinds}
-    assert claimed == {spec.name for spec in PLACED_KINDS} == work.claimed_by(HOST)
+    assert claimed == {spec.name for spec in PLACED_KINDS} == claimed_by(work, HOST)
     with pytest.raises(ValueError, match="pool_id"):
         Claimant.model_validate({"kind": HOST, "id": new_id()})
 
@@ -467,7 +468,7 @@ async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loo
         PlacementOptions().lane_cap(tier),
     )
     assert running is not None
-    before = await managers.agent_sessions.create_agent_session(owner, make_session())
+    before = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     await managers.work.enqueue(
         owner,
         an_item(owner, AgentSessionWorkKind.LOOP, {}).model_copy(update={"target_id": before.id}),
@@ -475,7 +476,7 @@ async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loo
     await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
     )
-    after = await managers.agent_sessions.create_agent_session(owner, make_session())
+    after = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     await managers.work.enqueue(
         owner,
         an_item(owner, AgentSessionWorkKind.LOOP, {}).model_copy(update={"target_id": after.id}),
@@ -590,7 +591,7 @@ async def test_a_tenant_past_its_retention_loses_its_share_and_a_living_one_keep
         managers.work,
         members,
         PlacementOptions(),
-        platform_work_kinds(),
+        KINDS,
         platform_claimant_kinds(),
     )
     assert await placement.purge_tenant(owner) == 0, "a living tenant keeps it"

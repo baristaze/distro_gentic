@@ -22,14 +22,13 @@ from tenant_support import person, tenant
 
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
-from acme.om.placement.kinds import ClaimantKindSpec
+from acme.om.placement.kinds import ClaimantKindSpec, PlacedKindSpec
 from acme.om.placement.types.claimant import Claimant
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.retention.crossing import Crossing, CrossingKind, declared
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, StreamKind
 from acme.om.watch.root import build_kind_streams
 from acme.om.watch.types.live import MAX_ENTRY
-from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.container import AppContainer
 
@@ -61,7 +60,7 @@ def _batch_claims(node: Claimant) -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 
 PRODUCT = ProductKinds(
-    work=(WorkKindSpec(RENDER, RenderPayload, Permission.WRITE, _render_lane, claimant=BATCH),),
+    work=(PlacedKindSpec(RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH),),
     claimants=(
         ClaimantKindSpec(BATCH, _batch_claims, prefix="bat_"),
         ClaimantKindSpec(PROBE, lambda _: (), prefix="prb_"),

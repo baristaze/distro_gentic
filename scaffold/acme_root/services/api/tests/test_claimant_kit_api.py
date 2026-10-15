@@ -27,10 +27,9 @@ from acme.client.client import ApiClient
 from acme.client.types import ReportOutcome
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.placement.kinds import ClaimantKindSpec
+from acme.om.placement.kinds import ClaimantKindSpec, PlacedKindSpec
 from acme.om.placement.types.claimant import Claimant as ClaimantRow
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.container import AppContainer
 
@@ -52,7 +51,7 @@ def _scanner_claims(claimant: ClaimantRow) -> tuple[tuple[str, tuple[str, ...]],
 
 
 PRODUCT = ProductKinds(
-    work=(WorkKindSpec(SCAN, ScanPayload, Permission.WRITE, _scan_lane, claimant=SCANNER),),
+    work=(PlacedKindSpec(SCAN, ScanPayload, Permission.WRITE, place=_scan_lane, claimant=SCANNER),),
     claimants=(ClaimantKindSpec(SCANNER, _scanner_claims, prefix="scn_"),),
 )
 

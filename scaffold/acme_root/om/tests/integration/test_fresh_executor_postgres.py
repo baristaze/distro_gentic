@@ -33,6 +33,7 @@ from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.request import Start
@@ -46,6 +47,7 @@ from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import WorkProduct
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -95,8 +97,6 @@ TOTAL = 3
 a new file beside the base's fixture."""
 REPLACES = """\
 import os
-from acme.om.platform_agents.kinds import ValidationWorkKind
-from acme.om.agent_root import AgentRootOptions
 
 os.remove("checks/expected.txt")
 with open("checks/expected.txt", "w") as fixture:

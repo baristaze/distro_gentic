@@ -72,7 +72,7 @@ from acme.om.watch.types.control import HandCommand
 from acme.services.api.services.impl import exec_relay as exec_relay_service
 
 from contracts.agent_project_storage import make_agent_project, make_binding
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -155,7 +155,7 @@ async def relay_to(
     agents.append(host)
     await host.start()
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     if agent_project_id is not None:
         await api.container.storage.get_agent_project_storage().bind_session(
             api.owner.org_id, make_binding(session.id, agent_project_id)
@@ -182,7 +182,7 @@ async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UU
     """A session of the host's pool whose workspace the host prepared and
     holds: its id, and where the host made it."""
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     await managers.hosts.place_session(api.owner, session.id, host_pool(host))
     await managers.exec_relay.ask_prepare(api.owner, session.id, spec)
     assert await host.claim_once() is not None

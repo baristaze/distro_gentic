@@ -446,7 +446,7 @@ def loop_over(
                 managers.pricing,
                 managers.agent_sessions,
                 managers.spend_budgets,
-                SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+                agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 version=None if language_models_layer is None else language_models_layer.version,
                 tier=None if language_models_layer is None else language_models_layer.tier,
                 clock=clock,

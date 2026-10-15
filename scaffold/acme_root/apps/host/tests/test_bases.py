@@ -53,7 +53,7 @@ from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkStatus
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 SETUP = ("pip install acme-tools", "echo built >> /opt/count")
 BASE = AgentWorkspaceBase(
@@ -205,7 +205,7 @@ async def a_host(
 
 async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     await managers.hosts.place_session(api.owner, session.id, pool_id)
     return session.id
 

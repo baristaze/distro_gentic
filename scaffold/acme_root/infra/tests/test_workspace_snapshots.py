@@ -442,7 +442,7 @@ async def test_a_container_another_deployment_workspace_or_tenant_started_is_nev
 
     monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", recorded)
     provider = AgentWorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
-    workspace = Workspace(
+    workspace = AgentWorkspace(
         id=agent_workspace_id,
         org_id=org,
         spec=kept(IsolationMode.CONTAINER),

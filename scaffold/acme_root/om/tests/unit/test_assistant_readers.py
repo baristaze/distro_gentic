@@ -50,11 +50,11 @@ from acme.om.tools.types.policy import ToolPolicyLayer
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 
 from contracts.agent_project_storage import in_agent_project
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.agent_step_storage import make_message
 from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import reply, said
-from contracts.platform_agents import CORPUS, OmBase, calls, platform_over
+from contracts.platform_agents import CORPUS, Platform, calls, platform_over
 
 ROOT = Path(__file__).resolve().parents[3]
 OBJECT_MODEL = ROOT / "docs" / "object-model.md"
@@ -227,7 +227,7 @@ CLERK = AgentKind(
 )
 
 
-async def held_session(platform: OmBase) -> UUID:
+async def held_session(platform: Platform) -> UUID:
     """A clerk's session parked on the call it holds for approval."""
     start = Start(id=new_id(), kind=CLERK.name, title="a held lookup")
     session = await platform.managers.agents.start_agent_session(platform.owner, start)
@@ -306,7 +306,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
         platform.owner,
     )
     root = await sessions.get_agent_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
-    child = await sessions.create_agent_session(owner, make_session(parent=root))
+    child = await sessions.create_agent_session(owner, make_agent_session(parent=root))
     asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     (message,) = await steps.append_inputs(
         owner, child.id, [make_message(child.id, principal=asker)]
@@ -337,7 +337,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
 # and that it is offline, beside the pool's other hosts.
 
 
-async def a_host(platform: OmBase, pool_id: UUID, name: str, last_seen_at: datetime) -> UUID:
+async def a_host(platform: Platform, pool_id: UUID, name: str, last_seen_at: datetime) -> UUID:
     """A host of the pool, enrolled at its storage, last seen at `last_seen_at`."""
     host = make_host(pool_id).model_copy(update={"name": name, "last_seen_at": last_seen_at})
     hosts = platform.storage.get_hosts_storage()

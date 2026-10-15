@@ -62,14 +62,14 @@ from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.transports import StaleCommand
 from acme.infra.transports.records import RecordBook
 from acme.integrations.impl.configured import absent_integrations
-from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
-from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
+from acme.integrations.model_providers.types import ProviderName
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
-from acme.om.agent_steps.types.content import ContentState, TextBlock, ToolUseBlock
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.agent_steps.types.content import ContentState
 from acme.om.agent_steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.loop_rules import ended_step
@@ -83,8 +83,8 @@ from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.impl.sealed_agent_steps import says_something
-from acme.om.spend_budgets.types.hold import SpendSettlement
 from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
+from acme.om.spend_budgets.types.spend_hold import SpendSettlement
 from acme.om.storage.migrate import VERSION_TABLE
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
@@ -445,17 +445,6 @@ async def until_steps(
 
 def of_type(steps: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
     return [step for step in steps if step["type"] == kind]
-
-
-def calls(tool: str, **call_input: object) -> ModelReply:
-    """A turn that calls one tool with the input the model wrote."""
-    use = ToolUseBlock(id=f"use_{new_id().hex[:12]}", name=tool, input=call_input)
-    return ModelReply(
-        blocks=(TextBlock(text="Let me look."), use),
-        stop_reason=StopReason.TOOL_USE,
-        usage=Usage(input=120, output=30),
-        model="claude-sonnet-5-5",
-    )
 
 
 @pytest.fixture
@@ -1108,7 +1097,6 @@ from acme.infra.buckets import Buckets
 from acme.infra.buckets.s3 import BucketsS3Impl
 from acme.infra.impl.settings import InfraSettings
 from acme.om.tools.impl.bases import PREFIX
-from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 
 async def kept():
     settings = InfraSettings()

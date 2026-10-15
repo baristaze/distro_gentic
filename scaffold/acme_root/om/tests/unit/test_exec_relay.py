@@ -83,7 +83,7 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 from contracts.agent_project_storage import in_agent_project
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import DELIVERY, reply, said
 from contracts.platform_loops import platform_loop_over
@@ -161,7 +161,7 @@ async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
     )
     holder = await enrolled(managers, owner, pool, "host-1")
     other = await enrolled(managers, owner, pool, "host-2")
-    session = await managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
     epoch = await managers.agent_steps.begin_run(owner, session.id)
@@ -880,9 +880,13 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
         "host-1",
     )
     # A cloud session stays on the runner; a pinned one no host holds is refused.
-    cloud = await wall.managers.agent_sessions.create_agent_session(wall.owner, make_session())
+    cloud = await wall.managers.agent_sessions.create_agent_session(
+        wall.owner, make_agent_session()
+    )
     assert await placement.executor_of(wall.owner.org_id, cloud.id) == runner
-    unheld = await wall.managers.agent_sessions.create_agent_session(wall.owner, make_session())
+    unheld = await wall.managers.agent_sessions.create_agent_session(
+        wall.owner, make_agent_session()
+    )
     await wall.managers.hosts.place_session(wall.owner, unheld.id, wall.pool.id)
     with pytest.raises(PinnedToHosts):
         await placement.executor_of(wall.owner.org_id, unheld.id)

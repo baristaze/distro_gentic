@@ -56,7 +56,7 @@ class PlatformWorkStorageContract:
             seconds_ago: int,
             *,
             on: str = lane,
-            kind: WorkKind = AgentSessionWorkKind.LOOP,
+            kind: str = AgentSessionWorkKind.LOOP,
             live: bool = True,
         ) -> WorkItem:
             item = make_item(lane=on).model_copy(

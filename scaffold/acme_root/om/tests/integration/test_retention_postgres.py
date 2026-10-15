@@ -32,11 +32,11 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.agent_step_storage import make_message
 from contracts.tools import stand_ins
 
-# What `make_session` names, so the agents manager classes every tool it
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
@@ -131,7 +131,7 @@ async def declare(managers: PlatformManagers, ctx: TenantContext, policy: Retent
 
 
 async def a_session_saying(managers: PlatformManagers, ctx: TenantContext) -> UUID:
-    session = await managers.agent_sessions.create_agent_session(ctx, make_session())
+    session = await managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     await managers.agent_steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
     return session.id
 

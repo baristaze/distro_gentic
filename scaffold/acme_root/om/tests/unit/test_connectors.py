@@ -194,7 +194,7 @@ def tenant(
         options=ConnectorsOptions(private_addresses=True),
     )
     loop = platform_loop_over(
-        tmp_path, kinds=(OPS_ANALYST,), attached=layer.attached, storage=storage, infra=infra
+        tmp_path, kinds=(OPS_ANALYST,), loop_hooks=layer.loop_hooks, storage=storage, infra=infra
     )
     return Tenant(loop, layer.build(loop.platform))
 

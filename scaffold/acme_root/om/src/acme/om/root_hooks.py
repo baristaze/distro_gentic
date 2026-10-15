@@ -201,7 +201,7 @@ class RootHooksNullImpl(RootHooksInterface):
             pricing,
             sessions,
             budgets,
-            SessionAgentProjectsNoneImpl(),
+            agent_projects=SessionAgentProjectsNoneImpl(),
             version=None if language_models_layer is None else language_models_layer.version,
             tier=None if language_models_layer is None else language_models_layer.tier,
         )

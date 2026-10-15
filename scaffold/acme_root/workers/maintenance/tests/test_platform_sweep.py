@@ -13,6 +13,7 @@ from acme.infra.cache import CacheScope
 from acme.om.agent_billing.types.spend_ledger import FundedHold
 from acme.om.context import TenantContext
 from acme.om.placement.types.standing import AgentFleetCounts, Count
+from acme.om.root import KINDS
 from acme.om.work import WorkManagerInterface
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.loop import (
@@ -42,6 +43,7 @@ def sweeping(
         outbox=quiet_outbox(),
         purges=purges,
         agent_fleet=agent_fleet,
+        kinds=KINDS,
         handlers={},
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),
@@ -68,6 +70,7 @@ async def test_each_tenant_is_ticked_once_a_pass_and_a_failing_tick_stops_nothin
         outbox=quiet_outbox(),
         purges={"purge": recording(calls, "purge")},
         ticks={"broken": broken, "tick": recording(calls, "tick")},
+        kinds=KINDS,
         handlers={},
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),

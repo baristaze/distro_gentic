@@ -283,7 +283,7 @@ def trusted(
             managers.pricing,
             managers.agent_sessions,
             managers.spend_budgets,
-            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+            agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         CallCredentialsPlatformImpl(providers),
         infra.get_outages(),

@@ -63,8 +63,8 @@ class Told(CallGateSpendBudgetImpl):
             managers.pricing,
             managers.agent_sessions,
             managers.spend_budgets,
-            agent_projects,
-            clock=clock,
+            clock,
+            agent_projects=agent_projects,
         )
         self.credentials: list[str] = []
 

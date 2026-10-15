@@ -131,7 +131,7 @@ class Dated(httpx.AsyncBaseTransport):
 
 OPEN_EGRESS = {"mode": "open", "hosts": []}
 SESSION_TOOLS = stand_ins("read_log", "run_tests")
-"""What `make_session` names, so the agents manager classes every tool it
+"""What `make_agent_session` names, so the agents manager classes every tool it
 offers."""
 DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
 

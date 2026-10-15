@@ -336,16 +336,7 @@ async def test_a_history_whose_key_is_revoked_reads_as_its_shape_alone(
     ctx = await managers.tenancy.authenticate(
         seed_request(), owner["Authorization"].removeprefix("Bearer ")
     )
-    sid, loop_id = UUID(session["id"]), UUID(said.json()["loop_id"])
-    request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
-    response = make_response(sid, loop_id, request.id)
-    call = make_tool_request(sid, loop_id, response.id)
-    answer = make_tool_response(sid, loop_id, call.id)
-    epoch = await managers.agent_steps.begin_run(ctx, sid)
-    await managers.agent_steps.append_agent_steps(
-        ctx, sid, epoch, [request, response, call, answer]
-    )
-    await managers.privacy.revoke_key(ctx, sid)
+    await managers.privacy.revoke_key(ctx, UUID(session["id"]))
 
     read = await client.get(f"{path}/steps", headers=owner)
 

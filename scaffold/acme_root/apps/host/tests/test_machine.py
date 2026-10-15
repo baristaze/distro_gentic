@@ -56,7 +56,7 @@ from acme.om.cloud_pool.rules import new_key, seed
 from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.tenancy.rules import hash_token
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 
 ROOT = Path(__file__).resolve().parents[3]
 MACHINES = ROOT / "deployment" / "machines"
@@ -328,7 +328,7 @@ async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_works
     session's pool of one, and prepares the session's workspace, kept by
     snapshots, which its pool keeps whole."""
     managers = api.container.managers
-    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_agent_session())
     service = await managers.tenancy.service_context(
         seed_request(), api.owner.org_id, api.owner.user_id
     )

@@ -92,6 +92,7 @@ from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
 from acme.om.language_models.layer import LanguageModelsLayer
 from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
+from acme.om.leases.types.leasable_resource import LeasableResourceKind
 from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
@@ -812,7 +813,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
         # the managers built here, so each edge is bound at call time.
         found: dict[str, LeasableResourceKindInterface] = {}
         for kind in self._resources():
-            if kind.name in found:
+            if kind.name in found or kind.name in set(LeasableResourceKind):
                 raise ValueError(f"leasable resource kind {kind.name} is registered twice")
             found[kind.name] = kind.hooks
         return found
@@ -975,7 +976,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 pricing,
                 sessions,
                 budgets,
-                self._session_policies,
+                agent_projects=self._session_policies,
                 version=version,
                 tier=tier,
             )
@@ -984,7 +985,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             self._book,
             sessions,
             budgets,
-            self._session_policies,
+            agent_projects=self._session_policies,
             version=version,
             tier=tier,
         )

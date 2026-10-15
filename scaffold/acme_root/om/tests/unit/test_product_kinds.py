@@ -18,6 +18,7 @@ from pydantic import Field, ValidationError
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
 from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import OmBase, new_id, utcnow
@@ -35,26 +36,29 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.leases.impl.kinds import NoopLeasableResourceKindImpl
-from acme.om.leases.kinds import ResourceKindSpec
 from acme.om.leases.types.leasable_resource import LeasableResourceKind
-from acme.om.leases.types.request import NoopAsk
 from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
     HOST,
     ClaimantKindSpec,
+    PlacedKindSpec,
     PlacementWorkKind,
+    claimed_by,
     platform_claimant_kinds,
-    platform_work_kinds,
 )
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,
     ProductKinds,
+    ProductResourceKind,
     build_platform_managers,
 )
+from acme.om.root import KINDS
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.rules import decide
@@ -107,7 +111,7 @@ def _render_lane(payload: RenderPayload) -> str:
     return batch_lane(payload.pool_id)
 
 
-RENDER_KIND = WorkKindSpec(RENDER, RenderPayload, Permission.WRITE, _render_lane, claimant=BATCH)
+RENDER_KIND = PlacedKindSpec(RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH)
 BATCH_CLAIMANT = ClaimantKindSpec(
     BATCH, lambda node: ((batch_lane(node.pool_id), (RENDER,)),), prefix="bat_"
 )
@@ -331,8 +335,8 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
         await managers.work.enqueue(ajax, a_render(ajax, new_id(), frames=0))
     with pytest.raises(ValueError, match="capitals"):
         WorkKindSpec("render", RenderPayload, Permission.WRITE)
-    with pytest.raises(ValueError, match="names its lane"):
-        WorkKindSpec("UNPLACED", RenderPayload, Permission.WRITE, claimant=BATCH)
+    with pytest.raises(ValueError, match="names both"):
+        PlacedKindSpec("UNPLACED", RenderPayload, Permission.WRITE, claimant=BATCH)
 
     # A product never takes over a kind of the platform's, nor leaves its
     # work to a claimant kind nobody registered.
@@ -362,15 +366,21 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
 
 
 def test_the_platforms_kinds_go_through_the_same_registries(managers: PlatformManagers) -> None:
-    work = platform_work_kinds()
-    assert {spec.name for spec in work} == set(WorkKind)
-    assert work.claimed_by(HOST) == {PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE}
+    platforms = {
+        *WorkKind,
+        *AgentSessionWorkKind,
+        *IntakeWorkKind,
+        *PlacementWorkKind,
+        *ValidationWorkKind,
+    }
+    assert {spec.name for spec in KINDS} == platforms
+    assert claimed_by(KINDS, HOST) == {PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE}
     assert [spec.name for spec in platform_claimant_kinds()] == [HOST]
     placement = managers.placement
     assert isinstance(placement, PlacementManagerImpl)
     held = placement._kinds  # pyright: ignore[reportPrivateUsage] (the root's one registry)
-    assert {spec.name for spec in held} == set(WorkKind) | {RENDER}
-    assert held.claimed_by(BATCH) == {RENDER} and held.claimed_by("greedy") == frozenset()
+    assert {spec.name for spec in held} == platforms | {RENDER}
+    assert claimed_by(held, BATCH) == {RENDER} and claimed_by(held, "greedy") == frozenset()
     platform = ScriptedExecutor()
     with pytest.raises(ValueError, match="registered twice"):
         Executors(platform, {PLATFORM_EXECUTOR: ScriptedExecutor(name="batch-1")})
@@ -769,7 +779,7 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
     kinds' shape is refused where it is declared."""
     taken = ProductKinds(
         resources=lambda _managers: (
-            ResourceKindSpec(LeasableResourceKind.NOOP, NoopAsk, NoopLeasableResourceKindImpl()),
+            ProductResourceKind(LeasableResourceKind.NOOP, NoopLeasableResourceKindImpl()),
         )
     )
     with pytest.raises(ValueError, match="resource kind noop is registered twice"):
@@ -778,5 +788,14 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
             InfraLocalImpl(tmp_path),
             platform_root_options=PlatformRootOptions(product_kinds=taken),
         )
-    with pytest.raises(ValueError, match="lower case"):
-        ResourceKindSpec("Dock", NoopAsk, NoopLeasableResourceKindImpl())
+    misnamed = ProductKinds(
+        resources=lambda _managers: (
+            ProductResourceKind("Dock", NoopLeasableResourceKindImpl()),
+        )
+    )
+    with pytest.raises(ValueError, match="snake case"):
+        build_platform_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            platform_root_options=PlatformRootOptions(product_kinds=misnamed),
+        )

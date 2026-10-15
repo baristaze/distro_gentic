@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import httpx
 from tenant_support import tenant
-from test_events_api import REPORT
+from test_change_events_api import REPORT
 
 from acme.om.base import utcnow
 from acme.services.api.container import AppContainer

@@ -47,6 +47,7 @@ from acme.om.context import (
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.placement.kinds import PlacedKindSpec
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.root import KINDS
@@ -248,10 +249,13 @@ def test_every_kind_is_claimed_by_one_worker_and_asked_for_as_widely_as_it_runs(
     runner = runner_over(tmp_path)
     handlers = build_runner(runner)._handlers  # pyright: ignore[reportPrivateUsage]
     assert set(handlers) == {AgentSessionWorkKind.LOOP} and not maintenance & set(handlers)
-    assert maintenance | set(handlers) == {kind.name for kind in KINDS}
+    gateway = {kind.name for kind in KINDS if isinstance(kind, PlacedKindSpec)}
+    assert not (maintenance | set(handlers)) & gateway
+    assert maintenance | set(handlers) | gateway == {kind.name for kind in KINDS}
     loop_kind = KINDS.get(AgentSessionWorkKind.LOOP)
     assert loop_kind is not None
     asking = loop_kind.permission
+    requires = LoopHandlerImpl.REQUIRES
     for role, permissions in ROLE_PERMISSIONS.items():
         if asking in permissions:
             missing = [p for p in requires if p not in permissions]

@@ -59,12 +59,12 @@ from acme.om.spend_budgets.types.amount import Amount
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.windows.types.policy import CompactionPolicy
 
-from contracts.agent_session_storage import make_session
+from contracts.agent_session_storage import make_agent_session
 from contracts.agent_step_storage import make_message, make_request, make_response
 from contracts.doubles import APP, context
 from contracts.tools import stand_ins
 
-# What `make_session` names, so the agents manager classes every tool it
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 KIND = AgentKind(
@@ -76,7 +76,7 @@ KIND = AgentKind(
     tree=TreeLimits(height=3, count=4),
     share=Amount(cost_micros=1_000),
 )
-"""The kind `make_session` names, which a run takes its loop up as, and
+"""The kind `make_agent_session` names, which a run takes its loop up as, and
 which a session spawns under its share."""
 
 DAY = timedelta(days=1)
@@ -169,7 +169,7 @@ class Roots:
         )
 
     async def session_saying(self, ctx: TenantContext, text: str = SAID) -> AgentSession:
-        session = await self.managers.agent_sessions.create_agent_session(ctx, make_session())
+        session = await self.managers.agent_sessions.create_agent_session(ctx, make_agent_session())
         await self.managers.agent_steps.append_inputs(
             ctx, session.id, [make_message(session.id, text)]
         )
@@ -558,7 +558,7 @@ async def test_a_memory_only_policy_chooses_the_engines_storage_before_the_histo
 ) -> None:
     owner = await roots.tenant()
     await roots.declare(owner, RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY))
-    session = await roots.managers.agent_sessions.create_agent_session(owner, make_session())
+    session = await roots.managers.agent_sessions.create_agent_session(owner, make_agent_session())
     privacy = await roots.managers.privacy.get_privacy(owner, session.id)
     assert privacy.policy.mode is StorageMode.MEMORY_ONLY
     assert not (await roots.managers.retention.get_snapshot(owner, session.id)).at_rest
@@ -605,10 +605,10 @@ async def test_a_child_session_belongs_to_its_parents_agent_project(tmp_path: Pa
         agent_project_id=agent_project.agent_project_id, policy=a_policy(WEEK)
     )
     await roots.declare(owner, a_policy(MONTH), (narrowing,))
-    parent = await roots.managers.agent_sessions.create_agent_session(owner, make_session())
+    parent = await roots.managers.agent_sessions.create_agent_session(owner, make_agent_session())
     agent_project.agent_project_id = new_id()
     child = await roots.managers.agent_sessions.create_agent_session(
-        owner, make_session(parent=parent)
+        owner, make_agent_session(parent=parent)
     )
     snapshot = await roots.managers.retention.get_snapshot(owner, child.id)
     assert snapshot.agent_project_id == narrowing.agent_project_id

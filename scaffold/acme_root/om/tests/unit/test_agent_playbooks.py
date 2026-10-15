@@ -379,7 +379,7 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
                 managers.pricing,
                 managers.agent_sessions,
                 managers.spend_budgets,
-                SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+                agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 clock=clock,
             )
         )
