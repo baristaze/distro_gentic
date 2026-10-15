@@ -24,10 +24,12 @@ class ProductLive:
     """What the API builds over the live streams that a product's service
     may hold beside the managers: the watch, which opens a live read for a
     viewer of the session's or the item's tenant, and the streams of the
-    product's own kinds, which its routes write where no claimant does. A
-    kind's stream is grouped by an item's id and carries no tenant of its
-    own, so a service writes one only for an item it read under the
-    caller's context."""
+    product's own kinds, which its routes write where no claimant does and
+    read where the product shows them. A kind's stream is grouped by an
+    item's id and carries no tenant or permission of its own, so a service
+    reads or writes one only for an item it read under the caller's
+    context, with the permission the platform's routes require for the same
+    act: READ to read, WRITE to write."""
 
     watch: WatchManagerInterface
     kind_streams: KindStreamsInterface

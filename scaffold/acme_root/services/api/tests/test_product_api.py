@@ -3,8 +3,9 @@ and nowhere else: the API serves its routes beside the platform's, under
 the gateway's checks, and resolves its service by the namespace's name, with
 no wiring file naming it; its service opens a live read and writes a stream
 kind of the product's own through the live parts the API hands it, for its
-caller's tenant alone; and one served without being declared is refused at
-boot, since nothing would purge its rows."""
+caller's tenant alone, and writes only for a caller who may write; and one
+served without being declared is refused at boot, since nothing would purge
+its rows."""
 
 import base64
 import importlib
@@ -14,12 +15,12 @@ from typing import Annotated
 from uuid import UUID
 
 import pytest
-from api_support import build_container, client_over, seed_request, sign_in
+from api_support import add_member, build_container, client_over, seed_request, sign_in, sign_in_as
 from fastapi import APIRouter, Depends
 
 from acme.om import product_namespaces
 from acme.om.base import OmBase, new_id, utcnow
-from acme.om.context import Permission, TenantContext
+from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec, PlacedKindSpec
 from acme.om.platform_root import (
     PlatformManagers,
@@ -81,8 +82,10 @@ class ParcelsService:
 
     async def note(self, ctx: TenantContext, item_id: UUID, text: str) -> None:
         """A note on a shipment, in the stream of notes its courier reads.
-        The stream carries no tenant of its own, so the shipment is read
-        under the caller's context first."""
+        The stream carries no tenant or permission of its own, so the
+        caller holds WRITE, as the platform's write routes require, and the
+        shipment is read under the caller's context first."""
+        ctx.require(Permission.WRITE)
         item = await self.managers.work.get_item(ctx, item_id)
         number = self.noted.get(item.id, 0)
         await self.live.kind_streams.append(NOTES, item.id, item.id, ((number, text.encode()),))
@@ -209,6 +212,14 @@ async def test_a_declared_namespaces_service_opens_a_live_read_and_writes_its_ow
             b"in transit",
         ]
 
+        # A viewer of the tenant reads the shipment but writes no note.
+        await add_member(container, ctx.org_id, "vic@example.test", Role.VIEWER)
+        viewer = await sign_in_as(client, "vic@example.test", ctx.org_id)
+        viewed = await client.post(
+            f"/v1/parcels/shipments/{mine.id}/notes", params={"text": "x"}, headers=viewer
+        )
+        assert viewed.status_code == 403, viewed.text
+
         # Another tenant's shipment takes no note and opens no live read.
         refused = (
             await client.post(
@@ -221,7 +232,8 @@ async def test_a_declared_namespaces_service_opens_a_live_read_and_writes_its_ow
         ]
 
     # The notes sit in the shipment's own group, where its courier reads
-    # them, and nothing reached the other tenant's.
+    # them, the viewer's is not among them, and nothing reached the other
+    # tenant's.
     (notes,) = await courier.read(NOTES, mine.id, {})
     assert [entry for _, entry in notes.entries] == [b"fragile", b"this side up"]
     assert await courier.read(NOTES, theirs.id, {}) == ()
