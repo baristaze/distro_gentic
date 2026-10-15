@@ -99,7 +99,23 @@ read as the guideline's skill reads them, with these differences.
   other revision of it names as its `down_revision`, which `head(<role>)`
   in `<root>`'s `storage/migrate.py` returns. It is read by the parents,
   never by the file name: a folded revision sorts below the parents it
-  follows.
+  follows. A product whose chain for a role is the render's files, with
+  any revisions of its own on them, takes that role's chain as the render
+  has it, its folds included, as the guideline's merge table has a layer
+  take its source's: the first of the product's own revisions, if it has
+  one, has its `down_revision` re-pointed to the render's head.
+- **A product's wiring** (its step 6). A product declares what it adds
+  in the platform's product seams
+  (`../../scaffold/acme_root/docs/adr/2064-the-platform-wires-in-files-of-its-own-and-a-product-declares-its-namespaces.md`):
+  its kinds in `product_kinds.py`, its namespaces and their purges in
+  `product_namespaces.py`, and their routers and services in
+  `product_api.py`. Its entries in a process's container, the routers'
+  registry, the services root, and the maintenance worker go through
+  those seams, never into the platform's files: a conflict there is not
+  resolved by the merge table's row for a line both sides changed, which
+  would keep them. Each moves into its seam, and the platform's file
+  keeps the render's lines. An entry no seam carries stays, and the
+  output names it.
 - **A layer's gates** (its step 8). A layer runs its scaffold's gates in
   a copy, as the platform's CI does, never in `<root>`. From the
   checkout's root, `python3 scaffold/new.py <dir>/<name>` copies it into
@@ -124,5 +140,5 @@ read as the guideline's skill reads them, with these differences.
 
 As the guideline's skill gives it, with the platform release of the
 base before and after, the engine release and the guideline release
-each takes, and each migration whose parent the move re-pointed, with
-its stamp and both parents.
+each takes, each migration whose parent the move re-pointed, with its
+stamp and both parents, and each product entry no seam carries.
