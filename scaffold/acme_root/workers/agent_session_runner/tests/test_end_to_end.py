@@ -415,7 +415,7 @@ async def awaiting_approval(
         "reason": "person",
         "unlock": "approval",
         "retry_at": None,
-        "line": None,
+        "wait_line": None,
         "cause": None,
         "holder": None,
     }
