@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -161,7 +162,7 @@ async def runner(api: Stack, image: str, vms: VmsLimaImpl) -> AsyncIterator[Runn
     infra = api.container.infra
     # The runner's VMs are Lima's: its pool starts them, and hands each
     # its seed through the hypervisor's channel.
-    infra._vms = vms  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    infra._agent_infra = replace(infra._agent_infra, vms=vms)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
     infra._platform_infra = PlatformInfra(  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
         infra.get_streams(), SeedsChannelImpl(vms, TIMEOUT)
     )
