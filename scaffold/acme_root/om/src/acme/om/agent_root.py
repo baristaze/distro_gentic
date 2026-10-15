@@ -352,11 +352,11 @@ def build_agent_managers(
         steps,
         tenancy,
         ModelResolverTableImpl(prices, ResolverOptions())
-        if layer is None or layer.resolver is None
+        if layer is None
         else layer.resolver(prices),
         options.language_models_options or LanguageModelsOptions(),
     )
-    if layer is not None and layer.models is not None:
+    if layer is not None:
         models = layer.models(models, tenancy)
     attribution = AttributionManagerImpl(
         storage.get_attribution_storage(),

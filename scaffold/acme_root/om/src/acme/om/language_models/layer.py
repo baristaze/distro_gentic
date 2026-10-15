@@ -20,23 +20,19 @@ from acme.om.tenancy import TenancyManagerInterface
 class LanguageModelsLayer:
     """`credentials` builds the client each call runs on over the providers'
     registry, which holds the platform's key. `resolver` builds the resolver
-    over the prices it asks before it answers a fill; None keeps the table.
-    `models` wraps the engine's models manager, with the tenancy manager
-    that answers whether a tenant is past its retention; None keeps the
-    manager as it is. `version` reads the version
+    over the prices it asks before it answers a fill. `models` wraps the
+    engine's models manager, with the tenancy manager that answers whether
+    a tenant is past its retention. `version` reads the version
     of the layer's table a session's fills came from last, None before
     they are resolved: the label a call's tokens and spend count under.
     `tier` reads the plan tier the session's tenant is served at, the label
     beside it."""
 
     credentials: Callable[[ModelProvidersInterface], CallCredentialsInterface]
-    resolver: Callable[[ModelPricesInterface], ModelResolverInterface] | None = None
-    models: (
-        Callable[
-            [LanguageModelsManagerInterface, TenancyManagerInterface],
-            LanguageModelsManagerInterface,
-        ]
-        | None
-    ) = None
+    resolver: Callable[[ModelPricesInterface], ModelResolverInterface]
+    models: Callable[
+        [LanguageModelsManagerInterface, TenancyManagerInterface],
+        LanguageModelsManagerInterface,
+    ]
     version: Callable[[TenantContext, UUID], Awaitable[int | None]] | None = None
     tier: Callable[[TenantContext, UUID], Awaitable[str]] | None = None
