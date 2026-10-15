@@ -6,7 +6,7 @@ children are not here at all, only whether the content is kept."""
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import ContentState
 from acme.om.agent_steps.types.header import StepHeader
 from acme.om.base import OmBase

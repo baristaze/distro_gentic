@@ -17,10 +17,10 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.evidence.rules import policy_key
 from acme.om.platform_agents import kinds
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
-from acme.om.work.types.work_item import WorkKind
 
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
@@ -129,13 +129,13 @@ async def test_a_validation_session_over_postgres_is_platform_work_with_no_model
     claimed = await platform.managers.work.claim(
         RequestContext(request_id=new_id(), app=WORKER),
         "default",
-        (WorkKind.VALIDATION,),
+        (ValidationWorkKind.VALIDATION,),
         "maintenance-1",
         timedelta(seconds=30),
     )
     assert claimed is not None
     ctx, item = claimed
-    assert (item.kind, item.target_id) == (WorkKind.VALIDATION, session.id)
+    assert (item.kind, item.target_id) == (ValidationWorkKind.VALIDATION, session.id)
     finished = await validations.run_validation(ctx, session.id)
     await platform.managers.work.complete(ctx, item)
 

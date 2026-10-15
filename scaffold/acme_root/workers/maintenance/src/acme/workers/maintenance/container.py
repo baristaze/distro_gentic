@@ -39,7 +39,6 @@ from acme.om.platform_root import (
     intake_absent,
 )
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.root import Managers, build_managers
 from acme.om.spend_budgets.impl.manager import SpendBudgetsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface

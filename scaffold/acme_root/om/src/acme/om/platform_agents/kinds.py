@@ -53,12 +53,15 @@ a person chooses by choosing the session they type in."""
 
 from collections.abc import Mapping
 from datetime import timedelta
+from enum import StrEnum
 from typing import Any
 
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.base import OmBase
+from acme.om.context import Permission
 from acme.om.language_models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
 from acme.om.spend_budgets.types.amount import Amount
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
@@ -67,6 +70,7 @@ from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
 from acme.om.windows.rules import READ_TOOL_OUTPUT
+from acme.om.work.kinds import WorkKindSpec
 
 SOFTWARE_ENGINEER = "software_engineer"
 ANALYSIS = "analysis"
@@ -699,3 +703,25 @@ SHIPPED: tuple[AgentKind, ...] = (
     OPS_ANALYST_KIND,
 )
 """Every kind the platform ships, at every version it still runs."""
+
+
+class ValidationWorkKind(StrEnum):
+    """The names of the validation session's kinds of work."""
+
+    VALIDATION = "VALIDATION"  # a validation session's check, on a fresh executor
+
+
+class ValidationPayload(OmBase):
+    """The VALIDATION kind carries nothing: its target is the validation
+    session, which holds what it runs."""
+
+
+VALIDATION_WORK_KINDS: tuple[WorkKindSpec, ...] = (
+    # A validation session's start asks for it, relayed from its own commit;
+    # the run writes the session's validation and finishes the session,
+    # which WRITE covers. It runs on the platform's own worker, with no
+    # agent and no model call.
+    WorkKindSpec(ValidationWorkKind.VALIDATION, ValidationPayload, Permission.WRITE),
+)
+"""The validation session's kind, registered below the marker of
+`root.KINDS`."""

@@ -17,7 +17,7 @@ from acme.infra.transports.redaction import forms, marker
 from acme.infra.transports.twin import TwinReply
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import ToolResultBlock, ToolUseBlock
 from acme.om.agent_steps.types.header import (
     LoopOutcome,

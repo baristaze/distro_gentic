@@ -18,6 +18,7 @@ from acme.infra.topics import TopicPayload, Topics, WorkAvailablePayload
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.rules import message_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
@@ -39,7 +40,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tenancy.rules import operator_permissions_of
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.main import build_runner
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -88,7 +89,7 @@ class Enqueued:
         if (
             isinstance(payload, WorkAvailablePayload)
             and payload.org_id == self.org_id
-            and payload.kind == WorkKind.LOOP.value
+            and payload.kind == AgentSessionWorkKind.LOOP.value
         ):
             self.keys.append(payload.idempotency_key)
 
@@ -140,7 +141,7 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
     _, ajax = await a_tenant("ajax", ("Why does checkout time out?", "Why does it stall?"))
     # Another runner of the lane holds Ajax's first loop: its share of one.
     held = await managers.work.claim(
-        rctx, lane, [WorkKind.LOOP], "runner-elsewhere", LEASE, tenant_cap=1
+        rctx, lane, [AgentSessionWorkKind.LOOP], "runner-elsewhere", LEASE, tenant_cap=1
     )
     assert held is not None and held[0].org_id == ajax.org_id
     _, beta = await a_tenant("beta", ("Why is the build red?",))

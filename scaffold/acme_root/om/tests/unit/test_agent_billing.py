@@ -380,7 +380,9 @@ async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
         await loop.managers.spend_budgets.create_spend_budget(
             owner, make_spend_budget(kind, key, cost_micros=cap)
         )
-    fills = await loop.managers.language_models.resolve_fill_set(owner, ours, ASSISTANT.roles, Eligibility())
+    fills = await loop.managers.language_models.resolve_fill_set(
+        owner, ours, ASSISTANT.roles, Eligibility()
+    )
     fill = fills.fill_for(MAIN)
     assert fill is not None
     call = ModelCall(model=fill.model, messages=(), max_output_tokens=4_000)

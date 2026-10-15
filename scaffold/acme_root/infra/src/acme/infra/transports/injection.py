@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-from acme.infra.agent_workspaces import AgentWorkspace, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.agent_workspaces.network import HOST_NETWORK_VARIABLES
 from acme.infra.secrets import SecretsInterface
 from acme.infra.transports import (

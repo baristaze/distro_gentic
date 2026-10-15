@@ -26,7 +26,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports.redaction import forms
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.run import RunEnd

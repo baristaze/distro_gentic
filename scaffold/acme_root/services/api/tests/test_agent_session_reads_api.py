@@ -23,7 +23,7 @@ from acme.integrations.model_providers.types import Usage
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.header import (
     AcceptedResult,
     ControlCommand,

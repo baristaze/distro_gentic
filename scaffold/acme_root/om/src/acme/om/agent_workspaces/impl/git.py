@@ -244,7 +244,9 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         env = {"BRANCH": branch, "START": start or ""}
         await self._run(ctx, workspace, epoch, "cut", CUT, env)
 
-    async def checkout(self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int) -> Checkout:
+    async def checkout(
+        self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int
+    ) -> Checkout:
         words = await self._run(ctx, workspace, epoch, "checkout", CHECKOUT, {})
         if len(words) != 4 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")

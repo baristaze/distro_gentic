@@ -33,7 +33,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.integrations.events import ProvidedEvent
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal

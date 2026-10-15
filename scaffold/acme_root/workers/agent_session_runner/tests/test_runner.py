@@ -23,14 +23,13 @@ from acme.integrations.model_providers.content import TextBlock, ToolUseBlock
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.om.agent_sessions.impl.manager import wake_row
-from acme.om.agent_sessions.kinds import LOOP_LANE, AgentSessionWorkKind
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.content import Attachment, Children, DocumentBlock
 from acme.om.agent_steps.types.content import TextBlock as KeptText
 from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason, ToolResponseHeader
-from acme.om.agent_steps.types.step import AgentStepType
 from acme.om.agents import LoopManagerInterface
 from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
@@ -48,7 +47,6 @@ from acme.om.context import (
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.impl.manager import PlacementOptions
-from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.root import KINDS

@@ -4,7 +4,6 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
-from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.infra.base import new_id
 from acme.infra.cache import CacheScope
 from acme.infra.cache.breaker import CacheBreakerImpl

@@ -12,7 +12,8 @@ from worker_support import request, sign_in
 
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.intake.kinds import IntakeWorkKind
+from acme.om.work.types.work_item import WorkItem
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 from acme.workers.maintenance.settings import MaintenanceSettings
@@ -60,7 +61,7 @@ async def test_a_removed_members_links_go_over_postgres(container: WorkerContain
     # The queue is the database's: an item another test left goes back.
     others: list[tuple[TenantContext, WorkItem]] = []
     while True:
-        claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "it", LEASE)
+        claimed = await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "it", LEASE)
         assert claimed is not None, "the removal queued its work"
         ctx, item = claimed
         if item.target_id == bob.id:

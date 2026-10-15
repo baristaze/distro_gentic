@@ -20,7 +20,12 @@ from uuid import UUID
 
 import pytest
 
-from acme.infra.agent_workspaces import AgentWorkspaceBase, EgressMode, IsolationMode, AgentWorkspace
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceBase,
+    EgressMode,
+    IsolationMode,
+)
 from acme.infra.agent_workspaces.container import DEFAULT_IMAGE, container_name
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
@@ -45,7 +50,6 @@ from acme.om.platform_agents.types.validation import ValidationStart, Validation
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
-from acme.om.work.types.work_item import WorkKind
 
 from contracts.agent_project_storage import in_agent_project
 from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
@@ -91,6 +95,7 @@ TOTAL = 3
 a new file beside the base's fixture."""
 REPLACES = """\
 import os
+from acme.om.platform_agents.kinds import ValidationWorkKind
 
 os.remove("checks/expected.txt")
 with open("checks/expected.txt", "w") as fixture:
@@ -380,7 +385,7 @@ async def test_a_validation_session_runs_the_bases_runner_whatever_the_head_plan
     claimed = await delivered.managers.work.claim(
         RequestContext(request_id=new_id(), app=WORKER),
         "default",
-        (WorkKind.VALIDATION,),
+        (ValidationWorkKind.VALIDATION,),
         "maintenance-1",
         timedelta(seconds=30),
     )

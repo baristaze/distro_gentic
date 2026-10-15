@@ -54,7 +54,7 @@ MAX_SETUP = 50
 MAX_REGISTRIES = 20
 
 
-class AgentWorkspaceBase(OmBase):
+class AgentProjectWorkspaceBase(OmBase):
     """What an agent project's sessions work in: the image their workspace starts
     on, and the commands that set it up, run once, in order, then kept as
     the base every workspace of a kind that takes it starts from.
@@ -93,4 +93,4 @@ class AgentProject(Identifiable, Trackable):
     name: Stored = Field(min_length=1, max_length=MAX_AGENT_PROJECT_NAME)
     repository: Repository
     workspace_snapshots: bool = True
-    agent_workspace_base: AgentWorkspaceBase | None = None
+    agent_workspace_base: AgentProjectWorkspaceBase | None = None

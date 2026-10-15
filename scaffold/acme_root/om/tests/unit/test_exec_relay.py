@@ -21,11 +21,11 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
@@ -68,6 +68,7 @@ from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.work import (
     ExecEffect,
@@ -79,7 +80,7 @@ from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_p
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_session
@@ -550,7 +551,9 @@ async def test_a_command_sent_after_its_host_was_revoked_is_refused_and_queues_n
     with pytest.raises(NoWorkspaceHost):
         await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
 
-    assert await work.latest_for_target(wall.owner, WorkKind.EXEC, wall.workspace.id) is None
+    assert (
+        await work.latest_for_target(wall.owner, PlacementWorkKind.EXEC, wall.workspace.id) is None
+    )
     assert await work.oldest_ready_age() == timedelta(0)
 
 
@@ -965,7 +968,9 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.other, row.id)
     await managers.exec_relay.released(request(), wall.holder, row.id)
-    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, agent_session_id)
+    done = await managers.work.latest_for_target(
+        owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert done is not None and done.status is WorkStatus.DONE
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.holder, row.id)
@@ -1061,7 +1066,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     with pytest.raises(ItemNotHeld):
         await managers.exec_relay.released(request(), wall.holder, purge.id)
     await managers.exec_relay.released(request(), wall.other, purge.id)
-    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    done = await managers.work.latest_for_target(owner, PlacementWorkKind.WORKSPACE, instance)
     assert done is not None and done.status is WorkStatus.DONE
 
 
@@ -1073,7 +1078,7 @@ async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall:
     assert not await managers.exec_relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
 
     assert await Host(managers, wall.other).claim() is None, "the prepare that waited is ended"
-    ended = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    ended = await managers.work.latest_for_target(owner, PlacementWorkKind.WORKSPACE, instance)
     assert ended is not None and ended.status is WorkStatus.DONE
 
 

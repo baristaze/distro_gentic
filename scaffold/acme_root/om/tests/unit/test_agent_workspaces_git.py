@@ -20,13 +20,13 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.impl.local import InfraLocalImpl

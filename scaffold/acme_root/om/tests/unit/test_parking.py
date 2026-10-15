@@ -44,12 +44,7 @@ from acme.om.spend_budgets.types.spend_budget import (
 from acme.om.spend_budgets.types.spend_hold import Billed, SpendHold, SpendHoldRequest
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import (
-    WakeAgentSessionPayload,
-    WakeAgentSessionsPayload,
-    WorkItem,
-    WorkKind,
-)
+from acme.om.work.types.work_item import WorkItem
 
 from contracts.agent_session_storage import make_agent_session
 from contracts.agent_step_storage import make_message, make_request
@@ -138,7 +133,9 @@ async def test_the_sessions_one_outage_parks_wake_staggered_not_at_once(engine: 
     for _ in range(20):
         session, epoch, loop = await running(engine, ctx)
         await engine.managers.agent_sessions.park(ctx, session.id, epoch, loop, outage)
-    wakes = sorted(item.available_at for item in engine.queued(WorkKind.WAKE_AGENT_SESSION))
+    wakes = sorted(
+        item.available_at for item in engine.queued(AgentSessionWorkKind.WAKE_AGENT_SESSION)
+    )
     spread = AgentSessionsOptions().wake_spread
     assert len(wakes) == 20 and len(set(wakes)) == 20, "no two wake at once"
     assert retry_at <= wakes[0] and wakes[-1] < retry_at + spread
@@ -146,7 +143,7 @@ async def test_the_sessions_one_outage_parks_wake_staggered_not_at_once(engine: 
     # A wake is drawn from its session and the retry time: asked again, the same.
     assert all(
         wakes_after(item.target_id, outage, spread) == item.available_at
-        for item in engine.queued(WorkKind.WAKE_AGENT_SESSION)
+        for item in engine.queued(AgentSessionWorkKind.WAKE_AGENT_SESSION)
     )
     budget = Park(reason=ParkReason.SPEND_BUDGET, unlock="b", retry_at=retry_at)
     assert wakes_after(new_id(), budget, spread) == retry_at

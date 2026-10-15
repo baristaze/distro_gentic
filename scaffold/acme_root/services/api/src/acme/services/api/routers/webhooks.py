@@ -15,7 +15,6 @@ from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.resolve import WebhooksService
 from acme.services.api.gateway.webhooks import IdentityDelivery, IntegrationDelivery
 from acme.services.api.types.common import DeliveryReceivedView
-from acme.services.api.types.webhooks import DeliveryReceivedView
 
 router = APIRouter(prefix="/webhooks")
 

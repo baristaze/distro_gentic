@@ -49,7 +49,6 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, switch_to
 from acme.infra.agent_workspaces.container import (

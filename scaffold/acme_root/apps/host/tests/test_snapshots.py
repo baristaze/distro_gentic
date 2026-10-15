@@ -38,6 +38,7 @@ from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
     EgressMode,
@@ -45,7 +46,6 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.buckets import Buckets
@@ -66,6 +66,7 @@ from acme.om.context import (
 )
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.platform_root import ProductKinds
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix
@@ -75,7 +76,7 @@ from acme.om.watch.exceptions import NotHandedOver
 from acme.om.watch.impl.manager import TAKEN
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 from acme.workers.agent_session_runner.workspaces import HeldWorkspacesSweep
 
 from contracts.agent_session_storage import make_session
@@ -335,7 +336,9 @@ async def test_a_kept_session_on_a_pool_with_no_probed_host_waits_and_is_never_a
 
     assert waits.value.clears, "it waits on the resource"
     assert "has probed snapshots of a container workspace" in waits.value.message
-    assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    assert not await managers.work.has_open(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
 
     # Asked anyway, the host refuses it: nothing is made as a cache.
     assert await managers.exec_relay.ask_prepare(api.owner, agent_session_id, KEPT)
@@ -499,7 +502,9 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     # The person works by hand; a take again restores nothing over it.
     twin.files[agent_session_id] = b"the person's work by hand"
     await watch.take_control(person, agent_session_id)
-    assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    assert not await managers.work.has_open(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert await host.claim_once() is None
     assert twin.files[agent_session_id] == b"the person's work by hand"
 
@@ -538,7 +543,9 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     now[0] += timedelta(minutes=10)
     assert await sweep(stage) == 0, "no snapshot holds it: it stays"
     assert await sweep(stage) == 0
-    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    asked = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert asked is not None and asked.payload["operation"] == "snapshot", "no release is asked"
     assert agent_session_id in twin.live
     assert twin.files[agent_session_id] == b"the snapshot, and what the run installed since"
@@ -579,7 +586,9 @@ async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_
     await other.idle()
     with pytest.raises(AgentWorkspaceLost):
         await restoring
-    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    asked = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert asked is not None and asked.status is WorkStatus.FAILED
     assert agent_session_id not in other_twin.live
 
@@ -648,6 +657,8 @@ async def test_a_sessions_purge_asks_each_host_that_keeps_its_snapshots_to_erase
     await claimed(host)
 
     assert not kept.exists(), "erased on the host, with no key revoked"
-    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    asked = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert asked is not None and asked.payload["operation"] == "erase"
     assert asked.status is WorkStatus.DONE

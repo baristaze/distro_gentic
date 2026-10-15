@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from uuid import UUID
 
-from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode
 from acme.infra.agent_workspaces.account import (
     SHARED_MODE,
     UMASK,

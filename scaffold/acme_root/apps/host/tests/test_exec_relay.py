@@ -41,11 +41,11 @@ from acme.apps.host.mcp import HostServers
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.container import DEFAULT_IMAGE, AgentWorkspaceContainerImpl
 from acme.infra.secrets.local import SecretsLocalImpl

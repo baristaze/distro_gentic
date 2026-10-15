@@ -26,8 +26,8 @@ from runner_support import TOOLS, assistant
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.client.types import IsolationMode
-from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces import AgentWorkspace
+from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerNullImpl
@@ -48,10 +48,11 @@ from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.exec_relay.rules import READ_BYTES
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -367,7 +368,7 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     assert await host.provider.held_instances() == []
     assert gone(host.transport.records / instance.hex), "and its records"
     assert await managers.exec_relay.binding_of(owner, instance) is None
-    purge = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    purge = await managers.work.latest_for_target(owner, PlacementWorkKind.WORKSPACE, instance)
     assert purge is not None and purge.status is WorkStatus.DONE
     assert WorkspacePayload.model_validate(purge.payload).operation is WorkspaceOperation.PURGE
     assert purge.id in host.claimed, "the host of the session's pool destroyed it"

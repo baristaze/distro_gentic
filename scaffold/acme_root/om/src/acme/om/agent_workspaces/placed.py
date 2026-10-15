@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import TransportInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
 from acme.om.context import TenantContext

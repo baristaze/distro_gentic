@@ -9,7 +9,7 @@ latest snapshot, which is the machine's whole disk."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.cloud_pool.types.machine import MachineSnapshot
 from acme.om.context import RequestContext, TenantContext

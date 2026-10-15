@@ -15,8 +15,8 @@ from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.intake.impl.manager import UNLINKED
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.tenancy.types.user import User
-from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 
@@ -42,13 +42,15 @@ async def bob_signs_in(container: WorkerContainer, org_id: UUID) -> TenantContex
 async def run_member_left(container: WorkerContainer) -> None:
     """The MEMBER_LEFT item the commit queued, run as the worker runs it."""
     work = container.managers.work
-    claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE)
+    claimed = await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE)
     assert claimed is not None
     ctx, item = claimed
     await build_loop(container)._handlers[item.kind].handle(ctx, item)  # pyright: ignore[reportPrivateUsage]
     await work.complete(ctx, item)
     # One item a place that ended: nothing else is queued.
-    assert await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE) is None
+    assert (
+        await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE) is None
+    )
 
 
 async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
@@ -131,7 +133,7 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
         await intake.link_account(ann, "forge", "bob-gh", bob.id),
     ]
     await container.managers.tenancy.members.remove_member(ann, bob.id)
-    claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE)
+    claimed = await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE)
     assert claimed is not None
     ctx, item = claimed
     handler = build_loop(container)._handlers[item.kind]  # pyright: ignore[reportPrivateUsage]

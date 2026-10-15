@@ -15,7 +15,7 @@ branch and pull request, for one loop at most."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.types.credential import (
     FetchCredential,

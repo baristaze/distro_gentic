@@ -41,7 +41,6 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
     ResourceLimits,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces import account as accounts
 from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl, Switch, switch_to

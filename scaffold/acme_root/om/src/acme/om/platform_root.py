@@ -8,7 +8,7 @@ platform's kinds is `ProductKinds`, declared once in
 `build_platform_managers`."""
 
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import Any, TypedDict, Unpack
 from uuid import UUID
@@ -31,10 +31,9 @@ from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_projects.impl.retention import SessionAgentProjectBoundImpl
 from acme.om.agent_projects.impl.sessions import AgentSessionsInAgentProjectImpl
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
+from acme.om.agent_root import LOCAL, AgentRootOptions, refuse_quiet_spend
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_steps import AgentStepsManagerInterface
-from acme.om.agent_steps.impl.manager import AgentStepsOptions
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces import rules as workspace_rules
 from acme.om.agent_workspaces.agent_projects import (
@@ -57,13 +56,9 @@ from acme.om.agent_workspaces.impl.tools import HeldWorkspaces, ToolsManagerAgen
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
-from acme.om.agents.impl.loop import LoopOptions
-from acme.om.agents.impl.manager import AgentsOptions
-from acme.om.agents.sink import StreamSinkInterface
+from acme.om.agents.hooks import LoopHooksInterface
+from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog
-from acme.om.attribution import PrincipalContext
-from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
@@ -95,15 +90,12 @@ from acme.om.hosts.impl.placement import inside_wall
 from acme.om.hosts.rules import ENROLLMENT_PREFIX
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
-from acme.om.language_models.impl.manager import LanguageModelsOptions
 from acme.om.language_models.layer import LanguageModelsLayer
-from acme.om.language_models.prices import ModelPricesInterface
-from acme.om.leases.hooks import LeasableResourceKindInterface
+from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
 from acme.om.leases.impl.manager import LeasesOptions
-from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
-from acme.om.leases.types.request import ASK_PAYLOADS
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
+from acme.om.orchestrations.kinds import OrchestrationKinds
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.park_alerts.impl.manager import ParkAlertsOptions
 from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
@@ -116,7 +108,6 @@ from acme.om.placement.kinds import (
     ClaimantKinds,
     ClaimantKindSpec,
     platform_claimant_kinds,
-    platform_work_kinds,
 )
 from acme.om.platform_agents import PlatformAgentsManagerInterface
 from acme.om.platform_agents.catalog import (
@@ -135,6 +126,7 @@ from acme.om.platform_agents.kinds import (
     WARM_GRACE,
     WORKSPACE_BASE_KINDS,
 )
+from acme.om.platform_loop_hooks import PlatformLoopHooksImpl
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.keys import AgentSessionKeysImpl
 from acme.om.privacy.impl.records import RecordSealKeysImpl
@@ -148,10 +140,9 @@ from acme.om.retention.impl.keys import (
 from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
 from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
 from acme.om.retention.keys import TenantKeysInterface
-from acme.om.root import LOCAL, Managers, build_managers, refuse_quiet_spend
+from acme.om.root import KINDS, Managers, build_managers
 from acme.om.root_hooks import RootHooksInterface, SessionPurge
 from acme.om.spend_budgets import SpendBudgetGateInterface, SpendBudgetsManagerInterface
-from acme.om.spend_budgets.impl.manager import SpendBudgetsOptions
 from acme.om.spend_budgets.pricing import PricingInterface
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface
@@ -159,11 +150,9 @@ from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tenancy.impl.operator import TenancyOperatorOptions
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES
 from acme.om.tools import ToolsManagerInterface
-from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.bases import AgentWorkspaceBases
 from acme.om.tools.impl.manager import ForkPoints, ToolsOptions
 from acme.om.tools.impl.snapshots import SnapshotStore
-from acme.om.tools.seal import RecordSealInterface, SnapshotSealInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
@@ -171,10 +160,7 @@ from acme.om.tools.types.toolset import Toolset
 from acme.om.trust.owners import SecretOwnerInterface
 from acme.om.watch.kinds import StreamKind
 from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.hashes import PromptHashInterface
 from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
-from acme.om.windows.seal import ToolOutputSealInterface
-from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work.impl.manager import Lanes, WorkOptions
 from acme.om.work.kinds import WorkKinds, WorkKindSpec
 
@@ -224,13 +210,23 @@ def no_actions(
     return ()
 
 
-ProductResources = Callable[[Callable[[], PlatformManagers]], tuple[ResourceKindSpec, ...]]
-"""A product's own resource kinds, each with the shape of its ask, its
-hooks, and its check of an ask if it has one, built over the managers as
-the root answers them, as a product's tools are."""
+@dataclass(frozen=True)
+class ProductResourceKind:
+    """One of a product's leasable resource kinds: its name, its hooks, whose
+    `ASK` is the shape of its ask, and, when it refuses some asks, its check
+    of one. The root registers it beside the mechanism's own."""
+
+    name: str
+    hooks: LeasableResourceKindInterface
+    check: AskCheckInterface | None = None
 
 
-def no_resources(managers: Callable[[], PlatformManagers]) -> tuple[ResourceKindSpec, ...]:
+ProductResources = Callable[[Callable[[], PlatformManagers]], tuple[ProductResourceKind, ...]]
+"""A product's own leasable resource kinds, built over the managers as the
+root answers them, as a product's tools are."""
+
+
+def no_resources(managers: Callable[[], PlatformManagers]) -> tuple[ProductResourceKind, ...]:
     """A product with no resource kind of its own."""
     return ()
 
@@ -248,8 +244,8 @@ class ProductKinds:
     the name a check's `executor` gives; and its kinds of agent automation
     action, each acting in a firing, saying when the run it started
     ended, and checking the person who writes one (`agent_automations.actions`);
-    and its resource kinds, each with the shape of its ask, the hooks a
-    grant asks, and its check of an ask if it has one (`leases.kinds`).
+    and its leasable resource kinds, each with its hooks, whose `ASK` is
+    the shape of its ask, and its check of an ask if it has one.
     Its toolsets join the platform's (`platform_agents.kinds.TOOLSETS`),
     and each toolset its kinds name is one of the two; a name the
     platform's toolsets hold is refused. Each of its agent kinds may name
@@ -546,9 +542,12 @@ class PlatformRootOptions:
     and sees each call the engine runs. `agents_layer` wraps the agents
     manager before anything that makes a session takes it: the agent
     projects, the platform's agents, the spawn tool, and the root's own.
-    None takes each manager as it is. `attached_toolsets` answers the
-    toolsets a session holds beyond its kind, a tenant's own: the loop
-    folds them into the session's kind at each run. None attaches nothing.
+    None takes each manager as it is. `loop_hooks` answers the toolsets a
+    session holds beyond its kind, a tenant's own, which the loop folds
+    into the session's kind at each run, and the steps a layer above the
+    platform appends before a run's first call; the platform's own hooks
+    renew a new loop's fill set and tell what changed under the model
+    around them (`platform_loop_hooks`). None attaches and appends nothing.
 
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
@@ -628,7 +627,7 @@ class PlatformRootOptions:
     agent_automations: Callable[[], AgentAutomationsManagerInterface] | None = None
     tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None
     agents_layer: Callable[[AgentsManagerInterface], AgentsManagerInterface] | None = None
-    attached_toolsets: AttachedToolsetsInterface | None = None
+    loop_hooks: LoopHooksInterface | None = None
     executor: ExecutorInterface | None = None
     executor_options: ExecutorOptions | None = None
     work_product: WorkProductInterface | None = None
@@ -654,41 +653,20 @@ class PlatformRootOptions:
 
 
 class EngineOptions(TypedDict, total=False):
-    """The engine's root's keywords (`acme.om.root.build_managers`), which
-    the platform's root hands on, its kinds, tools, classes, ceilings, and
-    record seal joined to theirs."""
+    """The roots' keywords (`acme.om.root.build_managers`), which the
+    platform's root hands on: the business root's own, and the engine's
+    options, with the platform's kinds, tools, classes, ceilings, record
+    seal, and loop hooks joined to theirs."""
 
-    media_options: MediaOptions | None
-    idempotency_options: IdempotencyOptions | None
     change_events_options: ChangeEventsOptions | None
-    work_options: WorkOptions | None
-    orchestrations_options: OrchestrationsOptions | None
+    idempotency_options: IdempotencyOptions | None
     leases_options: LeasesOptions | None
-    steps_options: AgentStepsOptions | None
-    agent_sessions_options: AgentSessionsOptions | None
-    budgets_options: SpendBudgetsOptions | None
-    language_models_options: LanguageModelsOptions | None
-    model_prices: ModelPricesInterface | None
-    language_models_layer: LanguageModelsLayer | None
-    call_gate: CallGateInterface | None
-    prompt_hash: PromptHashInterface | None
-    tool_output_seal: ToolOutputSealInterface | None
-    record_seal: RecordSealInterface | None
-    snapshot_seal: SnapshotSealInterface | None
-    compaction_policy: CompactionPolicy | None
-    agents_options: AgentsOptions | None
-    attribution_options: AttributionOptions | None
-    agent_kinds: tuple[AgentKind, ...]
-    principal_context: PrincipalContext | None
-    result_gate: ResultGateInterface | None
-    tools_options: ToolsOptions | None
-    spend_budget_gate: SpendBudgetGateInterface | None
-    stream_sink: StreamSinkInterface | None
-    tool_catalog: tuple[ToolInterface, ...]
-    attachment_reader: AttachmentReaderInterface | None
-    domain_classes: tuple[str, ...]
-    loop_options: LoopOptions | None
-    environment: str
+    media_options: MediaOptions | None
+    orchestration_kinds: OrchestrationKinds
+    orchestrations_options: OrchestrationsOptions | None
+    work_kinds: WorkKinds
+    work_options: WorkOptions | None
+    agent_root_options: AgentRootOptions | None
 
 
 class RootHooksPlatformImpl(RootHooksInterface):
@@ -710,16 +688,19 @@ class RootHooksPlatformImpl(RootHooksInterface):
         self._integrations = integrations
         self._options = options
         self._engine = engine
-        self._environment = engine.get("environment", LOCAL)
+        agent = engine.get("agent_root_options") or AgentRootOptions()
+        self._agent = agent
+        self._environment = agent.environment
         self._built: PlatformManagers | None = None
         # The kinds every manager reads through: the platform's own, and the
         # product's beside them. A product's tools read the managers built
         # below, as the platform's own do, so each edge is bound at call time.
         product = options.product_kinds or ProductKinds()
         self._product = product
-        agent_kinds = (*engine.get("agent_kinds", ()), *product.agents)
-        tool_catalog = (*engine.get("tool_catalog", ()), *product.tools(lambda: self.managers))
-        domain_classes = (*engine.get("domain_classes", ()), *product.classes)
+        self._product_resources: tuple[ProductResourceKind, ...] | None = None
+        agent_kinds = (*agent.agent_kinds, *product.agents)
+        tool_catalog = (*agent.tool_catalog, *product.tools(lambda: self.managers))
+        domain_classes = (*agent.domain_classes, *product.classes)
         if options.platform_agents is not None:
             # Their tools read the managers built below, so each edge is bound
             # at call time.
@@ -750,13 +731,13 @@ class RootHooksPlatformImpl(RootHooksInterface):
         self._tool_catalog = tool_catalog
         self._domain_classes = domain_classes
         self._kinds = AgentKindCatalog(kinds=agent_kinds)
-        self._work_kinds = platform_work_kinds().extended(product.work)
+        self._work_kinds = engine.get("work_kinds", KINDS).extended(product.work)
         self._claimant_kinds = ClaimantKinds(
             (*platform_claimant_kinds(), *product.claimants), reserved=PLATFORM_PREFIXES
         )
         # The ceilings: the options' own, the platform's on a protected path,
         # and the product's on its own classes.
-        tool_options = engine.get("tools_options") or ToolsOptions()
+        tool_options = agent.tools_options or ToolsOptions()
         ceilings = tool_options.ceilings
         if PROTECTED_CEILING not in ceilings.rules:
             ceilings = ToolPolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
@@ -770,7 +751,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             if self._environment == LOCAL
             else infra.get_keys()
         )
-        self._records = engine.get("record_seal") or RecordSealKeysImpl(
+        self._records = agent.record_seal or RecordSealKeysImpl(
             AgentSessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(self._keys)),
             storage.get_privacy_storage(),
         )
@@ -796,19 +777,26 @@ class RootHooksPlatformImpl(RootHooksInterface):
         return self._built
 
     def engine_options(self) -> EngineOptions:
-        """The engine's keywords as the caller set them, with the platform's
-        kinds, tools, classes, ceilings, and record seal joined to theirs."""
+        """The roots' keywords as the caller set them, with the platform's
+        work kinds beside theirs, and the platform's agent kinds, tools,
+        classes, ceilings, record seal, and loop hooks joined to the
+        engine's options. The platform's loop hooks run around the ones the
+        process wires, and read the models' face at call time."""
         engine = EngineOptions(**self._engine)
-        engine["agent_kinds"] = self._agent_kinds
-        engine["tool_catalog"] = self._tool_catalog
-        engine["domain_classes"] = self._domain_classes
-        engine["tools_options"] = self._tool_options
-        engine["record_seal"] = self._records
+        engine["work_kinds"] = self._work_kinds
+        engine["agent_root_options"] = replace(
+            self._agent,
+            agent_kinds=self._agent_kinds,
+            tool_catalog=self._tool_catalog,
+            domain_classes=self._domain_classes,
+            tools_options=self._tool_options,
+            record_seal=self._records,
+            loop_hooks=PlatformLoopHooksImpl(
+                self._options.loop_hooks or LoopHooksNullImpl(),
+                lambda: self.managers.language_models,
+            ),
+        )
         return engine
-
-    @property
-    def work_kinds(self) -> WorkKinds:
-        return self._work_kinds
 
     @property
     def lanes(self) -> Lanes | None:
@@ -817,17 +805,24 @@ class RootHooksPlatformImpl(RootHooksInterface):
         # is built after it and the edge is bound at call time.
         return lambda org_id, item: self.managers.placement.lane_for(org_id, item)
 
-    def resource_kinds(self, own: Mapping[str, LeasableResourceKindInterface]) -> ResourceKinds:
-        # The mechanism's own, and the product's beside them, each with its
-        # ask's shape, its hooks, and its check of an ask if it has one; a
-        # name registered twice is refused. A product's kinds read the
-        # managers built here, so each edge is bound at call time.
-        return ResourceKinds(
-            (
-                *(ResourceKindSpec(name, ASK_PAYLOADS[name], hooks) for name, hooks in own.items()),
-                *self._product.resources(lambda: self.managers),
-            )
-        )
+    def resource_kinds(self) -> Mapping[str, LeasableResourceKindInterface]:
+        # The product's beside the mechanism's own, each by its name with its
+        # hooks; a name registered twice is refused. A product's kinds read
+        # the managers built here, so each edge is bound at call time.
+        found: dict[str, LeasableResourceKindInterface] = {}
+        for kind in self._resources():
+            if kind.name in found:
+                raise ValueError(f"leasable resource kind {kind.name} is registered twice")
+            found[kind.name] = kind.hooks
+        return found
+
+    def resource_checks(self) -> Mapping[str, AskCheckInterface]:
+        return {kind.name: kind.check for kind in self._resources() if kind.check is not None}
+
+    def _resources(self) -> tuple[ProductResourceKind, ...]:
+        if self._product_resources is None:
+            self._product_resources = self._product.resources(lambda: self.managers)
+        return self._product_resources
 
     def key_service(self, keys: KeyServiceInterface) -> KeyServiceInterface:
         return KeyServiceByTenantImpl(self._keys)
@@ -1152,10 +1147,6 @@ class RootHooksPlatformImpl(RootHooksInterface):
         layer = self._options.agents_layer
         return agents if layer is None else layer(agents)
 
-    @property
-    def attached(self) -> AttachedToolsetsInterface:
-        return self._options.attached_toolsets or AttachedToolsetsNoneImpl()
-
     def build(self, managers: Managers) -> PlatformManagers:
         """The platform's managers over the engine's, which `build_managers`
         built with these hooks, handed back beside them."""
@@ -1271,10 +1262,11 @@ def build_platform_managers(
     **engine: Unpack[EngineOptions],
 ) -> PlatformManagers:
     """Every manager of the engine and the platform, in dependency order: the
-    engine's root builds its graph with the platform's hooks, and the
-    platform's managers are built over it. The engine's keywords are as
-    `build_managers` takes them; `platform_root_options` is what the process
-    sets on the platform's managers, None the defaults."""
+    roots build their graph with the platform's hooks, and the platform's
+    managers are built over it. The roots' keywords are as `build_managers`
+    takes them, the engine's in `agent_root_options`;
+    `platform_root_options` is what the process sets on the platform's
+    managers, None the defaults."""
     root = RootHooksPlatformImpl(
         storage, infra, integrations, platform_root_options or PlatformRootOptions(), engine
     )

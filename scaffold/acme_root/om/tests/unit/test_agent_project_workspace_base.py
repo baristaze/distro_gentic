@@ -19,20 +19,19 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceBase,
     AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
-from acme.om.agent_projects.types.agent_project import AgentWorkspaceBase
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER, WORKSPACE_BASE_KINDS
 from acme.om.platform_root import PlatformRootOptions, ProductKinds

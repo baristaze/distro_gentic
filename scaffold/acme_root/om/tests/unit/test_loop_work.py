@@ -22,7 +22,6 @@ from acme.om.agent_steps.types.header import (
     Park,
     ParkReason,
 )
-from acme.om.agent_steps.types.step import Actor, AgentStepType, Origin
 from acme.om.agents.loop_rules import ended_step
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -38,7 +37,6 @@ from acme.om.context import (
 )
 from acme.om.exceptions import NotAuthorized, NotFound
 from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem

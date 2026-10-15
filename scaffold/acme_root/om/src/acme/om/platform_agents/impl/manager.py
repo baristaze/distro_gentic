@@ -10,6 +10,7 @@ from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
+from acme.om.platform_agents.kinds import ValidationPayload, ValidationWorkKind
 from acme.om.platform_agents.manager import PlatformAgentsManagerInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.types.validation import (
@@ -19,7 +20,7 @@ from acme.om.platform_agents.types.validation import (
     ValidationStatus,
 )
 from acme.om.tenancy import TenancyManagerInterface
-from acme.om.work.types.work_item import ValidationPayload, WorkKind, work_row_kind
+from acme.om.work.types.work_item import work_row_kind
 
 CREATED = "platform_agents.validation_session.created"
 UPDATED = "platform_agents.validation_session.updated"
@@ -78,7 +79,7 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             versioned_row(ctx, CREATED, session.id, session.version),
             outbox_row(
                 ctx,
-                work_row_kind(WorkKind.VALIDATION),
+                work_row_kind(ValidationWorkKind.VALIDATION),
                 session.id,
                 ValidationPayload().model_dump(mode="json"),
             ),

@@ -6,7 +6,7 @@ from uuid import UUID
 from acme.infra.exceptions import InfraException, KeyRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.header import ControlCommand, ControlHeader
 from acme.om.base import EMPTY_UUID, OmBase, derived_id, new_id, utcnow
 from acme.om.change_events import ChangeEventsManagerInterface

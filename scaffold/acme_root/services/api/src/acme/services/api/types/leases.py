@@ -16,10 +16,9 @@ from acme.om.leases.types.leasable_resource import (
     MAX_LABELS,
     MAX_TERM_SECONDS,
     Label,
-    ResourceKindName,
 )
 from acme.om.leases.types.lease import LeaseStatus
-from acme.om.leases.types.request import EndReason, RequestStatus, WaiterKind
+from acme.om.leases.types.request import EndReason, RequestStatus
 from acme.services.api.types.common import RequestBody, View
 
 

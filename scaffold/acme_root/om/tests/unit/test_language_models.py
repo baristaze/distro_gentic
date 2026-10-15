@@ -12,7 +12,6 @@ from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import SwitchedHeader
-from acme.om.agent_steps.types.step import AgentStepType, Step
 from acme.om.base import new_id
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.exceptions import (
@@ -47,7 +46,6 @@ from acme.om.language_models.types.fill import (
     SwitchReason,
 )
 from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.root import Managers, build_managers
 from acme.om.spend_budgets.impl.pricing import PricingTableImpl
 from acme.om.storage.impl.memory import StorageMemoryImpl
 

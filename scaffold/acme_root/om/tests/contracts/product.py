@@ -53,9 +53,7 @@ class ReadTitleImpl(NativeToolImpl):
         # in the session's own work, whatever its product class would say.
         return Target(attributes={"outward": False})
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         session = await self._managers().agent_sessions.get_agent_session(
             ctx, runtime.agent_session_id
         )

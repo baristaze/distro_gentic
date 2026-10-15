@@ -47,13 +47,13 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import OutputSink

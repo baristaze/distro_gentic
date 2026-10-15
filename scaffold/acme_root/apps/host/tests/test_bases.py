@@ -31,6 +31,7 @@ from acme.apps.host.exec_relay import ExecutorRelayImpl
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceBase,
     Durability,
     EgressMode,
@@ -38,7 +39,6 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.buckets import Buckets
@@ -49,8 +49,9 @@ from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.om.agent_projects.types.agent_project import SetupCommand
 from acme.om.agent_workspaces.impl.git import INCOMING
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.tools.impl.bases import PREFIX
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 
 from contracts.agent_session_storage import make_session
 
@@ -103,7 +104,9 @@ class ContainerTransportTwin(TransportTwinImpl):
     ) -> CommandResult:
         return await super().run(_inside(workspace), command, on_output, seal=seal)
 
-    async def write_file(self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int) -> None:
+    async def write_file(
+        self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
         await super().write_file(_inside(workspace), path, data, epoch)
 
 
@@ -256,7 +259,9 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     assert not kept_base(host, api).exists(), "no half-built base"
     assert host.twin.started_from == {}, "no workspace started from one"
     assert await managers.exec_relay.binding_of(api.owner, agent_session_id) is None
-    row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    row = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert row is not None and row.status is WorkStatus.QUEUED, "a host builds again later"
     failed = "the base's setup command 1, 'pip install acme-tools', exited 1"
     assert row.last_error is not None and failed in row.last_error
@@ -281,7 +286,9 @@ async def test_a_setup_command_at_the_longest_an_agent_project_allows_fails_and_
         await placed.held_on_host(api.owner, agent_session_id, spec)
     await host.claimed()
 
-    row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    row = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert row is not None and row.last_error is not None, "the platform took the answer"
     cut = r"the base's setup command 1, 'pip install x+…\[\d+ more characters\]', exited 2"
     assert re.search(cut, row.last_error)
@@ -303,7 +310,9 @@ async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keep
     host.twin.started_from.clear()
 
     epoch = await managers.agent_steps.begin_run(api.owner, agent_session_id)
-    workspace = AgentWorkspace(id=agent_session_id, org_id=api.owner.org_id, spec=ON_BASE, location="")
+    workspace = AgentWorkspace(
+        id=agent_session_id, org_id=api.owner.org_id, spec=ON_BASE, location=""
+    )
     runner = runner_of(api)
     # A checkout's attach brings its bundle in, then runs git over it.
     written = asyncio.ensure_future(runner.write_file(workspace, INCOMING, b"bundle", epoch))
@@ -354,7 +363,9 @@ async def test_a_base_that_holds_a_hosts_secret_is_not_kept_and_the_prepare_is_u
     await host.claimed()
 
     assert not kept_base(host, api).exists()
-    row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, agent_session_id)
+    row = await managers.work.latest_for_target(
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
+    )
     assert row is not None and "SERVICE_TOKEN" in (row.last_error or "")
     assert SECRET not in (row.last_error or "")
     assert await managers.exec_relay.binding_of(api.owner, agent_session_id) is None

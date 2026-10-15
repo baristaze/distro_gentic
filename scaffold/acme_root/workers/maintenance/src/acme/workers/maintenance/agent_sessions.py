@@ -20,6 +20,7 @@ from pydantic import Field
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.kinds import (
+    AgentSessionWorkKind,
     LeaseNoticePayload,
     WakeAgentSessionPayload,
     WakeAgentSessionsPayload,
@@ -33,7 +34,6 @@ from acme.om.work import WorkManagerInterface
 from acme.om.work.types.handler import WorkHandlerInterface
 from acme.om.work.types.work_item import (
     WorkItem,
-    WorkKind,
 )
 
 log = logging.getLogger(__name__)
@@ -208,7 +208,7 @@ class StalledSessionsSweep:
             updated_at=now,
             created_by=session.created_by,
             updated_by=session.created_by,
-            kind=WorkKind.LOOP,
+            kind=AgentSessionWorkKind.LOOP,
             target_id=session.id,
             idempotency_key=key,
             request_id=rctx.request_id,
@@ -216,7 +216,7 @@ class StalledSessionsSweep:
             available_at=now,
         )
         try:
-            if await self._work.has_open(ctx, WorkKind.LOOP, session.id):
+            if await self._work.has_open(ctx, AgentSessionWorkKind.LOOP, session.id):
                 return True
             queued = await self._work.enqueue(ctx, item)
         except Exception:

@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationMode, IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationSpec
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
     CapabilityMissing,
@@ -203,7 +203,9 @@ class TransportRelayImpl(TransportInterface):
             raise FileTooLarge(READ_BYTES)
         return data
 
-    async def write_file(self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int) -> None:
+    async def write_file(
+        self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
         request = WriteRequest(path=path, data=base64.b64encode(data).decode())
         progress = await self._file(workspace, request, "idempotent", epoch)
         _completed(*_ended(progress))
@@ -427,7 +429,9 @@ class TransportPlacedImpl(TransportInterface):
     ) -> bytes:
         return await (await self._for(workspace)).read_file(workspace, path, max_bytes, offset)
 
-    async def write_file(self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int) -> None:
+    async def write_file(
+        self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
         await (await self._for(workspace)).write_file(workspace, path, data, epoch)
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:

@@ -18,8 +18,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.hosts import rules
 from acme.om.hosts.rules import WireType
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 from acme.services.api.container import AppContainer
 
 ASSISTANT = AgentKind(
@@ -89,7 +90,7 @@ async def prepare_in(container: AppContainer, ctx: TenantContext, pool_id: str) 
         updated_at=now,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
-        kind=WorkKind.WORKSPACE,
+        kind=PlacementWorkKind.WORKSPACE,
         target_id=new_id(),
         idempotency_key=new_id(),
         request_id=new_id(),

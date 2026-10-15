@@ -15,7 +15,7 @@ import pytest
 from acme.infra.agent_workspaces import AgentWorkspace
 from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledge, AgentKnowledgeStatus
 from acme.om.agent_steps.rules import message_step
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import InputHeader, ToolFailure
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow

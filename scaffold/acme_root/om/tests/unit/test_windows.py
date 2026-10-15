@@ -35,7 +35,6 @@ from acme.om.agent_steps.types.header import (
     ToolOutputRef,
     ToolResponseHeader,
 )
-from acme.om.agent_steps.types.step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.attribution.types.authority import AuthorityMode, RequestAttribution
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -64,10 +63,8 @@ from acme.om.language_models.types.fill import (
     SwitchReason,
 )
 from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.privacy.impl.artifacts import ToolOutputSealKeysImpl
 from acme.om.privacy.impl.keys import AgentSessionKeysImpl
 from acme.om.privacy.impl.tool_outputs import ToolOutputSealKeysImpl
-from acme.om.root import Managers, build_managers
 from acme.om.spend_budgets.types.usage import CallSite
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.windows import rules

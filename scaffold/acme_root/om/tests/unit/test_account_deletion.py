@@ -24,6 +24,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.relay import OutboxRelayInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
@@ -247,9 +248,9 @@ async def test_the_account_goes_in_one_commit_and_asks_for_the_rest(
     work = {r.kind: r for r in relay.rows if asks_for_work(r.kind)}
     assert sorted(work) == [
         work_row_kind(WorkKind.DELETE_ACCOUNT),
-        work_row_kind(WorkKind.MEMBER_LEFT),
+        work_row_kind(IntakeWorkKind.MEMBER_LEFT),
     ]
-    left = work[work_row_kind(WorkKind.MEMBER_LEFT)]
+    left = work[work_row_kind(IntakeWorkKind.MEMBER_LEFT)]
     assert (left.org_id, left.target_id) == (ajax.id, bob_in_ajax.id)
     rest = work[work_row_kind(WorkKind.DELETE_ACCOUNT)]
     assert (rest.org_id, rest.target_id) == (personal.id, personal.id)

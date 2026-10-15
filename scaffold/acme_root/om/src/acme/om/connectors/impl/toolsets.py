@@ -8,7 +8,7 @@ workspace, as `exec` work: the platform names the server and never opens a
 connection to it. Before either, the call checks that a person's review
 still serves the tool at the definition the session holds."""
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
@@ -21,8 +21,9 @@ from acme.infra.secrets import SecretsInterface
 from acme.integrations.mcp import McpAnswer, McpClientInterface
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import ToolFailure
-from acme.om.agents.attached import Attached, AttachedToolsetsInterface
+from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import utcnow
 from acme.om.connectors.impl.addresses import Resolve, refused_now, resolve
@@ -102,7 +103,7 @@ def input_model_of(schema: Mapping[str, Any]) -> type[ToolInput]:
     return Input
 
 
-class ConnectorToolsetsImpl(AttachedToolsetsInterface):
+class ConnectorToolsetsImpl(LoopHooksInterface):
     """`host` reaches a server inside a customer's wall; None is a process
     that reaches no host, whose calls of such a server are refused."""
 
@@ -133,7 +134,10 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         self._resolve = resolver
         self._clock = clock
 
-    async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
+    async def attached_toolsets(
+        self, ctx: TenantContext, agent_session: AgentSession
+    ) -> AttachedToolsets:
+        session = agent_session
         pin = await self._storage.read_pin(ctx.org_id, session.id)
         if pin is None:
             pin = await self._pin(ctx, session)
@@ -143,7 +147,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         for connector in pin.connectors:
             (deferred if connector.deferred else held).append(toolset_of(connector))
             tools.extend(self._tool(connector, tool) for tool in connector.tools)
-        return Attached(held=tuple(held), deferred=tuple(deferred), tools=tuple(tools))
+        return AttachedToolsets(held=tuple(held), deferred=tuple(deferred), tools=tuple(tools))
 
     async def _pin(self, ctx: TenantContext, session: AgentSession) -> AgentSessionConnectors:
         """What the session holds of its tenant's connectors, written once:
@@ -272,3 +276,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         reason = still_reviewed(current, tool)
         if reason is not None:
             raise ToolFailed(ToolFailure.PERMANENT, reason)
+
+    async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
+        """The connectors append nothing before a run's first call."""
+        return ()

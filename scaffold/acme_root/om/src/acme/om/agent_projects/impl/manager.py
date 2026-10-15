@@ -6,7 +6,11 @@ from acme.om.agent_projects.exceptions import AgentProjectFixed, AgentProjectInU
 from acme.om.agent_projects.impl.sessions import bind
 from acme.om.agent_projects.manager import AgentProjectsManagerInterface
 from acme.om.agent_projects.storage import AgentProjectStorageInterface
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase, Repository
+from acme.om.agent_projects.types.agent_project import (
+    AgentProject,
+    AgentProjectWorkspaceBase,
+    Repository,
+)
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
@@ -90,7 +94,7 @@ class AgentProjectsManagerImpl(AgentProjectsManagerInterface):
         self,
         ctx: TenantContext,
         agent_project_id: UUID,
-        agent_workspace_base: AgentWorkspaceBase | None,
+        agent_workspace_base: AgentProjectWorkspaceBase | None,
     ) -> AgentProject:
         ctx.require(Permission.MANAGE_MEMBERS)
         return await self._update(

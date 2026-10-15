@@ -60,9 +60,7 @@ class ListFilesImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PathInput)
         found = await runtime.list_files(call_input.path, 500)
         return Entries(
@@ -83,9 +81,7 @@ class ReadFileImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PathInput)
         data = await runtime.read_file(call_input.path, MAX_READ)
         return Text(text=data.decode(errors="replace"))
@@ -143,9 +139,7 @@ class SearchCodeImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SearchCodeInput)
         argv = (
             "grep",

@@ -340,13 +340,19 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
             next_cursor=listed.next_cursor,
         )
 
-    async def archive_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def archive_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         return agent_session_view(await self._sessions.archive_agent_session(ctx, agent_session_id))
 
-    async def delete_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def delete_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         return agent_session_view(await self._sessions.delete_agent_session(ctx, agent_session_id))
 
-    async def restore_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+    async def restore_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
         return agent_session_view(await self._sessions.restore_agent_session(ctx, agent_session_id))
 
     async def add_participant(
@@ -561,6 +567,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
+
     async def get_agent_session_usage(
         self,
         admin: OperatorContext,

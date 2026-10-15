@@ -103,9 +103,7 @@ class WriteFileImpl(FileChangeImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, WriteInput)
         data = call_input.text.encode()
         await runtime.write_file(call_input.path, data)
@@ -137,9 +135,7 @@ class EditFileImpl(FileChangeImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, EditInput)
         path = call_input.path
         data = await runtime.read_file(path, MAX_EDIT + 1)
@@ -192,9 +188,7 @@ class RunCommandImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, CommandInput)
         result = await runtime.run(call_input.argv)
         return CommandOutput(exit_code=result.exit_code, stdout=result.stdout, stderr=result.stderr)

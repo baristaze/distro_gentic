@@ -21,13 +21,13 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState

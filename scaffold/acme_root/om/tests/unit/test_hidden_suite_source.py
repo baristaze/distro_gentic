@@ -20,7 +20,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from uuid import UUID
 
-from acme.infra.agent_workspaces import AgentWorkspaceBase, IsolationMode, IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceBase,
+    IsolationMode,
+    IsolationSpec,
+)
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandSpec

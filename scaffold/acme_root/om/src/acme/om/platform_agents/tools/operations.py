@@ -76,9 +76,7 @@ class ListHostsImpl(NativeToolImpl):
     def __init__(self, hosts: Callable[[], HostsManagerInterface]) -> None:
         self._hosts = hosts
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         hosts = self._hosts()
         pools: list[PoolHosts] = []
         for pool in (await hosts.get_pools(ctx))[:LIST_MAX]:
@@ -155,9 +153,7 @@ class ReadSpendImpl(NativeToolImpl):
     def __init__(self, budgets: Callable[[], SpendBudgetsManagerInterface]) -> None:
         self._budgets = budgets
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PageInput)
         budgets = self._budgets()
         page = await budgets.get_spend_budgets(ctx, call_input.after, call_input.limit)

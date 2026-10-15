@@ -98,17 +98,6 @@ class NoopPayload(OmBase):
     """The NOOP kind carries nothing."""
 
 
-class MemberLeftPayload(OmBase):
-    """The MEMBER_LEFT kind carries nothing: its target is the user whose
-    place in the tenant ended, by a member's removal or an account's
-    deletion, and that id is all the work needs."""
-
-
-class ValidationPayload(OmBase):
-    """The VALIDATION kind carries nothing: its target is the validation
-    session, which holds what it runs."""
-
-
 class ScheduledPayload(OmBase):
     """A payload that says when its work may run. The relayed enqueue makes
     the item available at `not_before`, or at once when that has passed, so

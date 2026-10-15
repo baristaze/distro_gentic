@@ -43,6 +43,7 @@ from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
     HOST,
     ClaimantKindSpec,
+    PlacementWorkKind,
     platform_claimant_kinds,
     platform_work_kinds,
 )
@@ -335,7 +336,9 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
     # A product never takes over a kind of the platform's, nor leaves its
     # work to a claimant kind nobody registered.
     takeovers = (
-        ProductKinds(work=(replace(RENDER_KIND, name=WorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)),
+        ProductKinds(
+            work=(replace(RENDER_KIND, name=PlacementWorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)
+        ),
         ProductKinds(claimants=(ClaimantKindSpec(HOST, lambda _: (), prefix="hsx_"),)),
         ProductKinds(work=(RENDER_KIND,)),
         # Nor a prefix another credential carries: a host's, a person's, or
@@ -360,7 +363,7 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
 def test_the_platforms_kinds_go_through_the_same_registries(managers: PlatformManagers) -> None:
     work = platform_work_kinds()
     assert {spec.name for spec in work} == set(WorkKind)
-    assert work.claimed_by(HOST) == {WorkKind.EXEC, WorkKind.WORKSPACE}
+    assert work.claimed_by(HOST) == {PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE}
     assert [spec.name for spec in platform_claimant_kinds()] == [HOST]
     placement = managers.placement
     assert isinstance(placement, PlacementManagerImpl)

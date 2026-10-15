@@ -269,7 +269,11 @@ async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) ->
         pages: list[str] = []
         while True:
             page = await platform.managers.windows.get_tool_output(
-                platform.owner, agent_session_id, header.tool_output.id, len("".join(pages)), 100_000
+                platform.owner,
+                agent_session_id,
+                header.tool_output.id,
+                len("".join(pages)),
+                100_000,
             )
             pages.append(page.text)
             if not page.has_more:

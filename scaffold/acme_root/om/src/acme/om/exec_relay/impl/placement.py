@@ -10,11 +10,12 @@ from uuid import UUID
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 
 class PlacementRelayedImpl(PlacementInterface):
@@ -65,7 +66,7 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
             if claimed is None:
                 return None
             ctx, item = claimed
-            if item.kind != WorkKind.EXEC or await self._exec_relay().start(ctx, item):
+            if item.kind != PlacementWorkKind.EXEC or await self._exec_relay().start(ctx, item):
                 return claimed
 
     async def held_for(

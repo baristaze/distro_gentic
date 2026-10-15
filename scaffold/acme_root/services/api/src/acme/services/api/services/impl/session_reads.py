@@ -9,7 +9,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import (
     ControlCommand,
     ControlHeader,

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import OutputSink
 from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.rules import narrowed
@@ -243,7 +243,9 @@ class ToolsManagerAgentPlaybooksImpl(ToolsManagerInterface):
 
     # Helpers.
 
-    async def _narrowed(self, ctx: TenantContext, request: AgentStep, decided: Decision) -> Decision:
+    async def _narrowed(
+        self, ctx: TenantContext, request: AgentStep, decided: Decision
+    ) -> Decision:
         header = request.header
         if not isinstance(header, ToolRequestHeader):
             return decided

@@ -20,6 +20,7 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
     EgressMode,
@@ -28,14 +29,13 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.buckets import Buckets
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.agent_projects.impl.retention import SessionAgentProjectBoundImpl
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, LoopOutcome, ParkReason
 from acme.om.agent_workspaces.impl.tools import PinnedToolsOptions, ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
@@ -80,9 +80,7 @@ class Scribble(Lookup):
         super().__init__("scribble", effect=Effect.IDEMPOTENT, authorization_class=ToolClass.WRITE)
         self._twin = twin
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, Asked)
         self._twin.files[runtime.agent_session_id] = call_input.q.encode()
         return Found(text="written")

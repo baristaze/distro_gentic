@@ -32,7 +32,7 @@ from acme.om.agent_steps.types.header import (
     LoopOutcome,
     ParkReason,
 )
-from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
+from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.hooks import LoopHooksInterface
 from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions

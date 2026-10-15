@@ -91,7 +91,9 @@ async def session_saying(
     call = make_tool_request(sid, loop_id, response.id)
     answer = make_tool_response(sid, loop_id, call.id)
     epoch = await managers.agent_steps.begin_run(ctx, sid)
-    await managers.agent_steps.append_agent_steps(ctx, sid, epoch, [request, response, call, answer])
+    await managers.agent_steps.append_agent_steps(
+        ctx, sid, epoch, [request, response, call, answer]
+    )
     return agent_session_id
 
 

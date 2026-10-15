@@ -54,12 +54,13 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceProviderInterface,
     Durability,
     HeldInstance,
-    AgentWorkspace,
 )
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import ParkReason
@@ -72,12 +73,13 @@ from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.types.exec import AgentWorkspaceBinding
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +201,7 @@ class HeldWorkspacesSweep:
         if not deleted:
             # The platform lets it go, as no person: the system user.
             ctx = await self._tenancy.service_context(rctx, instance.org_id, EMPTY_UUID)
-            if await self._work.has_open(ctx, WorkKind.LOOP, instance.id):
+            if await self._work.has_open(ctx, AgentSessionWorkKind.LOOP, instance.id):
                 self._unaccounted.pop(instance.id, None)
                 return False
         if now < await self._until(ctx, instance.id, now):
@@ -262,7 +264,7 @@ class HeldWorkspacesSweep:
             return False
         ctx = await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
         if (
-            await self._work.has_open(ctx, WorkKind.LOOP, agent_session_id)
+            await self._work.has_open(ctx, AgentSessionWorkKind.LOOP, agent_session_id)
             or await self._released(ctx, agent_session_id)
             or await self._handed_over(ctx, agent_session_id)
         ):
@@ -341,7 +343,9 @@ class HeldWorkspacesSweep:
         last loop moved, answered or failed: nothing has run on it since,
         and a host that fails it would fail it again. A failed one is
         logged, once a process."""
-        asked = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
+        asked = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if asked is None:
             return False
         try:
@@ -350,7 +354,7 @@ class HeldWorkspacesSweep:
             return False
         if operation is not WorkspaceOperation.RELEASE:
             return False
-        loop = await self._work.latest_for_target(ctx, WorkKind.LOOP, agent_session_id)
+        loop = await self._work.latest_for_target(ctx, AgentSessionWorkKind.LOOP, agent_session_id)
         if loop is not None and loop.updated_at > asked.created_at:
             return False
         if asked.status is WorkStatus.FAILED and self._failed.get(agent_session_id) != asked.id:

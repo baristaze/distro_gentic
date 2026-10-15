@@ -41,7 +41,6 @@ from acme.infra.agent_workspaces import (
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
 from acme.infra.buckets import Buckets, BucketsInterface
@@ -56,7 +55,7 @@ from acme.om.platform_root import PlatformRootOptions
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, Loop, loop_over
+from contracts.loops import ASSISTANT, Loop
 from contracts.platform_loops import platform_loop_over
 
 IMAGE = "python:3.14-slim"

@@ -43,7 +43,7 @@ from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from acme.om.agent_billing.rules import FUNDS_UNLOCK
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock
 from acme.om.agent_steps.types.header import (
     ModelResponseHeader,

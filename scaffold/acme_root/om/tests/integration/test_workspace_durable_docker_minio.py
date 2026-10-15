@@ -41,7 +41,7 @@ from acme.infra.keys import KeyServiceInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock
 from acme.om.agent_steps.types.header import LoopOutcome, SnapshotHeader
 from acme.om.base import new_id

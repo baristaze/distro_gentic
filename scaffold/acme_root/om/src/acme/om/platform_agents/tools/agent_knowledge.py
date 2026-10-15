@@ -77,9 +77,7 @@ class SearchAgentKnowledgeImpl(NativeToolImpl):
         self._corpus = corpus
         self._agent_knowledge = agent_knowledge
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, AgentKnowledgeQuery)
         entries = await self._agent_knowledge().search(
             ctx, runtime.agent_session_id, call_input.query, call_input.limit
@@ -144,9 +142,7 @@ class ReadAgentKnowledgeImpl(NativeToolImpl):
         self._corpus = corpus
         self._agent_knowledge = agent_knowledge
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, AgentKnowledgeSlug)
         slug = call_input.slug
         for document in self._corpus.documents:
@@ -197,9 +193,7 @@ class SuggestAgentKnowledgeImpl(NativeToolImpl):
     def __init__(self, agent_knowledge: Callable[[], AgentKnowledgeManagerInterface]) -> None:
         self._agent_knowledge = agent_knowledge
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SuggestionInput)
         entry = await self._agent_knowledge().suggest(
             ctx, runtime.agent_session_id, call_input.title, call_input.trigger, call_input.text
@@ -238,8 +232,6 @@ class SearchCorpusImpl(NativeToolImpl):
     def __init__(self, corpus: Corpus) -> None:
         self._corpus = corpus
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SearchInput)
         return Found(passages=rules.search(self._corpus, call_input.query, call_input.limit))

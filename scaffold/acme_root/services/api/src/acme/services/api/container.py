@@ -18,13 +18,11 @@ from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.root import IntegrationsInterface
-from acme.om.agent_root import AgentRootOptions
-from acme.om.agents.types.kind import AgentKind
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.platform_root import PlatformManagers, PlatformPorts
 from acme.om.product_kinds import PRODUCT_KINDS
-from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build_managers
+from acme.om.root import TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface

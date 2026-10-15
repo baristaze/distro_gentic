@@ -22,6 +22,7 @@ from acme.om.change_events import ChangeEventsManagerInterface
 from acme.om.change_events.impl.manager import ChangeEventsManagerImpl, ChangeEventsOptions
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
+from acme.om.intake.kinds import INTAKE_WORK_KINDS
 from acme.om.leases import LeasesManagerInterface
 from acme.om.leases.impl.kinds import NoopLeasableResourceKindImpl, OrchestrationWaiterImpl
 from acme.om.leases.impl.manager import LeasesManagerImpl, LeasesOptions
@@ -34,6 +35,9 @@ from acme.om.orchestrations.impl.manager import OrchestrationsManagerImpl, Orche
 from acme.om.orchestrations.kinds import NOOP_ORCHESTRATION, OrchestrationKinds
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.impl.relay import OutboxRelayImpl
+from acme.om.placement.kinds import PLACED_KINDS
+from acme.om.platform_agents.kinds import VALIDATION_WORK_KINDS
+from acme.om.root_hooks import RootHooksInterface, RootHooksNullImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface, TenancyOperatorManagerInterface
 from acme.om.tenancy.impl.credentials import TenancyCredentialsManagerImpl
@@ -44,7 +48,7 @@ from acme.om.tenancy.impl.org import TenancyOrgManagerImpl
 from acme.om.tenancy.impl.sign_in import TenancySignInManagerImpl
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
-from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
+from acme.om.work.impl.manager import Lanes, WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.work.kinds import WORK_KINDS, WorkKinds
 
@@ -53,6 +57,9 @@ KINDS = WorkKinds(
         *WORK_KINDS,
         # A copy adds its entries below this line.
         *AGENT_SESSION_WORK_KINDS,
+        *INTAKE_WORK_KINDS,
+        *PLACED_KINDS,
+        *VALIDATION_WORK_KINDS,
     )
 )
 """Every kind of work this process knows: the work namespace's own, then
@@ -106,6 +113,8 @@ def build_managers(
     # What the adopter sets on the engine's managers, which
     # `build_agent_managers` builds and `Managers` holds beside these.
     agent_root_options: AgentRootOptions | None = None,
+    # Where a layer above the engine reaches the graph (`acme.om.root_hooks`).
+    hooks: RootHooksInterface | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -121,7 +130,12 @@ def build_managers(
 
     Each manager is one call to its builder below, in dependency order: a
     builder takes the storage, the infrastructure, and the sibling managers
-    it needs, by their interfaces, and nothing else."""
+    it needs, by their interfaces, and nothing else.
+
+    `hooks` is where a layer above the engine reaches the graph, each hook
+    called once as the roots build (`acme.om.root_hooks`). None reaches
+    nothing."""
+    hooks = hooks or RootHooksNullImpl()
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -146,7 +160,13 @@ def build_managers(
         storage, tenancy, change_events_options or ChangeEventsOptions()
     )
     work = build_work(
-        storage, infra, tenancy, change_events, work_options or WorkOptions(), work_kinds
+        storage,
+        infra,
+        tenancy,
+        change_events,
+        work_options or WorkOptions(),
+        work_kinds,
+        lanes=hooks.lanes,
     )
     work_operator = build_work_operator(storage, infra)
     media = build_media(storage, infra, tenancy, outbox, media_options or MediaOptions())
@@ -165,6 +185,7 @@ def build_managers(
         orchestrations,
         leases_options or LeasesOptions(),
         managers=lambda: managers,
+        hooks=hooks,
     )
     idempotency = build_idempotency(storage, idempotency_options or IdempotencyOptions())
     # A copy adds its entries below this line.
@@ -177,6 +198,7 @@ def build_managers(
         outbox=outbox,
         leases=leases,
         options=agent_root_options or AgentRootOptions(),
+        hooks=hooks,
     )
     managers = Managers(
         change_events=change_events,
@@ -216,6 +238,7 @@ def build_leases(
     options: LeasesOptions,
     *,
     managers: Callable[[], Managers],
+    hooks: RootHooksInterface,
 ) -> LeasesManagerInterface:
     """A copy registers its resource kinds and its waiter kinds here, below
     the marker, each by the name its namespace declares with its hooks, as a
@@ -230,6 +253,7 @@ def build_leases(
         kinds={
             LeasableResourceKind.NOOP: NoopLeasableResourceKindImpl(),
             # A copy adds its entries below this line.
+            **hooks.resource_kinds(),
         },
         waiters={
             WaiterKind.ORCHESTRATION: OrchestrationWaiterImpl(orchestrations),
@@ -237,6 +261,7 @@ def build_leases(
             **agent_session_waiters(managers),
         },
         work=work,
+        asks=hooks.resource_checks(),
     )
 
 
@@ -346,9 +371,17 @@ def build_work(
     change_events: ChangeEventsManagerInterface,
     options: WorkOptions,
     kinds: WorkKinds,
+    *,
+    lanes: Lanes | None = None,
 ) -> WorkManagerInterface:
     return WorkManagerImpl(
-        storage.get_work_storage(), tenancy, change_events, infra.get_topics(), options, kinds
+        storage.get_work_storage(),
+        tenancy,
+        change_events,
+        infra.get_topics(),
+        options,
+        kinds,
+        lanes=lanes,
     )
 
 

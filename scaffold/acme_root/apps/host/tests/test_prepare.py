@@ -19,7 +19,7 @@ from acme.client.client import ApiError
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id
-from acme.om.work.types.work_item import WorkKind
+from acme.om.placement.kinds import PlacementWorkKind
 
 from contracts.agent_session_storage import make_session
 
@@ -84,7 +84,7 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     assert not root.exists()
     # Back on the pool's lane after a wait, for a host that can give it.
     assert await api.container.managers.work.has_open(
-        api.owner, WorkKind.WORKSPACE, agent_session_id
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
     )
     assert await host.claim_once() is None
 
@@ -112,7 +112,7 @@ async def test_a_session_moved_to_another_pool_is_prepared_by_a_host_of_that_poo
     stale, _ = await directory_host(api, left.id, tmp_path / "left", name="host-l")
     assert await stale.claim_once() is None
     assert not await api.container.managers.work.has_open(
-        api.owner, WorkKind.WORKSPACE, agent_session_id
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
     )
 
 
@@ -138,7 +138,7 @@ async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and
     assert await relay.binding_of(api.owner, agent_session_id) is None
     assert not root.exists()
     assert await api.container.managers.work.has_open(
-        api.owner, WorkKind.WORKSPACE, agent_session_id
+        api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
     )
 
 

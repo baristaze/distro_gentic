@@ -8,25 +8,35 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from acme.integrations.model_providers import ModelProvidersInterface
+from acme.om.context import TenantContext
 from acme.om.language_models.credentials import CallCredentialsInterface
+from acme.om.language_models.manager import LanguageModelsManagerInterface
+from acme.om.language_models.prices import ModelPricesInterface
+from acme.om.language_models.resolver import ModelResolverInterface
+from acme.om.tenancy import TenancyManagerInterface
 
 
 @dataclass(frozen=True)
 class LanguageModelsLayer:
-    """`resolver` builds the resolver over the prices it asks before it
-    answers a fill. `models` wraps the engine's models manager, with the
-    tenancy manager that answers whether a tenant is past its retention.
-    `credentials` builds the client each call runs on over the providers'
-    registry, which holds the platform's key. `version` reads the version
+    """`credentials` builds the client each call runs on over the providers'
+    registry, which holds the platform's key. `resolver` builds the resolver
+    over the prices it asks before it answers a fill; None keeps the table.
+    `models` wraps the engine's models manager, with the tenancy manager
+    that answers whether a tenant is past its retention; None keeps the
+    manager as it is. `version` reads the version
     of the layer's table a session's fills came from last, None before
     they are resolved: the label a call's tokens and spend count under.
     `tier` reads the plan tier the session's tenant is served at, the label
     beside it."""
 
-    resolver: Callable[[ModelPricesInterface], ModelResolverInterface]
-    models: Callable[
-        [LanguageModelsManagerInterface, TenancyManagerInterface], LanguageModelsManagerInterface
-    ]
     credentials: Callable[[ModelProvidersInterface], CallCredentialsInterface]
+    resolver: Callable[[ModelPricesInterface], ModelResolverInterface] | None = None
+    models: (
+        Callable[
+            [LanguageModelsManagerInterface, TenancyManagerInterface],
+            LanguageModelsManagerInterface,
+        ]
+        | None
+    ) = None
     version: Callable[[TenantContext, UUID], Awaitable[int | None]] | None = None
     tier: Callable[[TenantContext, UUID], Awaitable[str]] | None = None

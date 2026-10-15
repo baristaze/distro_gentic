@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_projects import AgentProjectsManagerInterface
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase
+from acme.om.agent_projects.types.agent_project import AgentProject, AgentProjectWorkspaceBase
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.base import utcnow
@@ -78,7 +78,7 @@ class AgentProjectsServiceImpl(AgentProjectsServiceInterface):
         self, ctx: TenantContext, agent_project_id: UUID, body: AgentWorkspaceBaseBody | None
     ) -> AgentProjectView:
         agent_workspace_base = (
-            None if body is None else built(AgentWorkspaceBase, body.model_dump())
+            None if body is None else built(AgentProjectWorkspaceBase, body.model_dump())
         )
         updated = await self._agent_projects.set_workspace_base(
             ctx, agent_project_id, agent_workspace_base

@@ -19,12 +19,12 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceBase,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.infra.exceptions import InfraNotFound

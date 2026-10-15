@@ -17,6 +17,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.idempotency.types.attempt import Attempt
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row
 from acme.om.tenancy.impl.creates import user_payload, users_of
@@ -37,7 +38,7 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.org import Org
 from acme.om.tenancy.types.page import InvitationPage, MembershipPage, UserPage
 from acme.om.tenancy.types.user import User
-from acme.om.work.types.work_item import WorkKind, work_row_kind
+from acme.om.work.types.work_item import work_row_kind
 
 log = logging.getLogger(__name__)
 
@@ -359,7 +360,7 @@ class TenancyMembersManagerImpl(TenancyMembersManagerInterface):
         # The same commit asks for what the tenant keeps of them elsewhere,
         # such as an outside account linked to them, so a removal that lands
         # always lets go of it.
-        left = outbox_row(ctx, work_row_kind(WorkKind.MEMBER_LEFT), removed.id, {})
+        left = outbox_row(ctx, work_row_kind(IntakeWorkKind.MEMBER_LEFT), removed.id, {})
         rows = (row, left)
 
         def revocation(kind: str, credential_id: UUID) -> OutboxRow:

@@ -52,7 +52,7 @@ from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName, StopReason, Usage
 from acme.om.agent_steps.rules import message_step
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -66,6 +66,7 @@ from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import NotFound
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.types.agent_session_privacy import StorageMode, StoragePolicy
 from acme.om.spend_budgets.types.amount import Amount
@@ -73,7 +74,6 @@ from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
-from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -361,7 +361,7 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
             await managers.agent_sessions.get_agent_session(owner, request.id)
         assert await managers.agent_workspaces.kept_snapshots(owner, request.id) == ()
         assert await managers.agent_workspaces.kept_snapshots(owner, parent) == ()
-        latest = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, parent)
+        latest = await managers.work.latest_for_target(owner, PlacementWorkKind.WORKSPACE, parent)
         assert latest is not None
         asked = latest.payload["operation"]
         assert asked == ("prepare" if memory_only else "snapshot"), asked

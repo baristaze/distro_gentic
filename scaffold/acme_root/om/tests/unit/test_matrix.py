@@ -396,7 +396,9 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
     assert parked is RunEnd.PARKED, "its last eligible fallback failed too"
     (fell,) = await switches(agent_fleet, agent_session_id)
     assert (fell.from_fill, fell.to_fill) == (sol_eu, sonnet_eu)
-    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(
+        agent_fleet.owner, agent_session_id
+    )
     assert fills.eligibility == EU, "the fill set holds what the tenant requires"
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (sonnet_eu, ())
     assert (fills.roles[1].fill, fills.roles[1].fallbacks) == (haiku_eu, ())
@@ -669,9 +671,9 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     await agent_fleet.loop.managers.language_models.resolve_fill_set(
         agent_fleet.owner, fresh, (MAIN, SUMMARIZER), Eligibility()
     )
-    assert (await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, fresh)).fill_for(
-        MAIN
-    ) == OPUS
+    assert (
+        await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, fresh)
+    ).fill_for(MAIN) == OPUS
 
 
 def resized(size: ModelSize, *fills: Fill) -> tuple[MatrixRow, ...]:
@@ -693,7 +695,9 @@ async def test_a_kinds_ask_is_answered_by_its_sizes_row_at_the_effort_a_fill_lis
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(
+        agent_fleet.owner, agent_session_id
+    )
     main, summarizer = fills.roles
     assert served(main) == [(SONNET.name, Effort.XHIGH), (SOL.name, SOL.effort)], (
         "the size's row, each fill at the effort asked where it lists it"
@@ -831,7 +835,9 @@ async def test_an_own_key_tenants_calls_go_out_on_its_key_reference(tmp_path: Pa
 
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(
+        agent_fleet.owner, agent_session_id
+    )
     assert fills.roles[0].fallbacks == (), "no fallback on a provider it holds no key for"
     assert len(agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).calls) == 1
     assert agent_fleet.loop.anthropic.calls == [] and agent_fleet.loop.openai.calls == [], (
@@ -1150,7 +1156,9 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
         reply(said("The total is 12."), model=OPUS.model)
     )
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
-    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(
+        agent_fleet.owner, agent_session_id
+    )
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (OPUS, (SONNET,))
 
     platform, _ = await platform_tenant(agent_fleet)

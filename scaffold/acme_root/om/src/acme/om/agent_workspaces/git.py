@@ -62,7 +62,9 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def checkout(self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int) -> Checkout:
+    async def checkout(
+        self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int
+    ) -> Checkout:
         """What the checkout says of itself: its HEAD and whether it holds
         uncommitted work. The agent can write all of it, so it tells only
         what was not delivered (`RepositoryReaderInterface`)."""

@@ -14,14 +14,15 @@ relay that reaches the host inside it:
 
 A session's agent project is read from the agent projects' rows."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 
 from acme.infra.root import InfraInterface
 from acme.integrations.mcp import McpClientInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agents.attached import Attached, AttachedToolsetsInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.base import utcnow
 from acme.om.connectors.impl.addresses import Resolve, resolve
 from acme.om.connectors.impl.manager import ConnectorsManagerImpl, ConnectorsOptions
@@ -60,15 +61,20 @@ def build_connectors(
     )
 
 
-class AttachedToolsetsLateImpl(AttachedToolsetsInterface):
-    """The toolsets the impl `late` answers once it is built: a root hands
+class LoopHooksLateImpl(LoopHooksInterface):
+    """The loop's hooks the impl `late` answers once it is built: a root hands
     the loop this before it builds the managers the impl reads."""
 
-    def __init__(self, late: Callable[[], AttachedToolsetsInterface]) -> None:
+    def __init__(self, late: Callable[[], LoopHooksInterface]) -> None:
         self._late = late
 
-    async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
-        return await self._late().of(ctx, session)
+    async def attached_toolsets(
+        self, ctx: TenantContext, agent_session: AgentSession
+    ) -> AttachedToolsets:
+        return await self._late().attached_toolsets(ctx, agent_session)
+
+    async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
+        return await self._late().before_first_call(ctx, start)
 
 
 class ConnectorsLayer:
@@ -99,9 +105,10 @@ class ConnectorsLayer:
         self._built: tuple[ConnectorsManagerInterface, ConnectorToolsetsImpl] | None = None
 
     @property
-    def attached(self) -> AttachedToolsetsInterface:
-        """What `PlatformRootOptions` takes as `attached_toolsets`."""
-        return AttachedToolsetsLateImpl(lambda: self._parts()[1])
+    def loop_hooks(self) -> LoopHooksInterface:
+        """What `PlatformRootOptions` takes as `loop_hooks`: the toolsets each
+        session holds of its tenant's connectors."""
+        return LoopHooksLateImpl(lambda: self._parts()[1])
 
     def build(self, managers: PlatformManagers) -> ConnectorsManagerInterface:
         """The connectors manager over the engine's, once; built again, the same."""

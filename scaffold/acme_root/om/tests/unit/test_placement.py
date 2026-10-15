@@ -16,6 +16,7 @@ import pytest
 
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome
@@ -36,6 +37,7 @@ from acme.om.placement.impl.operator import SHARE_SET_KIND
 from acme.om.placement.kinds import (
     HOST,
     PLACED_KINDS,
+    PlacementWorkKind,
     claims_of,
     platform_claimant_kinds,
     platform_work_kinds,
@@ -45,6 +47,7 @@ from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import TierShare
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import operator_permissions_of
@@ -162,11 +165,11 @@ async def test_each_kind_goes_to_the_lane_where_its_environment_is(
     owner = await an_owner(managers)
     host, pool = new_id(), new_id()
     cases = {
-        (WorkKind.LOOP, ()): tier_lane("standard"),
-        (WorkKind.EXEC, ("host",)): host_lane(host),
-        (WorkKind.WORKSPACE, ("prepare",)): pool_lane(pool),
-        (WorkKind.WORKSPACE, ("release",)): host_lane(host),
-        (WorkKind.VALIDATION, ()): "default",
+        (AgentSessionWorkKind.LOOP, ()): tier_lane("standard"),
+        (PlacementWorkKind.EXEC, ("host",)): host_lane(host),
+        (PlacementWorkKind.WORKSPACE, ("prepare",)): pool_lane(pool),
+        (PlacementWorkKind.WORKSPACE, ("release",)): host_lane(host),
+        (ValidationWorkKind.VALIDATION, ()): "default",
         (WorkKind.NOOP, ()): "default",
     }
     payloads: dict[tuple[str, ...], dict[str, object]] = {
@@ -185,7 +188,7 @@ async def test_a_tenants_loops_go_to_its_tiers_lane_or_its_own(managers: Platfor
     admin = operator()
 
     async def loop_lane() -> str:
-        queued = await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
+        queued = await managers.work.enqueue(owner, an_item(owner, AgentSessionWorkKind.LOOP, {}))
         return queued.lane
 
     assert await loop_lane() == tier_lane("standard"), "no share is the default tier"
@@ -211,7 +214,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
     session = await managers.agent_sessions.create_agent_session(owner, make_session())
     said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does checkout time out?")
     await managers.agent_sessions.receive(owner, session.id, [said_now])
-    (loop,) = [i for i in items_of(storage) if i.kind == WorkKind.LOOP]
+    (loop,) = [i for i in items_of(storage) if i.kind == AgentSessionWorkKind.LOOP]
     assert loop.lane == tier_lane("pro") and loop.target_id == session.id
 
 
@@ -228,12 +231,12 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
     host = Claimant(kind=HOST, id=mine, org_id=owner.org_id, pool_id=my_pool)
     enqueued: dict[str, WorkItem] = {}
     for name, kind, payload in (
-        ("loop", WorkKind.LOOP, {}),
-        ("my exec", WorkKind.EXEC, exec_on(mine)),
-        ("their exec", WorkKind.EXEC, exec_on(theirs)),
-        ("my prepare", WorkKind.WORKSPACE, prepare_in(my_pool)),
-        ("their prepare", WorkKind.WORKSPACE, prepare_in(their_pool)),
-        ("my release", WorkKind.WORKSPACE, release_on(mine)),
+        ("loop", AgentSessionWorkKind.LOOP, {}),
+        ("my exec", PlacementWorkKind.EXEC, exec_on(mine)),
+        ("their exec", PlacementWorkKind.EXEC, exec_on(theirs)),
+        ("my prepare", PlacementWorkKind.WORKSPACE, prepare_in(my_pool)),
+        ("their prepare", PlacementWorkKind.WORKSPACE, prepare_in(their_pool)),
+        ("my release", PlacementWorkKind.WORKSPACE, release_on(mine)),
     ):
         enqueued[name] = await managers.work.enqueue(owner, an_item(owner, kind, payload))
 
@@ -272,8 +275,8 @@ def test_a_claimants_lanes_and_kinds_are_read_off_its_identity_alone() -> None:
     host = Claimant(kind=HOST, id=host_id, org_id=org, pool_id=pool)
     claimants, work = platform_claimant_kinds(), platform_work_kinds()
     assert claims_of(claimants, work, host) == (
-        (host_lane(host_id), (WorkKind.EXEC, WorkKind.WORKSPACE)),
-        (pool_lane(pool), (WorkKind.WORKSPACE,)),
+        (host_lane(host_id), (PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE)),
+        (pool_lane(pool), (PlacementWorkKind.WORKSPACE,)),
     )
     claimed = {kind for _, kinds in claims_of(claimants, work, host) for kind in kinds}
     assert claimed == {spec.name for spec in PLACED_KINDS} == work.claimed_by(HOST)
@@ -292,8 +295,12 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     walled_id, cloud_id, pool = new_id(), new_id(), new_id()
     walled = Claimant(kind=HOST, id=walled_id, org_id=ajax.org_id, pool_id=pool)
     cloud = Claimant(kind=HOST, id=cloud_id, pool_id=new_id())
-    stray = await managers.work.enqueue(beta, an_item(beta, WorkKind.EXEC, exec_on(walled_id)))
-    served = await managers.work.enqueue(beta, an_item(beta, WorkKind.EXEC, exec_on(cloud_id)))
+    stray = await managers.work.enqueue(
+        beta, an_item(beta, PlacementWorkKind.EXEC, exec_on(walled_id))
+    )
+    served = await managers.work.enqueue(
+        beta, an_item(beta, PlacementWorkKind.EXEC, exec_on(cloud_id))
+    )
 
     assert await managers.placement.claim_for(request(), walled, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
@@ -320,7 +327,7 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
         kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, agent_session_id=mine
     )
     stray = await managers.work.enqueue(
-        ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, other))
+        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(machine_id, other))
     )
 
     assert await managers.placement.claim_for(request(), machine, LEASE) is None
@@ -330,7 +337,9 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
     assert dead.target_id == stray.id and "another session" in str(dead.payload["last_error"])
 
-    own = await managers.work.enqueue(ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, mine)))
+    own = await managers.work.enqueue(
+        ajax, an_item(ajax, PlacementWorkKind.EXEC, exec_on(machine_id, mine))
+    )
     claimed = await managers.placement.claim_for(request(), machine, LEASE)
     assert claimed is not None and claimed[1].id == own.id
 
@@ -359,11 +368,11 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_
     lane = tier_lane("standard")
     cap = options.lane_cap(lane)
     for owner in (ajax, ajax, ajax, beta):
-        await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
+        await managers.work.enqueue(owner, an_item(owner, AgentSessionWorkKind.LOOP, {}))
 
     async def claim() -> tuple[TenantContext, WorkItem] | None:
         return await managers.work.claim(
-            request(), lane, [WorkKind.LOOP], "runner", LEASE, tenant_cap=cap
+            request(), lane, [AgentSessionWorkKind.LOOP], "runner", LEASE, tenant_cap=cap
         )
 
     first, second = await claim(), await claim()
@@ -404,7 +413,7 @@ async def test_a_tenant_moved_to_another_lane_keeps_its_own_cap_on_the_lane_it_l
     )
     assert (set_at.concurrency, set_at.own_cap) == (1, True)
     for _ in range(3):
-        await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
+        await managers.work.enqueue(owner, an_item(owner, AgentSessionWorkKind.LOOP, {}))
     await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
     )
@@ -414,7 +423,12 @@ async def test_a_tenant_moved_to_another_lane_keeps_its_own_cap_on_the_lane_it_l
     # to the tier's share.
     async def claim() -> tuple[TenantContext, WorkItem] | None:
         return await managers.work.claim(
-            request(), tier, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(tier)
+            request(),
+            tier,
+            [AgentSessionWorkKind.LOOP],
+            "runner",
+            LEASE,
+            PlacementOptions().lane_cap(tier),
         )
 
     assert await claim() is not None
@@ -440,21 +454,28 @@ async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loo
     await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=False, concurrency=1
     )
-    await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
+    await managers.work.enqueue(owner, an_item(owner, AgentSessionWorkKind.LOOP, {}))
     running = await managers.work.claim(
-        request(), tier, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(tier)
+        request(),
+        tier,
+        [AgentSessionWorkKind.LOOP],
+        "runner",
+        LEASE,
+        PlacementOptions().lane_cap(tier),
     )
     assert running is not None
     before = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": before.id})
+        owner,
+        an_item(owner, AgentSessionWorkKind.LOOP, {}).model_copy(update={"target_id": before.id}),
     )
     await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
     )
     after = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": after.id})
+        owner,
+        an_item(owner, AgentSessionWorkKind.LOOP, {}).model_copy(update={"target_id": after.id}),
     )
 
     async def standing(session: UUID) -> tuple[object, ...]:
@@ -606,7 +627,7 @@ async def test_a_lost_claim_writes_nothing_and_the_next_claim_recovers_the_sessi
     work = loop.managers.work
 
     lost = await work.claim(
-        request(), lane, [WorkKind.LOOP], "runner-a", timedelta(milliseconds=50)
+        request(), lane, [AgentSessionWorkKind.LOOP], "runner-a", timedelta(milliseconds=50)
     )
     assert lost is not None
     stalled = asyncio.ensure_future(loop.loops.run(lost[0], agent_session_id))
@@ -614,7 +635,7 @@ async def test_a_lost_claim_writes_nothing_and_the_next_claim_recovers_the_sessi
     await asyncio.sleep(0.1)
     assert await work.requeue_stale(request(), 100) == 1, "its lease ran out"
 
-    found = await work.claim(request(), lane, [WorkKind.LOOP], "runner-b", LEASE)
+    found = await work.claim(request(), lane, [AgentSessionWorkKind.LOOP], "runner-b", LEASE)
     assert found is not None and found[1].id == lost[1].id, "the lost claim does not count"
     run = await loop.loops.run(found[0], agent_session_id)
     loop.tools["slow"].release.set()

@@ -14,16 +14,16 @@ from typing import Any
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.agent_workspaces.twin import AgentWorkspaceTwinImpl
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl

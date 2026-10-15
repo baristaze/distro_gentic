@@ -25,7 +25,7 @@ from acme.integrations.model_providers.types import ProviderName
 from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-from acme.om.agent_steps.types.agent_step import AgentStepType, AgentStep
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
 from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure, ToolResponseHeader
 from acme.om.agents.impl.loop import LoopOptions
@@ -446,7 +446,9 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
         scope = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
         (share,) = [b for b in budgets.items if b.scope == scope]
         spent.append(
-            (await platform.managers.spend_budgets.get_spend(platform.owner, share.id)).spent_cost_micros
+            (
+                await platform.managers.spend_budgets.get_spend(platform.owner, share.id)
+            ).spent_cost_micros
         )
     assert all(child > 0 for child in spent), "each sub-agent spent from the tree"
     assert sum(spent) < tally.spent_cost_micros, "and the root spent from it too"

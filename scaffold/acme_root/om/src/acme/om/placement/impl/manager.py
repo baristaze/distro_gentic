@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.observability import OUTCOMES
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.base import EMPTY_UUID, OmBase, derived_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
@@ -19,7 +20,7 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.kinds import WorkKinds
 from acme.om.work.types.tenant_cap import MAX_CAP
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         self._clock = clock
 
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
-        if item.kind == WorkKind.LOOP:
+        if item.kind == AgentSessionWorkKind.LOOP:
             return loop_lane(org_id, await self._share(org_id))
         return placed_lane(self._kinds.get(item.kind), item.payload) or item.lane
 

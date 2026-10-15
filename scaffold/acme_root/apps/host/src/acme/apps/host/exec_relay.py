@@ -50,6 +50,7 @@ from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
 from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     AgentWorkspaceProviderInterface,
     Durability,
@@ -57,7 +58,6 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
@@ -731,7 +731,10 @@ class ExecutorRelayImpl(ExecutorInterface):
 
 
 async def _operate(
-    transport: TransportInterface, workspace: AgentWorkspace, detail: ExecDetailView, on_output: Sink
+    transport: TransportInterface,
+    workspace: AgentWorkspace,
+    detail: ExecDetailView,
+    on_output: Sink,
 ) -> dict[str, Any]:
     """The one operation the item names, through the host's transport."""
     request = detail.request

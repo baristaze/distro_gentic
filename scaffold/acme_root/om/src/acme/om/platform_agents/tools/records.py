@@ -17,6 +17,7 @@ from acme.om.agent_automations.types.agent_automation import Limits as AgentAuto
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_projects.types.agent_project import AgentProject
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
@@ -37,7 +38,7 @@ from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.policy import ApproverRule, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 
 # The assistant's readers. Each reads through the asking person's own
 # permissions: the call's context is theirs, so a row of another tenant's,
@@ -167,9 +168,7 @@ class ReadSessionImpl(NativeToolImpl):
         self._policies = policies
         self._agent_projects = agent_projects
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SessionInput)
         session = await self._sessions().get_agent_session(ctx, call_input.agent_session_id)
         park = session.park
@@ -283,9 +282,7 @@ class ListSessionsImpl(NativeToolImpl):
         self._sessions = sessions
         self._agent_projects = agent_projects
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SessionsQuery)
         # A sub-agent waits under a root in any status, an idle one included,
         # so the scan reads every root, and the filter reads each session.
@@ -415,12 +412,10 @@ class ReadWaitImpl(NativeToolImpl):
         self._hosts = hosts
         self._exec_relay = exec_relay
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, SessionInput)
         session = await self._sessions().get_agent_session(ctx, call_input.agent_session_id)
-        item = await self._work().latest_for_target(ctx, WorkKind.LOOP, session.id)
+        item = await self._work().latest_for_target(ctx, AgentSessionWorkKind.LOOP, session.id)
         loop: WaitingItem | None = None
         if item is not None:
             queued = item.status is WorkStatus.QUEUED
@@ -521,9 +516,7 @@ class ListAgentProjectsImpl(NativeToolImpl):
     def __init__(self, agent_projects: Callable[[], AgentProjectsManagerInterface]) -> None:
         self._agent_projects = agent_projects
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
         rows = await self._agent_projects().list_agent_projects(ctx, call_input.after, limit + 1)
@@ -554,9 +547,7 @@ class ReadAgentProjectImpl(NativeToolImpl):
     def __init__(self, agent_projects: Callable[[], AgentProjectsManagerInterface]) -> None:
         self._agent_projects = agent_projects
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, AgentProjectInput)
         return agent_project_read(
             await self._agent_projects().get_agent_project(ctx, call_input.agent_project_id)
@@ -651,9 +642,7 @@ class ListAgentAutomationsImpl(NativeToolImpl):
     def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
         self._agent_automations = agent_automations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PageInput)
         limit = call_input.limit
         rows = await self._agent_automations().list_agent_automations(
@@ -690,9 +679,7 @@ class ReadAgentAutomationImpl(NativeToolImpl):
     def __init__(self, agent_automations: Callable[[], AgentAutomationsManagerInterface]) -> None:
         self._agent_automations = agent_automations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, AgentAutomationInput)
         agent_automation = await self._agent_automations().get_agent_automation(
             ctx, call_input.agent_automation_id
@@ -770,9 +757,7 @@ class DraftToolPolicyImpl(NativeToolImpl):
         self._tools = tools
         self._classes = classes
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, DraftInput)
         live = await self._policies().get_policy(ctx)
         return rules.draft_policy(

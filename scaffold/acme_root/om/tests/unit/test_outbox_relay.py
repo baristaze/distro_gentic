@@ -23,7 +23,7 @@ from acme.om.outbox.impl.relay import DEAD_LETTER_KIND, OutboxOptions, OutboxRel
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.platform_root import PlatformManagers, build_platform_managers
-from acme.om.root import KINDS, Managers, build_managers
+from acme.om.root import KINDS
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.impl.creates import user_payload
 from acme.om.tenancy.impl.manager import TenancyOptions

@@ -490,7 +490,7 @@ async def write_tree(slug: str) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from acme.om.agent_sessions.rules import parked_step
     from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-    from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+    from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
     from acme.om.agent_steps.types.content import Content, TextBlock
     from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
     from acme.om.agents.loop_rules import ended_step

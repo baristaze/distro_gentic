@@ -116,9 +116,7 @@ class CommentImpl(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, CommentInput)
         intake = self._intake()
         forge = self._integrations(FORGE)

@@ -54,7 +54,7 @@ import pytest
 from api_support import seed_request, sign_in_as
 from httpx import ASGITransport
 from platform_runner_support import E2E_KINDS, submits, validates
-from runner_support import KINDS, TOOLS, answers, calls, runs
+from runner_support import KINDS, answers, calls, runs
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -83,7 +83,6 @@ from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.privacy.impl.sealed_agent_steps import says_something
-from acme.om.spend_budgets.types.budget import Budget, SpendBudgetScopeKind, WindowKind
 from acme.om.spend_budgets.types.hold import SpendSettlement
 from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.om.storage.migrate import VERSION_TABLE
@@ -94,7 +93,7 @@ from acme.om.tools.native.write_agent_plan import WRITE_AGENT_PLAN
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
 from acme.om.windows.rules import READ_TOOL_OUTPUT
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
 from acme.services.api.seed import CONTENT_LIFETIME, first_repository, seed_platform
@@ -763,11 +762,11 @@ async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_
     # Its loop was claimed from its plan tier's lane, and its run completed.
     work = storage.get_work_storage()
     deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
-    item = await work.read_latest_for_target(org_id, WorkKind.LOOP, sid)
+    item = await work.read_latest_for_target(org_id, AgentSessionWorkKind.LOOP, sid)
     while item is not None and item.status is not WorkStatus.DONE:
         assert asyncio.get_running_loop().time() < deadline, f"the loop's run is {item.status}"
         await asyncio.sleep(0.2)
-        item = await work.read_latest_for_target(org_id, WorkKind.LOOP, sid)
+        item = await work.read_latest_for_target(org_id, AgentSessionWorkKind.LOOP, sid)
     assert item is not None and item.lane == tier_lane(DEFAULT_TIER)
     found["claim"] = f"lane {item.lane}, {item.status.value} after {item.attempts} attempt(s)"
 
@@ -818,7 +817,9 @@ async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_
     }
 
     # Its success was decided by the result gate, at its pushed head.
-    opened = (await stack.container.managers.agent_steps.get_agent_steps(person.ctx, sid, 0, 200)).items
+    opened = (
+        await stack.container.managers.agent_steps.get_agent_steps(person.ctx, sid, 0, 200)
+    ).items
     accepted = [
         step.header.accepted
         for step in opened
@@ -1107,6 +1108,7 @@ from acme.infra.buckets import Buckets
 from acme.infra.buckets.s3 import BucketsS3Impl
 from acme.infra.impl.settings import InfraSettings
 from acme.om.tools.impl.bases import PREFIX
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 
 async def kept():
     settings = InfraSettings()

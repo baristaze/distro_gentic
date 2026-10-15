@@ -28,14 +28,11 @@ from acme.infra.observability import (
     name_process,
 )
 from acme.infra.trust import install_trust_store
-from acme.om.agent_sessions.kinds import LOOP_LANE, AgentSessionWorkKind
-from acme.om.agents.types.kind import AgentKind
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.placement.rules import LOOP_LANE_PREFIX, tier_label
 from acme.om.platform_root import PlatformPorts
 from acme.om.root import KINDS
 from acme.om.tools.attachments import AttachmentReaderInterface
-from acme.om.tools.tool import ToolInterface
-from acme.om.work.types.work_item import WorkKind
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.runs import LoopHandlerImpl
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings

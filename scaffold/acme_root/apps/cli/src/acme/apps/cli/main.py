@@ -36,19 +36,14 @@ from acme.apps.cli.model import (
     step_line,
 )
 from acme.apps.cli.product_commands import PRODUCT_COMMANDS
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import ApiClient
 from acme.client.realtime import ChannelRefused
 from acme.client.transport import ApiError
 from acme.client.types import (
     AgentAutomationRequest,
-    AgentSessionControl,
     AgentSessionStatus,
-    AgentSessionView,
-    AgentStepView,
     ConnectorReviewRequest,
     ConnectorView,
-    IssuedAuthSessionView,
-    IssuedLoginView,
     PinView,
 )
 from acme.client.types.agent_sessions import AgentSessionControl, AgentSessionView, AgentStepView

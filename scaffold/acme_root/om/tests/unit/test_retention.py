@@ -23,7 +23,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys import KeyServiceInterface, WrappedKey
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
 from acme.om.agent_steps.types.header import (
     ControlCommand,
@@ -170,11 +170,15 @@ class Roots:
 
     async def session_saying(self, ctx: TenantContext, text: str = SAID) -> AgentSession:
         session = await self.managers.agent_sessions.create_agent_session(ctx, make_session())
-        await self.managers.agent_steps.append_inputs(ctx, session.id, [make_message(session.id, text)])
+        await self.managers.agent_steps.append_inputs(
+            ctx, session.id, [make_message(session.id, text)]
+        )
         return session
 
     async def said(self, ctx: TenantContext, agent_session_id: UUID) -> list[str]:
-        steps = (await self.managers.agent_steps.get_agent_steps(ctx, agent_session_id, 0, 50)).items
+        steps = (
+            await self.managers.agent_steps.get_agent_steps(ctx, agent_session_id, 0, 50)
+        ).items
         return [step.as_text() for step in steps if step.content.state is ContentState.PLAIN]
 
     async def audited(self, ctx: TenantContext) -> list[dict[str, object]]:
@@ -603,7 +607,9 @@ async def test_a_child_session_belongs_to_its_parents_agent_project(tmp_path: Pa
     await roots.declare(owner, a_policy(MONTH), (narrowing,))
     parent = await roots.managers.agent_sessions.create_agent_session(owner, make_session())
     agent_project.agent_project_id = new_id()
-    child = await roots.managers.agent_sessions.create_agent_session(owner, make_session(parent=parent))
+    child = await roots.managers.agent_sessions.create_agent_session(
+        owner, make_session(parent=parent)
+    )
     snapshot = await roots.managers.retention.get_snapshot(owner, child.id)
     assert snapshot.agent_project_id == narrowing.agent_project_id
     assert snapshot.policy.content_lifetime == WEEK
@@ -873,7 +879,9 @@ async def test_a_revoked_tenant_key_makes_its_content_unreadable_and_nothing_els
     with pytest.raises(KeyRefused):
         await roots.said(revoking, gone.id)
     with pytest.raises(KeyRefused):
-        await roots.managers.agent_steps.append_inputs(revoking, gone.id, [make_message(gone.id, "more")])
+        await roots.managers.agent_steps.append_inputs(
+            revoking, gone.id, [make_message(gone.id, "more")]
+        )
     assert await roots.said(other, kept.id) == ["the other tenant's notes"]
     await roots.managers.agent_steps.append_inputs(other, kept.id, [make_message(kept.id, "more")])
     assert await roots.said(other, kept.id) == ["the other tenant's notes", "more"]

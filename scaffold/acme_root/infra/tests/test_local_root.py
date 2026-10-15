@@ -1,7 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
 
-from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.base import new_id
 from acme.infra.buckets import Buckets
 from acme.infra.cache import CacheScope

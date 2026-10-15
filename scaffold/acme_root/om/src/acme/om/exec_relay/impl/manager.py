@@ -59,7 +59,7 @@ from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.placement.kinds import HOST
+from acme.om.placement.kinds import HOST, PlacementWorkKind
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import (
@@ -72,7 +72,7 @@ from acme.om.retention.crossing import Crossing, CrossingKind, CrossingRefused, 
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
+from acme.om.work.types.work_item import WorkItem, WorkStatus, work_row_kind
 
 log = logging.getLogger(__name__)
 
@@ -245,7 +245,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     async def prepare_refusal(self, ctx: TenantContext, agent_session_id: UUID) -> str | None:
         ctx.require(Permission.READ)
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is None or latest.status not in REFUSED or latest.last_error is None:
             return None
         try:
@@ -272,7 +274,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         ctx.require(Permission.WRITE)
         binding = await self._storage.read_binding(ctx.org_id, instance_id)
         if binding is None:
-            latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, instance_id)
+            latest = await self._work.latest_for_target(
+                ctx, PlacementWorkKind.WORKSPACE, instance_id
+            )
             if latest is not None and latest.status is WorkStatus.QUEUED:
                 await self._work.end_queued(ctx, latest, "its run ended before a host made it")
             return False
@@ -307,7 +311,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         binding = await self._storage.read_binding(ctx.org_id, agent_session_id)
         if binding is None:
             return False
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if (
             latest is not None
             and latest.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
@@ -339,7 +345,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             raise ValidationFailed(
                 f"session {agent_session_id} runs in the cloud; no host restores it"
             )
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is not None and latest.status in OPEN:
             try:
                 waiting = WorkspacePayload.model_validate(latest.payload)
@@ -424,7 +432,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             id=new_id(),
             created_at=self._clock(),
             org_id=org_id,
-            kind=work_row_kind(WorkKind.WORKSPACE),
+            kind=work_row_kind(PlacementWorkKind.WORKSPACE),
             target_id=agent_session_id,
             payload=payload.model_dump(mode="json"),
             actor_id=EMPTY_UUID,
@@ -437,7 +445,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         ctx.require(Permission.READ)
         row = await self._work.get_item(ctx, item_id)
-        if row.kind != WorkKind.WORKSPACE:
+        if row.kind != PlacementWorkKind.WORKSPACE:
             raise NotFound(f"workspace item {item_id} does not exist")
         return row
 
@@ -906,7 +914,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
         settled = 0
         for row in ended:
-            if row.kind != WorkKind.EXEC:
+            if row.kind != PlacementWorkKind.EXEC:
                 continue
             try:
                 payload = ExecPayload.model_validate(row.payload)
@@ -925,7 +933,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         # Its commands' queue rows end first: a row whose item is gone would
         # wait for good on the lane of a host that never claims again.
         await self._work.end_open_for_target(
-            org_id, WorkKind.EXEC, agent_session_id, "its session was purged"
+            org_id, PlacementWorkKind.EXEC, agent_session_id, "its session was purged"
         )
         while await self._storage.purge_agent_session(
             org_id, agent_session_id, self._options.purge_batch
@@ -984,7 +992,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                kind=WorkKind.WORKSPACE,
+                kind=PlacementWorkKind.WORKSPACE,
                 target_id=target,
                 idempotency_key=row,
                 request_id=ctx.request_id,
@@ -1023,7 +1031,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         a prepare is asked only when no live host holds the workspace, so
         none is left for it to let go. A snapshot or an erase is a host's
         store's, and is left to run."""
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, agent_session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is None or latest.status not in OPEN:
             return False
         try:
@@ -1069,7 +1079,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             row = None
         held = (
             row is not None
-            and row.kind == WorkKind.WORKSPACE
+            and row.kind == PlacementWorkKind.WORKSPACE
             and _operation(row) in operations
             and row.status is WorkStatus.CLAIMED
             and row.claimed_by == worker_of(host)
@@ -1186,7 +1196,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                kind=WorkKind.EXEC,
+                kind=PlacementWorkKind.EXEC,
                 target_id=item.agent_session_id,
                 idempotency_key=item.row_id,
                 request_id=ctx.request_id,

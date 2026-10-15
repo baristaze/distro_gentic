@@ -45,7 +45,6 @@ from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import ROLE_PERMISSIONS
 from acme.om.work.impl.manager import not_before, relayed_key
-from acme.om.work.kinds import WORK_KINDS, WorkKinds
 from acme.om.work.types.work_item import (
     OrchestrationPayload,
     WakeParkedPayload,

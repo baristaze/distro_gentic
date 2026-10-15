@@ -31,8 +31,8 @@ from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -95,7 +95,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     assert parked.end is RunEnd.PARKED and parked.park is not None
     assert parked.park.reason is ParkReason.LEASABLE_RESOURCE
     assert model.calls == []
-    assert await managers.work.has_open(owner, WorkKind.WORKSPACE, session.id)
+    assert await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
     assert await managers.exec_relay.binding_of(owner, session.id) is None
 
     # A host comes online, claims the prepare, and makes the workspace: the
@@ -106,7 +106,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     binding = await managers.exec_relay.binding_of(owner, session.id)
     assert binding is not None and binding.host_id == UUID(host.credential.claimant_id)
     assert Path(binding.location).is_relative_to(root.resolve())
-    assert not await managers.work.has_open(owner, WorkKind.WORKSPACE, session.id)
+    assert not await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
 
     # The next loop's tool call runs on that host, in the directory it made.
     await managers.agent_sessions.wake_agent_session(owner, session.id, parked.park)

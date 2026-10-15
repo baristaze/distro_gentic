@@ -20,9 +20,10 @@ from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
 from acme.om.agent_billing.rules import line_keys, tally_of
 from acme.om.agent_billing.sweep import ProviderBillsInterface
 from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind, LoopPayload
 from acme.om.agent_sessions.rules import resumed_step
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader, ModelRequestHeader
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -50,7 +51,7 @@ from acme.om.spend_budgets.types.spend_hold import (
     SpendSettlement,
 )
 from acme.om.tenancy.rules import operator_permissions_of
-from acme.om.work.types.work_item import LoopPayload, WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.workers.maintenance.agent_sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
@@ -128,7 +129,9 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     managers = container.managers
     owner = await an_owner(container)
     session = await managers.agent_sessions.create_agent_session(owner, a_session())
-    (message,) = await managers.agent_steps.append_inputs(owner, session.id, [a_message(session.id)])
+    (message,) = await managers.agent_steps.append_inputs(
+        owner, session.id, [a_message(session.id)]
+    )
     # The loop's item on a lane of this test's own, claimed by a runner that
     # then dies: its lease runs out with nobody to renew it.
     lane, now = f"loop:agent_fleet-{new_id().hex[-8:]}", utcnow()
@@ -138,7 +141,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
         updated_at=now,
         created_by=owner.user_id,
         updated_by=owner.user_id,
-        kind=WorkKind.LOOP,
+        kind=AgentSessionWorkKind.LOOP,
         target_id=session.id,
         idempotency_key=new_id(),
         request_id=new_id(),
@@ -148,7 +151,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     )
     await container.storage.get_work_storage().create_item(owner.org_id, item)
     claimed = await managers.work.claim(
-        request(), lane, [WorkKind.LOOP], "runner-that-dies", timedelta(milliseconds=1)
+        request(), lane, [AgentSessionWorkKind.LOOP], "runner-that-dies", timedelta(milliseconds=1)
     )
     assert claimed is not None and claimed[1].id == item.id
     dead_ctx, _ = claimed
@@ -158,7 +161,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
 
     again = await managers.work.claim(
-        request(), lane, [WorkKind.LOOP], "runner-next", timedelta(minutes=1)
+        request(), lane, [AgentSessionWorkKind.LOOP], "runner-next", timedelta(minutes=1)
     )
     assert again is not None, "the sweep put the loop back in its lane"
     ctx, requeued = again
@@ -326,7 +329,7 @@ async def its_loop(
 ) -> tuple[TenantContext, WorkItem]:
     """The tenant's next loop, claimed by a runner that holds it for an hour."""
     claimed = await container.managers.work.claim(
-        request(), own_lane(owner.org_id), [WorkKind.LOOP], "runner", timedelta(hours=1)
+        request(), own_lane(owner.org_id), [AgentSessionWorkKind.LOOP], "runner", timedelta(hours=1)
     )
     assert claimed is not None
     return claimed
@@ -392,7 +395,7 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None
     assert (asked.kind, asked.target_id, asked.created_by) == (
-        WorkKind.LOOP,
+        AgentSessionWorkKind.LOOP,
         stuck.id,
         stuck.created_by,
     )
@@ -446,7 +449,7 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     await sweep(request())
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None, "its last step, a minute old, holds nothing"
-    assert (asked.kind, asked.target_id) == (WorkKind.LOOP, session.id)
+    assert (asked.kind, asked.target_id) == (AgentSessionWorkKind.LOOP, session.id)
     now = later + timedelta(minutes=1)
     await sweep(request())
     now = written + StalledOptions().stall_after * 2

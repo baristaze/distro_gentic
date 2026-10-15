@@ -18,11 +18,12 @@ from acme.om.base import new_id
 from acme.om.context import TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.handler import WorkRefused
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 
@@ -63,7 +64,7 @@ async def started(
 
 async def claimed(container: WorkerContainer) -> tuple[TenantContext, WorkItem]:
     found = await container.managers.work.claim(
-        request(), "default", (WorkKind.VALIDATION,), "maintenance-test", LEASE
+        request(), "default", (ValidationWorkKind.VALIDATION,), "maintenance-test", LEASE
     )
     assert found is not None
     return found
@@ -80,7 +81,7 @@ async def test_the_worker_runs_a_validation_session_once_to_its_record(tmp_path:
     )
     owner = await sign_in(container)
     agent_session_id = await started(container, owner, "unit")
-    handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+    handler = build_loop(container)._handlers[ValidationWorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)
     assert item.target_id == agent_session_id
@@ -110,7 +111,7 @@ async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Pa
     await evidence.write_policy(
         owner, policy.model_copy(update={"checks": renamed, "requirements": ()})
     )
-    handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+    handler = build_loop(container)._handlers[ValidationWorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)
     with pytest.raises(WorkRefused, match="declares no check unit"):
@@ -135,7 +136,7 @@ async def test_a_check_naming_a_products_executor_runs_on_it(tmp_path: Path) -> 
     )
     owner = await sign_in(container)
     agent_session_id = await started(container, owner, "unit", executor="batch")
-    handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+    handler = build_loop(container)._handlers[ValidationWorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)
     await handler.handle(ctx, item)
@@ -156,7 +157,7 @@ async def test_a_check_whose_work_fails_on_its_last_attempt_reads_refused(
     owner = await sign_in(container)
     agent_session_id = await started(container, owner, "unit")
     loop = build_loop(container)
-    handler = loop._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+    handler = loop._handlers[ValidationWorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
     sessions = container.managers.platform_agents
 
     ctx, item = await claimed(container)

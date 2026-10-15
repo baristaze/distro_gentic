@@ -52,9 +52,7 @@ class HandOffToSoftwareEngineerImpl(NativeToolImpl):
     def __init__(self, agents: Callable[[], AgentsManagerInterface]) -> None:
         self._agents = agents
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, HandOffInput)
         handoff = Handoff(
             id=runtime.key,

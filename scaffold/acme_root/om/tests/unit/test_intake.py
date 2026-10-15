@@ -13,7 +13,7 @@ import pytest
 
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.rules import message_step
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.header import ControlHeader, InputHeader, ParkReason
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import derived_id, new_id, utcnow

@@ -35,11 +35,9 @@ from acme.infra.vms.twin import VmsTwinImpl
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, SnapshotHeader
-from acme.om.agent_steps.types.step import AgentStep
 from acme.om.base import new_id
 from acme.om.context import Role
 from acme.om.platform_root import build_platform_managers
-from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.bases import base_agent_workspace_id, base_key
 from acme.om.tools.tool import TakenSnapshot

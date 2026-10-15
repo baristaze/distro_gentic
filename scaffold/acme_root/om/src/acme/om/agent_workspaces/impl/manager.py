@@ -8,11 +8,11 @@ from uuid import UUID
 from pydantic import Field, SecretStr, ValidationError
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets import SecretsInterface

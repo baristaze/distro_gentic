@@ -77,9 +77,7 @@ class WriteFile(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, WriteInput)
         self.written.append(call_input.path)
         return Written(path=call_input.path)

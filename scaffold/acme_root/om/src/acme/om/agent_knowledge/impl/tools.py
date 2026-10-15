@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import OutputSink
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface

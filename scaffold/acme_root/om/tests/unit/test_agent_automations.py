@@ -485,7 +485,9 @@ async def test_an_agent_automations_session_starts_in_its_agent_project_under_it
         await platform.managers.agent_projects.create_agent_project(creator, make_agent_project())
     ).id
     await platform.managers.evidence.write_policy(creator, make_policy(policy_key(agent_project)))
-    budget = make_spend_budget(SpendBudgetScopeKind.AGENT_PROJECT, str(agent_project), cost_micros=1)
+    budget = make_spend_budget(
+        SpendBudgetScopeKind.AGENT_PROJECT, str(agent_project), cost_micros=1
+    )
     await platform.managers.spend_budgets.create_spend_budget(creator, budget)
     await made(platform, creator, action=started_in(agent_project))
     (run,) = await fired(platform, comment())

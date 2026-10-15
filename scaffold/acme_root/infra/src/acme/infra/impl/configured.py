@@ -1,7 +1,6 @@
 """The infra root that picks impls from settings and refuses combinations
 that are only safe locally."""
 
-import os
 from datetime import timedelta
 
 import aioboto3
@@ -28,7 +27,6 @@ from acme.infra.outages.null import OutageSignalNullImpl
 from acme.infra.platform_root import (
     PlatformInfra,
     PlatformInfraRoot,
-    cloud_machines,
     unsafe_on_platform,
 )
 from acme.infra.queues import QueuesInterface

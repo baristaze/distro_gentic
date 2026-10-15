@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_steps.types.header import ParkReason
 from acme.om.base import OmBase, new_id, utcnow
@@ -43,7 +44,6 @@ from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.work.manager import WorkOperatorManagerInterface
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.types.tenant_cap import MAX_CAP, TenantCap
-from acme.om.work.types.work_item import WorkKind
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +183,9 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         stored = await self._storage.read_share(org_id)
         tier = self._options.default_tier if stored is None else stored.plan_tier
         moved = stored is not None and stored.own_lane
-        item = await self._work.read_latest_for_target(org_id, WorkKind.LOOP, agent_session_id)
+        item = await self._work.read_latest_for_target(
+            org_id, AgentSessionWorkKind.LOOP, agent_session_id
+        )
         # The cap of the lane the loop stands on, which a move leaves where
         # it is; with no loop, of the lane its next one goes to.
         if item is not None:

@@ -27,7 +27,6 @@ from acme.om.agent_sessions.kinds import AgentSessionWorkKind, WakeAgentSessionP
 from acme.om.agent_sessions.rules import wakes_after
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
-from acme.om.agent_steps.types.step import AgentStepType
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal

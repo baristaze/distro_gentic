@@ -549,7 +549,9 @@ async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cance
         epoch = await steps.begin_run(ctx, agent_session_id)
         done = [request, response, ended(agent_session_id, objective.id)]
         await steps.append_agent_steps(ctx, agent_session_id, epoch, done)
-        assert (await sessions.project_status(ctx, agent_session_id)).status is AgentSessionStatus.IDLE
+        assert (
+            await sessions.project_status(ctx, agent_session_id)
+        ).status is AgentSessionStatus.IDLE
     await sessions.delete_agent_session(ctx, gone.id)
     epoch = await steps.begin_run(ctx, sibling.id)
     opening = (await steps.get_agent_steps(ctx, sibling.id, 0, 1)).items[0]
@@ -557,7 +559,9 @@ async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cance
     assert (await sessions.project_status(ctx, sibling.id)).status is AgentSessionStatus.PARKED
     (asked,) = await steps.append_inputs(ctx, below.id, [make_message(below.id)])
     epoch = await steps.begin_run(ctx, below.id)
-    await steps.append_agent_steps(ctx, below.id, epoch, [make_request(below.id, asked.id, (asked.id,))])
+    await steps.append_agent_steps(
+        ctx, below.id, epoch, [make_request(below.id, asked.id, (asked.id,))]
+    )
     assert (await sessions.project_status(ctx, below.id)).status is AgentSessionStatus.RUNNING
 
     await agents.set_deadline(ctx, root.id, utcnow() + timedelta(hours=1))

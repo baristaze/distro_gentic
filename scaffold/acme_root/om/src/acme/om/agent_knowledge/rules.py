@@ -17,7 +17,7 @@ from acme.om.agent_knowledge.types.agent_knowledge import (
     AgentKnowledge,
     AgentKnowledgeStatus,
 )
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal

@@ -5,7 +5,7 @@ checkout in a workspace, kept in memory."""
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from acme.infra.agent_workspaces import AgentWorkspaceBase, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, AgentWorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import (
     PullRequestsInterface,
@@ -118,7 +118,9 @@ class GitTwin(WorkspaceGitInterface):
         self.local.add(branch)
         self.dirty = False  # what the checkout held is gone with the cut
 
-    async def checkout(self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int) -> Checkout:
+    async def checkout(
+        self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int
+    ) -> Checkout:
         self.epochs.append(epoch)
         return Checkout(head=self.head, dirty=self.dirty)
 

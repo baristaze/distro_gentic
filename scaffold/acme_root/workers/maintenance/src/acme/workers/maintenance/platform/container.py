@@ -35,12 +35,14 @@ from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.intake.impl.manager import IntakeOptions
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.intake.root import build_intake
 from acme.om.park_alerts.impl.manager import ParkAlertsOptions
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformManagers, PlatformPorts, PlatformRootOptions, ProductKinds
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import LOCAL
@@ -51,7 +53,6 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.handler import WorkHandlerInterface
-from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.agent_sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.deliveries import DeliveryProviderInterface
 from acme.workers.maintenance.feedback import FeedbackDeliveriesImpl
@@ -347,8 +348,8 @@ class WorkerPlatform:
         member who left a team org, and a validation."""
         return {
             **engine,
-            WorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(self.intake),
-            WorkKind.VALIDATION: ValidationHandlerImpl(self._managers.platform_agents),
+            IntakeWorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(self.intake),
+            ValidationWorkKind.VALIDATION: ValidationHandlerImpl(self._managers.platform_agents),
         }
 
     def providers(

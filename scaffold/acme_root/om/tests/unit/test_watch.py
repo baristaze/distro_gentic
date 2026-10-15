@@ -16,11 +16,11 @@ import pytest
 from pydantic import SecretStr
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    AgentWorkspace,
 )
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
@@ -212,7 +212,9 @@ def service(options: StreamOptions | None = None, clock: Clock | None = None) ->
 async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part_seen(
     watched: Watched,
 ) -> None:
-    other = await watched.managers.agent_sessions.create_agent_session(watched.owner, make_session())
+    other = await watched.managers.agent_sessions.create_agent_session(
+        watched.owner, make_session()
+    )
     mine, theirs = new_id(), new_id()
     for n in range(3):
         watched.stream.emit(text(watched.agent_session_id, mine, n))
@@ -505,9 +507,7 @@ class Counting(Lookup):
     def __init__(self) -> None:
         super().__init__("count")
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         await runtime.run(("count",))
         return await super().run(ctx, call_input, runtime)
 

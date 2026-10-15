@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from acme.infra.agent_workspaces import IsolationSpec, AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import TransportInterface
 from acme.om.agent_workspaces.placed import PlacedInstancesInterface
 from acme.om.base import utcnow

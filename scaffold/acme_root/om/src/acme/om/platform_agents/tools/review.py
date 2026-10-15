@@ -198,9 +198,7 @@ class ReadPullRequestImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PullRequestAddress)
         forge = self._integrations(FORGE)
         try:
@@ -287,9 +285,7 @@ class ReadPullRequestFileImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, FileAtHeadInput)
         forge = self._integrations(FORGE)
         try:
@@ -352,9 +348,7 @@ class NoteFindingImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, FindingInput)
         forge = self._integrations(FORGE)
         try:
@@ -398,7 +392,5 @@ class SubmitReviewImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         raise ToolFailed(ToolFailure.PERMANENT, "a review is judged by the loop, never run")

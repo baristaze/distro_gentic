@@ -77,6 +77,7 @@ from acme.om.platform_agents.kinds import (
     SOFTWARE_ENGINEER_SHARE,
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
+    ValidationWorkKind,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
@@ -94,7 +95,7 @@ from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
 from acme.om.windows.rules import READ_TOOL_OUTPUT
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 from contracts.agent_project_storage import in_agent_project
 from contracts.evidence import ScriptedExecutor
@@ -1100,14 +1101,14 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
     assert await validations.start_validation(platform.owner, start) == session
     assert session.status is ValidationStatus.QUEUED
     assert [(i.kind, i.lane, i.target_id) for i in items_of(platform)] == [
-        (WorkKind.VALIDATION, "default", session.id)
+        (ValidationWorkKind.VALIDATION, "default", session.id)
     ], "one item on the platform's own lane, and no loop"
     # The platform's worker claims it, as it claims any of its own work, and
     # the check runs on the executor.
     claimed = await platform.managers.work.claim(
         RequestContext(request_id=new_id(), app=WORKER),
         "default",
-        (WorkKind.VALIDATION,),
+        (ValidationWorkKind.VALIDATION,),
         "maintenance-1",
         timedelta(seconds=30),
     )
@@ -1129,7 +1130,7 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
         RunPurpose.VALIDATION,
     ), "the same execution record an agent's validation writes"
     assert [(i.kind, i.status) for i in items_of(platform)] == [
-        (WorkKind.VALIDATION, WorkStatus.DONE)
+        (ValidationWorkKind.VALIDATION, WorkStatus.DONE)
     ]
     assert platform.model_calls() == 0, "no model was called"
     # It runs its check once: run again, it runs nothing; finished with

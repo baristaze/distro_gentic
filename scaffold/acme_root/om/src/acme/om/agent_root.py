@@ -61,6 +61,7 @@ from acme.om.privacy.impl.sealed_agent_steps import AgentStepStorageSealedImpl
 from acme.om.privacy.impl.snapshots import SnapshotSealKeysImpl
 from acme.om.privacy.impl.tool_outputs import ToolOutputSealKeysImpl
 from acme.om.privacy.keys import AgentSessionKeysInterface
+from acme.om.root_hooks import RootHooksInterface, RootHooksNullImpl
 from acme.om.spend_budgets import (
     SpendBudgetGateInterface,
     SpendBudgetsManagerInterface,
@@ -89,7 +90,6 @@ from acme.om.tools.tool import ToolInterface
 from acme.om.windows import WindowsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
-from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
 from acme.om.windows.impl.hashes import PromptHashPrivacyImpl
 from acme.om.windows.impl.manager import WindowsManagerImpl, WindowsOptions
 from acme.om.windows.seal import ToolOutputSealInterface
@@ -264,13 +264,19 @@ def build_agent_managers(
     outbox: OutboxRelayInterface,
     leases: LeasesManagerInterface,
     options: AgentRootOptions,
+    hooks: RootHooksInterface | None = None,
 ) -> AgentManagers:
     """The engine's managers over the guideline's `tenancy`, `change_events`,
     `outbox`, and `leases`, as `options` sets them. `integrations` None is a
-    process with no model provider: every call is refused as unavailable."""
+    process with no model provider: every call is refused as unavailable.
+    `hooks` is where a layer above reaches the graph as it is built, each
+    hook called once (`acme.om.root_hooks`); None reaches nothing."""
+    hooks = hooks or RootHooksNullImpl()
     # The history first: a session's status is read off its steps. What a
     # step says reaches it through the sealing layer, by the session's policy.
-    agent_session_keys = AgentSessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
+    agent_session_keys = AgentSessionKeysImpl(
+        storage.get_privacy_storage(), hooks.key_service(infra.get_keys())
+    )
     steps = AgentStepsManagerImpl(
         private_history(storage, agent_session_keys, AgentStepStorageMemoryImpl()),
         tenancy,
@@ -294,8 +300,10 @@ def build_agent_managers(
         # What attribution and the agents hold of a purged session goes with
         # it. Both are built below on this manager, so the edge is bound at
         # call time.
-        purged=lambda org_id, agent_session_id, tree_id: purge_held(
-            managers, org_id, agent_session_id, tree_id
+        purged=hooks.purged(
+            lambda org_id, agent_session_id, tree_id: purge_held(
+                managers, org_id, agent_session_id, tree_id
+            )
         ),
     )
     privacy = PrivacyManagerImpl(
@@ -311,6 +319,14 @@ def build_agent_managers(
         # call time.
         revoked=lambda ctx, agent_session_id: managers.tools.erase_snapshots(ctx, agent_session_id),
     )
+    agent_sessions = hooks.agent_sessions(
+        agent_sessions,
+        steps=steps,
+        privacy=privacy,
+        tenancy=tenancy,
+        events=change_events,
+        outbox=outbox,
+    )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = SpendBudgetsManagerImpl(
         storage.get_spend_budget_storage(),
@@ -325,18 +341,23 @@ def build_agent_managers(
     refuse_quiet_spend(options.environment, gate, storage.get_ledger_storage())
     # The one source of prices, which the resolver asks before it answers a
     # fill and the gate prices every call by.
-    pricing = PricingTableImpl()
+    pricing = hooks.pricing(gate) or PricingTableImpl()
     # A session's fills. The resolver refuses a model with no price row of
-    # its own.
-    models = LanguageModelsManagerImpl(
+    # its own; a layer's own resolver takes the table's place, and its face
+    # over the manager is what every namespace reaches.
+    prices = options.model_prices or ModelPricesFromPricingImpl(pricing)
+    layer = options.language_models_layer
+    models: LanguageModelsManagerInterface = LanguageModelsManagerImpl(
         storage.get_fill_set_storage(),
         steps,
         tenancy,
-        ModelResolverTableImpl(
-            options.model_prices or ModelPricesFromPricingImpl(pricing), ResolverOptions()
-        ),
+        ModelResolverTableImpl(prices, ResolverOptions())
+        if layer is None or layer.resolver is None
+        else layer.resolver(prices),
         options.language_models_options or LanguageModelsOptions(),
     )
+    if layer is not None and layer.models is not None:
+        models = layer.models(models, tenancy)
     attribution = AttributionManagerImpl(
         storage.get_attribution_storage(),
         agent_sessions,
@@ -361,7 +382,9 @@ def build_agent_managers(
         else options.language_models_layer.credentials(providers)
     )
     # The one gate every model call passes, priced from the one source.
-    calls = options.call_gate or CallGateSpendBudgetImpl(gate, pricing, agent_sessions, budgets)
+    calls = options.call_gate or hooks.call_gate(
+        gate, pricing, agent_sessions, budgets, options.language_models_layer
+    )
     windows = WindowsManagerImpl(
         storage.get_window_storage(),
         steps,
@@ -386,6 +409,7 @@ def build_agent_managers(
         + options.tool_catalog
     )
     ToolRegistry(catalog, options.domain_classes)  # refuses two tools of one name at boot
+    hooks.catalog(catalog)
     # Where the engine touches the world: the session's history for a
     # person's decisions, the change events for the audit of each secret a call
     # uses, the workspace and the transport infra chose, and attribution,
@@ -413,7 +437,7 @@ def build_agent_managers(
         change_events,
         outbox,
         infra.get_agent_workspaces(),
-        infra.get_transport(),
+        hooks.transport(infra.get_transport()),
         tools_settings,
         keyed_hash=privacy.keyed_hash,
         record_seal=options.record_seal
@@ -431,18 +455,20 @@ def build_agent_managers(
             tools_settings.purge_batch,
             utcnow,
         ),
+        fork_points=hooks.fork_points,
     )
+    tools = hooks.tools(tools, snapshots=snapshots)
     # A child's report reaches its parent through windows, which bounds it.
     # The toolsets a layer's hooks attach to a session are the loop's, and
     # the agents' too: who may instruct the session classes their tools, and
     # what a session carries to another counts their secrets.
-    hooks = options.loop_hooks or LoopHooksNullImpl()
+    loop_hooks = options.loop_hooks or LoopHooksNullImpl()
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
         steps,
         attribution,
-        options.result_gate or ResultGateNullImpl(),
+        hooks.result_gate(options.result_gate) or ResultGateNullImpl(),
         kinds,
         tenancy,
         outbox,
@@ -452,8 +478,9 @@ def build_agent_managers(
         tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
         secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
         tools=tools,
-        hooks=hooks,
+        hooks=loop_hooks,
     )
+    agents = hooks.agents(agents)
     managers = AgentManagers(
         agent_steps=steps,
         agent_sessions=agent_sessions,
@@ -491,7 +518,7 @@ def build_agent_managers(
             options.loop_options or LoopOptions(),
             leases=leases,
             domain_classes=options.domain_classes,
-            hooks=hooks,
+            hooks=loop_hooks,
         ),
     )
     return managers

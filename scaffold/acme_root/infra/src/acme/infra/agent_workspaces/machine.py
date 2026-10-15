@@ -9,12 +9,12 @@ import asyncio
 from uuid import UUID
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    AgentWorkspace,
     refusal,
 )
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
@@ -53,7 +53,9 @@ class WorkspaceMachineImpl(AgentWorkspaceHostImpl):
         directory = self._directory(org_id, agent_workspace_id)
         await asyncio.to_thread(directory.mkdir, mode=0o700, parents=True, exist_ok=True)
         await asyncio.to_thread(self._mark(org_id, agent_workspace_id).touch, mode=0o600)
-        return AgentWorkspace(id=agent_workspace_id, org_id=org_id, spec=spec, location=str(directory))
+        return AgentWorkspace(
+            id=agent_workspace_id, org_id=org_id, spec=spec, location=str(directory)
+        )
 
     async def snapshot(self, workspace: AgentWorkspace) -> bytes:
         raise SnapshotRefused(KEPT_BY_THE_POOL)

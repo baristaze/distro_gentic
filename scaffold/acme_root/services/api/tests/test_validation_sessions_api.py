@@ -37,8 +37,8 @@ from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import PreconditionFailed
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformPorts
-from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
 
 from contracts.evidence import ScriptedExecutor
@@ -107,7 +107,7 @@ async def worker_runs(container: AppContainer) -> int:
         claimed = await container.managers.work.claim(
             RequestContext(request_id=new_id(), app=WORKER),
             "default",
-            (WorkKind.VALIDATION,),
+            (ValidationWorkKind.VALIDATION,),
             "maintenance-test",
             LEASE,
         )
@@ -128,7 +128,7 @@ async def worker_refuses(container: AppContainer) -> list[str]:
         claimed = await container.managers.work.claim(
             RequestContext(request_id=new_id(), app=WORKER),
             "default",
-            (WorkKind.VALIDATION,),
+            (ValidationWorkKind.VALIDATION,),
             "maintenance-test",
             LEASE,
         )

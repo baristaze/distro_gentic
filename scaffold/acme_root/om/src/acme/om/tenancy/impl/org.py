@@ -18,6 +18,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.idempotency.types.attempt import Attempt
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row
 from acme.om.tenancy.impl.creates import (
@@ -209,7 +210,9 @@ class TenancyOrgManagerImpl(TenancyOrgManagerInterface):
             # What a team org keeps of them beyond their place, such as an
             # outside account linked to them, goes by the queue; a personal
             # org goes whole, by the sweep.
-            rows.append(outbox_row(where, work_row_kind(WorkKind.MEMBER_LEFT), place.user.id, {}))
+            rows.append(
+                outbox_row(where, work_row_kind(IntakeWorkKind.MEMBER_LEFT), place.user.id, {})
+            )
 
         users = {place.org.id: place.user.id for place in places}
 

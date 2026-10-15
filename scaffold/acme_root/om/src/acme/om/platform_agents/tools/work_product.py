@@ -55,9 +55,7 @@ class SubmitResultImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         raise ToolFailed(ToolFailure.PERMANENT, "a result is judged by the loop, never run")
 
 
@@ -104,9 +102,7 @@ class ValidateImpl(NativeToolImpl):
     def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
         self._evidence = evidence
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, ValidateInput)
         purpose = RunPurpose.BASELINE if call_input.baseline else RunPurpose.VALIDATION
         kept = await self._evidence().validate(ctx, runtime.agent_session_id, purpose)
@@ -177,9 +173,7 @@ class OpenPullRequestImpl(NativeToolImpl):
         # repository: its work product, never an outward write.
         return Target(attributes={"outward": False})
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> OmBase:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PullRequestInput)
         found = await runtime.run(("git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"))
         head = found.stdout.strip()

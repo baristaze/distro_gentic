@@ -47,6 +47,7 @@ from acme.om.agent_billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK, AnomalyGua
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.agent_billing.types.spend_ledger import EntryKind, FundedHold
 from acme.om.agent_billing.types.unit_plan import UNIT_PLANS, UnitPlan, UnitPlanCatalog
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.run import RunEnd
@@ -61,7 +62,6 @@ from acme.om.spend_budgets.types.spend_hold import Billed, SpendHoldRequest
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
 
 from contracts.loops import reply, said
@@ -189,7 +189,11 @@ class Case:
         assert isinstance(work, WorkStorageMemoryImpl)
         items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
         return len(
-            [i for i in items if i.kind == WorkKind.LOOP and str(i.target_id) == agent_session_id]
+            [
+                i
+                for i in items
+                if i.kind == AgentSessionWorkKind.LOOP and str(i.target_id) == agent_session_id
+            ]
         )
 
     async def entries(self, kind: EntryKind) -> int:

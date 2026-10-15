@@ -29,8 +29,8 @@ from runner_support import TOOLS, assistant
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.client.types import IsolationMode
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationRefused
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
-from acme.infra.agent_workspaces import IsolationRefused, AgentWorkspace
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerNullImpl
@@ -40,6 +40,7 @@ from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om import platform_root
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.types.header import ParkReason
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
@@ -49,10 +50,11 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.types.link import Installation
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -132,7 +134,7 @@ async def claimed_loop(
             updated_at=now,
             created_by=owner.user_id,
             updated_by=owner.user_id,
-            kind=WorkKind.LOOP,
+            kind=AgentSessionWorkKind.LOOP,
             target_id=agent_session_id,
             idempotency_key=new_id(),
             request_id=new_id(),
@@ -140,7 +142,7 @@ async def claimed_loop(
         ),
     )
     claimed = await managers.work.claim(
-        request(), queued.lane, [WorkKind.LOOP], "runner-1", timedelta(minutes=1)
+        request(), queued.lane, [AgentSessionWorkKind.LOOP], "runner-1", timedelta(minutes=1)
     )
     assert claimed is not None and claimed[1].target_id == agent_session_id
     return claimed[1]
@@ -201,7 +203,7 @@ class Placed:
 
     async def release(self) -> WorkItem | None:
         asked = await self.managers.work.latest_for_target(
-            self.owner, WorkKind.WORKSPACE, self.agent_session_id
+            self.owner, PlacementWorkKind.WORKSPACE, self.agent_session_id
         )
         if asked is None:
             return None

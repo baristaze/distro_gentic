@@ -12,7 +12,11 @@ product on."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase, Repository
+from acme.om.agent_projects.types.agent_project import (
+    AgentProject,
+    AgentProjectWorkspaceBase,
+    Repository,
+)
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
 from acme.om.context import TenantContext
@@ -57,7 +61,7 @@ class AgentProjectsManagerInterface(ABC):
         self,
         ctx: TenantContext,
         agent_project_id: UUID,
-        agent_workspace_base: AgentWorkspaceBase | None,
+        agent_workspace_base: AgentProjectWorkspaceBase | None,
     ) -> AgentProject:
         """The agent project with the workspace base its sessions' workspaces start
         from, or with none, as one who writes the tenant's configuration may

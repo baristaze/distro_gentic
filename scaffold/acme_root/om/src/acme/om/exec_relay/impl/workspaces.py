@@ -26,12 +26,12 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
-    AgentWorkspace,
 )
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
@@ -216,4 +216,6 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
 def _held(
     ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec, binding: AgentWorkspaceBinding
 ) -> AgentWorkspace:
-    return AgentWorkspace(id=agent_session_id, org_id=ctx.org_id, spec=spec, location=binding.location)
+    return AgentWorkspace(
+        id=agent_session_id, org_id=ctx.org_id, spec=spec, location=binding.location
+    )

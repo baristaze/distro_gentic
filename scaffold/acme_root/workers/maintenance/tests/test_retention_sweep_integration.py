@@ -12,7 +12,7 @@ import pytest
 from worker_support import request
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin, AgentStep
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -100,7 +100,9 @@ async def test_one_pass_destroys_an_expired_sessions_key_and_audits_the_report(
     steps = (await managers.agent_steps.get_agent_steps(owner, session.id, 0, 10)).items
     assert [step.content.state for step in steps] == [ContentState.ABSENT]
     (entry,) = [
-        e for e in await managers.change_events.get_change_events(owner, 0, 100) if e.kind == KEY_DESTROYED
+        e
+        for e in await managers.change_events.get_change_events(owner, 0, 100)
+        if e.kind == KEY_DESTROYED
     ]
     assert entry.payload["reported"] is True
     assert entry.payload["service"] == "keys=local"

@@ -25,6 +25,7 @@ from uuid import UUID
 import pytest
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceBase,
     AgentWorkspaceLost,
     Durability,
@@ -35,7 +36,6 @@ from acme.infra.agent_workspaces import (
     IsolationSpec,
     ResourceLimits,
     SnapshotRefused,
-    AgentWorkspace,
 )
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.vms import SEED_FILE, VmSpec, VmState
@@ -164,7 +164,9 @@ class Placed:
         pooled: PlacementState | None = None,
     ) -> AgentWorkspace:
         self.pools.append(pooled)
-        return AgentWorkspace(id=agent_session_id, org_id=ctx.org_id, spec=spec, location="/workspace")
+        return AgentWorkspace(
+            id=agent_session_id, org_id=ctx.org_id, spec=spec, location="/workspace"
+        )
 
 
 class Pool:

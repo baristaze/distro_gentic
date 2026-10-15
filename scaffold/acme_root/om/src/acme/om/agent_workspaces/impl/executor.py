@@ -61,13 +61,13 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.agent_workspaces import (
+    AgentWorkspace,
     AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
     ResourceLimits,
-    AgentWorkspace,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface

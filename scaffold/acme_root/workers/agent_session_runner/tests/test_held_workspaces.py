@@ -34,6 +34,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.rules import SNAPSHOT_PREFIX, session_branch
@@ -51,7 +52,7 @@ from acme.om.platform_root import (
 )
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import snapshotted_step
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 from acme.workers.agent_session_runner.workspaces import Graces, HeldWorkspacesSweep
 
 from contracts.agent_session_storage import make_session
@@ -188,7 +189,7 @@ class Host:
                 updated_at=now,
                 created_by=owner.user_id,
                 updated_by=owner.user_id,
-                kind=WorkKind.LOOP,
+                kind=AgentSessionWorkKind.LOOP,
                 target_id=session.id,
                 idempotency_key=new_id(),
                 request_id=new_id(),
@@ -196,7 +197,7 @@ class Host:
             ),
         )
         claimed = await managers.work.claim(
-            request(), queued.lane, [WorkKind.LOOP], "runner-1", timedelta(minutes=1)
+            request(), queued.lane, [AgentSessionWorkKind.LOOP], "runner-1", timedelta(minutes=1)
         )
         assert claimed is not None and claimed[1].target_id == session.id
         await managers.agent_steps.begin_run(owner, session.id)
