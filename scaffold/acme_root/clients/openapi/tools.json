@@ -1,0 +1,512 @@
+{
+  "components": {
+    "schemas": {
+      "ApproverRuleBody": {
+        "additionalProperties": false,
+        "description": "Who may approve a call of one class: people's roles, never a service.",
+        "properties": {
+          "authorization_class": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Authorization Class",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "common.json#/components/schemas/Role"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "authorization_class",
+          "roles"
+        ],
+        "title": "ApproverRuleBody",
+        "type": "object"
+      },
+      "ApproverRuleView": {
+        "properties": {
+          "authorization_class": {
+            "title": "Authorization Class",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "common.json#/components/schemas/Role"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "authorization_class",
+          "roles"
+        ],
+        "title": "ApproverRuleView",
+        "type": "object"
+      },
+      "Decision": {
+        "description": "From the least strict to the most.",
+        "enum": [
+          "allow",
+          "approve",
+          "deny"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "Effect": {
+        "description": "What a repeat of a call may do.",
+        "enum": [
+          "read_only",
+          "idempotent",
+          "unsafe"
+        ],
+        "title": "Effect",
+        "type": "string"
+      },
+      "PolicyRuleBody": {
+        "additionalProperties": false,
+        "description": "What a rule matches and what it decides. A selector left unset matches\nany call; every target attribute it names must equal the target's.",
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "maxProperties": 20,
+            "title": "Target",
+            "type": "object"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "PolicyRuleBody",
+        "type": "object"
+      },
+      "PolicyRuleView": {
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "additionalProperties": true,
+            "title": "Target",
+            "type": "object"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "tool",
+          "authorization_class",
+          "effect",
+          "target_kind",
+          "target",
+          "decision"
+        ],
+        "title": "PolicyRuleView",
+        "type": "object"
+      },
+      "ToolClass": {
+        "description": "The authorization classes every engine knows. An adopter adds domain\nclasses of its own by declaring them to the registry; a class is a name\neither way, and policy keys on it.",
+        "enum": [
+          "read",
+          "write",
+          "execute",
+          "network",
+          "integration",
+          "spawn",
+          "configuration",
+          "credentials",
+          "destructive"
+        ],
+        "title": "ToolClass",
+        "type": "string"
+      },
+      "ToolPolicyRequest": {
+        "additionalProperties": false,
+        "description": "The tenant's whole layer, written over the version `If-Match` names.",
+        "properties": {
+          "approvers": {
+            "items": {
+              "$ref": "#/components/schemas/ApproverRuleBody"
+            },
+            "maxItems": 200,
+            "title": "Approvers",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleBody"
+            },
+            "maxItems": 200,
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "ToolPolicyRequest",
+        "type": "object"
+      },
+      "ToolPolicyView": {
+        "description": "The tenant's layer; version 1 and empty until its first write.",
+        "properties": {
+          "approvers": {
+            "items": {
+              "$ref": "#/components/schemas/ApproverRuleView"
+            },
+            "title": "Approvers",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleView"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "approvers",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "ToolPolicyView",
+        "type": "object"
+      },
+      "Verdict": {
+        "description": "A person's decision on one exact call, as the history holds it.",
+        "enum": [
+          "approved",
+          "denied",
+          "expired",
+          "pending"
+        ],
+        "title": "Verdict",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: tools",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/tools/policy": {
+      "get": {
+        "operationId": "get_policy",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "tools"
+        ]
+      },
+      "put": {
+        "description": "The layer as written, on the version `If-Match` names.",
+        "operationId": "write_policy",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Policy",
+        "tags": [
+          "tools"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "The tenant's tool policy: its layer of rules over the agent kinds'\ndefaults and under the platform's ceilings, and who approves each class of\ncall. Any member reads it; an owner or an admin writes it whole, on the\nversion they read.",
+      "name": "tools"
+    }
+  ]
+}

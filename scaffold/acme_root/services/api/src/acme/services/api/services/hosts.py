@@ -7,23 +7,21 @@ from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
-from acme.services.api.types.claimants import (
+from acme.services.api.types.hosts import (
     ClaimantClaimView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
     ClaimantWorkView,
-    ExtendLeaseRequest,
-    IssuedClaimantCredentialView,
-)
-from acme.services.api.types.hosts import (
     ClaimRequest,
     ClaimView,
     CreatePoolRequest,
     EnrollmentTokenView,
     EnrollRequest,
+    ExtendLeaseRequest,
     HeartbeatRequest,
     HostView,
+    IssuedClaimantCredentialView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,

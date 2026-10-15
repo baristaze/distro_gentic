@@ -21,6 +21,13 @@ export interface components {
          */
         AgentStepType: "message" | "event" | "control" | "model_request" | "model_response" | "tool_request" | "tool_response" | "summary" | "parked" | "resumed" | "loop_ended" | "switched" | "environment_changed" | "snapshotted";
         /**
+         * ContentState
+         * @description Where what a step says is. The state answers, so no caller compares
+         *     strings.
+         * @enum {string}
+         */
+        ContentState: "plain" | "sealed" | "absent";
+        /**
          * ControlCommand
          * @description What a `control` step records: a command that travels out of band.
          * @enum {string}

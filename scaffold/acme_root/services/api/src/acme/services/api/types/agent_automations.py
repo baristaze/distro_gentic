@@ -4,10 +4,10 @@ stored; and the tenant's agent automation principal, the role a person grants it
 and the grant as it stands."""
 
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BeforeValidator, Field, JsonValue
+from pydantic import BeforeValidator, Field
 
 from acme.om.agent_automations.types.agent_automation import (
     ACTION_NAME,
@@ -64,7 +64,7 @@ class ActionBody(RequestBody):
     title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     agent_project_id: UUID | None = None
     agent_session_id: UUID | None = None
-    params: dict[str, JsonValue] = Field(default_factory=lambda: {})
+    params: dict[str, Any] = Field(default_factory=lambda: {})
     agent_playbook: str | None = Field(
         default=None, min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME
     )
@@ -80,7 +80,7 @@ class ActionView(View):
     agent_playbook: str | None
     # The stored params are frozen, a nested list a tuple and a nested
     # mapping a read-only view, so they are thawed back to JSON here.
-    params: Annotated[dict[str, JsonValue], BeforeValidator(thaw_mapping)]
+    params: Annotated[dict[str, Any], BeforeValidator(thaw_mapping)]
 
 
 class LimitsBody(RequestBody):

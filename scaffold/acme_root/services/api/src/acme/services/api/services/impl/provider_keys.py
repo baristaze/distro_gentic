@@ -3,7 +3,7 @@ from acme.om.context import TenantContext
 from acme.om.trust import TrustManagerInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.types.common import clamp_limit
-from acme.services.api.types.provider_keys import ProviderKeyView, SaveKeyRequest
+from acme.services.api.types.trust import ProviderKeyView, SaveKeyRequest
 
 
 class ProviderKeysServiceImpl(ProviderKeysServiceInterface):

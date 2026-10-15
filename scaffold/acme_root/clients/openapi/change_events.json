@@ -335,6 +335,119 @@
         ]
       }
     },
+    "/v1/change-events/recent": {
+      "get": {
+        "description": "The newest change events below `before_seq`, newest first; from the\nhead when it is left out. A page that reaches the floor is short.",
+        "operationId": "list_recent_change_events",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Seq"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChangeEventView"
+                  },
+                  "title": "Response List Recent Change Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Recent Change Events",
+        "tags": [
+          "change_events"
+        ]
+      }
+    },
     "/v1/realtime/tickets": {
       "post": {
         "operationId": "mint_ticket",
@@ -419,7 +532,7 @@
   },
   "tags": [
     {
-      "description": "Change events: the org's diary after a sequence number. A client that\nreconnects, or sees a gap on the channel, asks for everything after the\nlast sequence number it saw (`/v1/change-events`). The live channel is a\nwebsocket opened with a single-use ticket (`/v1/realtime/tickets`, then\n`/v1/realtime`). On the operator plane (`routers/tenancy.py`), an operator\nreads an org's change events the same way, under the org named in the\npath.",
+      "description": "Change events: the org's diary after a sequence number. A client that\nreconnects, or sees a gap on the channel, asks for everything after the\nlast sequence number it saw (`/v1/change-events`). A screen that shows\nwhat just happened reads back from the head instead\n(`/v1/change-events/recent`). The live channel is a\nwebsocket opened with a single-use ticket (`/v1/realtime/tickets`, then\n`/v1/realtime`). On the operator plane (`routers/tenancy.py`), an operator\nreads an org's change events the same way, under the org named in the\npath.",
       "name": "change_events"
     }
   ]

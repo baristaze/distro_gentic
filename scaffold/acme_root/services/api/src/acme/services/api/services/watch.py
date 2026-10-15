@@ -12,7 +12,7 @@ from uuid import UUID
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.services.api.types.agent_sessions import AgentSessionView
-from acme.services.api.types.claimants import ClaimantAppendRequest
+from acme.services.api.types.hosts import ClaimantAppendRequest
 from acme.services.api.types.watch import (
     CommandProgressView,
     CommandRequest,

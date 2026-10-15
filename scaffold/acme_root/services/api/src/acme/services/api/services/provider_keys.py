@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.context import TenantContext
-from acme.services.api.types.provider_keys import ProviderKeyView, SaveKeyRequest
+from acme.services.api.types.trust import ProviderKeyView, SaveKeyRequest
 
 
 class ProviderKeysServiceInterface(ABC):

@@ -15,20 +15,17 @@ from acme.om.trust import TrustOperatorManagerInterface
 from acme.om.trust.types.shape import StepShape
 from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.impl.agent_sessions import park_view, step_view
-from acme.services.api.types.agent_fleet import (
-    HostStandingView,
-    LaneLoadView,
+from acme.services.api.types.agent_sessions import AgentStepPageView
+from acme.services.api.types.common import clamp_limit
+from acme.services.api.types.hosts import AdvertisementView, HostStandingView, LaneLoadView
+from acme.services.api.types.levers import LeverReadingView
+from acme.services.api.types.placement import (
     LoopStandingView,
     SessionStandingView,
     SetShareRequest,
-    ShapePageView,
     ShareView,
-    StepShapeView,
 )
-from acme.services.api.types.agent_sessions import AgentStepPageView
-from acme.services.api.types.common import clamp_limit
-from acme.services.api.types.hosts import AdvertisementView
-from acme.services.api.types.levers import LeverReadingView
+from acme.services.api.types.trust import ShapePageView, StepShapeView
 
 
 def shape_view(shape: StepShape) -> StepShapeView:

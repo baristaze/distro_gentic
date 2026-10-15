@@ -8,8 +8,11 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.agent_billing import CostApprovalRequest, RaiseRequest
-from acme.services.api.types.spend_ledgers import SpendLedgerEntryView
+from acme.services.api.types.agent_billing import (
+    CostApprovalRequest,
+    RaiseRequest,
+    SpendLedgerEntryView,
+)
 
 
 class AgentBillingServiceInterface(ABC):

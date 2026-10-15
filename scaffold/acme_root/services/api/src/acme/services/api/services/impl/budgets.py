@@ -10,7 +10,8 @@ from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetSco
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.impl.built import built
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
-from acme.services.api.types.budgets import (
+from acme.services.api.types.common import clamp_limit
+from acme.services.api.types.spend_budgets import (
     AmountRequest,
     BudgetUsageView,
     BudgetView,
@@ -18,7 +19,6 @@ from acme.services.api.types.budgets import (
     SettableScope,
     UsagePageView,
 )
-from acme.services.api.types.common import clamp_limit
 
 USAGE = "usage"
 

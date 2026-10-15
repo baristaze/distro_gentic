@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.validations import StartValidationRequest, ValidationSessionView
+from acme.services.api.types.platform_agents import StartValidationRequest, ValidationSessionView
 
 
 class ValidationsServiceInterface(ABC):

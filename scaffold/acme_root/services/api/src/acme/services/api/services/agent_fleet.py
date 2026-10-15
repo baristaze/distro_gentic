@@ -10,15 +10,11 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import OperatorContext
-from acme.services.api.types.agent_fleet import (
-    HostStandingView,
-    SessionStandingView,
-    SetShareRequest,
-    ShapePageView,
-    ShareView,
-)
 from acme.services.api.types.agent_sessions import AgentStepPageView
+from acme.services.api.types.hosts import HostStandingView
 from acme.services.api.types.levers import LeverReadingView
+from acme.services.api.types.placement import SessionStandingView, SetShareRequest, ShareView
+from acme.services.api.types.trust import ShapePageView
 
 
 class AgentFleetServiceInterface(ABC):

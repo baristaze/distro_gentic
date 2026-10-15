@@ -6,10 +6,10 @@ session is visible to reads it as the session's own reader does."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, JsonValue, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
 from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin
@@ -128,7 +128,7 @@ class ToolUseView(View):
 
     id: str
     name: str
-    input: dict[str, JsonValue]
+    input: dict[str, Any]
 
 
 class AgentRefView(View):

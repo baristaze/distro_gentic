@@ -20,26 +20,24 @@ from acme.om.hosts.types.host import (
 from acme.om.hosts.types.pool import HostPool
 from acme.om.work.types.work_item import WorkItem
 from acme.services.api.services.hosts import HostsServiceInterface
-from acme.services.api.types.claimants import (
+from acme.services.api.types.hosts import (
+    AdvertisementBody,
+    AdvertisementView,
     ClaimantClaimView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
     ClaimantWorkView,
-    ExtendLeaseRequest,
-    IssuedClaimantCredentialView,
-)
-from acme.services.api.types.hosts import (
-    AdvertisementBody,
-    AdvertisementView,
     ClaimedWorkView,
     ClaimRequest,
     ClaimView,
     CreatePoolRequest,
     EnrollmentTokenView,
     EnrollRequest,
+    ExtendLeaseRequest,
     HeartbeatRequest,
     HostView,
+    IssuedClaimantCredentialView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,

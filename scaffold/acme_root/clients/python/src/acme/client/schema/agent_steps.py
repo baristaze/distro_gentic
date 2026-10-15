@@ -39,6 +39,17 @@ class AgentStepType(StrEnum):
     snapshotted = 'snapshotted'
 
 
+class ContentState(StrEnum):
+    """
+    Where what a step says is. The state answers, so no caller compares
+    strings.
+    """
+
+    plain = 'plain'
+    sealed = 'sealed'
+    absent = 'absent'
+
+
 class ControlCommand(StrEnum):
     """
     What a `control` step records: a command that travels out of band.

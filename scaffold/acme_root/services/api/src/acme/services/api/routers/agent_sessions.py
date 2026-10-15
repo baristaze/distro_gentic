@@ -38,6 +38,7 @@ from acme.services.api.types.agent_sessions import (
     AgentSessionView,
     AgentStepPageView,
     AgentStepView,
+    ApprovalPageView,
     ApprovalView,
     BoundsView,
     ControlRequest,
@@ -380,3 +381,16 @@ async def get_agent_session_usage(
     content. `404 not_found` for an unknown org, and for a session the org
     holds no record of, which is how another tenant's session reads."""
     return await service.get_agent_session_usage(admin, org_id, agent_session_id, cursor, limit)
+
+
+approvals = APIRouter(prefix="/approvals", tags=["agent_sessions"])
+
+
+@approvals.get("", response_model=ApprovalPageView)
+async def list_approvals(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    cursor: str | None = None,
+    limit: int = LIMIT_DEFAULT,
+) -> ApprovalPageView:
+    return await sessions.get_org_approvals(ctx, cursor, limit)

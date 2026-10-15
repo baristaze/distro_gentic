@@ -2,12 +2,25 @@
 #   filename:  agent_sessions.json
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 from . import agent_steps, attribution
+from . import tools as tools_1
+
+
+class AgentRefView(BaseModel):
+    """
+    The agent that wrote a message: its kind and the session it runs in.
+    The session is one of the same tree, which a reader of this session
+    reads too: a sub-agent's report names the child, a child's objective
+    its parent.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    kind: Annotated[str, Field(title='Kind')]
 
 
 class AgentSessionControl(StrEnum):
@@ -53,6 +66,22 @@ class Among(StrEnum):
 
     mine = 'mine'
     visible = 'visible'
+
+
+class ApprovalView(BaseModel):
+    """
+    A tool call held for a person's decision: its session, the seq it is
+    decided at, its tool and the class of power it exercises, and the
+    principal it runs under. Its input stays in the history; the request
+    names only its hash.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    seq: Annotated[int, Field(title='Seq')]
+    tool: Annotated[str, Field(title='Tool')]
 
 
 class RequestSeq(RootModel[int]):
@@ -102,6 +131,22 @@ class DecisionRequest(BaseModel):
     note: Annotated[str | None, Field(max_length=100000, title='Note')] = ''
 
 
+class FillUsageView(BaseModel):
+    """
+    What one model, at its provider, used in the session's calls: the
+    calls that answered, and their tokens by class, no token counted
+    twice.
+    """
+
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fill: Annotated[str, Field(title='Fill')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class GiveBackRequest(BaseModel):
     """
     What the person who held the environment did there, which the model
@@ -112,6 +157,20 @@ class GiveBackRequest(BaseModel):
         extra='forbid',
     )
     summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
+
+
+class LoopLimitsView(BaseModel):
+    """
+    The bounds of one loop of the session's kind: the model calls before
+    the step guard parks it for a person, the tool errors or identical
+    calls in a row that end it, the nudges it gives, and how long one run
+    drives it before handing it on.
+    """
+
+    error_streak: Annotated[int, Field(title='Error Streak')]
+    nudges: Annotated[int, Field(title='Nudges')]
+    run_time_seconds: Annotated[float, Field(title='Run Time Seconds')]
+    step_guard: Annotated[int, Field(title='Step Guard')]
 
 
 class MessageRequest(BaseModel):
@@ -138,6 +197,35 @@ class PrincipalRequest(BaseModel):
     steerer: Annotated[UUID | None, Field(title='Steerer')] = None
 
 
+class QuestionView(BaseModel):
+    """
+    What a session asks of a person now: a park on a person that is no
+    call's decision, such as a step guard to lift, a deadline to move, or a
+    principal to name. `unlock` is what clears it, sent as a control; `seq`
+    is the step that parked it.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    asked_at: Annotated[AwareDatetime, Field(title='Asked At')]
+    seq: Annotated[int, Field(title='Seq')]
+    unlock: Annotated[str, Field(title='Unlock')]
+
+
+class SessionModelUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class SnapshotView(BaseModel):
     """
     A workspace's snapshot a step names: its id, which a restore names,
@@ -153,12 +241,15 @@ class SnapshotView(BaseModel):
 
 class StartAgentSessionRequest(BaseModel):
     """
-    A session to start on the latest version of a kind the product runs.
+    A session to start on the latest version of a kind the product runs,
+    in an agent project of the caller's tenant. Outside a local stack a session
+    starts in an agent project or not at all.
     """
 
     model_config = ConfigDict(
         extra='forbid',
     )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
     title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
@@ -190,6 +281,33 @@ class ToolOutputPageView(BaseModel):
     start: Annotated[int, Field(title='Start')]
     text: Annotated[str, Field(title='Text')]
     tool_output_id: Annotated[UUID, Field(title='Tool Output Id')]
+
+
+class ToolUseView(BaseModel):
+    """
+    One call a model response made: its id, which the call's request and
+    response name, the tool, and what the tool was asked, each string cut
+    at `MAX_SHOWN`.
+    """
+
+    id: Annotated[str, Field(title='Id')]
+    input: Annotated[dict[str, Any], Field(title='Input')]
+    name: Annotated[str, Field(title='Name')]
+
+
+class TreeBoundsView(BaseModel):
+    """
+    What the session's tree shares: how deep and how many sub-agents it
+    may have, how many run at once, the one deadline, and how many were
+    spawned so far.
+    """
+
+    concurrency: Annotated[int | None, Field(title='Concurrency')]
+    count: Annotated[int, Field(title='Count')]
+    deadline: Annotated[AwareDatetime | None, Field(title='Deadline')]
+    height: Annotated[int, Field(title='Height')]
+    root_id: Annotated[UUID, Field(title='Root Id')]
+    size: Annotated[int, Field(title='Size')]
 
 
 class UsageRecordView(BaseModel):
@@ -261,6 +379,30 @@ class WaitLineParkView(BaseModel):
     request_id: Annotated[UUID, Field(title='Request Id')]
 
 
+class ApprovalPageView(BaseModel):
+    """
+    The calls held across one page of the tenant's parked sessions, by
+    session id. `next_cursor` reads the next page of sessions and is null
+    on the last one; a page may hold no call and still have a next.
+    """
+
+    items: Annotated[list[ApprovalView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class BoundsView(BaseModel):
+    """
+    The bounds a session runs under: its kind's loop limits, the deadline
+    its kind gives a tree it roots, and its tree's record.
+    """
+
+    kind: Annotated[str, Field(title='Kind')]
+    kind_deadline_seconds: Annotated[float | None, Field(title='Kind Deadline Seconds')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
+    loop: LoopLimitsView
+    tree: TreeBoundsView
+
+
 class JobCompletionRequest(BaseModel):
     """
     How a job ended, from the system it ran on: the tool's handle for
@@ -300,6 +442,26 @@ class ParkView(BaseModel):
     wait_line: WaitLineParkView | None = None
 
 
+class ToolCallView(BaseModel):
+    """
+    One tool call of a session: its request, a person's decision on it
+    when one was asked, and its response once it answered. A call with no
+    response is open: held for a decision, or running.
+    """
+
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    decided_by: Annotated[UUID | None, Field(title='Decided By')]
+    decision: tools_1.Verdict | None
+    failure: agent_steps.ToolFailure | None
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    responded_at: Annotated[AwareDatetime | None, Field(title='Responded At')]
+    response_seq: Annotated[int | None, Field(title='Response Seq')]
+    seq: Annotated[int, Field(title='Seq')]
+    tool: Annotated[str, Field(title='Tool')]
+
+
 class VisibilityRequest(BaseModel):
     """
     Who sees the session from here: every member of the org, or its
@@ -334,22 +496,27 @@ class AgentSessionView(BaseModel):
     A session: its kind, its title, and its status, which follows its
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
-    open. `visibility` says who sees it: every member of the org, who may
-    join it, or its creator and its `participants` alone. `steerer` is the
-    person whose messages instruct it, its creator until a hand-off; a
-    participant's message is data. A sub-agent names none: its parent
-    steers it, and it is seen as its root is.
+    open. A sub-agent names the session that spawned it, and every session
+    the root of its tree. `visibility` says who sees it: every member of the
+    org, who may join it, or its creator and its `participants` alone.
+    `steerer` is the person whose messages instruct it, its creator until a
+    hand-off; a participant's message is data. A sub-agent names none: its
+    parent steers it, and it is seen as its root is. `deleted_at` is set
+    only on the answer to a delete: a deleted session is on no read until it
+    is restored.
     """
 
     archived_at: Annotated[AwareDatetime | None, Field(title='Archived At')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
+    deleted_at: Annotated[AwareDatetime | None, Field(title='Deleted At')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     kind_version: Annotated[int, Field(title='Kind Version')]
     parent_id: Annotated[UUID | None, Field(title='Parent Id')]
     park: ParkView | None
     participants: Annotated[list[UUID], Field(title='Participants')]
+    root_id: Annotated[UUID, Field(title='Root Id')]
     status: AgentSessionStatus
     steerer: Annotated[UUID | None, Field(title='Steerer')]
     title: Annotated[str, Field(title='Title')]
@@ -359,19 +526,26 @@ class AgentSessionView(BaseModel):
 class AgentStepView(BaseModel):
     """
     One step of a session's history, in its order. `text` is what it
-    says: a message's words, a model's answer, a tool's result. The rest is
-    its header's, by type: the tools a model response called, why it
-    stopped, and what it used; a tool call's tool and the class of its
-    failure; a control's command; a park; a loop's outcome, and its cause
-    when the engine names one, such as the setup command that failed and
-    its exit code; the snapshot a `snapshotted` step names, or a restore
-    starts from. A message names its `author`, and `participant` says it is
-    a participant's, data, never an instruction. A `switched` step that
-    moved the steer names the new `steerer`, and one that switched who sees
-    the session its `visibility`.
+    says: a message's words, a model's answer, a tool's result. A model
+    response also says what it thought (`thinking`) and the calls it made
+    (`tool_uses`); a tool response names the call it answers
+    (`tool_use_id`). Each of these is the step's content: where it is gone,
+    its session's key revoked or its content never kept here, each is empty
+    as `text` is. The rest is its header's, by type: the agent that wrote a
+    message, on a message an agent wrote (`agent`); the tools a model
+    response called, why it stopped, and what it used; a tool call's tool,
+    the id of the call it runs, and the class of its failure; a control's
+    command; a park; a loop's outcome, and its cause when the engine names
+    one, such as the setup command that failed and its exit code; the
+    snapshot a `snapshotted` step names, or a restore starts from. A message
+    names its `author`, and `participant` says it is a participant's, data,
+    never an instruction. A `switched` step that moved the steer names the
+    new `steerer`, and one that switched who sees the session its
+    `visibility`.
     """
 
     actor: agent_steps.Actor
+    agent: AgentRefView | None
     author: Annotated[UUID | None, Field(title='Author')]
     cause: Annotated[str | None, Field(title='Cause')]
     command: agent_steps.ControlCommand | None
@@ -390,21 +564,35 @@ class AgentStepView(BaseModel):
     steerer: Annotated[UUID | None, Field(title='Steerer')]
     stop_reason: StopReason | None
     text: Annotated[str, Field(title='Text')]
+    thinking: Annotated[str, Field(title='Thinking')]
     tool: Annotated[str | None, Field(title='Tool')]
+    tool_use_id: Annotated[str | None, Field(title='Tool Use Id')]
+    tool_uses: Annotated[list[ToolUseView], Field(title='Tool Uses')]
     tools: Annotated[list[str], Field(title='Tools')]
     type: agent_steps.AgentStepType
     usage: AgentStepUsageView | None
     visibility: attribution.Visibility | None
 
 
-class AgentSessionPageView(BaseModel):
+class ToolCallPageView(BaseModel):
     """
-    One page of root sessions by id. With `has_more`, the next page
-    starts after the last one's id.
+    One page of a session's tool calls, in order, after the seq the
+    request named. With `has_more`, the next page starts after the last
+    call's seq.
     """
 
     has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[ToolCallView], Field(title='Items')]
+
+
+class AgentSessionPageView(BaseModel):
+    """
+    One page of root sessions, newest first. `next_cursor` fetches the
+    next page and is null on the last one.
+    """
+
     items: Annotated[list[AgentSessionView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
 class AgentStepPageView(BaseModel):

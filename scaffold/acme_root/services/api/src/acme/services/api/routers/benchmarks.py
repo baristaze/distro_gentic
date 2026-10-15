@@ -14,10 +14,10 @@ from acme.services.api.gateway.platform_resolve import BenchmarksService
 from acme.services.api.types.benchmarks import BenchmarkSummaryView, BenchmarkView
 from acme.services.api.types.common import LIMIT_DEFAULT
 
-router = APIRouter(prefix="/admin/benchmarks", tags=["admin"])
+operator = APIRouter(prefix="/admin/benchmarks", tags=["benchmarks"])
 
 
-@router.get("", response_model=list[BenchmarkSummaryView])
+@operator.get("", response_model=list[BenchmarkSummaryView])
 async def get_trend(
     admin: OperatorCtx,
     service: BenchmarksService,
@@ -29,7 +29,7 @@ async def get_trend(
     return await service.get_trend(admin, scenario, limit)
 
 
-@router.get("/{benchmark_id}", response_model=BenchmarkView)
+@operator.get("/{benchmark_id}", response_model=BenchmarkView)
 async def get_benchmark(
     admin: OperatorCtx, service: BenchmarksService, benchmark_id: UUID
 ) -> BenchmarkView:

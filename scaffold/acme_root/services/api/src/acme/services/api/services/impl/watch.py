@@ -12,7 +12,7 @@ from acme.om.watch.types.live import MAX_SEEN, ItemPage, ItemSeen, Seen
 from acme.services.api.services.impl.agent_sessions import agent_session_view
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.types.agent_sessions import AgentSessionView
-from acme.services.api.types.claimants import ClaimantAppendRequest
+from acme.services.api.types.hosts import ClaimantAppendRequest
 from acme.services.api.types.watch import (
     CommandPartView,
     CommandProgressView,

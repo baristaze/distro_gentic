@@ -54,8 +54,9 @@ export interface paths {
         };
         /**
          * List Agent Sessions
-         * @description The org's root sessions by id, after `after`: the ones the caller
-         *     made or takes part in (`mine`), or every one they see (`visible`).
+         * @description The org's root sessions in a status, or in any, newest first, a page
+         *     at a time: the ones the caller made or takes part in (`mine`), or every
+         *     one they see (`visible`).
          */
         get: operations["list_agent_sessions"];
         put?: never;
@@ -81,6 +82,72 @@ export interface paths {
         get: operations["get_agent_session"];
         put?: never;
         post?: never;
+        /**
+         * Delete Agent Session
+         * @description An idle session marked deleted: it answers as one that never existed
+         *     until it is restored, and its retention ends the chance.
+         */
+        delete: operations["delete_agent_session"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Approvals
+         * @description The calls the session holds for a person's decision.
+         */
+        get: operations["get_approvals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Agent Session
+         * @description An idle session archived: it keeps what arrives and wakes for nothing
+         *     until a person's message brings it back.
+         */
+        post: operations["archive_agent_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/bounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Bounds
+         * @description The loop limits of the session's kind, and its tree's bounds.
+         */
+        get: operations["get_bounds"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -101,6 +168,26 @@ export interface paths {
          * @description An approval or a denial of the tool call at `request_seq`, as stored.
          */
         post: operations["decide_call"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Children
+         * @description The sessions this one spawned, a page at a time by id.
+         */
+        get: operations["list_children"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -263,6 +350,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{agent_session_id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Questions
+         * @description What the session waits on a person for, other than a call's decision.
+         */
+        get: operations["get_questions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Agent Session
+         * @description A deleted session back as it was, with its history.
+         */
+        post: operations["restore_agent_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{agent_session_id}/steps": {
         parameters: {
             query?: never;
@@ -304,6 +431,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{agent_session_id}/tool-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tool Calls
+         * @description Each tool call with its decision and its answer, strictly after
+         *     `after_seq`.
+         */
+        get: operations["get_tool_calls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{agent_session_id}/tool-outputs/{tool_output_id}": {
         parameters: {
             query?: never;
@@ -318,6 +466,26 @@ export interface paths {
          *     place moves between pages. The policy's page bounds `limit`.
          */
         get: operations["get_tool_output"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description The tokens the session's model calls used, per model and in total.
+         */
+        get: operations["get_usage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -347,10 +515,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Approvals */
+        get: operations["list_approvals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentRefView
+         * @description The agent that wrote a message: its kind and the session it runs in.
+         *     The session is one of the same tree, which a reader of this session
+         *     reads too: a sub-agent's report names the child, a child's objective
+         *     its parent.
+         */
+        AgentRefView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /** Kind */
+            kind: string;
+        };
         /**
          * AgentSessionControl
          * @description The controls a person sends a session out of band. A decision on one
@@ -360,14 +561,14 @@ export interface components {
         AgentSessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock" | "restore";
         /**
          * AgentSessionPageView
-         * @description One page of root sessions by id. With `has_more`, the next page
-         *     starts after the last one's id.
+         * @description One page of root sessions, newest first. `next_cursor` fetches the
+         *     next page and is null on the last one.
          */
         AgentSessionPageView: {
-            /** Has More */
-            has_more: boolean;
             /** Items */
             items: components["schemas"]["AgentSessionView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * AgentSessionStatus
@@ -403,11 +604,14 @@ export interface components {
          * @description A session: its kind, its title, and its status, which follows its
          *     steps. `pending` while an input waits for a run, `running` while a run
          *     holds its loop, `parked` while the loop waits, `idle` when no loop is
-         *     open. `visibility` says who sees it: every member of the org, who may
-         *     join it, or its creator and its `participants` alone. `steerer` is the
-         *     person whose messages instruct it, its creator until a hand-off; a
-         *     participant's message is data. A sub-agent names none: its parent
-         *     steers it, and it is seen as its root is.
+         *     open. A sub-agent names the session that spawned it, and every session
+         *     the root of its tree. `visibility` says who sees it: every member of the
+         *     org, who may join it, or its creator and its `participants` alone.
+         *     `steerer` is the person whose messages instruct it, its creator until a
+         *     hand-off; a participant's message is data. A sub-agent names none: its
+         *     parent steers it, and it is seen as its root is. `deleted_at` is set
+         *     only on the answer to a delete: a deleted session is on no read until it
+         *     is restored.
          */
         AgentSessionView: {
             /** Archived At */
@@ -422,6 +626,8 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
+            /** Deleted At */
+            deleted_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -436,6 +642,11 @@ export interface components {
             park: components["schemas"]["ParkView"] | null;
             /** Participants */
             participants: string[];
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
             status: components["schemas"]["AgentSessionStatus"];
             /** Steerer */
             steerer: string | null;
@@ -474,19 +685,26 @@ export interface components {
         /**
          * AgentStepView
          * @description One step of a session's history, in its order. `text` is what it
-         *     says: a message's words, a model's answer, a tool's result. The rest is
-         *     its header's, by type: the tools a model response called, why it
-         *     stopped, and what it used; a tool call's tool and the class of its
-         *     failure; a control's command; a park; a loop's outcome, and its cause
-         *     when the engine names one, such as the setup command that failed and
-         *     its exit code; the snapshot a `snapshotted` step names, or a restore
-         *     starts from. A message names its `author`, and `participant` says it is
-         *     a participant's, data, never an instruction. A `switched` step that
-         *     moved the steer names the new `steerer`, and one that switched who sees
-         *     the session its `visibility`.
+         *     says: a message's words, a model's answer, a tool's result. A model
+         *     response also says what it thought (`thinking`) and the calls it made
+         *     (`tool_uses`); a tool response names the call it answers
+         *     (`tool_use_id`). Each of these is the step's content: where it is gone,
+         *     its session's key revoked or its content never kept here, each is empty
+         *     as `text` is. The rest is its header's, by type: the agent that wrote a
+         *     message, on a message an agent wrote (`agent`); the tools a model
+         *     response called, why it stopped, and what it used; a tool call's tool,
+         *     the id of the call it runs, and the class of its failure; a control's
+         *     command; a park; a loop's outcome, and its cause when the engine names
+         *     one, such as the setup command that failed and its exit code; the
+         *     snapshot a `snapshotted` step names, or a restore starts from. A message
+         *     names its `author`, and `participant` says it is a participant's, data,
+         *     never an instruction. A `switched` step that moved the steer names the
+         *     new `steerer`, and one that switched who sees the session its
+         *     `visibility`.
          */
         AgentStepView: {
             actor: components["schemas"]["Actor"];
+            agent: components["schemas"]["AgentRefView"] | null;
             /** Author */
             author: string | null;
             /** Cause */
@@ -525,8 +743,14 @@ export interface components {
             stop_reason: components["schemas"]["StopReason"] | null;
             /** Text */
             text: string;
+            /** Thinking */
+            thinking: string;
             /** Tool */
             tool: string | null;
+            /** Tool Use Id */
+            tool_use_id: string | null;
+            /** Tool Uses */
+            tool_uses: components["schemas"]["ToolUseView"][];
             /** Tools */
             tools: string[];
             type: components["schemas"]["AgentStepType"];
@@ -540,6 +764,63 @@ export interface components {
          * @enum {string}
          */
         Among: "mine" | "visible";
+        /**
+         * ApprovalPageView
+         * @description The calls held across one page of the tenant's parked sessions, by
+         *     session id. `next_cursor` reads the next page of sessions and is null
+         *     on the last one; a page may hold no call and still have a next.
+         */
+        ApprovalPageView: {
+            /** Items */
+            items: components["schemas"]["ApprovalView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * ApprovalView
+         * @description A tool call held for a person's decision: its session, the seq it is
+         *     decided at, its tool and the class of power it exercises, and the
+         *     principal it runs under. Its input stays in the history; the request
+         *     names only its hash.
+         */
+        ApprovalView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /** Authorization Class */
+            authorization_class: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Seq */
+            seq: number;
+            /** Tool */
+            tool: string;
+        };
+        /**
+         * BoundsView
+         * @description The bounds a session runs under: its kind's loop limits, the deadline
+         *     its kind gives a tree it roots, and its tree's record.
+         */
+        BoundsView: {
+            /** Kind */
+            kind: string;
+            /** Kind Deadline Seconds */
+            kind_deadline_seconds: number | null;
+            /** Kind Version */
+            kind_version: number;
+            loop: components["schemas"]["LoopLimitsView"];
+            tree: components["schemas"]["TreeBoundsView"];
+        };
         /**
          * ControlRequest
          * @description A control. An interrupt names the seq of the tool request it stops,
@@ -580,6 +861,28 @@ export interface components {
             note: string;
         };
         /**
+         * FillUsageView
+         * @description What one model, at its provider, used in the session's calls: the
+         *     calls that answered, and their tokens by class, no token counted
+         *     twice.
+         */
+        FillUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fill */
+            fill: string;
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
+        /**
          * GiveBackRequest
          * @description What the person who held the environment did there, which the model
          *     reads as their message when the loop goes on.
@@ -604,6 +907,23 @@ export interface components {
              * @default
              */
             text: string;
+        };
+        /**
+         * LoopLimitsView
+         * @description The bounds of one loop of the session's kind: the model calls before
+         *     the step guard parks it for a person, the tool errors or identical
+         *     calls in a row that end it, the nudges it gives, and how long one run
+         *     drives it before handing it on.
+         */
+        LoopLimitsView: {
+            /** Error Streak */
+            error_streak: number;
+            /** Nudges */
+            nudges: number;
+            /** Run Time Seconds */
+            run_time_seconds: number;
+            /** Step Guard */
+            step_guard: number;
         };
         /** LoopUsageView */
         LoopUsageView: {
@@ -654,6 +974,50 @@ export interface components {
             steerer?: string | null;
         };
         /**
+         * QuestionView
+         * @description What a session asks of a person now: a park on a person that is no
+         *     call's decision, such as a step guard to lift, a deadline to move, or a
+         *     principal to name. `unlock` is what clears it, sent as a control; `seq`
+         *     is the step that parked it.
+         */
+        QuestionView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Seq */
+            seq: number;
+            /** Unlock */
+            unlock: string;
+        };
+        /**
+         * SessionModelUsageView
+         * @description What a session's model calls used, as each provider reported it, per
+         *     model and in total.
+         */
+        SessionModelUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fills */
+            fills: components["schemas"]["FillUsageView"][];
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
+        /**
          * SnapshotView
          * @description A workspace's snapshot a step names: its id, which a restore names,
          *     the hash of its bytes keyed by its session, its size in bytes, and the
@@ -677,9 +1041,13 @@ export interface components {
         };
         /**
          * StartAgentSessionRequest
-         * @description A session to start on the latest version of a kind the product runs.
+         * @description A session to start on the latest version of a kind the product runs,
+         *     in an agent project of the caller's tenant. Outside a local stack a session
+         *     starts in an agent project or not at all.
          */
         StartAgentSessionRequest: {
+            /** Agent Project Id */
+            agent_project_id?: string | null;
             /** Kind */
             kind: string;
             /** Title */
@@ -693,6 +1061,55 @@ export interface components {
          * @enum {string}
          */
         StopReason: "end_turn" | "tool_use" | "output_limit" | "refusal" | "content_filter" | "pause";
+        /**
+         * ToolCallPageView
+         * @description One page of a session's tool calls, in order, after the seq the
+         *     request named. With `has_more`, the next page starts after the last
+         *     call's seq.
+         */
+        ToolCallPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ToolCallView"][];
+        };
+        /**
+         * ToolCallView
+         * @description One tool call of a session: its request, a person's decision on it
+         *     when one was asked, and its response once it answered. A call with no
+         *     response is open: held for a decision, or running.
+         */
+        ToolCallView: {
+            /** Authorization Class */
+            authorization_class: string;
+            /** Decided By */
+            decided_by: string | null;
+            decision: components["schemas"]["Verdict"] | null;
+            failure: components["schemas"]["ToolFailure"] | null;
+            /**
+             * Loop Id
+             * Format: uuid
+             */
+            loop_id: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Responded At */
+            responded_at: string | null;
+            /** Response Seq */
+            response_seq: number | null;
+            /** Seq */
+            seq: number;
+            /** Tool */
+            tool: string;
+        };
         /**
          * ToolOutputPageView
          * @description A page of what a session keeps whole outside its window, such as a
@@ -713,6 +1130,45 @@ export interface components {
              * Format: uuid
              */
             tool_output_id: string;
+        };
+        /**
+         * ToolUseView
+         * @description One call a model response made: its id, which the call's request and
+         *     response name, the tool, and what the tool was asked, each string cut
+         *     at `MAX_SHOWN`.
+         */
+        ToolUseView: {
+            /** Id */
+            id: string;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+        };
+        /**
+         * TreeBoundsView
+         * @description What the session's tree shares: how deep and how many sub-agents it
+         *     may have, how many run at once, the one deadline, and how many were
+         *     spawned so far.
+         */
+        TreeBoundsView: {
+            /** Concurrency */
+            concurrency: number | null;
+            /** Count */
+            count: number;
+            /** Deadline */
+            deadline: string | null;
+            /** Height */
+            height: number;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
+            /** Size */
+            size: number;
         };
         /**
          * UsageRecordView
@@ -916,6 +1372,12 @@ export interface components {
          * @enum {string}
          */
         AgentStepType: "message" | "event" | "control" | "model_request" | "model_response" | "tool_request" | "tool_response" | "summary" | "parked" | "resumed" | "loop_ended" | "switched" | "environment_changed" | "snapshotted";
+        /**
+         * Verdict
+         * @description A person's decision on one exact call, as the history holds it.
+         * @enum {string}
+         */
+        Verdict: "approved" | "denied" | "expired" | "pending";
     };
     responses: never;
     parameters: never;
@@ -969,7 +1431,7 @@ export interface operations {
             query?: {
                 among?: components["schemas"]["Among"];
                 status?: components["schemas"]["AgentSessionStatus"] | null;
-                after?: string | null;
+                cursor?: string | null;
                 limit?: number;
             };
             header?: {
@@ -1075,6 +1537,146 @@ export interface operations {
             };
         };
     };
+    delete_agent_session: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_approvals: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_agent_session: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bounds: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     decide_call: {
         parameters: {
             query?: never;
@@ -1103,6 +1705,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentStepView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_children: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionPageView"];
                 };
             };
             /** @description Validation Error */
@@ -1427,6 +2067,76 @@ export interface operations {
             };
         };
     };
+    get_questions: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_agent_session: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_steps: {
         parameters: {
             query?: {
@@ -1500,6 +2210,44 @@ export interface operations {
             };
         };
     };
+    get_tool_calls: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolCallPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_tool_output: {
         parameters: {
             query?: {
@@ -1539,6 +2287,41 @@ export interface operations {
             };
         };
     };
+    get_usage: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionModelUsageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     switch_visibility: {
         parameters: {
             query?: never;
@@ -1565,6 +2348,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_approvals: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalPageView"];
                 };
             };
             /** @description Validation Error */

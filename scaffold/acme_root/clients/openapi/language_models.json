@@ -1,0 +1,32 @@
+{
+  "components": {
+    "schemas": {
+      "ModelSize": {
+        "description": "How much model a role needs, from the smallest to the largest. A\nresolver maps each size to fills; a kind asks a size, never a model.",
+        "enum": [
+          "xs",
+          "s",
+          "m",
+          "l",
+          "xl"
+        ],
+        "title": "ModelSize",
+        "type": "string"
+      },
+      "OutputShape": {
+        "enum": [
+          "text",
+          "schema"
+        ],
+        "title": "OutputShape",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: language_models",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {}
+}

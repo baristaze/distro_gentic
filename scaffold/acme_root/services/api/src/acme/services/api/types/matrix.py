@@ -4,17 +4,37 @@ retirement an operator records, and what a tenant on its own keys may
 choose and has chosen."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
 
 from pydantic import Field, StringConstraints
 
-from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.language_models.types.fill import ModelRole, ModelSize, OutputShape
 from acme.om.matrix.types.matrix import MAX_FILLS, MAX_ROLES, MAX_ROWS, NAME, MatrixStatus
 from acme.om.matrix.types.record import MAX_MODEL, BenchmarkName
 from acme.services.api.types.common import RequestBody, View
+
+
+class ProviderName(StrEnum):
+    """A model provider, as the wire names it: the providers' own name, by
+    value."""
+
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+
+
+class Effort(StrEnum):
+    """How hard a model works on a call, as the wire names it: the
+    providers' own level, by value."""
+
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+
 
 Name = Annotated[str, StringConstraints(pattern=NAME)]
 KindName = Annotated[str, StringConstraints(min_length=1, max_length=MAX_KIND)]

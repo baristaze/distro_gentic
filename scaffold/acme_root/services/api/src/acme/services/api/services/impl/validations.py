@@ -9,7 +9,7 @@ from acme.om.platform_agents.types.validation import ValidationSession, Validati
 from acme.services.api.services.impl.evidence import execution_view
 from acme.services.api.services.validations import ValidationsServiceInterface
 from acme.services.api.types.common import LIMIT_MAX
-from acme.services.api.types.validations import StartValidationRequest, ValidationSessionView
+from acme.services.api.types.platform_agents import StartValidationRequest, ValidationSessionView
 
 
 class ValidationsServiceImpl(ValidationsServiceInterface):

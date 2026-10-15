@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.budgets import (
+from acme.services.api.types.spend_budgets import (
     AmountRequest,
     BudgetView,
     CreateBudgetRequest,

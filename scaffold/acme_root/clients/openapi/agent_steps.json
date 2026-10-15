@@ -35,6 +35,16 @@
         "title": "AgentStepType",
         "type": "string"
       },
+      "ContentState": {
+        "description": "Where what a step says is. The state answers, so no caller compares\nstrings.",
+        "enum": [
+          "plain",
+          "sealed",
+          "absent"
+        ],
+        "title": "ContentState",
+        "type": "string"
+      },
       "ControlCommand": {
         "description": "What a `control` step records: a command that travels out of band.",
         "enum": [

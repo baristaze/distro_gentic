@@ -1,0 +1,713 @@
+{
+  "components": {
+    "schemas": {
+      "CasesView": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "passed",
+          "failed",
+          "skipped"
+        ],
+        "title": "CasesView",
+        "type": "object"
+      },
+      "ExecutionPageView": {
+        "description": "One page of a session's runs, oldest first. `next_cursor` fetches the\nnext page and is null on the last one.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ExecutionPageView",
+        "type": "object"
+      },
+      "ExecutionView": {
+        "description": "One run of one check: why it ran, the version and whether the tree\nwas dirty, the image, host, and isolation it ran on, who wrote its\nresults, its timing, its outcome and its cases, and the weakest\nprovenance of what served it. A `work` run names the agent's tool call;\na baseline or a validation run names its validation.",
+        "properties": {
+          "abort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abort"
+          },
+          "agent_project": {
+            "title": "Agent Project",
+            "type": "string"
+          },
+          "agent_step_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Step Id"
+          },
+          "cases": {
+            "$ref": "#/components/schemas/CasesView"
+          },
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "check_version": {
+            "title": "Check Version",
+            "type": "string"
+          },
+          "dirty": {
+            "title": "Dirty",
+            "type": "boolean"
+          },
+          "executor": {
+            "title": "Executor",
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "isolation": {
+            "title": "Isolation",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RunOutcome"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/RunPurpose"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "validation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "purpose",
+          "agent_step_id",
+          "validation_id",
+          "agent_project",
+          "version",
+          "dirty",
+          "image",
+          "host",
+          "isolation",
+          "executor",
+          "check",
+          "check_version",
+          "started_at",
+          "finished_at",
+          "outcome",
+          "cases",
+          "provenance",
+          "abort"
+        ],
+        "title": "ExecutionView",
+        "type": "object"
+      },
+      "Provenance": {
+        "description": "From the strongest to the weakest.",
+        "enum": [
+          "real",
+          "twin",
+          "double",
+          "unavailable"
+        ],
+        "title": "Provenance",
+        "type": "string"
+      },
+      "ReportView": {
+        "description": "The result the session submitted and the gate accepted: the outcome\nits loop ended with, whether a gate that knows the evidence judged it,\nand the step that answered it.",
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "agent_steps.json#/components/schemas/LoopOutcome"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seq",
+          "accepted_at",
+          "outcome",
+          "verified"
+        ],
+        "title": "ReportView",
+        "type": "object"
+      },
+      "RunOutcome": {
+        "enum": [
+          "passed",
+          "failed",
+          "errored",
+          "aborted"
+        ],
+        "title": "RunOutcome",
+        "type": "string"
+      },
+      "RunPurpose": {
+        "description": "Why a run ran. Only the executor writes a `baseline` or a\n`validation` run; the agent's own runs are `work`.",
+        "enum": [
+          "work",
+          "baseline",
+          "validation"
+        ],
+        "title": "RunPurpose",
+        "type": "string"
+      },
+      "ValidationView": {
+        "description": "One pass of the policy's checks on a fresh executor: the version it\nran at and the version its checks came from, who ran it, the hash of\nthe results it wrote, and its runs.",
+        "properties": {
+          "agent_project": {
+            "title": "Agent Project",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "executor": {
+            "title": "Executor",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/RunPurpose"
+          },
+          "records": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "results_sha256": {
+            "title": "Results Sha256",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "purpose",
+          "agent_project",
+          "version",
+          "source",
+          "executor",
+          "results_sha256",
+          "records"
+        ],
+        "title": "ValidationView",
+        "type": "object"
+      },
+      "WorkHandleView": {
+        "description": "A pull request or a branch the session opened as its work, by the\nname source control gives it.",
+        "properties": {
+          "bound_at": {
+            "format": "date-time",
+            "title": "Bound At",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "intake.json#/components/schemas/HandleKind"
+          }
+        },
+        "required": [
+          "kind",
+          "handle",
+          "bound_at"
+        ],
+        "title": "WorkHandleView",
+        "type": "object"
+      },
+      "WorkProductView": {
+        "description": "What a session delivered: its agent project, its branch and whether the\nremote has held it, the pull requests and branches bound to it, and its\nlatest accepted result. A session that never had a workspace has no\nbranch.",
+        "properties": {
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "branch_seen": {
+            "title": "Branch Seen",
+            "type": "boolean"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work": {
+            "items": {
+              "$ref": "#/components/schemas/WorkHandleView"
+            },
+            "title": "Work",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_project_id",
+          "branch",
+          "branch_seen",
+          "work",
+          "report"
+        ],
+        "title": "WorkProductView",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: evidence",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/agent-sessions/{agent_session_id}/executions": {
+      "get": {
+        "description": "The runs of checks the session recorded or the executor ran for it,\noldest first, a page at a time.",
+        "operationId": "list_executions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Executions",
+        "tags": [
+          "evidence"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{agent_session_id}/validations": {
+      "get": {
+        "operationId": "list_validations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationView"
+                  },
+                  "title": "Response List Validations",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Validations",
+        "tags": [
+          "evidence"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{agent_session_id}/work-product": {
+      "get": {
+        "description": "Its branch, the pull requests and branches bound to it, and the result\nit submitted that the gate accepted.",
+        "operationId": "get_work_product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkProductView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Product",
+        "tags": [
+          "evidence"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "A session's evidence and its work product: the runs of its checks, its\nvalidations, and what it delivered. Each function is one call into the\nevidence service; another tenant's session answers as one that never\nexisted.",
+      "name": "evidence"
+    }
+  ]
+}

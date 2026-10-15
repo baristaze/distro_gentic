@@ -14,7 +14,7 @@ from acme.om.agent_billing.types.spend_ledger import (
 from acme.om.context import OperatorContext
 from acme.om.spend_budgets.types.spend_hold import SpendSettlement
 from acme.services.api.services.spend_ledgers import SpendLedgersServiceInterface
-from acme.services.api.types.spend_ledgers import (
+from acme.services.api.types.agent_billing import (
     SpendLedgerEntryView,
     SpendLedgerPageView,
     SpendUnitsGrantRequest,

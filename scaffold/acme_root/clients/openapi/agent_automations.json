@@ -1,0 +1,1185 @@
+{
+  "components": {
+    "schemas": {
+      "ActionBody": {
+        "additionalProperties": false,
+        "description": "`start_agent_session`: start a session of `agent_kind` titled `title` in the\ntenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of\nthat name into it first, its latest version at each firing, when one is\nnamed; a name with no version is refused. `message_session`: send the brief to the\nstanding session `agent_session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
+        "properties": {
+          "agent_kind": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Kind"
+          },
+          "agent_playbook": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Playbook"
+          },
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
+          "agent_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Session Id"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief"
+          },
+          "kind": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ActionBody",
+        "type": "object"
+      },
+      "ActionView": {
+        "properties": {
+          "agent_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Kind"
+          },
+          "agent_playbook": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Playbook"
+          },
+          "agent_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Project Id"
+          },
+          "agent_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Session Id"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind",
+          "brief",
+          "agent_kind",
+          "title",
+          "agent_project_id",
+          "agent_session_id",
+          "agent_playbook",
+          "params"
+        ],
+        "title": "ActionView",
+        "type": "object"
+      },
+      "AgentAutomationPrincipalView": {
+        "description": "The tenant's agent automation principal: its id, the role it holds, and who\ngranted it.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "granted_by": {
+            "format": "uuid",
+            "title": "Granted By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "common.json#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "granted_by",
+          "created_at"
+        ],
+        "title": "AgentAutomationPrincipalView",
+        "type": "object"
+      },
+      "AgentAutomationRequest": {
+        "additionalProperties": false,
+        "description": "An agent automation whole, as made or as edited.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionBody"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsBody"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "own_events": {
+            "default": false,
+            "title": "Own Events",
+            "type": "boolean"
+          },
+          "runs_as": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunsAs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerBody"
+          }
+        },
+        "required": [
+          "name",
+          "trigger",
+          "action",
+          "limits"
+        ],
+        "title": "AgentAutomationRequest",
+        "type": "object"
+      },
+      "AgentAutomationView": {
+        "description": "An agent automation, whom it runs as, and who made and last edited it.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionView"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsView"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "own_events": {
+            "title": "Own Events",
+            "type": "boolean"
+          },
+          "runs_as": {
+            "$ref": "#/components/schemas/RunsAs"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerView"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "trigger",
+          "action",
+          "limits",
+          "runs_as",
+          "own_events",
+          "enabled",
+          "created_at",
+          "created_by",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "AgentAutomationView",
+        "type": "object"
+      },
+      "GrantRequest": {
+        "additionalProperties": false,
+        "description": "The role the agent automation principal holds: never above the granter's.",
+        "properties": {
+          "role": {
+            "$ref": "common.json#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "GrantRequest",
+        "type": "object"
+      },
+      "LimitsBody": {
+        "additionalProperties": false,
+        "description": "The most its runs spend in a period, in millionths at list price, and\nthe share one run may take; the most firings a period; the most runs at\nwork at once; whether a stopped firing waits, and how many may; and the\nlongest chain of agent automations a firing extends.",
+        "properties": {
+          "concurrency": {
+            "exclusiveMinimum": 0.0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cost_cap_micros": {
+            "exclusiveMinimum": 0.0,
+            "title": "Cost Cap Micros",
+            "type": "integer"
+          },
+          "hop_limit": {
+            "default": 3,
+            "minimum": 1.0,
+            "title": "Hop Limit",
+            "type": "integer"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "queue": {
+            "default": false,
+            "title": "Queue",
+            "type": "boolean"
+          },
+          "queue_depth": {
+            "default": 50,
+            "minimum": 1.0,
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "rate": {
+            "exclusiveMinimum": 0.0,
+            "title": "Rate",
+            "type": "integer"
+          },
+          "run_cap_micros": {
+            "exclusiveMinimum": 0.0,
+            "title": "Run Cap Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cost_cap_micros",
+          "run_cap_micros",
+          "rate",
+          "concurrency"
+        ],
+        "title": "LimitsBody",
+        "type": "object"
+      },
+      "LimitsView": {
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cost_cap_micros": {
+            "title": "Cost Cap Micros",
+            "type": "integer"
+          },
+          "hop_limit": {
+            "title": "Hop Limit",
+            "type": "integer"
+          },
+          "period": {
+            "format": "duration",
+            "title": "Period",
+            "type": "string"
+          },
+          "queue": {
+            "title": "Queue",
+            "type": "boolean"
+          },
+          "queue_depth": {
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "run_cap_micros": {
+            "title": "Run Cap Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cost_cap_micros",
+          "run_cap_micros",
+          "period",
+          "rate",
+          "concurrency",
+          "queue",
+          "queue_depth",
+          "hop_limit"
+        ],
+        "title": "LimitsView",
+        "type": "object"
+      },
+      "RunsAs": {
+        "description": "Whose authority an agent automation's action runs on.",
+        "enum": [
+          "creator",
+          "agent_automation_principal"
+        ],
+        "title": "RunsAs",
+        "type": "string"
+      },
+      "TriggerBody": {
+        "additionalProperties": false,
+        "description": "An event that passes every filter set (one left empty matches any),\nor a schedule, every `every` seconds, a minute at least.",
+        "properties": {
+          "arrivals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Effects",
+            "type": "array"
+          },
+          "every": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Every"
+          },
+          "integrations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Integrations",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TriggerBody",
+        "type": "object"
+      },
+      "TriggerKind": {
+        "enum": [
+          "event",
+          "schedule"
+        ],
+        "title": "TriggerKind",
+        "type": "string"
+      },
+      "TriggerView": {
+        "properties": {
+          "arrivals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Effects",
+            "type": "array"
+          },
+          "every": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Every"
+          },
+          "integrations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Integrations",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          }
+        },
+        "required": [
+          "kind",
+          "integrations",
+          "arrivals",
+          "effects",
+          "every"
+        ],
+        "title": "TriggerView",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: agent_automations",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/agent-automations": {
+      "get": {
+        "description": "The tenant's agent automations by id, after the id `after` names.",
+        "operationId": "list_agent_automations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentAutomationView"
+                  },
+                  "title": "Response List Agent Automations",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Automations",
+        "tags": [
+          "agent_automations"
+        ]
+      },
+      "post": {
+        "description": "An agent automation that runs as its maker, or as the agent automation principal.",
+        "operationId": "create_agent_automation",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentAutomationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Agent Automation",
+        "tags": [
+          "agent_automations"
+        ]
+      }
+    },
+    "/v1/agent-automations/principal": {
+      "get": {
+        "operationId": "get_principal",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAutomationPrincipalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Principal",
+        "tags": [
+          "agent_automations"
+        ]
+      },
+      "put": {
+        "description": "The principal granted the role; a grant over a standing one keeps it.",
+        "operationId": "grant_principal",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAutomationPrincipalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Principal",
+        "tags": [
+          "agent_automations"
+        ]
+      }
+    },
+    "/v1/agent-automations/{agent_automation_id}": {
+      "get": {
+        "operationId": "get_agent_automation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Automation",
+        "tags": [
+          "agent_automations"
+        ]
+      },
+      "put": {
+        "description": "The agent automation as edited. One that runs as its creator is edited by\nits creator alone; one that runs as the agent automation principal takes its\neditor as its creator.",
+        "operationId": "update_agent_automation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentAutomationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Automation",
+        "tags": [
+          "agent_automations"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "A tenant's agent automations, made, read, and edited by a person in person;\nand the tenant's agent automation principal: read its grant, and grant it a role,\nin person, never above the granter's own.",
+      "name": "agent_automations"
+    }
+  ]
+}

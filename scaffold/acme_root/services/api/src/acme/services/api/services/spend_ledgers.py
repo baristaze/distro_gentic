@@ -6,7 +6,7 @@ from uuid import UUID
 
 from acme.om.agent_billing.types.spend_ledger import EntryKind
 from acme.om.context import OperatorContext
-from acme.services.api.types.spend_ledgers import (
+from acme.services.api.types.agent_billing import (
     SpendLedgerEntryView,
     SpendLedgerPageView,
     SpendUnitsGrantRequest,

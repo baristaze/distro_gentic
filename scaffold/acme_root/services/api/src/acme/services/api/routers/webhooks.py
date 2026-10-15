@@ -26,7 +26,7 @@ async def identity_delivery(
     return await webhooks.receive_identity(rctx, delivery)
 
 
-@router.post("/integrations/{name}", response_model=DeliveryReceivedView)
+@router.post("/integrations/{name}", response_model=DeliveryReceivedView, tags=["intake"])
 async def integration_delivery(
     rctx: Rctx, webhooks: WebhooksService, name: str, delivery: IntegrationDelivery
 ) -> DeliveryReceivedView:
