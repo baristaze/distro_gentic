@@ -86,9 +86,10 @@ The shape of a kind is the four profiles in
    cases of its step 5, read over `PRODUCT_KINDS.agents`, and the kind in
    `om/src/<name>/om/agents/README.md`. It writes none of that skill's
    wiring: no `om/src/<name>/om/agents/kinds.py` and no `AGENT_KINDS`,
-   no `agent_kinds=` in a container's call to `build_managers`, and
-   neither the API's nor the maintenance worker's container test that
-   reads that call. Its kinds, every version it still runs, its tools,
+   no `agent_kinds=` in a container's call to `build_platform_managers`,
+   which stands here for that skill's `build_managers`, and neither the
+   API's nor the maintenance worker's container test that reads that
+   call. Its kinds, every version it still runs, its tools,
    and the classes they declare go in `PRODUCT_KINDS`, in
    `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
    `ceilings` of `ProductKinds` in
