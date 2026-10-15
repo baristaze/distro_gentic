@@ -37,7 +37,7 @@ def settings(corpus_root: Path | None) -> PlatformAgentsSettings:
     return PlatformAgentsSettings.model_validate({"_env_file": None, "corpus_root": corpus_root})
 
 
-@pytest.mark.parametrize("image", ["api", "session-runner"])
+@pytest.mark.parametrize("image", ["api", "agent-session-runner"])
 def test_each_image_that_ships_the_agents_carries_the_map_and_every_document_it_lists_for_tenants(
     image: str,
 ) -> None:

@@ -165,7 +165,7 @@ uv run --package acme-api python services/api/tests/portal_check.py script .loca
 # the seed, both processes, and the check, and PORTAL_REPOSITORIES naming
 # an empty folder:
 uv run --package acme-api python services/api/tests/portal_stack.py api --port 8000
-uv run --package acme-session-runner python services/api/tests/portal_stack.py runner
+uv run --package acme-agent-session-runner python services/api/tests/portal_stack.py runner
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/timeline.spec.ts
 ```
 

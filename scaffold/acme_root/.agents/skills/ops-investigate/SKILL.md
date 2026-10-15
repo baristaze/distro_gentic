@@ -49,7 +49,7 @@ the token has expired: stop, and name the refresh the preamble gives.
 
 ## Procedure
 
-The processes are `api`, `maintenance`, and `session-runner`, as
+The processes are `api`, `maintenance`, and `agent-session-runner`, as
 `deployment/README.md` lists them. Each is an ECS service of that
 name in the cluster `acme-<env>`, with the log group
 `/acme/<env>/<process>`.
@@ -237,7 +237,7 @@ Search, and the report their Report.
 
    ```bash
    aws ecs describe-services --cluster acme-<env> \
-     --services api maintenance session-runner \
+     --services api maintenance agent-session-runner \
      --profile acme-<env>-investigate
    ```
 
@@ -290,7 +290,7 @@ Search, and the report their Report.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/agent-session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, level, request_id, @message | filter level = "ERROR" | sort @timestamp desc | limit 100'
    aws logs get-query-results --query-id <id> --profile acme-<env>-investigate
@@ -324,7 +324,7 @@ Search, and the report their Report.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/agent-session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, @log, @message | filter @message like /<every Search, joined with |>/ | sort @timestamp desc | limit 50'
    ```

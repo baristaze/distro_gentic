@@ -10,7 +10,7 @@ A path that starts with `../` is read from this skill's folder as
 `realpath` resolves it.
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Sessions Are Work (Kinds of
-Work, Fair Share), Session Runners, Placement and Workspace Hosts
+Work, Fair Share), Agent Session Runners, Placement and Workspace Hosts
 (Placement, The Exec Relay Transport).
 Lenses: `../../lenses/placement.md`.
 

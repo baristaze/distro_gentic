@@ -81,7 +81,7 @@ stop, and name the refresh the preamble gives.
 
 ## Procedure
 
-The processes are `api`, `maintenance`, and `session-runner`, as
+The processes are `api`, `maintenance`, and `agent-session-runner`, as
 `deployment/README.md` lists them.
 
 Before step 1, read every file in `../_shared/signals/`, a path from
@@ -280,7 +280,7 @@ runs once, before the passes. It is not a pass.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/agent-session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, level, @message | filter request_id = "<id>" or caused_by_request_id = "<id>" | sort @timestamp asc'
    aws logs get-query-results --query-id <id> --profile acme-<env>-investigate

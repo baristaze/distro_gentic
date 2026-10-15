@@ -1,4 +1,4 @@
-# The session runner: the maintenance worker's shape, with no exposed port.
+# The agent session runner: the maintenance worker's shape, with no exposed port.
 # It prepares no workspace of its own in a deployed environment (ADR 2026),
 # so it carries no container engine. It carries git: the platform reads a
 # session's repository and makes its bundles on its own host. The
@@ -17,13 +17,13 @@ COPY workers/agent_session_runner/pyproject.toml workers/agent_session_runner/
 # members this image runs are copied whole below.
 COPY clients/python/pyproject.toml clients/python/
 COPY apps/cli/pyproject.toml apps/cli/
-RUN uv sync --frozen --no-dev --package acme-session-runner --no-install-workspace
+RUN uv sync --frozen --no-dev --package acme-agent-session-runner --no-install-workspace
 COPY om om
 COPY infra infra
 COPY integrations integrations
 COPY workers/maintenance workers/maintenance
 COPY workers/agent_session_runner workers/agent_session_runner
-RUN uv sync --frozen --no-dev --package acme-session-runner
+RUN uv sync --frozen --no-dev --package acme-agent-session-runner
 # The knowledge map and the documents it lists for tenant users, outside the
 # packages above: the runner ships the platform's agents over them, as the
 # API does (ACME_CORPUS_ROOT).
@@ -45,4 +45,4 @@ USER acme
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s \
   CMD python -c "import os, urllib.request, sys; port = os.environ.get('ACME_RUNNER_METRICS_PORT', '9465'); sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:%s/healthz' % port).status == 200 else 1)"
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["acme-session-runner", "serve"]
+CMD ["acme-agent-session-runner", "serve"]

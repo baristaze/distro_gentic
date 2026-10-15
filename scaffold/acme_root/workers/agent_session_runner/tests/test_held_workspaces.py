@@ -80,7 +80,7 @@ def forge(connected: Connected) -> SourceControlForgeImpl:
     return SourceControlForgeImpl(lambda name: IntegrationTwinImpl(name, writes=True), connected)
 
 
-APP = AppContext(type=AppType.WORKER, version="session-runner@test")
+APP = AppContext(type=AppType.WORKER, version="agent-session-runner@test")
 GRACE = WARM_GRACE
 NO_PRODUCT = ProductKinds()
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))

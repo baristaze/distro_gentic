@@ -55,7 +55,7 @@ These are the invariants. Each links the section that states it.
 
 - [A loop is closed by evidence and returning
   feedback](#what-closes-a-loop), and the platform enforces it.
-- [The brain runs in the platform's cloud, always](#session-runners); a
+- [The brain runs in the platform's cloud, always](#agent-session-runners); a
   runner never runs inside the sandbox it drives.
 - [Hosts pull; the platform never calls into a customer's
   wall](#workspace-hosts), and a host advertises only what it probed.
@@ -75,7 +75,7 @@ These are the invariants. Each links the section that states it.
 - [What Closes a Loop](#what-closes-a-loop)
 - [At a Glance](#at-a-glance)
 - [Sessions Are Work](#sessions-are-work)
-- [Session Runners](#session-runners)
+- [Agent Session Runners](#agent-session-runners)
 - [Placement and Workspace Hosts](#placement-and-workspace-hosts)
 - [Workspaces and Isolation](#workspaces-and-isolation)
 - [Watching and Steering](#watching-and-steering)
@@ -152,7 +152,7 @@ flowchart LR
         CP[Control plane:<br/>gateway, sessions, intake,<br/>agent automations, policy, approvals]
         CW[Control workers:<br/>intake, agent automations]
         Q[(Work queue)]
-        SR[Session runners:<br/>the engine, the brain]
+        SR[Agent session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
         Rec[(Steps, records,<br/>artifacts)]
         Money[Metering, limits,<br/>agent billing, model matrix]
@@ -178,7 +178,7 @@ flowchart LR
 | Plane | Parts | Where it runs |
 |---|---|---|
 | **Control** | The gateway, sessions, intake and routing, agent automations, policy, approvals, realtime; the control workers | The platform's cloud |
-| **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
+| **Brain** | Agent session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
 | **Records and money** | Steps, execution records, artifacts; metering, limits, agent billing, the model matrix | The platform's cloud |
 
@@ -196,7 +196,7 @@ several kinds of work, and each must run where its environment is:
 
 | Work | Runs on | Claimed from |
 |---|---|---|
-| `loop`: run or resume a session's loop | Any session runner | The loop lanes |
+| `loop`: run or resume a session's loop | Any agent session runner | The loop lanes |
 | `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
 | Platform work: intake, agent automations | Control workers | Their own lanes |
@@ -227,11 +227,11 @@ holds both, as the guideline's [work queue][g-workq] holds every cap: a
 tenant at its cap is passed over, and its loops wait unwritten and
 spend no attempt. The claim order within a lane stays the guideline's.
 
-## Session Runners
+## Agent Session Runners
 
 `core`
 
-A **session runner** is a worker role ([Worker Roles][g-workers]) that
+An **agent session runner** is a worker role ([Worker Roles][g-workers]) that
 claims `loop` work and hosts the engine while it runs a session's loop.
 It holds nothing that cannot be rebuilt from storage, so any runner
 resumes any session; a session's first run and its second, a week
@@ -1235,7 +1235,7 @@ story; the rest is its planned shape:
 
   | Group | Prefix | Covers |
   |---|---|---|
-  | `placement` | `PLC` | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
+  | `placement` | `PLC` | Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts |
   | `workspaces` | `WSP` | Workspaces and Isolation |
   | `watch` | `WAT` | Watching and Steering |
   | `intake` | `INT` | Work In, Results Out |
@@ -1247,7 +1247,7 @@ story; the rest is its planned shape:
 - **Skills**, named `distro-*` and following the Agent Skills standard: a
   review per lens group and a full review, `distro-explain`,
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
-  platform, and scaffolds for a session runner, a workspace host, a
+  platform, and scaffolds for an agent session runner, a workspace host, a
   workspace provider, an integration with its twin, an agent kind, an
   agent automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of

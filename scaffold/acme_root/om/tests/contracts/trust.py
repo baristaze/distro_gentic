@@ -124,7 +124,7 @@ class Placement(PlacementInterface):
     )
     cloud: Executor = field(
         default_factory=lambda: Executor(
-            kind=ExecutorKind.CLOUD, credential_id=new_id(), label="session-runner-1"
+            kind=ExecutorKind.CLOUD, credential_id=new_id(), label="agent-session-runner-1"
         )
     )
     walled: set[UUID] = field(default_factory=set[UUID])

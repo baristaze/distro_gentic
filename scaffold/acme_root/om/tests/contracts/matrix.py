@@ -202,7 +202,9 @@ async def agent_fleet_over(
     def client(provider: ProviderName, value: str) -> ModelProviderInterface:
         return keyed.setdefault(value, ModelProviderScriptedImpl(provider))
 
-    runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="session-runner-1")
+    runner = Executor(
+        kind=ExecutorKind.CLOUD, credential_id=new_id(), label="agent-session-runner-1"
+    )
     probe = KeyProbeTwinImpl()
     trust_infra = InfraLocalImpl(tmp_path / "trust")
     trust = TrustLayer(
