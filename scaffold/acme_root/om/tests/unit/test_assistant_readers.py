@@ -150,7 +150,7 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
             "write_tally",
         ),
         # A name the assistant holds already, or one named twice.
-        (ProductKinds(assistant_tools=(kinds.READ_SESSION,)), kinds.READ_SESSION),
+        (ProductKinds(assistant_tools=(kinds.READ_AGENT_SESSION,)), kinds.READ_AGENT_SESSION),
         (
             ProductKinds(
                 tools=tools_of(a_reader("read_spend_tally")),
@@ -183,15 +183,15 @@ async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path
     agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(agent_session_id, "What is stuck?")
     malformed = {
-        "bad_id": calls(kinds.READ_SESSION, "bad_id", agent_session_id="not-a-session"),
+        "bad_id": calls(kinds.READ_AGENT_SESSION, "bad_id", agent_session_id="not-a-session"),
         "no_id": calls(kinds.READ_WAIT, "no_id"),
         "extra": calls(
             kinds.READ_AGENT_PROJECT, "extra", agent_project_id=str(new_id()), org_id="x"
         ),
-        "zero": calls(kinds.LIST_SESSIONS, "zero", limit=0),
+        "zero": calls(kinds.LIST_AGENT_SESSIONS, "zero", limit=0),
         "huge": calls(kinds.LIST_AGENT_PROJECTS, "huge", limit=10_000),
-        "status": calls(kinds.LIST_SESSIONS, "status", status="stuck"),
-        "reason": calls(kinds.LIST_SESSIONS, "reason", park_reason="person", status="idle"),
+        "status": calls(kinds.LIST_AGENT_SESSIONS, "status", status="stuck"),
+        "reason": calls(kinds.LIST_AGENT_SESSIONS, "reason", park_reason="person", status="idle"),
         "cursor": calls(kinds.LIST_AGENT_AUTOMATIONS, "cursor", after="page-2"),
         "runs": calls(
             kinds.READ_AGENT_AUTOMATION, "runs", agent_automation_id=str(new_id()), runs=500
@@ -252,10 +252,10 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_agent_project_and_r
     await platform.say(asking, "Which sessions wait for a person?")
     platform.anthropic.add(
         reply(
-            calls(kinds.LIST_SESSIONS, "use_person", park_reason="person", limit=1),
-            calls(kinds.LIST_SESSIONS, "use_idle", status="idle"),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_person", park_reason="person", limit=1),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_idle", status="idle"),
             calls(
-                kinds.LIST_SESSIONS,
+                kinds.LIST_AGENT_SESSIONS,
                 "use_agent_project",
                 park_reason="person",
                 agent_project_id=str(agent_project_id),
@@ -274,7 +274,9 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_agent_project_and_r
     assert page["sessions"][0]["park_reason"] == "person"
     assert page["next"] == str(second)
     platform.anthropic.add(
-        reply(calls(kinds.LIST_SESSIONS, "use_on", park_reason="person", before=page["next"])),
+        reply(
+            calls(kinds.LIST_AGENT_SESSIONS, "use_on", park_reason="person", before=page["next"])
+        ),
         reply(said("And one more.")),
     )
     await platform.say(asking, "And the rest?")
@@ -317,7 +319,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Which sessions wait for a person?")
     platform.anthropic.add(
-        reply(calls(kinds.LIST_SESSIONS, "use_person", park_reason="person")),
+        reply(calls(kinds.LIST_AGENT_SESSIONS, "use_person", park_reason="person")),
         reply(said("One waits for a person.")),
     )
 
@@ -396,12 +398,12 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
 # engine writes, each with its cause and who may clear it.
 
 COMPUTED = {
-    "agents/impl/loop.py: fill.provider.value": "a provider's name",
-    "agents/impl/loop.py: refused.unlock": "`<provider>:key`",
-    "agents/impl/loop.py: f'{fill.provider.value}:{cause}'": "`<provider>:billing`",
-    "agents/impl/loop.py: str(started.key)": "a job's key",
-    "agents/impl/loop.py: str(job.key)": "a job's key",
-    "budgets/rules.py: unlock": "a budget's id",
+    "agents/impl/loop_model_turn.py: fill.provider.value": "a provider's name",
+    "agents/impl/loop_model_turn.py: refused.unlock": "`<provider>:key`",
+    "agents/impl/loop_model_turn.py: f'{fill.provider.value}:{cause}'": "`<provider>:billing`",
+    "agents/impl/loop_tool_turn.py: str(started.key)": "a job's key",
+    "agents/impl/loop_tool_turn.py: str(job.key)": "a job's key",
+    "spend_budgets/rules.py: unlock": "a budget's id",
 }
 """Each unlock the engine computes rather than names, by the module and the
 expression that compute it, with the start of its row in the object model."""

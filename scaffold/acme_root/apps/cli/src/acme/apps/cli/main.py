@@ -452,7 +452,7 @@ def start_agent_session(
 
 
 @agent_session_app.command("list")
-def list_sessions(
+def list_agent_sessions(
     status: Annotated[
         AgentSessionStatus | None, typer.Option(help="Only the sessions in this status.")
     ] = None,

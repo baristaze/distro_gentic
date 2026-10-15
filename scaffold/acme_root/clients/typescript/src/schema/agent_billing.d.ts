@@ -91,7 +91,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/budgets/{spend_budget_id}/raises": {
+    "/v1/spend-budgets/{spend_budget_id}/raises": {
         parameters: {
             query?: never;
             header?: never;

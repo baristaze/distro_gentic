@@ -329,7 +329,7 @@ async def test_a_budget_a_call_passes_is_raised_for_its_window_by_a_person_who_s
 ) -> None:
     await case.seat("starter")
     made = await case.client.post(
-        "/v1/budgets",
+        "/v1/spend-budgets",
         headers=created(case[Role.OWNER]),
         json={"scope_kind": "tenant", "window_kind": "day", "cost_micros": 1},
     )
@@ -338,7 +338,7 @@ async def test_a_budget_a_call_passes_is_raised_for_its_window_by_a_person_who_s
     agent_session_id = await case.started()
     await case.run(agent_session_id)
     assert (await case.parked_on(agent_session_id))["unlock"] == spend_budget_id
-    path = f"/v1/budgets/{spend_budget_id}/raises"
+    path = f"/v1/spend-budgets/{spend_budget_id}/raises"
     body = {"cost_micros": PLENTY}
     runs = case.runs_of(agent_session_id)
 
@@ -364,7 +364,7 @@ async def test_a_budget_a_call_passes_is_raised_for_its_window_by_a_person_who_s
     assert again.headers.get("Idempotent-Replayed") == "true", "a retry posts once"
     assert again.json() == raised.json()
     assert await case.entries(EntryKind.RAISE) == 1
-    budget = await case.client.get(f"/v1/budgets/{spend_budget_id}", headers=case[Role.OWNER])
+    budget = await case.client.get(f"/v1/spend-budgets/{spend_budget_id}", headers=case[Role.OWNER])
     assert budget.json()["cost_micros"] == 1, "the budget's own amount is unchanged"
     await case.runs_again(agent_session_id, raised, runs)
 

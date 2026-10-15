@@ -14,7 +14,7 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.inference import Inference, InferenceKind, Stance
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
-from acme.om.evidence.types.provenance import Dependency, Provenance, ToolOutputRef
+from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance
 from acme.om.evidence.types.record import (
     CaseTally,
     ExecutionRecord,
@@ -113,7 +113,7 @@ def make_record(
         cases=CaseTally(
             passed=int(outcome is RunOutcome.PASSED), failed=int(outcome is RunOutcome.FAILED)
         ),
-        artifacts=(ToolOutputRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
+        artifacts=(ArtifactRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
         dependencies=(Dependency(name="browser", provenance=provenance),),
         abort="the guard stopped it" if outcome is RunOutcome.ABORTED else None,
     )

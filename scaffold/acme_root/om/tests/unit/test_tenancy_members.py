@@ -12,6 +12,7 @@ from acme.infra.cache import CacheScope
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.om.base import new_id, utcnow
+from acme.om.change_events.impl.manager import ChangeEventsOptions
 from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl
 from acme.om.context import Role
 from acme.om.exceptions import (
@@ -21,16 +22,21 @@ from acme.om.exceptions import (
     PersonalOrgFixed,
     ValidationFailed,
 )
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.root import build_tenancy
+from acme.om.root import KINDS, build_change_events, build_tenancy, build_work
+from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tenancy.storage.impl.memory import TenancyStorageMemoryImpl
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.org import OrgKind
 from acme.om.tenancy.types.user import PERSONAL_FIELDS, User
+from acme.om.work import WorkManagerInterface
+from acme.om.work.impl.manager import WorkOptions
+from acme.om.work.types.work_item import work_row_kind
 
 from contracts.outbox_storage import claim_all
 from contracts.tenancy import SpyRelay, add_member, make_manager, request, sign_in, signed_up
@@ -112,7 +118,14 @@ async def test_removing_a_member_soft_deletes_the_user_and_ends_access(
 async def test_removing_a_member_revokes_their_credentials_and_announces_each(
     storage: TenancyStorageMemoryImpl, infra: InfraLocalImpl, outbox: OutboxStorageMemoryImpl
 ) -> None:
-    relay = SpyRelay(OutboxRelayImpl(outbox, ChangeEventStorageMemoryImpl(), infra.get_topics()))
+    # The platform's removal also asks for work, so the relay enqueues it.
+    queue = StorageMemoryImpl()
+    built: list[WorkManagerInterface] = []
+    relay = SpyRelay(
+        OutboxRelayImpl(
+            outbox, ChangeEventStorageMemoryImpl(), infra.get_topics(), work=lambda: built[0]
+        )
+    )
     manager = build_tenancy(
         storage,
         relay,
@@ -120,6 +133,8 @@ async def test_removing_a_member_revokes_their_credentials_and_announces_each(
         TenancyOptions(dev_sign_in=True),
         identity_provider=IdentityProviderAbsentImpl(),
     )
+    events = build_change_events(queue, manager, ChangeEventsOptions())
+    built.append(build_work(queue, infra, manager, events, WorkOptions(), KINDS))
     _, org = await manager.bootstrap(request(), "Ajax", "ajax", "ann@example.test", "Ann")
     owner = await sign_in(manager, "ann@example.test", org.id)
     bob = await add_member(storage, org.id, "bob@example.test", Role.MEMBER)
@@ -148,6 +163,8 @@ async def test_removing_a_member_revokes_their_credentials_and_announces_each(
             ("tenancy.auth_session.revoked", bobs.security.credential_id),
             ("tenancy.auth_session.revoked", other.security.credential_id),
             ("tenancy.api_key.deleted", key.api_key.id),
+            # The platform's: what the tenant keeps of them elsewhere goes too.
+            (work_row_kind(IntakeWorkKind.MEMBER_LEFT), bob.id),
         ]
     )
     assert await claim_all(outbox) == []

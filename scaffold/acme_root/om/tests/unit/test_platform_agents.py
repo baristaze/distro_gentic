@@ -516,15 +516,15 @@ RENDERED = {
     (
         kinds.SOFTWARE_ENGINEER,
         8,
-    ): "e95c4d517f6337704afffec7fb86aea679d475063686f797eba482db6033ab55",
-    (kinds.ANALYSIS, 4): "1b8dc15d3ef03802fe55eb09ceda1f7fd6f6270c997a6b9138f23ce0d329feba",
-    (kinds.PLANNER, 1): "79036b8634a53884d1b6f04f08ae7cdab7d45c793394811c693ca251843a2a73",
+    ): "9cc87aa9d21dd89c27a67b9b8ed4899e50a36f416386ff0d5d4b8cb3a560ba05",
+    (kinds.ANALYSIS, 4): "5b4047be69f2dedab3921c6d31c92796a2887d7e12c0dcf7d319b6b28eed2d52",
+    (kinds.PLANNER, 1): "6aff6c34908d0b1791f6ecc3e155b77f31d6635faa23fb75c46756e741205035",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "ad8ce54fb50244be1513ee6c985c0fa57af9d623a35ee99d7fa08c989e4318dd",
-    (kinds.REVIEWER, 1): "9d40afdd71b8b804b7a5f52efa074ed126898493987cc0557bc26f132f72909f",
-    (kinds.OPS_ANALYST, 1): "508d8625db0ad0f662b643a376b87e7a03649ee547f5563b8f5e24fce87f5b12",
+    ): "930825c984ab75a673c1a65353f365f29dae1e6e1501ba4ccc2c9889bfc03753",
+    (kinds.REVIEWER, 1): "f19192e0af04c5b3c6ba12c5724b563d540a2b4cb452a4f654e11b36d1fe0eb1",
+    (kinds.OPS_ANALYST, 1): "2377712e4882d2500950e01c904163bb8bf6c8411cf122fafc1c060234672f3e",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -632,10 +632,10 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         )
         for version in (2, 3, 4)
     },
-    (kinds.PLANNER, 1): ("read_session", "hand_off_to_software_engineer"),
+    (kinds.PLANNER, 1): ("read_agent_session", "hand_off_to_software_engineer"),
     (kinds.PLATFORM_ASSISTANT, 1): (
         "search_corpus",
-        "read_session",
+        "read_agent_session",
         "draft_tool_policy",
         "hand_off_to_software_engineer",
     ),
@@ -643,8 +643,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "search_corpus",
         "search_agent_knowledge",
         "read_agent_knowledge",
-        "read_session",
-        "list_sessions",
+        "read_agent_session",
+        "list_agent_sessions",
         "read_wait",
         "list_agent_projects",
         "read_agent_project",
@@ -664,8 +664,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_tool_output",
     ),
     (kinds.OPS_ANALYST, 1): (
-        "read_session",
-        "list_sessions",
+        "read_agent_session",
+        "list_agent_sessions",
         "read_wait",
         "list_agent_projects",
         "read_agent_project",
@@ -904,7 +904,9 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
 
     await platform.say(agent_session_id, "Where does it stand?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_SESSION, "use_read", agent_session_id=str(software_engineer_id))),
+        reply(
+            calls(kinds.READ_AGENT_SESSION, "use_read", agent_session_id=str(software_engineer_id))
+        ),
         reply(said("It waits for you to confirm it.")),
     )
     await platform.managers.loop.run(platform.owner, agent_session_id)
@@ -1418,7 +1420,7 @@ async def test_an_ops_analyst_answers_why_a_session_waits_from_the_records(tmp_p
     answer = "It waits for a host of build: host-1, its only one, is offline."
     platform.anthropic.add(
         reply(
-            calls(kinds.LIST_SESSIONS, "use_list", status="idle"),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_list", status="idle"),
             calls(kinds.READ_WAIT, "use_wait", agent_session_id=str(waiting)),
             calls(kinds.LIST_HOSTS, "use_hosts"),
             calls(kinds.READ_SPEND, "use_spend"),

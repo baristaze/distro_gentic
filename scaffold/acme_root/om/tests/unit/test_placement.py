@@ -71,6 +71,9 @@ WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
+EVERY_KIND = [spec.name for spec in KINDS]
+"""Every kind this process knows: a claim that names them all."""
+
 
 def request(app: AppContext = WORKER) -> RequestContext:
     return RequestContext(request_id=new_id(), app=app)
@@ -246,13 +249,11 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
 
     # A runner claims from a loop lane, and only a loop is there.
     runner = await managers.work.claim(
-        request(), tier_lane("standard"), list(WorkKind), "runner-1", LEASE
+        request(), tier_lane("standard"), EVERY_KIND, "runner-1", LEASE
     )
     assert runner is not None and runner[1].id == enqueued["loop"].id
     assert (
-        await managers.work.claim(
-            request(), tier_lane("standard"), list(WorkKind), "runner-1", LEASE
-        )
+        await managers.work.claim(request(), tier_lane("standard"), EVERY_KIND, "runner-1", LEASE)
         is None
     )
 
@@ -307,7 +308,7 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     )
 
     assert await managers.placement.claim_for(request(), walled, LEASE) is None
-    failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
+    failed = await managers.work.claim(request(), stray.lane, EVERY_KIND, "x", LEASE)
     assert failed is None, "never claimed again"
     events = await managers.change_events.get_change_events(beta, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
@@ -335,7 +336,7 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     )
 
     assert await managers.placement.claim_for(request(), machine, LEASE) is None
-    failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
+    failed = await managers.work.claim(request(), stray.lane, EVERY_KIND, "x", LEASE)
     assert failed is None, "never claimed again"
     events = await managers.change_events.get_change_events(ajax, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]

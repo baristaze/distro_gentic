@@ -90,13 +90,13 @@ SUBMIT_RESULT = "submit_result"
 VALIDATE = "validate"
 OPEN_PULL_REQUEST = "open_pull_request"
 SEARCH_CORPUS = "search_corpus"
-READ_SESSION = "read_session"
+READ_AGENT_SESSION = "read_agent_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
 HAND_OFF = "hand_off_to_software_engineer"
 SEARCH_AGENT_KNOWLEDGE = "search_agent_knowledge"
 READ_AGENT_KNOWLEDGE = "read_agent_knowledge"
 SUGGEST_AGENT_KNOWLEDGE = "suggest_agent_knowledge"
-LIST_SESSIONS = "list_sessions"
+LIST_AGENT_SESSIONS = "list_agent_sessions"
 READ_WAIT = "read_wait"
 LIST_AGENT_PROJECTS = "list_agent_projects"
 READ_AGENT_PROJECT = "read_agent_project"
@@ -111,8 +111,8 @@ LIST_HOSTS = "list_hosts"
 READ_SPEND = "read_spend"
 
 ASSISTANT_READERS = (
-    READ_SESSION,
-    LIST_SESSIONS,
+    READ_AGENT_SESSION,
+    LIST_AGENT_SESSIONS,
     READ_WAIT,
     LIST_AGENT_PROJECTS,
     READ_AGENT_PROJECT,
@@ -519,7 +519,7 @@ PLANNER_KIND = AgentKind(
     name=PLANNER,
     version=1,
     # It reads one session, never the tenant's other records.
-    tools=(READ_SESSION,),
+    tools=(READ_AGENT_SESSION,),
     toolsets=(HANDOFF_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
@@ -527,7 +527,7 @@ PLANNER_KIND = AgentKind(
     prompts=(
         "You turn findings into tasks. For each task, decide whether an existing session "
         "should continue it or a new one should start: read where a session stands with "
-        "read_session, and hand new engineering work to a software engineer with "
+        "read_agent_session, and hand new engineering work to a software engineer with "
         "hand_off_to_software_engineer, with an objective that stands on its own. Answer with the "
         "plan: each task and the session it goes to.",
     ),
@@ -537,7 +537,7 @@ PLANNER_KIND = AgentKind(
 PLATFORM_ASSISTANT_V1 = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=1,
-    tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY),
+    tools=(SEARCH_CORPUS, READ_AGENT_SESSION, DRAFT_TOOL_POLICY),
     toolsets=(HANDOFF_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
@@ -545,7 +545,7 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
         "product only from what search_corpus finds, and cite the document of every "
-        "passage you use. Diagnose live state with read_session, never by guessing. Draft "
+        "passage you use. Diagnose live state with read_agent_session, never by guessing. Draft "
         "a change to the tool policy with draft_tool_policy and show the difference from "
         "what is live: a person applies it, never you. When the work is engineering, hand "
         "it to a software engineer with hand_off_to_software_engineer and an objective that stands on its "
@@ -573,8 +573,8 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "what owns it, and what moves it between its states. docs/portal-routes.md lists "
         "the portal's pages: when you name a page, link it by its address as that "
         "document says, so the person can open it. Diagnose by reading first, "
-        "never by guessing. Find sessions with list_sessions and read one with "
-        "read_session; read what a waiting session waits on, its place in the work queue "
+        "never by guessing. Find sessions with list_agent_sessions and read one with "
+        "read_agent_session; read what a waiting session waits on, its place in the work queue "
         "and the hosts that run it, with read_wait; read agent projects and agent_automations, and an "
         "agent_automation's recent runs, the same way, and any other reader you hold. When "
         "something waits or is slow, say what it waits on as you read it, what clears it, "
@@ -653,7 +653,7 @@ a sub-agent on the pull request another kind opened."""
 
 OPS_ANALYST_PROMPT = (
     "You read how the tenant's part of the platform runs, and you change nothing: every "
-    "tool you hold reads. Find sessions with list_sessions and read one with read_session. "
+    "tool you hold reads. Find sessions with list_agent_sessions and read one with read_agent_session. "
     "Read what a waiting session waits on with read_wait: its loop's place on the work "
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "

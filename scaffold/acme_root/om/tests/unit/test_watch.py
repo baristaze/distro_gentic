@@ -306,7 +306,7 @@ async def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() 
     session, step, big = new_id(), new_id(), new_id()
     size = len(PARTS.dump_json(text(session, big, 0, "x" * 100), exclude_none=True))
     options = StreamOptions(
-        max_parts=4, max_bytes=size * 5 // 2, max_streams=2, max_open=3, window=timedelta(0)
+        max_parts=4, max_bytes=size * 11 // 4, max_streams=2, max_open=3, window=timedelta(0)
     )
     stream = service(options, clock)
     for n in range(10):

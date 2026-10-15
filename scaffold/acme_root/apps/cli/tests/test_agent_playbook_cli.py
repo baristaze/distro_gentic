@@ -25,7 +25,7 @@ def published(stack: Stack) -> None:
 
 def started(stack: Stack) -> str:
     result = stack.acme(
-        "session", "start", "assistant", "the ledger", "--agent-project", AGENT_PROJECT_ID
+        "agent-session", "start", "assistant", "the ledger", "--agent-project", AGENT_PROJECT_ID
     )
     assert result.exit_code == 0, result.output
     return result.output.split()[1]
@@ -39,7 +39,7 @@ def test_a_agent_playbook_is_invoked_into_a_session_and_its_brief_is_the_callers
     invoked = stack.acme("agent-playbook", "invoke", agent_session_id, AGENT_PLAYBOOK["name"])
     assert invoked.exit_code == 0, invoked.output
     assert invoked.output == f"invoked {AGENT_PLAYBOOK['name']} 1 into {agent_session_id}\n"
-    steps = stack.acme("session", "steps", agent_session_id)
+    steps = stack.acme("agent-session", "steps", agent_session_id)
     assert steps.exit_code == 0, steps.output
     assert "message" in steps.output and "name: answer-from-the-ledger" in steps.output
 

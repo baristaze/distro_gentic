@@ -117,13 +117,14 @@
         "type": "object"
       },
       "Effort": {
-        "description": "How hard a model works on a call, as the wire names it: the\nproviders' own level, by value.",
+        "description": "How hard a model works on a call, as the wire names it: the\nproviders' own level, by value, held to theirs as `ProviderName` is.",
         "enum": [
           "none",
           "low",
           "medium",
           "high",
-          "xhigh"
+          "xhigh",
+          "max"
         ],
         "title": "Effort",
         "type": "string"
@@ -202,7 +203,7 @@
             "items": {
               "$ref": "#/components/schemas/Effort"
             },
-            "maxItems": 5,
+            "maxItems": 6,
             "title": "Efforts",
             "type": "array"
           },
@@ -713,7 +714,7 @@
         "type": "object"
       },
       "ProviderName": {
-        "description": "A model provider, as the wire names it: the providers' own name, by\nvalue.",
+        "description": "A model provider, as the wire names it: the providers' own name, by\nvalue. A wire type lives in this layer, so the providers' enum is\nrepeated here, and a test holds the two to the same values.",
         "enum": [
           "anthropic",
           "openai"

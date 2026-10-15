@@ -19,7 +19,8 @@ from acme.services.api.types.common import RequestBody, View
 
 class ProviderName(StrEnum):
     """A model provider, as the wire names it: the providers' own name, by
-    value."""
+    value. A wire type lives in this layer, so the providers' enum is
+    repeated here, and a test holds the two to the same values."""
 
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
@@ -27,13 +28,14 @@ class ProviderName(StrEnum):
 
 class Effort(StrEnum):
     """How hard a model works on a call, as the wire names it: the
-    providers' own level, by value."""
+    providers' own level, by value, held to theirs as `ProviderName` is."""
 
     NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     XHIGH = "xhigh"
+    MAX = "max"
 
 
 Name = Annotated[str, StringConstraints(pattern=NAME)]

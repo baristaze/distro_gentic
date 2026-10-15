@@ -131,18 +131,22 @@ async def test_a_products_kind_is_asked_for_granted_and_revoked_through_the_rout
         kai = await a_member(client, container, org_id, "kai")
         mia = await a_member(client, container, org_id, "mia")
 
-        first = await ask(client, kai, kind=DOCK, resource_id=str(dock.id), payload={"bay": 3})
+        first = await ask(
+            client, kai, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 3}
+        )
         assert first.status_code == 201, first.text
         held = first.json()
         assert held["request"]["kind"] == DOCK and held["lease"]["fencing_token"] == 1
         assert hooks.asked == [UUID(held["request"]["id"])]
         assert hooks.started == [(UUID(held["request"]["id"]), 1)]
 
-        second = await ask(client, mia, kind=DOCK, resource_id=str(dock.id), payload={"bay": 4})
+        second = await ask(
+            client, mia, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 4}
+        )
         waits = second.json()
         assert second.status_code == 201 and waits["lease"] is None and waits["place"] == 1
-        line = await client.get(f"/v1/leases/resources/{dock.id}/line", headers=kai)
-        assert line.json()["resource"]["kind"] == DOCK
+        line = await client.get(f"/v1/leases/leasable-resources/{dock.id}/wait-line", headers=kai)
+        assert line.json()["leasable_resource"]["kind"] == DOCK
 
         revoked = await client.post(f"/v1/leases/{held['lease']['id']}/revoke", headers=owner)
         assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
@@ -152,7 +156,9 @@ async def test_a_products_kind_is_asked_for_granted_and_revoked_through_the_rout
         assert now["request"]["status"] == "granted" and now["lease"]["fencing_token"] == 2
         assert hooks.started[-1] == (UUID(waits["request"]["id"]), 2)
 
-        off_shape = await ask(client, kai, kind=DOCK, resource_id=str(dock.id), payload={"bay": 0})
+        off_shape = await ask(
+            client, kai, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 0}
+        )
         assert off_shape.status_code == 422, off_shape.text
         unknown = await ask(client, kai, kind="crane", labels=[])
         assert unknown.status_code == 422, unknown.text
@@ -171,14 +177,20 @@ async def test_a_products_check_refuses_an_ask_before_it_waits(tmp_path: Path) -
         dock = await a_dock(container, org_id)
         mia = await a_member(client, container, org_id, "mia")
 
-        refused = await ask(client, mia, kind=DOCK, resource_id=str(dock.id), payload={"bay": 2})
+        refused = await ask(
+            client, mia, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 2}
+        )
         assert refused.status_code == 403, refused.text
         assert refused.json()["error"]["code"] == "not_authorized"
-        line = await client.get(f"/v1/leases/resources/{dock.id}/line", headers=owner)
-        assert line.json()["requests"] == [] and line.json()["resource"]["lease_id"] is None
+        line = await client.get(f"/v1/leases/leasable-resources/{dock.id}/wait-line", headers=owner)
+        assert (
+            line.json()["requests"] == [] and line.json()["leasable_resource"]["lease_id"] is None
+        )
         assert hooks.asked == [], "the refused ask never reached a grant"
 
-        held = await ask(client, owner, kind=DOCK, resource_id=str(dock.id), payload={"bay": 2})
+        held = await ask(
+            client, owner, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 2}
+        )
         assert held.status_code == 201 and held.json()["lease"]["fencing_token"] == 1
         noop = await ask(client, mia, kind="noop", labels=[])
         assert noop.status_code == 201, "the check is the dock's alone"

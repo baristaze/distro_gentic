@@ -85,7 +85,9 @@ def agent(
     )
 
 
-async def enqueue(api: Stack, kind: PlacementWorkKind, payload: dict[str, Any], lane: str) -> WorkItem:
+async def enqueue(
+    api: Stack, kind: PlacementWorkKind, payload: dict[str, Any], lane: str
+) -> WorkItem:
     """An item as a producer will write it, with the fields a host reads of
     what it asks (`ceilings.ask_of`), on the lane placement gives it. It is
     landed in the queue directly: the payloads of today's kinds carry where

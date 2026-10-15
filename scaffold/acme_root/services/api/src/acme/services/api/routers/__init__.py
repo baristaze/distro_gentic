@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from importlib import import_module
 
 from fastapi import APIRouter
+from fastapi.routing import APIRoute
 
 from acme.services.api.realtime import socket
 from acme.services.api.routers import (
@@ -61,8 +62,15 @@ def all_routers(namespaces: Sequence[str] = ()) -> list[APIRouter]:
 
 
 def tags() -> list[dict[str, str]]:
-    """Each hosted namespace's tag, described by its router module's docstring."""
+    """Each hosted namespace's tag, described by its router module's docstring:
+    the module that defines its first route, which a product's namespace
+    declares outside this package."""
     return [
-        {"name": name, "description": inspect.getdoc(import_module(f"{__name__}.{name}")) or ""}
+        {"name": name, "description": inspect.getdoc(import_module(_module_of(name))) or ""}
         for name in HOSTED
     ]
+
+
+def _module_of(name: str) -> str:
+    route = HOSTED[name][0].routes[0]
+    return route.endpoint.__module__ if isinstance(route, APIRoute) else f"{__name__}.{name}"

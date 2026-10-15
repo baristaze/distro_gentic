@@ -32,7 +32,9 @@ async def test_a_declared_namespaces_purge_runs_before_the_purge_it_names(
     assert isinstance(parcels, Parcels)
     loop = build_loop(container)
     order = list(loop._purges)  # pyright: ignore[reportPrivateUsage]
-    assert order.index(PARCELS) == order.index("events") - 1, "just before the events' purge"
+    assert order.index(PARCELS) == order.index("change_events") - 1, (
+        "just before the change events' purge"
+    )
 
     # A team org deleted past its retention, with a parcel, and an api key
     # whose making its stream records.

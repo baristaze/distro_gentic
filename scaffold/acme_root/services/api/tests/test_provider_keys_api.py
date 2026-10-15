@@ -22,7 +22,7 @@ ROTATED = "sk-ant-the-tenants-next-key-9876543210"
 def container(tmp_path: Path) -> AppContainer:
     """Beside the scripted providers, which stand in for every model, the
     probe's twin takes every key."""
-    return build_container(tmp_path, model_providers="scripted")
+    return build_container(tmp_path, llm_providers="scripted")
 
 
 async def test_a_key_is_written_and_never_read_back_and_its_status_is_shown(

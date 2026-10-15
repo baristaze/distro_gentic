@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator
 
 from acme.om.base import FrozenMapping, OmBase
-from acme.om.evidence.types.provenance import Dependency, ToolOutputRef
+from acme.om.evidence.types.provenance import ArtifactRef, Dependency
 from acme.om.evidence.types.record import NAME, VERSION, RunImage, RunOutcome
 
 SCHEMA = 1
@@ -102,7 +102,7 @@ class EndLine(OmBase):
     outcome: RunOutcome
     finished_at: datetime
     metrics: FrozenMapping = Field(default_factory=dict, validate_default=True)
-    artifacts: tuple[ToolOutputRef, ...] = ()
+    artifacts: tuple[ArtifactRef, ...] = ()
     abort: str | None = Field(default=None, min_length=1, max_length=500)
 
 

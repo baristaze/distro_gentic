@@ -470,7 +470,8 @@ export interface components {
         /**
          * ProviderName
          * @description A model provider, as the wire names it: the providers' own name, by
-         *     value.
+         *     value. A wire type lives in this layer, so the providers' enum is
+         *     repeated here, and a test holds the two to the same values.
          * @enum {string}
          */
         ProviderName: "anthropic" | "openai";

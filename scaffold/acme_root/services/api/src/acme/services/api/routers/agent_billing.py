@@ -67,7 +67,7 @@ async def approve_call(
 
 
 @router.post(
-    "/budgets/{spend_budget_id}/raises", response_model=SpendLedgerEntryView, status_code=201
+    "/spend-budgets/{spend_budget_id}/raises", response_model=SpendLedgerEntryView, status_code=201
 )
 async def raise_once(
     ctx: Ctx,

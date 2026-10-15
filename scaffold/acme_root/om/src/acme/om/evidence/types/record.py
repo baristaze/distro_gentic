@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from acme.om.base import Created, FrozenMapping, Identifiable, OmBase
-from acme.om.evidence.types.provenance import Dependency, Provenance, ToolOutputRef, weakest
+from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance, weakest
 
 NAME = r"^[a-z][a-z0-9_.-]{0,99}$"
 """A check's name, and a kind's."""
@@ -80,7 +80,7 @@ class ExecutionRecord(Identifiable, Created):
     finished_at: datetime
     outcome: RunOutcome
     cases: CaseTally = Field(default_factory=CaseTally)
-    artifacts: tuple[ToolOutputRef, ...] = ()
+    artifacts: tuple[ArtifactRef, ...] = ()
     dependencies: tuple[Dependency, ...] = ()
     abort: str | None = Field(default=None, min_length=1, max_length=500)
 

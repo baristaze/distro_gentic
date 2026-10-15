@@ -115,7 +115,7 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
     platform.anthropic.add(
         reply(
             said("Let me read."),
-            calls(kinds.READ_SESSION, "their_session", agent_session_id=str(theirs)),
+            calls(kinds.READ_AGENT_SESSION, "their_session", agent_session_id=str(theirs)),
             calls(kinds.READ_WAIT, "their_wait", agent_session_id=str(theirs)),
             calls(
                 kinds.READ_AGENT_PROJECT,
@@ -127,16 +127,18 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
                 "their_agent_automation",
                 agent_automation_id=str(their_agent_automation),
             ),
-            calls(kinds.READ_SESSION, "deleted", agent_session_id=str(deleted)),
-            calls(kinds.LIST_SESSIONS, "sessions", limit=50),
+            calls(kinds.READ_AGENT_SESSION, "deleted", agent_session_id=str(deleted)),
+            calls(kinds.LIST_AGENT_SESSIONS, "sessions", limit=50),
             calls(
-                kinds.LIST_SESSIONS, "by_agent_project", agent_project_id=str(their_agent_project)
+                kinds.LIST_AGENT_SESSIONS,
+                "by_agent_project",
+                agent_project_id=str(their_agent_project),
             ),
             calls(kinds.LIST_AGENT_PROJECTS, "agent_projects", limit=50),
             calls(kinds.LIST_AGENT_AUTOMATIONS, "agent_automations", limit=50),
         ),
         reply(
-            calls(kinds.READ_SESSION, "our_session", agent_session_id=str(ours)),
+            calls(kinds.READ_AGENT_SESSION, "our_session", agent_session_id=str(ours)),
             calls(kinds.READ_WAIT, "our_wait", agent_session_id=str(ours)),
             calls(
                 kinds.READ_AGENT_PROJECT,
@@ -195,7 +197,7 @@ async def test_each_reader_reads_only_the_asking_persons_tenant(
 
 
 def from_the_read(use_id: str) -> Later:
-    """The assistant's answer, made from what read_session answered and from
+    """The assistant's answer, made from what read_agent_session answered and from
     nothing else: a held call the read did not carry is in no answer."""
 
     def turn(call: ModelCall) -> ModelReply:
@@ -242,7 +244,7 @@ async def test_the_assistant_explains_a_held_call_from_what_it_read(
     asking = await a_session(platform, platform.owner, kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, f"Why is session {held} parked?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_SESSION, "use_read", agent_session_id=str(held))),
+        reply(calls(kinds.READ_AGENT_SESSION, "use_read", agent_session_id=str(held))),
         from_the_read("use_read"),
     )
 

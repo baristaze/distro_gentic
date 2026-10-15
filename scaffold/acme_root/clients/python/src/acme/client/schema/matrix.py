@@ -13,7 +13,7 @@ from . import language_models
 class Effort(StrEnum):
     """
     How hard a model works on a call, as the wire names it: the
-    providers' own level, by value.
+    providers' own level, by value, held to theirs as `ProviderName` is.
     """
 
     none = 'none'
@@ -21,6 +21,7 @@ class Effort(StrEnum):
     medium = 'medium'
     high = 'high'
     xhigh = 'xhigh'
+    max = 'max'
 
 
 class Region(RootModel[str]):
@@ -108,7 +109,8 @@ class MatrixStatus(StrEnum):
 class ProviderName(StrEnum):
     """
     A model provider, as the wire names it: the providers' own name, by
-    value.
+    value. A wire type lives in this layer, so the providers' enum is
+    repeated here, and a test holds the two to the same values.
     """
 
     anthropic = 'anthropic'
@@ -197,7 +199,7 @@ class FillBody(BaseModel):
     )
     context_window: Annotated[int, Field(gt=0, title='Context Window')]
     effort: Effort | None = None
-    efforts: Annotated[list[Effort] | None, Field(max_length=5, title='Efforts')] = None
+    efforts: Annotated[list[Effort] | None, Field(max_length=6, title='Efforts')] = None
     eligibility: EligibilityBody | None = None
     max_output_tokens: Annotated[int, Field(gt=0, title='Max Output Tokens')]
     model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]

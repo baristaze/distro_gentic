@@ -46,13 +46,13 @@ from acme.om.work.types.work_item import WorkStatus
 # answers a record's shape, never a session's content, and bounds its list.
 
 SESSION_SCAN = 100
-"""The root sessions one list_sessions call reads at most, newest first,
+"""The root sessions one list_agent_sessions call reads at most, newest first,
 each with the sub-agents under it, before it filters by status, park reason,
 and agent project: the call stays one read of a page, a read of each tree's
 children, and at most a lookup of an agent project for each session it reads, and
 its answer says where to read on."""
 RUNS_MAX = 20  # an agent automation's recent runs one read answers at most
-CHILDREN_MAX = 20  # the sub-agents read_session answers at most
+CHILDREN_MAX = 20  # the sub-agents read_agent_session answers at most
 CHILDREN_PAGE = 100  # the sub-agents of one parent a tree's read takes at a time
 HISTORY_PAGE = 200  # steps one read of a history takes
 
@@ -139,7 +139,7 @@ class ReadSessionImpl(NativeToolImpl):
     it; a park on its sub-agents answers them."""
 
     SPEC = ToolSpec(
-        name=kinds.READ_SESSION,
+        name=kinds.READ_AGENT_SESSION,
         description=(
             "Reads where a session of the tenant stands: its kind, title, agent project, who "
             "started it, whether it is pending, running, parked, or idle, why it is parked "
@@ -258,7 +258,7 @@ class ListSessionsImpl(NativeToolImpl):
     tree that would pass the limit, unless that tree comes first."""
 
     SPEC = ToolSpec(
-        name=kinds.LIST_SESSIONS,
+        name=kinds.LIST_AGENT_SESSIONS,
         description=(
             "Lists the tenant's sessions, newest first: each one's id, title, kind, "
             "status, park reason, who started it, and when. Filter by status, by park reason "
@@ -533,7 +533,7 @@ class ReadAgentProjectImpl(NativeToolImpl):
         name=kinds.READ_AGENT_PROJECT,
         description=(
             "Reads one agent project of the tenant: its name, the repository its work lands on, "
-            "and who made it when. Its sessions are list_sessions with its agent_project_id."
+            "and who made it when. Its sessions are list_agent_sessions with its agent_project_id."
         ),
         input_model=AgentProjectInput,
         output_model=AgentProjectRead,

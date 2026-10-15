@@ -10,6 +10,7 @@ import pytest
 
 from acme.infra.agent_root import AGENT_UNSAFE_IN_CLOUD
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.infra.base import new_id
 from acme.infra.impl.configured import InfraConfiguredImpl, UnsafeConfiguration
 from acme.infra.impl.local import InfraLocalImpl
@@ -92,7 +93,8 @@ def test_the_keys_root_comes_from_settings_and_refuses_another_shape(tmp_path: P
             "account",
             ["workspaces=account(acme-agent, {root})", "transport=local(acme-agent)"],
         ),
-        ("container", ["workspaces=container(python:3.14-slim)", "transport=container"]),
+        # The platform's default image, which holds `git`.
+        ("container", [f"workspaces=container({DEFAULT_IMAGE})", "transport=container"]),
         ("vm", ["workspaces=vm(template:_images/ubuntu-lts)", "transport=vm"]),
     ],
 )

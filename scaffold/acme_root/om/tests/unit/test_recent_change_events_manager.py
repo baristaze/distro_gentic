@@ -49,9 +49,13 @@ async def test_the_recent_read_pages_back_from_the_head_to_the_floor(
     assert seqs(await manager.get_recent_change_events(ctx, None, 1000)) == [7, 6, 5, 4, 3]
     # Every page is the caller's own: the other tenant's longer stream and
     # untrimmed bottom never show, at the head or paging back.
-    assert all(e.org_id == ctx.org_id for e in await manager.get_recent_change_events(ctx, 1000, 1000))
+    assert all(
+        e.org_id == ctx.org_id for e in await manager.get_recent_change_events(ctx, 1000, 1000)
+    )
     assert seqs(await manager.get_recent_change_events(other, None, 1000)) == list(range(9, 0, -1))
-    assert all(e.org_id == other.org_id for e in await manager.get_recent_change_events(other, 3, 1000))
+    assert all(
+        e.org_id == other.org_id for e in await manager.get_recent_change_events(other, 3, 1000)
+    )
     assert await manager.get_recent_change_events(context(), None, 10) == []
 
 

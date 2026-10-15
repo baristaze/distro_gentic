@@ -111,7 +111,9 @@ def _render_lane(payload: RenderPayload) -> str:
     return batch_lane(payload.pool_id)
 
 
-RENDER_KIND = PlacedKindSpec(RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH)
+RENDER_KIND = PlacedKindSpec(
+    RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH
+)
 BATCH_CLAIMANT = ClaimantKindSpec(
     BATCH, lambda node: ((batch_lane(node.pool_id), (RENDER,)),), prefix="bat_"
 )
@@ -789,9 +791,7 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
             platform_root_options=PlatformRootOptions(product_kinds=taken),
         )
     misnamed = ProductKinds(
-        resources=lambda _managers: (
-            ProductResourceKind("Dock", NoopLeasableResourceKindImpl()),
-        )
+        resources=lambda _managers: (ProductResourceKind("Dock", NoopLeasableResourceKindImpl()),)
     )
     with pytest.raises(ValueError, match="snake case"):
         build_platform_managers(

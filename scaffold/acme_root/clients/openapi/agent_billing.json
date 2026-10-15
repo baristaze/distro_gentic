@@ -766,7 +766,7 @@
         ]
       }
     },
-    "/v1/budgets/{spend_budget_id}/raises": {
+    "/v1/spend-budgets/{spend_budget_id}/raises": {
       "post": {
         "description": "The budget raised for the window open now; its own amount is\nunchanged. The sessions parked on a budget run again.",
         "operationId": "raise_once",

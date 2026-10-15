@@ -42,7 +42,7 @@ class Dependency(OmBase):
     provenance: Provenance
 
 
-class ToolOutputRef(OmBase):
+class ArtifactRef(OmBase):
     """An artifact an execution made: its name, the hash of its bytes, and
     what made it. The bytes are in the object store, never here."""
 

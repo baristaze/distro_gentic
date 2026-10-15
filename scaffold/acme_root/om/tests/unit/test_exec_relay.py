@@ -944,7 +944,10 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
 
     for run, parked_at in ((waiting, first), (offline, loop.clock())):
         assert run.end is RunEnd.PARKED and run.park is not None, "never ended errored"
-        assert (run.park.reason, run.park.unlock) == (ParkReason.LEASABLE_RESOURCE, "workspace")
+        assert (run.park.reason, run.park.unlock) == (
+            ParkReason.LEASABLE_RESOURCE,
+            "agent_workspace",
+        )
         assert run.park.retry_at is not None and run.park.retry_at > parked_at, "it asks again"
     assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
 

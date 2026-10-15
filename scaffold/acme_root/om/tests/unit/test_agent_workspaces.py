@@ -137,7 +137,7 @@ async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_th
     run = await one_loop(loop, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None
-    assert run.park.reason is ParkReason.LEASABLE_RESOURCE and run.park.unlock == "workspace"
+    assert run.park.reason is ParkReason.LEASABLE_RESOURCE and run.park.unlock == "agent_workspace"
     assert run.park.retry_at is not None and run.park.retry_at > loop.clock()
     assert loop.anthropic.calls == [], "refused before the first model call"
     assert provider(loop).live == set(), "no weaker place, and no place at all, was made"
@@ -316,7 +316,7 @@ async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for
     run = await one_loop(loop, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None and loop.anthropic.calls == []
-    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "workspace")
+    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "agent_workspace")
     assert git.cuts == [], "nothing merged or cut"
 
 
@@ -344,7 +344,7 @@ async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_perso
     lost = await one_loop(loop, agent_session_id, "Go on.")
 
     assert lost.end is RunEnd.PARKED and lost.park is not None
-    assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "workspace")
+    assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "agent_workspace")
     assert len(loop.anthropic.calls) == calls, "it failed before the first model call"
     assert git.cuts == [], "nothing restarted from the default branch"
     assert provider(loop).live == set()

@@ -73,14 +73,18 @@ def told(park_alerts: tuple[ParkAlert, ...]) -> set[tuple[UUID, str]]:
     return {(n.recipient, n.channel) for n in park_alerts}
 
 
-DOCUMENT = Path(__file__).resolve().parents[3] / "clients" / "typescript" / "openapi.json"
-"""The API's committed document: every route it serves."""
+DOCUMENTS = Path(__file__).resolve().parents[3] / "clients" / "openapi"
+"""The API's committed documents, one a namespace: every route it serves."""
 
 
 def routed(park_alerts: Iterable[ParkAlert]) -> bool:
     """Every link the park alerts carry is a route the API serves, each
     path parameter filled."""
-    paths = json.loads(DOCUMENT.read_text())["paths"]
+    paths = [
+        path
+        for document in sorted(DOCUMENTS.glob("*.json"))
+        for path in json.loads(document.read_text()).get("paths", {})
+    ]
     routes = [re.compile(re.sub(r"\{[^/}]+\}", "[^/]+", path)) for path in paths]
     return all(any(route.fullmatch(n.link) for route in routes) for n in park_alerts if n.link)
 
@@ -165,7 +169,7 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
     # The link is the budget's amount, and the text names the budget.
-    link = f"/v1/budgets/{budget.id}/amount"
+    link = f"/v1/spend-budgets/{budget.id}/amount"
     assert {(n.action, n.link) for n in notified} == {("raise_budget", link)}
     assert all(str(budget.id) in n.text for n in notified)
     assert routed(notified)

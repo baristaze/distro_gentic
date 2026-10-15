@@ -178,7 +178,7 @@ def message_link(agent_session_id: UUID) -> str:
 
 
 def budget_link(spend_budget_id: UUID) -> str:
-    return f"/v1/budgets/{spend_budget_id}/amount"
+    return f"/v1/spend-budgets/{spend_budget_id}/amount"
 
 
 def approval_link(agent_session_id: UUID) -> str:

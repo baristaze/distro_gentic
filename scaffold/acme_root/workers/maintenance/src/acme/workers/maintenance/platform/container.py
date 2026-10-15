@@ -258,18 +258,18 @@ class WorkerPlatform:
         platform: list[tuple[str, PurgeStep, str | None]] = [
             # Its validation policies, then its runs, validations, and
             # hypotheses and findings under the purge login.
-            ("evidence", managers.evidence.purge_tenant, "artifacts"),
-            ("placement", managers.placement.purge_tenant, "artifacts"),
-            ("hosts", managers.hosts.purge_tenant, "artifacts"),
-            ("validation_sessions", managers.platform_agents.purge_tenant, "artifacts"),
+            ("evidence", managers.evidence.purge_tenant, "tool_outputs"),
+            ("placement", managers.placement.purge_tenant, "tool_outputs"),
+            ("hosts", managers.hosts.purge_tenant, "tool_outputs"),
+            ("validation_sessions", managers.platform_agents.purge_tenant, "tool_outputs"),
             # Its exec items with their output, its controls, its bindings.
-            ("exec_relay", managers.exec_relay.purge_tenant, "artifacts"),
-            ("agent_workspaces", managers.agent_workspaces.purge_tenant, "artifacts"),
+            ("exec_relay", managers.exec_relay.purge_tenant, "tool_outputs"),
+            ("agent_workspaces", managers.agent_workspaces.purge_tenant, "tool_outputs"),
             # Each session's agent project row, then the tenant's agent
             # projects; each session's retention snapshot, then the tenant's
             # policy, once its sessions' key versions are gone.
-            ("agent_projects", managers.agent_projects.purge_tenant, "budgets"),
-            ("retention", managers.retention.purge_tenant, "budgets"),
+            ("agent_projects", managers.agent_projects.purge_tenant, "spend_budgets"),
+            ("retention", managers.retention.purge_tenant, "spend_budgets"),
             ("agent_billing", self.agent_billing.purge_tenant, None),
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.

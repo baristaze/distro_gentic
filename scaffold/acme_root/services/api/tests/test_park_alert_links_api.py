@@ -49,7 +49,7 @@ ASSISTANT = AgentKind(
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
     # The scripted providers' key probe takes every key, so a key's link saves.
-    return build_container(tmp_path, agent_kinds=(ASSISTANT,), model_providers="scripted")
+    return build_container(tmp_path, agent_kinds=(ASSISTANT,), llm_providers="scripted")
 
 
 class Tenant:
@@ -251,7 +251,7 @@ async def test_a_budgets_link_answers_who_sets_budgets_alone(
     notified = await told(container, ajax, run)
     assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}
     (link,) = {n.link for n in notified}
-    assert link == f"/v1/budgets/{budget.id}/amount"
+    assert link == f"/v1/spend-budgets/{budget.id}/amount"
     raised = {"json": {"cost_micros": 5_000_000}}
     for refused in (Role.MEMBER, Role.VIEWER):
         answered = await follow(client, "PUT", link, {**ajax[refused], "If-Match": '"1"'}, **raised)

@@ -90,7 +90,7 @@ async def a_session_that_was_told(client: httpx.AsyncClient, owner: dict[str, st
 
 
 async def stream(client: httpx.AsyncClient, reader: dict[str, str], org_id: str) -> list[Any]:
-    answered = await client.get(f"/v1/admin/orgs/{org_id}/events?limit=200", headers=reader)
+    answered = await client.get(f"/v1/admin/orgs/{org_id}/change-events?limit=200", headers=reader)
     assert answered.status_code == 200, answered.text
     return answered.json()
 
@@ -292,7 +292,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     ).is_success
     standing = (await client.get(path, headers=reader)).json()
     assert standing["status"] == "parked"
-    assert (standing["park"]["reason"], standing["park"]["unlock"]) == ("budget", "raise")
+    assert (standing["park"]["reason"], standing["park"]["unlock"]) == ("spend_budget", "raise")
     # Its loop stays queued where it was: the cap is that lane's, not the
     # cap set on the lane its next loop goes to.
     assert (
@@ -367,7 +367,7 @@ async def test_the_agent_fleet_counts_carry_bounded_labels_alone(
     await a_session_that_was_told(client, owner)
     counts = await container.managers.placement_operator.agent_fleet_counts()
     assert {labels for count in counts.parked for labels in [count.labels]} >= {
-        ("budget", "under_1h"),
+        ("spend_budget", "under_1h"),
         ("person", "over_1d"),
     }
     assert [(c.labels, c.value) for c in counts.loops_ready] == [(("standard",), 1)]

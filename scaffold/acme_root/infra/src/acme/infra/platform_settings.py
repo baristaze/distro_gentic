@@ -1,13 +1,18 @@
 """The platform's infra settings, a section of their own that the
 guideline's `InfraSettings` takes in under its prefix and its file: the
-deployment a container workspace carries, the image pull's limit, a machine
-of the platform's cloud account, and the cloud pool."""
+image and the deployment a container workspace carries, the image pull's
+limit, a VM of the platform's cloud account, and the cloud pool."""
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
+
 
 class PlatformInfraSettings(BaseSettings):
+    # The image a container workspace runs: a session checks out and pushes
+    # its repository inside it, so the platform's default holds `git`.
+    agent_workspace_image: str = DEFAULT_IMAGE
     # Each container workspace carries the deployment's name, and a runner
     # holds only those that carry its own.
     agent_workspace_deployment: str = Field(default="acme-local", min_length=1)

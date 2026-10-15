@@ -39,7 +39,7 @@ the read of a result kept outside the window.
 names alone a tool whose toolset would give it more than it may call.
 Analysis runs commands and edits nothing, so it names `run_command`
 alone. The software engineer names `suggest_agent_knowledge` alone, the
-planner `read_session`, and the assistant its corpus search and its
+planner `read_agent_session`, and the assistant its corpus search and its
 policy draft. Each version's tools are the same set as before, and the
 registry renders by name, so each renders the same tool definitions,
 byte for byte, and keeps its version. A kind whose tools change is a new

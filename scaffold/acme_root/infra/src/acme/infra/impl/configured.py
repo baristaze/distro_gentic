@@ -242,8 +242,8 @@ class InfraConfiguredImpl(PlatformInfraRoot, AgentInfraRoot, InfraInterface):
             self._buckets.describe(),
             self._queues.describe(),
             self._secrets.describe(),
-            *self._agent_infra.describe(),
             *self._platform_infra.describe(),
+            *self._agent_infra.describe(),
             self._flags.describe(),
         ]
 

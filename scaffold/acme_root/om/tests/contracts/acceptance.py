@@ -20,7 +20,7 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, HiddenSuite, Scenario, Surface
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.inference import Inference, InferenceKind, Stance
-from acme.om.evidence.types.provenance import Provenance, ToolOutputRef
+from acme.om.evidence.types.provenance import ArtifactRef, Provenance
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
 from acme.om.evidence.types.validation import (
     ExecutionRequest,
@@ -175,7 +175,7 @@ class ScriptedRun:
         as its artifacts."""
         record = make_record(self.session, agent_step_id=new_id(), version=version)
         made = tuple(
-            ToolOutputRef(name=name, sha256=HASH, provenance=Provenance.REAL) for name in files
+            ArtifactRef(name=name, sha256=HASH, provenance=Provenance.REAL) for name in files
         )
         record = record.model_copy(update={"artifacts": (*record.artifacts, *made)})
         return await self.evidence.manager.record_run(self.ctx, record)

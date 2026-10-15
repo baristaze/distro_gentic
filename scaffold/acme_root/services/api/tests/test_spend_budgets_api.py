@@ -69,26 +69,26 @@ def breached(answer: SpendHold | Refusal, spend_budget_id: str) -> set[AmountUni
     return {b.unit for b in answer.breaches if str(b.spend_budget_id) == spend_budget_id}
 
 
-@pytest.mark.parametrize("kind", ["person", "project", "tenant"])
+@pytest.mark.parametrize("kind", ["person", "agent_project", "tenant"])
 async def test_an_owner_sets_a_token_budget_lists_it_and_the_gate_holds_calls_to_it(
     client: httpx.AsyncClient, container: AppContainer, kind: str
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     ctx = await funded(container, ajax.owner)
     agent_project_id = new_id()
-    key = {"person": str(ctx.user_id), "project": str(agent_project_id), "tenant": None}[kind]
+    key = {"person": str(ctx.user_id), "agent_project": str(agent_project_id), "tenant": None}[kind]
     body = {"scope_kind": kind, "scope_key": key, "window_kind": "day", "tokens": 3_000}
 
-    made = await client.post("/v1/budgets", headers=ajax.owner, json=body)
+    made = await client.post("/v1/spend-budgets", headers=ajax.owner, json=body)
 
     assert made.status_code == 201, made.text
     budget = made.json()
-    expected_key = {"person": key, "project": key, "tenant": str(ajax.org_id)}[kind]
+    expected_key = {"person": key, "agent_project": key, "tenant": str(ajax.org_id)}[kind]
     assert (budget["scope_kind"], budget["scope_key"]) == (kind, expected_key)
     assert (budget["window_kind"], budget["tokens"], budget["cost_micros"]) == ("day", 3_000, None)
-    listed = await client.get("/v1/budgets", headers=ajax.owner)
+    listed = await client.get("/v1/spend-budgets", headers=ajax.owner)
     assert [b["id"] for b in listed.json()] == [budget["id"]]
-    got = await client.get(f"/v1/budgets/{budget['id']}", headers=ajax.owner)
+    got = await client.get(f"/v1/spend-budgets/{budget['id']}", headers=ajax.owner)
     assert got.json() == budget
     past = await asked(container, ctx, 4_000, agent_project_id)
     assert breached(past, budget["id"]) == {AmountUnit.TOKENS}, "a call past it is refused"
@@ -109,7 +109,7 @@ async def test_a_budget_in_reference_cost_over_a_span_reads_back_as_set(
         "window_seconds": 3_600,
         "cost_micros": 5_000_000,
     }
-    made = await client.post("/v1/budgets", headers=ajax.owner, json=body)
+    made = await client.post("/v1/spend-budgets", headers=ajax.owner, json=body)
     assert made.status_code == 201, made.text
     assert (made.json()["window_seconds"], made.json()["cost_micros"]) == (3_600, 5_000_000)
 
@@ -118,7 +118,12 @@ async def test_a_budget_in_reference_cost_over_a_span_reads_back_as_set(
     "body",
     [
         {"scope_kind": "team", "scope_key": str(UUID(int=1)), "window_kind": "day", "tokens": 1},
-        {"scope_kind": "session", "scope_key": str(UUID(int=1)), "window_kind": "day", "tokens": 1},
+        {
+            "scope_kind": "agent_session",
+            "scope_key": str(UUID(int=1)),
+            "window_kind": "day",
+            "tokens": 1,
+        },
         {"scope_kind": "person", "window_kind": "day", "tokens": 1},
         {"scope_kind": "person", "scope_key": "someone", "window_kind": "day", "tokens": 1},
         {"scope_kind": "tenant", "window_kind": "day"},
@@ -132,9 +137,11 @@ async def test_a_budget_the_gate_would_not_hold_a_call_to_is_refused_whole(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     refused(
-        await client.post("/v1/budgets", headers=ajax.owner, json=body), 422, "validation_failed"
+        await client.post("/v1/spend-budgets", headers=ajax.owner, json=body),
+        422,
+        "validation_failed",
     )
-    assert (await client.get("/v1/budgets", headers=ajax.owner)).json() == []
+    assert (await client.get("/v1/spend-budgets", headers=ajax.owner)).json() == []
 
 
 async def test_the_usage_page_reads_what_the_money_gate_holds_and_settles(
@@ -145,7 +152,7 @@ async def test_the_usage_page_reads_what_the_money_gate_holds_and_settles(
     tenant counts it. A tenant with no account has held nothing."""
     ajax = await tenant(client, container, "ajax")
     bare = await client.post(
-        "/v1/budgets",
+        "/v1/spend-budgets",
         headers=ajax.owner,
         json={"scope_kind": "tenant", "window_kind": "day", "tokens": 9_000},
     )
@@ -178,16 +185,16 @@ async def test_a_member_sets_no_budget_and_raises_no_amount(
     mine = await context_of(container, them)
     own = {"scope_kind": "person", "scope_key": str(mine.user_id), "window_kind": "day"}
     refused(
-        await client.post("/v1/budgets", headers=them, json={**own, "tokens": 10**9}),
+        await client.post("/v1/spend-budgets", headers=them, json={**own, "tokens": 10**9}),
         403,
         "not_authorized",
     )
-    capped = await client.post("/v1/budgets", headers=ajax.owner, json={**own, "tokens": 10})
+    capped = await client.post("/v1/spend-budgets", headers=ajax.owner, json={**own, "tokens": 10})
     assert capped.status_code == 201, capped.text
-    url = f"/v1/budgets/{capped.json()['id']}/amount"
+    url = f"/v1/spend-budgets/{capped.json()['id']}/amount"
     raised = await client.put(url, headers={**them, "If-Match": '"1"'}, json={"tokens": 10**9})
     refused(raised, 403, "not_authorized")
-    listed = await client.get("/v1/budgets", headers=them)
+    listed = await client.get("/v1/spend-budgets", headers=them)
     assert [b["tokens"] for b in listed.json()] == [10], "one budget, at its amount"
 
 
@@ -198,28 +205,28 @@ async def test_another_tenant_reads_nothing_and_its_budgets_bind_nothing_here(
     bolt = await tenant(client, container, "bolt")
     owner = await funded(container, ajax.owner)
     made = await client.post(
-        "/v1/budgets",
+        "/v1/spend-budgets",
         headers=ajax.owner,
         json={"scope_kind": "tenant", "window_kind": "day", "tokens": 10**6},
     )
-    url = f"/v1/budgets/{made.json()['id']}"
+    url = f"/v1/spend-budgets/{made.json()['id']}"
 
     refused(await client.get(url, headers=bolt.owner), 404, "not_found")
     raised = await client.put(
         f"{url}/amount", headers={**bolt.owner, "If-Match": '"1"'}, json={"tokens": 1}
     )
     refused(raised, 404, "not_found")
-    assert (await client.get("/v1/budgets", headers=bolt.owner)).json() == []
+    assert (await client.get("/v1/spend-budgets", headers=bolt.owner)).json() == []
     theirs = {"scope_kind": "tenant", "scope_key": str(ajax.org_id), "window_kind": "day"}
     refused(
-        await client.post("/v1/budgets", headers=bolt.owner, json={**theirs, "tokens": 0}),
+        await client.post("/v1/spend-budgets", headers=bolt.owner, json={**theirs, "tokens": 0}),
         422,
         "validation_failed",
     )
     # A budget bolt keys on ajax's owner is bolt's: ajax's calls never meet it.
     keyed = {"scope_kind": "person", "scope_key": str(owner.user_id), "window_kind": "day"}
-    zero = await client.post("/v1/budgets", headers=bolt.owner, json={**keyed, "tokens": 0})
+    zero = await client.post("/v1/spend-budgets", headers=bolt.owner, json={**keyed, "tokens": 0})
     assert zero.status_code == 201, zero.text
     assert isinstance(await asked(container, owner, 1_000, None), SpendHold)
-    listed = await client.get("/v1/budgets", headers=ajax.owner)
+    listed = await client.get("/v1/spend-budgets", headers=ajax.owner)
     assert [b["id"] for b in listed.json()] == [made.json()["id"]]
