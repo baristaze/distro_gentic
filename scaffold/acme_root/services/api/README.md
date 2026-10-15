@@ -35,8 +35,10 @@ app, and `main.py` is the `acme-api` command, whose subcommands are
 A product built on Acme declares a namespace of its own once, in
 `product_api.py`: one `ProductApiNamespace` in `PRODUCT_API` names its
 routers and its service factory, over the managers its `ProductNamespace`
-in `acme.om.product_namespaces` builds. A router reaches the service
-through `gateway.platform_resolve.product_service`. So, whatever the
+in `acme.om.product_namespaces` builds, the platform's, and the live parts
+the container builds (`products.ProductLive`): the watch, which opens a
+live read, and the streams of the product's own kinds. A router reaches
+the service through `gateway.platform_resolve.product_service`. So, whatever the
 guideline's `arch-scaffold-entity` says, a product adds nothing to
 `HOSTED` in `routers/__init__.py`, to the services interface or its root,
 to `gateway/resolve.py`, or to `container.py`.

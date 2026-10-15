@@ -63,10 +63,14 @@ managers and its purges, each with the purge it runs before, go beside
 its kinds in `acme.om.product_namespaces`. Its routers and its service
 factory go beside its API in `acme.services.api.product_api`. The two are
 apart because the object model never imports the API: the maintenance
-worker reads the first, and the API reads both. A router names its
-service with `product_service`. A namespace served and never declared is
-refused at boot, and so is a name the platform hosts. No wiring file
-names a product's namespace.
+worker reads the first, and the API reads both. Its service is built over
+its managers, the platform's, and the live parts the API's container
+builds (`ProductLive`): the watch, and the streams of the product's own
+kinds, so a service that opens a live read or writes a kind of its own
+needs no edit of the platform's. A router names its service with
+`product_service`. A namespace served and never declared is refused at
+boot, and so is a name the platform hosts. No wiring file names a
+product's namespace.
 
 **A toolset's tools live in a module of their own**, under
 `platform_agents/tools/`, and their tests beside them.
