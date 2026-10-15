@@ -32,6 +32,10 @@ Minor; the renames are breaking, and no alias is left.
 - Breaking: the cloud pool's machines are VMs on every surface:
   `POST /v1/hosts/vm-enrollments`, `ACME_HOST_VM_SEED` and
   `ACME_HOST_VM_WORKSPACE`, `deployment/vms`, and `make vm-image` (#174).
+- Breaking: the cloud pool's tag is `acme:vm` (was `acme:machine`), and
+  its IAM condition reads it, so a deployment whose pool holds VMs, kept
+  disks, or a sealed image retags them or ends them before it takes this
+  release (#174).
 - Each namespace has its own OpenAPI document, generated types, and
   client module, and the platform's operator routes sit in its
   namespace routers (#174).
