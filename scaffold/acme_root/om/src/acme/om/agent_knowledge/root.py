@@ -66,7 +66,7 @@ class AgentKnowledgeLayer:
             inner,
             lambda: self._managers()[0],
             lambda: self._managers()[1].agent_sessions,
-            lambda: self._managers()[1].steps,
+            lambda: self._managers()[1].agent_steps,
         )
 
     def build(self, managers: PlatformManagers) -> AgentKnowledgeManagerInterface:

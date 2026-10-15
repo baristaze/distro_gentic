@@ -1,10 +1,9 @@
 """The window storage contract over Postgres, and what only the database
-holds: an artifact's record is written once, so the serving logins may read
+holds: a tool output's record is written once, so the serving logins may read
 and insert it and never rewrite or remove it, and the purge login, which
 takes it with its history, may read and remove it and nothing more."""
 
 import pytest
-from contracts.window_storage import WindowStorageContract
 from sqlalchemy import text
 
 from acme.om.storage.impl.pg_base import LoginSessions
@@ -15,6 +14,8 @@ from acme.om.storage.settings import MigrationSettings
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.postgres import WindowStoragePostgresImpl
 
+from contracts.window_storage import WindowStorageContract
+
 pytestmark = pytest.mark.integration
 
 
@@ -24,7 +25,7 @@ class TestWindowStoragePostgres(WindowStorageContract):
         return WindowStoragePostgresImpl(pg_sessions)
 
 
-async def test_only_the_purge_login_removes_an_artifact(
+async def test_only_the_purge_login_removes_an_tool_output(
     pg_sessions: LoginSessions, migration_settings: MigrationSettings
 ) -> None:
     """A deploy makes the logins again before every migration, which grants
@@ -32,7 +33,7 @@ async def test_only_the_purge_login_removes_an_artifact(
     to the serving logins after it, and the purge login keeps its reach."""
     settings = migration_settings
     await ensure_logins_everywhere(settings.master_databases(), settings.login_passwords())
-    privilege = text("SELECT has_table_privilege(:login, 'activity.artifacts', :privilege)")
+    privilege = text("SELECT has_table_privilege(:login, 'activity.tool_outputs', :privilege)")
     held: set[tuple[str, str]] = set()
     async with pg_sessions[DatabaseRole.ACTIVITY]() as db:
         for login in (RUNTIME_LOGIN, SYSTEM_LOGIN, PURGE_LOGIN):

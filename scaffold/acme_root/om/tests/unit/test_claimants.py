@@ -268,7 +268,7 @@ async def test_a_revoked_or_expired_claimant_credential_is_refused(
     with pytest.raises(NotFound):
         await hosts.revoke_host(owner, revoked.claimant_id)
 
-    # A rotated credential presented past its grace means two machines hold
+    # A rotated credential presented past its grace means two VMs hold
     # it: refused, and the claimant and every credential it holds end.
     copied = await a_node(hosts, owner, pool, "node-3")
     rotated = await hosts.rotate(request(), await identity_of(hosts, copied))

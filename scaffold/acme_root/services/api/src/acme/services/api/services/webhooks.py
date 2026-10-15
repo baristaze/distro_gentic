@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from acme.om.context import RequestContext
-from acme.services.api.types.webhooks import DeliveryReceivedView
+from acme.services.api.types.common import DeliveryReceivedView
 
 
 @dataclass(frozen=True)

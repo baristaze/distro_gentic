@@ -15,16 +15,23 @@ import secrets as tokens
 import shlex
 import subprocess
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import aioboto3
 import pytest
-from contracts.loops import ALLOWED, ASSISTANT, call, reply, said
-from contracts.platform_loops import PlatformLoop, platform_loop_over
-from contracts.tools import Command
 
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceProviderInterface,
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+)
+from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl, container_name
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.s3 import BucketsS3Impl
 from acme.infra.docker import docker
@@ -35,26 +42,21 @@ from acme.infra.keys import KeyServiceInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.workspaces import (
-    Durability,
-    EgressMode,
-    EgressPolicy,
-    IsolationMode,
-    IsolationSpec,
-    WorkspaceProviderInterface,
-)
-from acme.infra.workspaces.container import WorkspaceContainerImpl, container_name
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
+from acme.om.agent_steps.types.content import TextBlock
+from acme.om.agent_steps.types.header import LoopOutcome, SnapshotHeader
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.platform_root import build_platform_managers
-from acme.om.steps.types.content import TextBlock
-from acme.om.steps.types.header import LoopOutcome, SnapshotHeader
-from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tools.impl.snapshots import BUCKET, session_prefix
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
+
+from contracts.loops import ALLOWED, ASSISTANT, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
+from contracts.tools import Command
 
 IMAGE = "python:3.14-slim"
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -68,10 +70,10 @@ KEEPER = ASSISTANT.model_copy(
         "name": "keeper",
         "isolation": KEPT,
         "tools": (*ASSISTANT.tools, "run_command"),
-        "policy": PolicyLayer(
+        "policy": ToolPolicyLayer(
             rules=(
                 *ALLOWED.rules,
-                PolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
+                ToolPolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
             )
         ),
     }
@@ -131,14 +133,14 @@ class OnDocker(InfraLocalImpl):
     ) -> None:
         super().__init__(root)
         if keys is not None:
-            self._keys = keys
-        self.workspaces = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
+            self._agent_infra = replace(self._agent_infra, keys=keys)
+        self.workspaces = AgentWorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
         self.transport = TransportContainerImpl(
             root / "records", self.get_secrets(), BrokerNullImpl(), timedelta(seconds=120)
         )
         self.buckets = buckets
 
-    def get_workspaces(self) -> WorkspaceProviderInterface:
+    def get_agent_workspaces(self) -> AgentWorkspaceProviderInterface:
         return self.workspaces
 
     def get_transport(self) -> TransportInterface:
@@ -234,9 +236,9 @@ def a_runner(
     return loop, infra
 
 
-def printed(history: list[Step]) -> str:
+def printed(history: list[AgentStep]) -> str:
     """What the last command the loop ran printed."""
-    last = [step for step in history if step.type is StepType.TOOL_RESPONSE][-1]
+    last = [step for step in history if step.type is AgentStepType.TOOL_RESPONSE][-1]
     (part,) = last.as_tool_response().parts
     assert isinstance(part, TextBlock)
     return json.loads(part.text)["stdout"]
@@ -247,43 +249,43 @@ async def test_a_kept_session_resumes_on_the_tree_it_left_after_the_runner_resta
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     first, infra = a_runner(tmp_path / "first", storage, owner, minio)
-    session_id = await first.start(KEEPER.name)
+    agent_session_id = await first.start(KEEPER.name)
     try:
-        await first.say(session_id, "Note what you learned and install the tool.")
+        await first.say(agent_session_id, "Note what you learned and install the tool.")
         first.anthropic.add(
             reply(call("run_command", argv=["sh", "-c", WORK])),
             reply(call("run_command", argv=["sh", "-c", TREE])),
             reply(said("Noted and installed.")),
         )
-        ran = await first.loops.run(owner, session_id)
+        ran = await first.loops.run(owner, agent_session_id)
         assert ran.outcome is LoopOutcome.SUCCEEDED
-        history = await first.history(session_id)
+        history = await first.history(agent_session_id)
         left = printed(history)
         assert left.endswith("1.0\n"), left
-        (taken,) = [step for step in history if step.type is StepType.SNAPSHOTTED]
+        (taken,) = [step for step in history if step.type is AgentStepType.SNAPSHOTTED]
         assert isinstance(taken.header, SnapshotHeader)
         named = taken.header.snapshot
-        stored = await minio.list(owner.org_id, BUCKET, session_prefix(session_id), 10)
+        stored = await minio.list(owner.org_id, BUCKET, session_prefix(agent_session_id), 10)
         assert len(stored) == 1, "kept on MinIO"
         record = await first.platform.agent_workspaces.kept_snapshot(owner, named.id)
         assert record is not None and not record.on_host and record.hash == named.hash
-        name = container_name(session_id)
+        name = container_name(agent_session_id)
         shown = await docker("inspect", "--type", "container", name, bound=timedelta(seconds=20))
         assert not shown.ok, "released once its snapshot held it"
 
         # The runner restarts: nothing of the first root is held, and the
-        # workspace's volume is gone with its machine.
+        # workspace's volume is gone with its VM.
         removed = await docker("volume", "rm", "-f", name, bound=timedelta(seconds=60))
         assert removed.ok
         second, _ = a_runner(tmp_path / "second", storage, owner, minio, infra.get_keys())
-        await second.say(session_id, "Is the tool still there?")
+        await second.say(agent_session_id, "Is the tool still there?")
         second.anthropic.add(
             reply(call("run_command", argv=["sh", "-c", TREE])),
             reply(said("It is.")),
         )
-        resumed = await second.loops.run(owner, session_id)
+        resumed = await second.loops.run(owner, agent_session_id)
 
         assert resumed.outcome is LoopOutcome.SUCCEEDED
-        assert printed(await second.history(session_id)) == left, "the same tree, by hash"
+        assert printed(await second.history(agent_session_id)) == left, "the same tree, by hash"
     finally:
-        await first.managers.tools.purge_workspace(owner.org_id, session_id)
+        await first.managers.tools.purge_agent_workspace(owner.org_id, agent_session_id)

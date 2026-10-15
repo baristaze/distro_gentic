@@ -16,7 +16,6 @@ from uuid import UUID
 
 import httpx
 from api_support import build_container, seed_request
-from contracts.tools import stand_ins
 from fastapi import FastAPI
 
 from acme.apps.host.agent import HostAgent
@@ -27,14 +26,14 @@ from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
 from acme.client.client import ApiClient
-from acme.client.types import IsolationMode
+from acme.client.types.hosts import IsolationMode
+from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
+from acme.infra.agent_workspaces import IsolationMode as ProviderMode
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
-from acme.infra.workspaces import IsolationMode as ProviderMode
-from acme.infra.workspaces import WorkspaceProviderInterface
-from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
@@ -43,6 +42,8 @@ from acme.om.storage.root import StorageInterface
 from acme.om.storage.settings import MigrationSettings
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
+
+from contracts.tools import stand_ins
 
 
 class Streamed(httpx.AsyncBaseTransport):
@@ -130,7 +131,7 @@ class Dated(httpx.AsyncBaseTransport):
 
 OPEN_EGRESS = {"mode": "open", "hosts": []}
 SESSION_TOOLS = stand_ins("read_log", "run_tests")
-"""What `make_session` names, so the agents manager classes every tool it
+"""What `make_agent_session` names, so the agents manager classes every tool it
 offers."""
 DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
 
@@ -173,7 +174,7 @@ def failing(name: str) -> Probe:
 
 
 def probes(*modes: IsolationMode, metadata_answers: bool = False) -> Probes:
-    """The startup's own probes of the machine, each passing, and the
+    """The startup's own probes of the VM, each passing, and the
     platform's real one; the isolation probes pass for `modes` alone, and
     the metadata probe fails only when `metadata_answers`."""
     return Probes(
@@ -281,7 +282,7 @@ async def directory_host(
         ),
         IsolationMode.directory,
         {ProviderMode.HOST: transport},
-        {ProviderMode.HOST: WorkspaceHostImpl(root)},
+        {ProviderMode.HOST: AgentWorkspaceHostImpl(root)},
         servers=servers,
     )
     return host, root
@@ -310,7 +311,7 @@ async def started_host(
     ceilings: Ceilings,
     mode: IsolationMode,
     transports: Mapping[ProviderMode, TransportInterface],
-    workspaces: Mapping[ProviderMode, WorkspaceProviderInterface],
+    workspaces: Mapping[ProviderMode, AgentWorkspaceProviderInterface],
     *,
     servers: HostServers | None = None,
 ) -> HostAgent:

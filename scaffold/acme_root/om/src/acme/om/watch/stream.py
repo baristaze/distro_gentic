@@ -17,7 +17,7 @@ from acme.om.watch.types.live import LiveStream, Seen
 
 class StreamServiceInterface(StreamSinkInterface):
     @abstractmethod
-    async def read(self, session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
+    async def read(self, agent_session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
         """The session's open streams, each with the parts after the last
         `seen` names for it, or every part it still holds for a stream
         `seen` does not name. A late viewer reads the buffered tail. Only

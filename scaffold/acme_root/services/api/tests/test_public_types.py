@@ -22,12 +22,12 @@ def test_a_view_that_carries_a_minted_secret_is_named_issued(tmp_path: Path) -> 
     )
     assert carrying == [
         "IssuedApiKeyView",
+        "IssuedAuthSessionView",
         "IssuedClaimantCredentialView",
         "IssuedEnrollmentTokenView",
         "IssuedHostCredentialView",
         "IssuedLoginView",
         "IssuedOperatorTokenView",
-        "IssuedSessionView",
         "IssuedTicketView",
         "IssuedTotpSecretView",
     ]

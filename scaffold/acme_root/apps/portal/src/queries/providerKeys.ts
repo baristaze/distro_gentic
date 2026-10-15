@@ -2,7 +2,7 @@
 // save and never comes back: the reads answer the record alone, who added
 // it, when, its state, and when it was last used.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProviderKeyView, ProviderName } from "@acme/client";
+import type { matrix, trust } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
@@ -13,7 +13,7 @@ const PAGE_SIZE = 200;
 export function useProviderKeys() {
   return useQuery({
     queryKey: keys.providerKeys.list(PAGE_SIZE),
-    queryFn: ({ signal }) => api.get<ProviderKeyView[]>(`/v1/provider-keys?limit=${PAGE_SIZE}`, { signal }),
+    queryFn: ({ signal }) => api.get<trust.ProviderKeyView[]>(`/v1/provider-keys?limit=${PAGE_SIZE}`, { signal }),
   });
 }
 
@@ -22,8 +22,8 @@ export function useProviderKeys() {
 export function useSaveKey() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ provider, value }: { provider: ProviderName; value: string }) =>
-      api.request<ProviderKeyView>("PUT", `/v1/provider-keys/${encodeURIComponent(provider)}`, { value }),
+    mutationFn: ({ provider, value }: { provider: matrix.ProviderName; value: string }) =>
+      api.request<trust.ProviderKeyView>("PUT", `/v1/provider-keys/${encodeURIComponent(provider)}`, { value }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: keys.providerKeys.all }),

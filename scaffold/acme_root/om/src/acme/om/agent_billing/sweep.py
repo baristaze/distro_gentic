@@ -8,13 +8,13 @@ its spend counts nowhere."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.budgets.types.hold import Bill, Hold
 from acme.om.context import RequestContext
+from acme.om.spend_budgets.types.spend_hold import Bill, SpendHold
 
 
 class ProviderBillsInterface(ABC):
     @abstractmethod
-    async def retrieve(self, org_id: UUID, hold: Hold) -> Bill | None:
+    async def retrieve(self, org_id: UUID, hold: SpendHold) -> Bill | None:
         """What the provider says it billed for the call `hold` covers: the
         usage, priced at list price, or that it billed nothing, with the
         proof. None when it cannot say."""
@@ -29,7 +29,7 @@ class ProviderBillsUnknownImpl(ProviderBillsInterface):
     fact: every hold the sweep finds counts whole, which never counts less
     than the provider billed."""
 
-    async def retrieve(self, org_id: UUID, hold: Hold) -> Bill | None:
+    async def retrieve(self, org_id: UUID, hold: SpendHold) -> Bill | None:
         return None
 
     def describe(self) -> str:
@@ -39,7 +39,7 @@ class ProviderBillsUnknownImpl(ProviderBillsInterface):
 class HoldSweepInterface(ABC):
     @abstractmethod
     async def settle_open(self, rctx: RequestContext) -> int:
-        """Platform-internal: the sweep, across tenants, once a pass, under a
+        """System-internal: the sweep, across tenants, once a pass, under a
         service context minted for each tenant from `rctx`. Each hold open
         longer than any call it covers can last, and that no settlement has
         closed, settles once through the gate: at the bill the provider

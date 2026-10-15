@@ -14,28 +14,30 @@ from acme.om.storage.impl.memory_base import HasId, MemoryStorageBase, MemoryTab
 class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
-        self._workspaces: MemoryTable[AgentSessionWorkspace] = {}
+        self._agent_workspaces: MemoryTable[AgentSessionWorkspace] = {}
         self._allowlists: MemoryTable[EgressAllowlist] = {}
         self._credentials: MemoryTable[RepositoryCredential] = {}
         self._snapshots: MemoryTable[KeptSnapshot] = {}
 
-    async def read_workspace(self, org_id: UUID, session_id: UUID) -> AgentSessionWorkspace | None:
-        return self._get(self._workspaces, org_id, session_id)
+    async def read_workspace(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionWorkspace | None:
+        return self._get(self._agent_workspaces, org_id, agent_session_id)
 
     async def create_workspace(self, org_id: UUID, workspace: AgentSessionWorkspace) -> bool:
         async with self._lock:
-            return self._insert(self._workspaces, org_id, workspace)
+            return self._insert(self._agent_workspaces, org_id, workspace)
 
     async def write_workspace(
         self, org_id: UUID, workspace: AgentSessionWorkspace, expected_version: int
     ) -> None:
         async with self._lock:
-            found = self._get(self._workspaces, org_id, workspace.id)
+            found = self._get(self._agent_workspaces, org_id, workspace.id)
             if found is None or found.version != expected_version:
                 raise PreconditionFailed(
                     f"workspace {workspace.id} is no longer at version {expected_version}"
                 )
-            self._put(self._workspaces, org_id, workspace)
+            self._put(self._agent_workspaces, org_id, workspace)
 
     async def read_allowlist(self, org_id: UUID, agent_project_id: UUID) -> EgressAllowlist | None:
         found = [
@@ -116,32 +118,36 @@ class AgentWorkspaceStorageMemoryImpl(MemoryStorageBase, AgentWorkspaceStorageIn
         return self._get(self._snapshots, org_id, snapshot_id)
 
     async def read_snapshots(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[KeptSnapshot]:
-        found = [row for row in self._rows(self._snapshots, org_id) if row.session_id == session_id]
+        found = [
+            row
+            for row in self._rows(self._snapshots, org_id)
+            if row.agent_session_id == agent_session_id
+        ]
         return sorted(found, key=lambda row: (row.created_at, row.id))[:limit]
 
-    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+    async def purge_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
         async with self._lock:
             gone = [
                 row.id
                 for row in self._rows(self._snapshots, org_id)
-                if row.session_id == session_id
+                if row.agent_session_id == agent_session_id
             ]
             for row_id in gone:
                 del self._snapshots[row_id]
             return len(gone)
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> bool:
         async with self._lock:
-            if self._get(self._workspaces, org_id, session_id) is None:
+            if self._get(self._agent_workspaces, org_id, agent_session_id) is None:
                 return False
-            del self._workspaces[session_id]
+            del self._agent_workspaces[agent_session_id]
             return True
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
-            purged = self._purged(self._workspaces, org_id, limit)
+            purged = self._purged(self._agent_workspaces, org_id, limit)
             purged += self._purged(self._allowlists, org_id, limit)
             return purged + self._purged(self._snapshots, org_id, limit)
 

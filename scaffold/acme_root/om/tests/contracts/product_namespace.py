@@ -1,13 +1,13 @@
 """A product's namespace as a suite declares it beside its kinds: `parcels`,
 a tenant's parcels held in this process, and its purge of a deleted tenant,
-which runs before the purge of the tenant's events and records how many of
-them it found still there."""
+which runs before the purge of the tenant's change events and records how
+many of them it found still there."""
 
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from acme.om.change_events.storage import ChangeEventStorageInterface
 from acme.om.context import TenantContext
-from acme.om.events.storage import EventStorageInterface
 from acme.om.platform_root import (
     PlatformManagers,
     ProductNamespace,
@@ -24,9 +24,9 @@ name in the sweep."""
 @dataclass
 class Parcels:
     """The namespace's managers: each tenant's parcels, by name, and what
-    each purge of a tenant found of the tenant's events."""
+    each purge of a tenant found of the tenant's change events."""
 
-    events: EventStorageInterface
+    events: ChangeEventStorageInterface
     held: dict[UUID, list[str]] = field(default_factory=lambda: {})
     found: list[tuple[UUID, int]] = field(default_factory=lambda: [])
 
@@ -48,7 +48,7 @@ built: list[Parcels] = []
 
 
 def build_parcels(storage: StorageInterface, managers: PlatformManagers) -> Parcels:
-    parcels = Parcels(storage.get_event_storage())
+    parcels = Parcels(storage.get_change_event_storage())
     built.append(parcels)
     return parcels
 
@@ -56,7 +56,7 @@ def build_parcels(storage: StorageInterface, managers: PlatformManagers) -> Parc
 NAMESPACE = ProductNamespace(
     PARCELS,
     build_parcels,
-    purges=(ProductPurge(PARCELS, lambda parcels: parcels.purge_tenant, before="events"),),
+    purges=(ProductPurge(PARCELS, lambda parcels: parcels.purge_tenant, before="change_events"),),
 )
 
 NAMESPACES = ProductNamespaces((NAMESPACE,))

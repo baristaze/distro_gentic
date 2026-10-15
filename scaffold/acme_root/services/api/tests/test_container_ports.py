@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-from contracts.ports import open_ports
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_billing.gate import MoneyGateInterface
@@ -14,11 +13,13 @@ from acme.om.exceptions import UnsafeConfiguration
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.services.api.container import AppContainer
 
+from contracts.ports import open_ports
+
 
 def test_the_api_wires_the_money_gate(tmp_path: Path) -> None:
     container = AppContainer.for_tests(StorageMemoryImpl(), InfraLocalImpl(tmp_path))
     assert container.settings.environment == "test"
-    assert isinstance(container.managers.budget_gate, MoneyGateInterface)
+    assert isinstance(container.managers.spend_budget_gate, MoneyGateInterface)
 
 
 def test_the_api_outside_local_refuses_every_port_that_ships_a_gate_open(tmp_path: Path) -> None:

@@ -45,7 +45,7 @@ class AgentPlaybooksManagerInterface(ABC):
 
     @abstractmethod
     async def invoke(
-        self, ctx: TenantContext, session_id: UUID, name: str
+        self, ctx: TenantContext, agent_session_id: UUID, name: str
     ) -> AgentPlaybookInvocation:
         """Brings the latest version into a session, by a principal in
         person who may instruct it: its gates hold there from now on, and
@@ -55,7 +55,7 @@ class AgentPlaybooksManagerInterface(ABC):
 
     @abstractmethod
     async def invoke_version(
-        self, ctx: TenantContext, session_id: UUID, agent_playbook_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, agent_playbook_id: UUID
     ) -> AgentPlaybookInvocation:
         """Brings one version into a session as an agent automation's firing runs,
         under the context it runs as, which may instruct the session: as
@@ -96,7 +96,9 @@ class AgentPlaybooksManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def gates_of(self, ctx: TenantContext, session_id: UUID) -> tuple[AgentPlaybookGate, ...]:
+    async def gates_of(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> tuple[AgentPlaybookGate, ...]:
         """The gates of every agent playbook the session, or a session above it in
         its tree, invoked, a session marked deleted included: a sub-agent
         meets every gate its ancestors met. A session of the chain that

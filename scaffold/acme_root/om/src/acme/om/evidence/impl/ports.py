@@ -28,7 +28,7 @@ class WorkProductAbsentImpl(WorkProductInterface):
     """Loud: no work product is wired, so none is read, and the gate counts
     no success on what it cannot see."""
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
+    async def delivered(self, ctx: TenantContext, agent_session_id: UUID) -> WorkProduct | None:
         raise Unavailable("this platform reads no work product")
 
 
@@ -38,8 +38,8 @@ class WorkProductMemoryImpl(WorkProductInterface):
     def __init__(self) -> None:
         self._work_products: dict[tuple[UUID, UUID], WorkProduct] = {}
 
-    def deliver(self, org_id: UUID, session_id: UUID, work_product: WorkProduct) -> None:
-        self._work_products[(org_id, session_id)] = work_product
+    def deliver(self, org_id: UUID, agent_session_id: UUID, work_product: WorkProduct) -> None:
+        self._work_products[(org_id, agent_session_id)] = work_product
 
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
-        return self._work_products.get((ctx.org_id, session_id))
+    async def delivered(self, ctx: TenantContext, agent_session_id: UUID) -> WorkProduct | None:
+        return self._work_products.get((ctx.org_id, agent_session_id))

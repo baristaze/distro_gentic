@@ -16,14 +16,26 @@ the platform grows too.
 
 ## Decision
 
-**The engine's root takes hooks, and the platform builds over them.**
-`acme.om.root.build_managers` keeps its own construction and takes one
-`RootHooksInterface` (`acme.om.root_hooks`). It calls each hook once, in
-the order it builds: the work and resource kinds, the key service, a face
+**The engine's roots take hooks, and the platform builds over them.**
+`acme.om.root.build_managers` and the engine's agent root
+(`acme.om.agent_root.build_agent_managers`) keep their own construction
+and take one `RootHooksInterface` (`acme.om.root_hooks`). They call each
+hook once, in the order they build: the lane each work item goes to and
+the leasable resource kinds a product adds, then the key service, a face
 over the sessions, the tools, and the agents, the gates a call and a
-result pass, the transport, the attached toolsets, and what goes with a
-purged session. With no hooks it builds the engine's graph as rendered,
-so the engine's own suites run on it. `acme.om.platform_root` holds the
+result pass, the transport, and what goes with a purged session. With no
+hooks they build the engine's graph as rendered, so the engine's own
+suites run on it. The kinds of work each namespace declares in its own
+`kinds.py` join the root's registry below its marker.
+
+**The loop takes the engine's hooks.** What a session holds beyond its
+kind, a tenant's connector say, and what a run does before its first
+model call, a new loop's fill-set renewal and the step that says what
+changed under the model, are the engine's loop hooks
+(`LoopHooksInterface`), implemented in `acme.om.platform_loop_hooks`. So
+every guard of the engine's that reads a session's tools reads what the
+platform attaches, and the loop holds no edit of the platform's.
+`acme.om.platform_root` holds the
 platform's half in the engine's shape: `PlatformRootOptions` is what a
 process sets on the platform's managers, `PlatformManagers` is the
 engine's `Managers` with the platform's beside them, and
@@ -68,36 +80,34 @@ with the row's prefix.
 
 | Path | Why it stays |
 |---|---|
-| `om/src/acme/om/root.py` | It takes the hooks and calls each where the graph is built, and it reads the models layer the platform widened (below). It shrinks to the engine's when the engine's root takes these seams. |
-| `infra/src/acme/infra/root.py`, `infra/src/acme/infra/impl/` | The interface names the platform's two getters, since every root serves them and every caller holds an `InfraInterface`. Each root names `PlatformInfra` once and wires the platform's proxy and deployment into its container workspace. The settings take the platform's section, and two of the engine's fields take its values: the `ec2` machines and the workspace image. |
-| `services/api/src/acme/services/api/container.py`, `services/api/src/acme/services/api/services/impl/root.py`, `services/api/src/acme/services/api/routers/__init__.py`, `workers/maintenance/src/acme/workers/maintenance/container.py`, `workers/maintenance/src/acme/workers/maintenance/main.py`, `workers/session_runner/src/acme/workers/session_runner/container.py` | Each process's entry hands its half the ports, the agents, and the payments the process sets, and holds what it builds. The services root passes intake and the agent projects to the two engine services the platform widened. The registry rides `with_platform` in one line. |
-| `om/tests/contracts/loops.py`, `services/api/tests/test_container.py` | The loops fixture takes the builder it runs on. It also passes the call gate's agent projects and labels, and the attached toolsets, which the loop's own hooks carry at the next base move. The container test counts the platform's build. |
-| `om/src/acme/om/work/`, `om/src/acme/om/leases/` | Work kinds are a registry a product extends, an item goes to the lane placement answers, and a resource kind declares its ask's shape and check. These change the engine types' shapes, which no hook carries. |
-| `om/src/acme/om/windows/impl/gate.py`, `om/src/acme/om/budgets/`, `om/src/acme/om/models/` | The call gate keys budgets by agent project, counts each call under a version and a plan tier, and settles holds. The models layer carries the matrix's resolver, its face over the manager, and those labels. |
-| `om/src/acme/om/agent_sessions/`, `om/src/acme/om/agents/`, `om/src/acme/om/attribution/`, `om/src/acme/om/steps/`, `om/src/acme/om/tools/`, `om/src/acme/om/privacy/`, `om/src/acme/om/events/`, `om/src/acme/om/tenancy/` | A session is org-wide or private and stalls, a loop folds in attached toolsets, a fork is taken at a host, a tool spec declares what the platform reads, a member's removal asks for what the tenant keeps of them, and the sweep asks whether a tenant is gone. Each is behaviour of an engine namespace, upstream or staying. |
-| `om/src/acme/om/storage/`, `om/migrations/versions/` | The storage roots hold a getter for each of the platform's namespaces, its scopes, and its logins. A storage root has no seam a layer's tables register through. One engine migration's parent is a migration of the platform's, where the two chains meet in one role's history. |
-| `infra/src/acme/infra/machines/`, `infra/src/acme/infra/transports/`, `infra/src/acme/infra/workspaces/`, `infra/src/acme/infra/observability.py`, `infra/src/acme/infra/outages/` | The machines hand a seed, a transport carries the host's network, a container workspace carries its deployment and pulls with a limit, and the platform's metrics sit beside the engine's. These change the capabilities themselves. |
+| `om/src/acme/om/root.py`, `om/src/acme/om/agent_root.py` | Each takes the hooks and calls each where its graph is built, and the business root registers the platform's kinds below its marker. They shrink to the engine's when its roots take these seams. |
+| `infra/src/acme/infra/root.py`, `infra/src/acme/infra/impl/` | The interface names the platform's two getters, since every root serves them and every caller holds an `InfraInterface`. Each root names `PlatformInfra` once and wires the platform's proxy and deployment into its container workspace. The settings take the platform's section, and two of the engine's fields take its values: the `ec2` VMs and the workspace image. |
+| `services/api/src/acme/services/api/container.py`, `services/api/src/acme/services/api/services/impl/root.py`, `services/api/src/acme/services/api/routers/__init__.py`, `workers/maintenance/src/acme/workers/maintenance/container.py`, `workers/maintenance/src/acme/workers/maintenance/main.py`, `workers/agent_session_runner/src/acme/workers/agent_session_runner/container.py` | Each process's entry hands its half the ports, the agents, and the payments the process sets, and holds what it builds. The services root passes intake and the agent projects to the two engine services the platform widened. The registry rides `with_platform` in one line. |
+| `om/tests/contracts/loops.py`, `services/api/tests/test_container.py` | The loops fixture takes the builder it runs on, and passes the call gate's agent projects and labels. The container test counts the platform's build. |
+| `om/src/acme/om/work/` | A claim reads a lane's fair shares and caps, and an item ends with its target or its lane. These change the work manager and its storage, which no hook carries. |
+| `om/src/acme/om/windows/impl/gate.py`, `om/src/acme/om/spend_budgets/`, `om/src/acme/om/language_models/` | The call gate keys budgets by agent project, counts each call under a version and a plan tier, and settles holds. The models layer carries the matrix's resolver, its face over the manager, and those labels. |
+| `om/src/acme/om/agent_sessions/`, `om/src/acme/om/attribution/`, `om/src/acme/om/agent_steps/`, `om/src/acme/om/tools/`, `om/src/acme/om/privacy/`, `om/src/acme/om/change_events/`, `om/src/acme/om/tenancy/` | A session is org-wide or private and stalls, a fork is taken at a host, a tool spec declares what the platform reads, a member's removal asks for what the tenant keeps of them, and the sweep asks whether a tenant is gone. Each is behaviour of an engine namespace, upstream or staying. |
+| `om/src/acme/om/storage/` | The storage roots hold a getter for each of the platform's namespaces, its scopes, and its logins. A storage root has no seam a layer's tables register through. |
+| `infra/src/acme/infra/vms/`, `infra/src/acme/infra/transports/`, `infra/src/acme/infra/agent_workspaces/`, `infra/src/acme/infra/observability.py`, `infra/src/acme/infra/outages/` | The VMs hand a seed, a transport carries the host's network, a container workspace carries its deployment and pulls with a limit, and the platform's metrics sit beside the engine's. These change the capabilities themselves. |
 | `integrations/` | The forge, the chat, and the scripted twin's pace are integrations the configured root picks. The settings take the platform's section, `PlatformIntegrationsSettings`, in one line. |
 | `services/api/src/acme/services/api/` (its other files), `services/api/README.md` | The engine's routes and commands carry the platform's behaviour: a session's agent project, the integration webhooks, the event kinds, admission, and an operator's grant of a tenant's content. The seed of a local org's platform parts is a command of the platform's own. The settings take the platform's sections in one line. Not now: once a base move conflicts in `main.py`, it joins the platform's half through one hook. |
-| `workers/maintenance/src/`, `workers/session_runner/src/`, `apps/cli/`, `ops/` | The loop runs ticks, duties across tenants in recovery, and the fleet's gauges. The runner claims a placed lane and holds warm workspaces. The CLI and the operations tool reach the platform's routes. |
-| `clients/` | The document and both clients' types are generated from the copy's whole API, and the clients' calls name its routes. |
+| `workers/maintenance/src/`, `workers/agent_session_runner/src/`, `apps/cli/`, `ops/` | The loop runs ticks, duties across tenants in recovery, and the fleet's gauges. The runner claims a placed lane and holds warm workspaces. The CLI and the operations tool reach the platform's routes. |
+| `clients/` | Each namespace's document and both clients' types are generated from the copy's whole API. The platform's namespaces have their own documents, call modules, and type facades; the engine's transport carries the platform's health read and its held-open stream, and its agent sessions' calls the platform's listing and agent project. |
 | `apps/portal/` | The portal has no registry a layer's pages join. Not now: once the engine's portal ships one, the platform's pages register through it. |
-| `deployment/`, `scripts/`, `.github/`, `checkers/`, `docs/`, `.agents/`, `README.md`, `llms.txt`, `pyproject.toml`, `pyrightconfig.json`, `uv.lock`, `pnpm-lock.yaml`, `.gitignore`, `.env.example`, `Makefile`, `om/README.md`, `infra/README.md`, `workers/maintenance/README.md`, `workers/session_runner/README.md` | Each describes, configures, or locks the copy whole: its stack, its cloud, its workflows, its members, its ports, and its documents. `.env.example` and the Makefile keep the platform's lines in their trailing blocks, and only the values a copy names stay in place. |
-| `om/tests/`, `infra/tests/`, `integrations/tests/`, `services/api/tests/`, `workers/maintenance/tests/`, `workers/session_runner/tests/`, `apps/cli/tests/`, `clients/python/tests/` | An engine suite reads a behaviour the platform changes above, adds the platform's entries to a list the engine's own cases read, or holds a fixture the platform's cases read that no other suite can import. Cases the platform only added sit in a suite of its own. Not now for the cases mixed among the engine's: when a base move conflicts in one, they move out with the merge. |
+| `deployment/`, `scripts/`, `.github/`, `checkers/`, `docs/`, `.agents/`, `README.md`, `llms.txt`, `pyproject.toml`, `pyrightconfig.json`, `uv.lock`, `pnpm-lock.yaml`, `.gitignore`, `.env.example`, `Makefile`, `om/README.md`, `infra/README.md`, `workers/maintenance/README.md`, `workers/agent_session_runner/README.md` | Each describes, configures, or locks the copy whole: its stack, its cloud, its workflows, its members, its ports, and its documents. `.env.example` and the Makefile keep the platform's lines in their trailing blocks, and only the values a copy names stay in place. |
+| `om/tests/`, `infra/tests/`, `integrations/tests/`, `services/api/tests/`, `workers/maintenance/tests/`, `workers/agent_session_runner/tests/`, `apps/cli/tests/`, `clients/python/tests/` | An engine suite reads a behaviour the platform changes above, adds the platform's entries to a list the engine's own cases read, or holds a fixture the platform's cases read that no other suite can import. Cases the platform only added sit in a suite of its own. Not now for the cases mixed among the engine's: when a base move conflicts in one, they move out with the merge. |
 
 ## Consequences
 
 - A product declares its kinds, its namespaces, and their API in three
   files, and a base move of the product meets the platform's wiring only
   where the platform itself changed.
-- A base move of the platform meets the engine's root, registries, and
+- A base move of the platform meets the engine's roots, registries, and
   containers only at the hooks, the platform's halves, and the rows
-  above. At the next one, the engine's root splits by layer and its loop
-  takes hooks of its own. The hooks move into the engine's agent root,
-  and the loop's own edits onto its hooks.
+  above, and the engine's loop not at all.
 - A process the platform's tests build without its half gets the engine's
   graph: a suite of the platform's builds through
   `build_platform_managers` or `contracts.platform_loops`.
-- `build_managers` no longer takes the platform's keywords: a caller hands
-  them to `PlatformRootOptions`. `acme.om.root` no longer exports
-  `ProductKinds` or `PlatformPorts`.
+- `build_managers` takes none of the platform's keywords: a caller hands
+  them to `PlatformRootOptions`. `ProductKinds` and `PlatformPorts` live
+  in `acme.om.platform_root`, never in `acme.om.root`.

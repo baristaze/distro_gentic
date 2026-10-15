@@ -5,9 +5,9 @@ values out; no clock, no storage."""
 from collections.abc import Callable, Collection, Iterable, Sequence
 
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.language_models.types.fill import Eligibility, Fill, ModelRole, ModelSize
 from acme.om.matrix.types.matrix import MatrixQuery, MatrixRow, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef
-from acme.om.models.types.fill import Eligibility, Fill, ModelRole, ModelSize
 from acme.om.retention.types.policy import RetentionPolicy
 
 Admits = Callable[[Fill], bool]

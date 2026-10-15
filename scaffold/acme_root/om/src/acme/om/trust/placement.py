@@ -15,13 +15,13 @@ from acme.om.trust.types.identities import Executor
 
 class PlacementInterface(ABC):
     @abstractmethod
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
         """Whether the session's calls run on a host inside a customer's wall,
         rather than in the platform's cloud."""
         ...
 
     @abstractmethod
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
         """The machine credential the session's next call runs under: a host
         of its pool inside the wall, or the cloud's."""
         ...

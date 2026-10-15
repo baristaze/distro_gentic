@@ -61,10 +61,10 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
             await db.commit()
 
     @staticmethod
-    def _snapshot(org_id: UUID, session_id: UUID) -> Select[tuple[AgentSessionRetentionRows]]:
+    def _snapshot(org_id: UUID, agent_session_id: UUID) -> Select[tuple[AgentSessionRetentionRows]]:
         return select(AgentSessionRetentionRows).where(
             AgentSessionRetentionRows.org_id == org_id,
-            AgentSessionRetentionRows.session_id == session_id,
+            AgentSessionRetentionRows.agent_session_id == agent_session_id,
         )
 
     async def create_snapshot(self, org_id: UUID, snapshot: SessionRetention) -> SessionRetention:
@@ -77,7 +77,7 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
             .on_conflict_do_nothing(
                 index_elements=[
                     AgentSessionRetentionRows.org_id,
-                    AgentSessionRetentionRows.session_id,
+                    AgentSessionRetentionRows.agent_session_id,
                 ]
             )
             .returning(AgentSessionRetentionRows.id)
@@ -89,7 +89,7 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
                     await session.commit()
                     return snapshot
                 stored = (
-                    await session.execute(self._snapshot(org_id, snapshot.session_id))
+                    await session.execute(self._snapshot(org_id, snapshot.agent_session_id))
                 ).scalar_one()
                 await session.commit()
                 return to_model(stored, SessionRetention)
@@ -99,8 +99,8 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
                     f"session retention {snapshot.id} is not in {org_id}"
                 ) from error
 
-    async def read_snapshot(self, org_id: UUID, session_id: UUID) -> SessionRetention | None:
-        stmt = self._snapshot(org_id, session_id)
+    async def read_snapshot(self, org_id: UUID, agent_session_id: UUID) -> SessionRetention | None:
+        stmt = self._snapshot(org_id, agent_session_id)
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, SessionRetention)
@@ -111,14 +111,14 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
         values = {
             k: v
             for k, v in to_values(snapshot, AgentSessionRetentionRows).items()
-            if k not in {"id", "session_id", "created_at"}
+            if k not in {"id", "agent_session_id", "created_at"}
         }
         stmt = (
             update(AgentSessionRetentionRows)
             .where(
                 AgentSessionRetentionRows.org_id == org_id,
                 AgentSessionRetentionRows.id == snapshot.id,
-                AgentSessionRetentionRows.session_id == snapshot.session_id,
+                AgentSessionRetentionRows.agent_session_id == snapshot.agent_session_id,
                 AgentSessionRetentionRows.version == expected_version,
             )
             .values(**values)

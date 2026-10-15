@@ -15,9 +15,9 @@ class ExecControls(IdentifiableMixin, TrackableMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index("ix_exec_controls_org_id_host_id_created_at", "org_id", "host_id", "created_at"),
-        Index("ix_exec_controls_org_id_session_id", "org_id", "session_id"),
+        Index("ix_exec_controls_org_id_agent_session_id", "org_id", "agent_session_id"),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     item_id: Mapped[UUID]
     host_id: Mapped[UUID]
     kind: Mapped[str]

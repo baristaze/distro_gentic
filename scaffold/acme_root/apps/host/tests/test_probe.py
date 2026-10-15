@@ -30,8 +30,9 @@ from acme.apps.host.probe import (
     proxy,
     startup,
 )
-from acme.client.client import ApiClient, ApiError
-from acme.client.types import IsolationMode
+from acme.client.client import ApiClient
+from acme.client.transport import ApiError
+from acme.client.types.hosts import IsolationMode
 from acme.om.base import utcnow
 
 

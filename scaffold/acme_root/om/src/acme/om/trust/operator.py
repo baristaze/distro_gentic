@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from datetime import timedelta
 from uuid import UUID
 
-from acme.om.context import OperatorContext, RequestContext
-from acme.om.steps.types.page import StepPage
+from acme.om.agent_steps.types.page import AgentStepPage
+from acme.om.context import OperatorContext, RequestContext, transition
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.shape import ShapePage
 
@@ -21,7 +21,12 @@ from acme.om.trust.types.shape import ShapePage
 class TrustOperatorManagerInterface(ABC):
     @abstractmethod
     async def get_session_shape(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
     ) -> ShapePage:
         """The shape of the named tenant's session past `after_seq`: each
         step's place, type, actor, origin, header, and whether its content is
@@ -32,8 +37,13 @@ class TrustOperatorManagerInterface(ABC):
 
     @abstractmethod
     async def get_session_content(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPage:
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
+    ) -> AgentStepPage:
         """The named tenant's session past `after_seq`, opened. Requires
         `OperatorPermission.READ` and a live content grant of the operator's
         identity in that tenant (`ContentNotGranted` otherwise, `read` alone
@@ -43,6 +53,7 @@ class TrustOperatorManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def grant_content(
         self,
         rctx: RequestContext,
@@ -50,7 +61,7 @@ class TrustOperatorManagerInterface(ABC):
         org_id: UUID,
         expires_in: timedelta | None = None,
     ) -> ContentGrant:
-        """Platform-internal: the grant job opens one tenant's session content
+        """System-internal: the grant job opens one tenant's session content
         to one operator's identity, for `expires_in` (the options' default
         when None), never past the options' bound (`ValidationFailed`). A
         grant made again replaces the one before. Audited in the tenant's
@@ -58,7 +69,8 @@ class TrustOperatorManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def revoke_content(self, rctx: RequestContext, identity_id: UUID, org_id: UUID) -> bool:
-        """Platform-internal: the grant job ends an operator's content grant
+        """System-internal: the grant job ends an operator's content grant
         in a tenant at once, audited. False when none was held."""
         ...

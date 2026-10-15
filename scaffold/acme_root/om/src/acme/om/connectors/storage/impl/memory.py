@@ -50,8 +50,8 @@ class ConnectorStorageMemoryImpl(MemoryStorageBase, ConnectorStorageInterface):
             self._put(self._pins, org_id, pin)
             return pin
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None:
-        return self._get(self._pins, org_id, session_id)
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> AgentSessionConnectors | None:
+        return self._get(self._pins, org_id, agent_session_id)
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:

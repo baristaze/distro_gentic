@@ -1,8 +1,6 @@
 # ADR 2025: A product adds its own kinds through the registries the platform's go through
 
-**Status**: accepted (2026-10-03), amended by [ADR
-2029](2029-a-products-claimant-enrolls-and-claims-the-way-a-host-does.md),
-[ADR 2031](2031-a-product-adds-its-own-kind-of-agent-automation-action.md), and [ADR 2049](2049-a-product-registers-its-own-resource-kinds.md)
+**Status**: accepted (2026-10-03)
 
 ## Context
 
@@ -16,13 +14,15 @@ forks the base, or puts its domain back into the platform.
 ## Decision
 
 **Each kind is a registry, and the platform's own go through it.**
-Five registries, each refusing a name registered twice:
+Each registry refuses a name registered twice:
 
 - A **work kind**: its name, its payload, the permission that asks for
   it, its lane read off its payload, and the claimant kind that takes it
   (`work/kinds.py`, `placement/kinds.py`).
-- A **claimant kind**: its name, and the lanes and kinds its identity
-  claims (`placement/kinds.py`). The host is the platform's.
+- A **claimant kind**: its name, its credential's prefix, and the lanes
+  and kinds its identity claims (`placement/kinds.py`). The host is the
+  platform's
+  ([ADR 2029](2029-a-products-claimant-enrolls-and-claims-the-way-a-host-does.md)).
 - A **secret owner kind**: whether an owner is the tenant's, and which
   owner a session is placed on (`trust/owners.py`). The agent project is
   the platform's, and resolves first.
@@ -30,6 +30,13 @@ Five registries, each refusing a name registered twice:
   (`watch/kinds.py`). The step is the platform's.
 - An **executor**, by the name a check's `executor` gives it
   (`evidence/executor.py`). The fresh executor is `platform`.
+- An **agent automation action**: its name, its params' shape, its
+  handler, and its check (`agent_automations/actions.py`). The two that
+  start or message a session are the platform's
+  ([ADR 2031](2031-a-product-adds-its-own-kind-of-agent-automation-action.md)).
+- A **resource kind**: its name, its hooks, whose `ASK` is its ask's
+  shape, and its check (`leases/hooks.py`). `noop` is the mechanism's own
+  ([ADR 2049](2049-a-product-registers-its-own-resource-kinds.md)).
 
 A product hands its kinds to every root in one place, `PRODUCT_KINDS`
 in `product_kinds.py`, with its agent kinds, its tools, and the classes
@@ -73,9 +80,9 @@ before it is kept, and the result gate reads the record alike.
   platform's, so a product never edits the platform's rules. A ceiling
   of a platform class, of a class not the product's, or of a class the
   platform already caps is refused at boot.
-- A product's claimant authenticates as a host does: the product's own
-  route resolves its credential to a claimant, then calls placement.
-  The platform issues no credential of a product's kind.
+- A product's claimant enrolls, authenticates, and claims through the
+  host's path, under the credential prefix its kind registers, at
+  `/claimants/...`.
 - A row asking for a kind its process does not know is refused at the
   relay and ends a dead letter, which an audit event names. Every root
   reads the kinds from the one hand-off so none omits them.

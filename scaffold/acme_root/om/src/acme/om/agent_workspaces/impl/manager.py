@@ -7,15 +7,15 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr, ValidationError
 
-from acme.infra.exceptions import InfraException
-from acme.infra.secrets import SecretsInterface
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceLost,
     Durability,
     IsolationMode,
     IsolationSpec,
-    Workspace,
-    WorkspaceLost,
 )
+from acme.infra.exceptions import InfraException
+from acme.infra.secrets import SecretsInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.agent_projects import (
@@ -43,7 +43,7 @@ from acme.om.agent_workspaces.types.source import (
 )
 from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.agents.types.kind import AgentKindCatalog
-from acme.om.base import Platform, utcnow
+from acme.om.base import OmBase, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.validation import WorkProduct
 from acme.om.exceptions import (
@@ -68,7 +68,7 @@ SECRET_NOT_FOUND = "secret_not_found"
 """The code the tenant's store answers for a name it holds no value under."""
 
 
-class AgentWorkspacesOptions(Platform):
+class AgentWorkspacesOptions(OmBase):
     # The platform's internal network, which no workspace reaches: every
     # private range unless a deployment names its own.
     internal_networks: tuple[str, ...] = rules.PLATFORM_NETWORKS
@@ -179,23 +179,27 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             # Read once, here: the session keeps the base it pinned, and a
             # later change of its agent project's workspace base reaches only the
             # sessions created after it.
-            workspace_base = await self._agent_projects.workspace_base_of(ctx, agent_project_id)
-            if workspace_base is not None:
-                spec = spec.model_copy(update={"base": workspace_base})
+            agent_workspace_base = await self._agent_projects.workspace_base_of(
+                ctx, agent_project_id
+            )
+            if agent_workspace_base is not None:
+                spec = spec.model_copy(update={"base": agent_workspace_base})
         return await self._land(ctx, session.id, spec, label, agent_project_id, allowlist)
 
-    async def get_workspace(self, ctx: TenantContext, session_id: UUID) -> AgentSessionWorkspace:
+    async def get_workspace(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionWorkspace:
         ctx.require(Permission.READ)
-        stored = await self._storage.read_workspace(ctx.org_id, session_id)
+        stored = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if stored is None:
-            raise NotFound(f"the workspace of session {session_id} was never pinned")
+            raise NotFound(f"the workspace of session {agent_session_id} was never pinned")
         return stored
 
     async def pinned(
-        self, ctx: TenantContext, session_id: UUID, asked: IsolationSpec
+        self, ctx: TenantContext, agent_session_id: UUID, asked: IsolationSpec
     ) -> IsolationSpec:
         ctx.require(Permission.WRITE)
-        stored = await self._storage.read_workspace(ctx.org_id, session_id)
+        stored = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if stored is not None:
             return stored.spec()
         if asked.mode is IsolationMode.NONE:
@@ -205,17 +209,17 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         # it runs, and held to that from here on.
         log.warning(
             "session %s of org %s had no pinned isolation: it is pinned at its first prepare",
-            session_id,
+            agent_session_id,
             ctx.org_id,
         )
-        landed = await self._land(ctx, session_id, asked, "its first loop's kind", None, None)
+        landed = await self._land(ctx, agent_session_id, asked, "its first loop's kind", None, None)
         return landed.spec()
 
     # Around a loop.
 
     async def attach(
-        self, ctx: TenantContext, workspace: Workspace, epoch: int, *, restored: bool = False
-    ) -> Workspace:
+        self, ctx: TenantContext, workspace: AgentWorkspace, epoch: int, *, restored: bool = False
+    ) -> AgentWorkspace:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
@@ -262,7 +266,9 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                     held.branch,
                     why,
                 )
-                raise WorkspaceLost(f"the branch {held.branch} of session {workspace.id} {why}")
+                raise AgentWorkspaceLost(
+                    f"the branch {held.branch} of session {workspace.id} {why}"
+                )
             if plan in (BranchPlan.CUT, BranchPlan.REBUILD):
                 # What the checkout holds is kept before it is cut over: a
                 # push that does not land raises, and nothing is cut.
@@ -302,7 +308,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             )
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
-    async def detach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
+    async def detach(self, ctx: TenantContext, workspace: AgentWorkspace, epoch: int) -> None:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
@@ -333,7 +339,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             adds=rules.told_of_snapshot(snapshot.ref, snapshot.commit, at),
         )
 
-    async def work_product(self, ctx: TenantContext, workspace: Workspace) -> WorkProduct:
+    async def work_product(self, ctx: TenantContext, workspace: AgentWorkspace) -> WorkProduct:
         ctx.require(Permission.READ)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         binding = None if held is None else await self._binding(ctx, held)
@@ -466,17 +472,19 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         return updated
 
     async def egress(
-        self, ctx: TenantContext, session_id: UUID, request: EgressRequest
+        self, ctx: TenantContext, agent_session_id: UUID, request: EgressRequest
     ) -> EgressDecision:
         ctx.require(Permission.READ)
-        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        held = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if held is None:
             return EgressDecision(allowed=False, reason="this session never pinned its egress")
         return rules.egress_decision(held.egress, held.rules, request, self._internal)
 
-    async def outward(self, ctx: TenantContext, session_id: UUID, write: RepositoryWrite) -> bool:
+    async def outward(
+        self, ctx: TenantContext, agent_session_id: UUID, write: RepositoryWrite
+    ) -> bool:
         ctx.require(Permission.READ)
-        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        held = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if held is None:
             return True
         binding = await self._binding(ctx, held)
@@ -543,18 +551,18 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         )
         return True
 
-    async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
+    async def mint_push_token(self, ctx: TenantContext, agent_session_id: UUID) -> PushToken:
         ctx.require(Permission.WRITE)
-        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        held = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if held is None:
-            raise NotFound(f"session {session_id} has no workspace")
+            raise NotFound(f"session {agent_session_id} has no workspace")
         binding = await self._binding(ctx, held)
         if binding is None:
-            raise Unavailable(f"session {session_id} works on no bound repository")
+            raise Unavailable(f"session {agent_session_id} works on no bound repository")
         token = rules.PUSH_TOKEN_PREFIX + secrets.token_urlsafe(32)
         expires_at = self._clock() + self._options.push_token_lifetime
         await self._write(
-            ctx, session_id, {"push_digest": hash_token(token), "push_expires_at": expires_at}
+            ctx, agent_session_id, {"push_digest": hash_token(token), "push_expires_at": expires_at}
         )
         return PushToken(
             token=SecretStr(token),
@@ -564,15 +572,21 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         )
 
     async def open_pull_request(
-        self, ctx: TenantContext, session_id: UUID, token: str, head: str, title: str, body: str
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        token: str,
+        head: str,
+        title: str,
+        body: str,
     ) -> OpenedPullRequest:
         ctx.require(Permission.WRITE)
-        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        held = await self._storage.read_workspace(ctx.org_id, agent_session_id)
         if held is None:
-            raise NotFound(f"session {session_id} has no workspace")
+            raise NotFound(f"session {agent_session_id} has no workspace")
         binding = await self._binding(ctx, held)
         if binding is None:
-            raise Unavailable(f"session {session_id} works on no bound repository")
+            raise Unavailable(f"session {agent_session_id} works on no bound repository")
         if not rules.COMMIT.fullmatch(head):
             raise ValidationFailed("the head of a pull request is a commit's full id")
         refusal = rules.body_refusal(body, binding)
@@ -591,22 +605,22 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
             if refusal is not None:
                 log.warning(
                     "session %s of org %s: a push token was refused: %s",
-                    session_id,
+                    agent_session_id,
                     ctx.org_id,
                     refusal,
                 )
                 raise NotAuthorized(refusal)
-        workspace = self._held.get(session_id)
+        workspace = self._held.get(agent_session_id)
         if workspace is None:
-            raise Unavailable(f"the workspace of session {session_id} is not held here")
-        epoch = self._epoch(session_id)
+            raise Unavailable(f"the workspace of session {agent_session_id} is not held here")
+        epoch = self._epoch(agent_session_id)
         # The session's commits go out as a bundle the platform makes, and
         # source control pushes the one head to the session's branch alone.
         bundle = await self._git.outgoing(ctx, workspace, head, epoch=epoch)
         await self._source_control.push(ctx, binding, f"refs/heads/{held.branch}", head, bundle)
         await self._git.landed(ctx, workspace, held.branch, head, epoch=epoch)
         if not held.branch_seen:
-            await self._write(ctx, session_id, {"branch_seen": True})
+            await self._write(ctx, agent_session_id, {"branch_seen": True})
         return await self._source_control.open_pull_request(ctx, binding, held.branch, title, body)
 
     # Where a session's snapshots live.
@@ -625,22 +639,26 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         return await self._storage.read_snapshot(ctx.org_id, snapshot_id)
 
     async def kept_snapshots(
-        self, ctx: TenantContext, session_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID
     ) -> tuple[KeptSnapshot, ...]:
         ctx.require(Permission.READ)
         return tuple(
-            await self._storage.read_snapshots(ctx.org_id, session_id, self._options.snapshots_read)
+            await self._storage.read_snapshots(
+                ctx.org_id, agent_session_id, self._options.snapshots_read
+            )
         )
 
-    async def snapshot_hosts(self, org_id: UUID, session_id: UUID) -> frozenset[UUID]:
-        kept = await self._storage.read_snapshots(org_id, session_id, self._options.snapshots_read)
+    async def snapshot_hosts(self, org_id: UUID, agent_session_id: UUID) -> frozenset[UUID]:
+        kept = await self._storage.read_snapshots(
+            org_id, agent_session_id, self._options.snapshots_read
+        )
         return frozenset(record.host_id for record in kept if record.host_id is not None)
 
-    async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
-        return await self._storage.purge_snapshots(org_id, session_id)
+    async def forget_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
+        return await self._storage.purge_snapshots(org_id, agent_session_id)
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
-        return await self._storage.purge_workspace(org_id, session_id)
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        return await self._storage.purge_agent_workspace(org_id, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
@@ -658,12 +676,12 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
 
     # Helpers.
 
-    def _epoch(self, session_id: UUID) -> int:
+    def _epoch(self, agent_session_id: UUID) -> int:
         """The epoch of the run that holds the session's workspace here: a
         command for a tool of that run carries it."""
-        epoch = self._held.epoch_of(session_id)
+        epoch = self._held.epoch_of(agent_session_id)
         if epoch is None:
-            raise Unavailable(f"the workspace of session {session_id} is not held here")
+            raise Unavailable(f"the workspace of session {agent_session_id} is not held here")
         return epoch
 
     async def _fetch_credential(
@@ -693,7 +711,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     async def _land(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         label: str,
         agent_project_id: UUID | None,
@@ -704,7 +722,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         try:
             egress, egress_rules, source = rules.pinned_egress(spec.egress, label, allowlist)
             workspace = AgentSessionWorkspace(
-                id=session_id,
+                id=agent_session_id,
                 created_at=now,
                 updated_at=now,
                 created_by=ctx.user_id,
@@ -717,20 +735,22 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
                 egress_source=source,
                 durability=spec.durability,
                 base=spec.base,
-                branch=rules.session_branch(session_id),
+                branch=rules.session_branch(agent_session_id),
             )
         except ValidationError as error:
             raise ValidationFailed(
-                f"the workspace of session {session_id}: {error}"[:500]
+                f"the workspace of session {agent_session_id}: {error}"[:500]
             ) from None
         if not await self._storage.create_workspace(ctx.org_id, workspace):
-            landed = await self._storage.read_workspace(ctx.org_id, session_id)
+            landed = await self._storage.read_workspace(ctx.org_id, agent_session_id)
             if landed is None:
-                raise PreconditionFailed(f"the workspace of session {session_id} is another's")
+                raise PreconditionFailed(
+                    f"the workspace of session {agent_session_id} is another's"
+                )
             return landed
         log.info(
             "session %s of org %s pinned %s isolation, egress %s, durability %s: %s",
-            session_id,
+            agent_session_id,
             ctx.org_id,
             workspace.level.value,
             workspace.egress.value,
@@ -749,7 +769,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
     async def _update(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         *,
         branch_seen: bool,
         snapshot_ref: str | None = None,
@@ -767,12 +787,12 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         }
         if snapshot_ref is not None or forget_snapshot:
             changes["snapshot_ref"] = snapshot_ref
-        await self._write(ctx, session_id, changes, told=told, adds=adds)
+        await self._write(ctx, agent_session_id, changes, told=told, adds=adds)
 
     async def _write(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         fields: dict[str, object],
         *,
         told: tuple[str, ...] = (),
@@ -784,7 +804,7 @@ class AgentWorkspacesManagerImpl(AgentWorkspacesManagerInterface):
         wrote meanwhile stays for the next loop; the one a release `adds`
         joins any not yet told."""
         for attempt in range(self._options.write_tries):
-            stored = await self._storage.read_workspace(ctx.org_id, session_id)
+            stored = await self._storage.read_workspace(ctx.org_id, agent_session_id)
             if stored is None:
                 return
             notices = tuple(n for n in stored.notices if n not in told)

@@ -28,6 +28,7 @@ from acme.om.evidence.types.validation import (
     Validation,
     WorkProduct,
 )
+
 from contracts.evidence import Evidence, ScriptedExecutor
 from contracts.evidence_storage import HASH, make_record
 
@@ -172,7 +173,7 @@ class ScriptedRun:
     async def work_run(self, version: str = BASE, files: tuple[str, ...] = ()) -> ExecutionRecord:
         """A run of the agent's own, in its workspace, with the files it made
         as its artifacts."""
-        record = make_record(self.session, step_id=new_id(), version=version)
+        record = make_record(self.session, agent_step_id=new_id(), version=version)
         made = tuple(
             ArtifactRef(name=name, sha256=HASH, provenance=Provenance.REAL) for name in files
         )
@@ -183,8 +184,8 @@ class ScriptedRun:
         stated = Inference(
             id=new_id(),
             created_at=utcnow(),
-            session_id=self.session,
-            step_id=new_id(),
+            agent_session_id=self.session,
+            agent_step_id=new_id(),
             kind=InferenceKind.HYPOTHESIS,
         )
         return await self.evidence.manager.record_inference(self.ctx, stated)
@@ -193,8 +194,8 @@ class ScriptedRun:
         found = Inference(
             id=new_id(),
             created_at=utcnow(),
-            session_id=self.session,
-            step_id=new_id(),
+            agent_session_id=self.session,
+            agent_step_id=new_id(),
             kind=InferenceKind.FINDING,
             resolves=hypothesis.id,
             stance=Stance.SUPPORTED,
@@ -238,7 +239,7 @@ async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) ->
         trials.append(
             Trial(
                 contender=contender,
-                session_id=run.session,
+                agent_session_id=run.session,
                 executor=parts.executor.name,
                 started_at=verdict.created_at,
                 verdict=verdict,

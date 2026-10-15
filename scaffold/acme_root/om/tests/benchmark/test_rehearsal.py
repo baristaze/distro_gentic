@@ -16,16 +16,17 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-from contracts.acceptance import EXPORT, judged_trials
-from contracts.benchmark_export import Export
-from contracts.benchmark_storage import BASELINE, CANDIDATE, operator
-from contracts.rehearsal import world_over
 
 from acme.om.benchmarks.rules import qualifications
 from acme.om.benchmarks.types.benchmark import BenchmarkTrials
 from acme.om.matrix.root import MatrixLayer
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.acceptance import EXPORT, judged_trials
+from contracts.benchmark_export import Export
+from contracts.benchmark_storage import BASELINE, CANDIDATE, operator
+from contracts.rehearsal import world_over
 
 pytestmark = pytest.mark.benchmark
 

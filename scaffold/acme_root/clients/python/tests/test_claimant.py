@@ -29,7 +29,8 @@ from acme.client.claimant.settings import ClaimantSettings, claimant_env
 from acme.client.client import ApiClient
 from acme.client.leases import MIN_RENEW_SECONDS
 from acme.client.leases import LeaseClock as HoldClock
-from acme.client.types import ClaimantWorkView, ReportOutcome
+from acme.client.types.hosts import ClaimantWorkView
+from acme.client.types.placement import ReportOutcome
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
 

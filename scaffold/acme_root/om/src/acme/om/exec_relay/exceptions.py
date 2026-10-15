@@ -3,13 +3,13 @@
 from acme.om.exceptions import (
     Conflict,
     NotAuthorized,
-    PlatformException,
+    OmException,
     PreconditionFailed,
     Unavailable,
 )
 
 
-class ExecRelayException(PlatformException): ...
+class ExecRelayException(OmException): ...
 
 
 class StaleExec(ExecRelayException, PreconditionFailed):
@@ -30,7 +30,7 @@ class ItemNotHeld(ExecRelayException, Conflict):
 class NoWorkspaceHost(ExecRelayException, NotAuthorized):
     """A call of a session pinned to its tenant's hosts while no host holds
     its workspace. It is refused, never run on one of the platform's own
-    machines instead."""
+    VMs instead."""
 
     code = "no_workspace_host"
 

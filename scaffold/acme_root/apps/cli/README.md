@@ -7,22 +7,22 @@ stays and prints every change in the org as it happens.
 uv run acme login --org ajax        # confirm the code in the browser
 uv run acme login --dev-email bob@example.test --org ajax   # local stack only
 uv run acme whoami
-uv run acme orgs                    # * marks the session's org
-uv run acme switch fabrikam         # the old session ends
+uv run acme orgs                    # * marks the auth session's org
+uv run acme switch fabrikam         # the old auth session ends
 uv run acme upload spec.pdf         # --type, --json
-uv run acme session list --status parked   # the org's sessions, one a line
-uv run acme session start assistant "the dropped object" --agent-project <id>   # local: optional
-uv run acme session say <id> "Why does the export time out?"
-uv run acme session control <id> pause     # resume, cancel, compact, unlock
-uv run acme session control <id> interrupt --call <seq>   # stops the one call it names
-uv run acme session decide <id> <seq> --approve
-uv run acme session steps <id> --follow    # until the loop stops
+uv run acme agent-session list --status parked   # the org's sessions, one a line
+uv run acme agent-session start assistant "the dropped object" --agent-project <id>   # local: optional
+uv run acme agent-session say <id> "Why does the export time out?"
+uv run acme agent-session control <id> pause     # resume, cancel, compact, unlock
+uv run acme agent-session control <id> interrupt --call <seq>   # stops the one call it names
+uv run acme agent-session decide <id> <seq> --approve
+uv run acme agent-session steps <id> --follow    # until the loop stops
 uv run acme agent-project create "the reports" github.com/octo/reports
 uv run acme agent-project credential <id> --username reader   # the token is asked for, never echoed
 uv run acme agent-project list
 uv run acme agent-automation create triage.json   # the agent automation as the API takes it
 uv run acme agent-automation list
-uv run acme agent-playbook invoke <session-id> release-check   # its brief as your message
+uv run acme agent-playbook invoke <agent-session-id> release-check   # its brief as your message
 uv run acme agent-playbook pin software_engineer release-check --agent-project <id>   # the kind manual
 uv run acme agent-playbook pins
 uv run acme agent-playbook unpin software_engineer --agent-project <id>
@@ -38,7 +38,7 @@ uv run acme logout
   API is unreachable, 5 a followed loop stopped without succeeding: it
   parked, or ended any other way. A setting the environment got wrong is
   usage.
-- The session lives in `$ACME_HOME/session.json` (default `~/.config/acme`,
+- The auth session lives in `$ACME_HOME/auth_session.json` (default `~/.config/acme`,
   mode 600) and goes only to the API that issued it. `ACME_TOKEN` wins over
   it. `ACME_API_URL` or `--api` names the API. `ACME_HTTP_TIMEOUT_SECONDS`,
   `ACME_HTTP_RETRIES`, and `ACME_HTTP_RETRY_BACKOFF_SECONDS` tune the client.

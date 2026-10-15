@@ -21,7 +21,7 @@ class AgentAutomationRuns(IdentifiableMixin, CreatedMixin, Base):
             "agent_automation_id",
             "created_at",
         ),
-        Index("ix_agent_automation_runs_org_id_session_id", "org_id", "session_id"),
+        Index("ix_agent_automation_runs_org_id_agent_session_id", "org_id", "agent_session_id"),
         # Its queued runs, oldest first, on every tick, and their count at
         # every admission: runs are never trimmed, so the status leads.
         Index(
@@ -38,9 +38,9 @@ class AgentAutomationRuns(IdentifiableMixin, CreatedMixin, Base):
     status: Mapped[str]
     refusal: Mapped[str | None]
     hop: Mapped[int]
-    session_id: Mapped[UUID | None]
+    agent_session_id: Mapped[UUID | None]
     opened: Mapped[bool]
-    budget_id: Mapped[UUID | None]
+    spend_budget_id: Mapped[UUID | None]
     reserved_micros: Mapped[int] = mapped_column(BigInteger)
     work_id: Mapped[UUID | None]
     outcome: Mapped[str | None]

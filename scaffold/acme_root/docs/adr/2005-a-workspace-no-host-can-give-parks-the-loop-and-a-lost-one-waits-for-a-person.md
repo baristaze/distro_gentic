@@ -29,7 +29,7 @@ model call. At the retry time the next run asks again. No weaker
 workspace is made, and nothing is spent while it waits.
 
 **A lost workspace parks the loop for a person.** A layer that prepares
-a workspace raises `WorkspaceLost` when its durable state is gone and
+a workspace raises `AgentWorkspaceLost` when its durable state is gone and
 nothing says why, such as a branch the remote held and lost with no
 merged or closed pull request behind it, or one that moved on both
 sides. The loop parks on `person` with the unlock `workspace`, loudly,
@@ -73,5 +73,5 @@ alone.
   process does not hold, or whose agent project binds no repository,
   reads as nothing and counts no success.
 - The engine's loop gains the two parks and the told change, and its
-  workspace interface gains `changed` and `WorkspaceLost`. The next move
+  workspace interface gains `changed` and `AgentWorkspaceLost`. The next move
   of the base merges over all four.

@@ -169,7 +169,7 @@ export function changedFiles(calls: readonly Call[]): ChangedFile[] {
 export function latestPlan(calls: readonly Call[]): { text: string; at: string; callId: string } | null {
   for (let at = calls.length - 1; at >= 0; at -= 1) {
     const call = calls[at]!;
-    const plan = call.tool === "write_plan" ? call.input?.plan : undefined;
+    const plan = call.tool === "write_agent_plan" ? call.input?.plan : undefined;
     if (typeof plan === "string" && plan.trim()) return { text: plan, at: call.startedAt, callId: call.id };
   }
   return null;

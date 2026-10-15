@@ -1,6 +1,6 @@
 # ADR 2018: Acceptance judges records, and a sequential test stops only at its boundary
 
-**Status**: accepted (2026-10-02), amended by [ADR 2053](2053-the-gate-counts-a-success-after-a-baseline-and-a-run-at-the-check-version-that-governs.md)
+**Status**: accepted (2026-10-02)
 
 ## Context
 
@@ -30,8 +30,8 @@ showed. A check with a sequential test declares no other rate.
 again rather than trust the verdict the loop kept. It reads the baselines,
 the validations, and the hypotheses and findings from the evidence's
 storage, and the work product from its system. The chain is whole when a
-baseline at the scenario's base, taken before the session validated any
-change, at any head, fails a visible check; every hypothesis is
+baseline at the scenario's base that the one baseline rule counts
+([ADR 2053](2053-the-gate-counts-a-success-after-a-baseline-and-a-run-at-the-check-version-that-governs.md)) fails a visible check; every hypothesis is
 resolved; the gate accepts a verified success; the result cites the validation at the head;
 the hidden suite passes there; no forbidden path changed; and no surface
 the agent reads names the hidden suite. The harness runs the hidden

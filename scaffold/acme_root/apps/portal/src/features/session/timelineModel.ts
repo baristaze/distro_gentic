@@ -8,7 +8,7 @@
 // is a card that opens the child, and a child's first message is a card
 // that opens its parent. A stream of a step not stored yet joins at the
 // end, and the step that lands replaces it. No React, no fetch.
-import type { AgentSessionView, ApprovalView, StepView, Visibility } from "@acme/client";
+import type { agent_sessions, attribution } from "@acme/client";
 import { looksLikeDiff, parseJsonText } from "../../design/kit";
 import type { LiveStream } from "../../queries/live";
 import { needsYou, statusWords } from "../../app/shell/shellModel";
@@ -88,8 +88,8 @@ export interface ChildState {
   id: string;
   title: string;
   kind: string;
-  status: AgentSessionView["status"];
-  park: AgentSessionView["park"];
+  status: agent_sessions.AgentSessionView["status"];
+  park: agent_sessions.AgentSessionView["park"];
   archived_at: string | null;
   created_at: string;
   /** What it does now, read from its own history ("Running `pytest -q`");
@@ -124,7 +124,7 @@ export type Entry =
    * which reaches the agent as a suggestion, never an instruction. */
   | { kind: "person"; key: string; seq: number; at: string; text: string; author: string | null; suggestion: boolean }
   /** The steer moved to `steerer`, or the session switched who sees it. */
-  | { kind: "shared"; key: string; seq: number; at: string; steerer: string | null; visibility: Visibility | null }
+  | { kind: "shared"; key: string; seq: number; at: string; steerer: string | null; visibility: attribution.Visibility | null }
   | { kind: "note"; key: string; seq: number; at: string; label: string; text: string }
   | ThoughtEntry
   | { kind: "prose"; key: string; seq: number | null; at: string; text: string; live: boolean }
@@ -155,12 +155,12 @@ export interface Timeline {
 }
 
 export interface TimelineInput {
-  steps: readonly StepView[];
+  steps: readonly agent_sessions.AgentStepView[];
   live: readonly LiveStream[];
-  session: Pick<AgentSessionView, "status" | "park" | "archived_at">;
+  session: Pick<agent_sessions.AgentSessionView, "status" | "park" | "archived_at">;
   /** The calls the session holds for a person's decision. They count only
    * while it is parked on one: a list read before then is stale. */
-  held: readonly Pick<ApprovalView, "seq" | "tool" | "authorization_class">[];
+  held: readonly Pick<agent_sessions.ApprovalView, "seq" | "tool" | "authorization_class">[];
   /** How each tool's call reads: the platform's and the product's. */
   gists: Readonly<Record<string, Gist>>;
   /** The tools whose call the product draws as a card of its own. */
@@ -179,13 +179,13 @@ export interface TimelineInput {
 export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask_person"]);
 /** The tools whose call is a card of its own. */
 export const CARD_TOOLS: Readonly<Record<string, CardKind>> = {
-  write_plan: "plan",
+  write_agent_plan: "plan",
   open_pull_request: "pull_request",
   validate: "validation",
   submit_result: "result",
 };
 /** The tools whose call starts a sub-agent; each answers with the
- * `session_id` of the child it started. */
+ * `agent_session_id` of the child it started. */
 export const SPAWN_TOOLS: ReadonlySet<string> = new Set(["spawn", "spawn_sub_agent"]);
 /** Whether a tool's call starts another session, or hands work to one. */
 export const spawns = (tool: string) => SPAWN_TOOLS.has(tool) || tool.startsWith("hand_off");
@@ -381,7 +381,7 @@ export function outputText(output: string): string {
 }
 
 /** Who a message is from, when it is not a person: its card's label. */
-export function noteLabel(step: Pick<StepView, "actor" | "origin">): string | null {
+export function noteLabel(step: Pick<agent_sessions.AgentStepView, "actor" | "origin">): string | null {
   if (step.actor === "person") return null;
   if (step.origin === "automation") return "From an agent automation";
   if (step.origin === "parent") return "From the parent agent";
@@ -391,7 +391,7 @@ export function noteLabel(step: Pick<StepView, "actor" | "origin">): string | nu
   return "From an agent";
 }
 
-const ACTORS: Record<StepView["actor"], string> = {
+const ACTORS: Record<agent_sessions.AgentStepView["actor"], string> = {
   person: "A person",
   program: "A program",
   agent: "The agent",
@@ -401,7 +401,7 @@ const ACTORS: Record<StepView["actor"], string> = {
 };
 
 /** A control as its thin line reads: "A person paused it". */
-export function controlLine(step: Pick<StepView, "actor" | "command" | "text">): string {
+export function controlLine(step: Pick<agent_sessions.AgentStepView, "actor" | "command" | "text">): string {
   const who = ACTORS[step.actor];
   const note = step.text.trim() ? `: “${oneLine(step.text, 80)}”` : "";
   switch (step.command) {
@@ -427,7 +427,7 @@ export function controlLine(step: Pick<StepView, "actor" | "command" | "text">):
 }
 
 /** A park as its thin line reads: "Waiting for a workspace · retries 10:42". */
-export function parkedLine(park: NonNullable<StepView["park"]>): string {
+export function parkedLine(park: NonNullable<agent_sessions.AgentStepView["park"]>): string {
   const said = statusWords({ status: "parked", park, archived_at: null });
   return park.retry_at ? `${said} · retries ${shortTime(park.retry_at)}` : said;
 }
@@ -444,7 +444,7 @@ const OUTCOMES: Record<string, "plain" | "accent" | "danger"> = {
 function pairCalls(input: Pick<TimelineInput, "steps" | "held" | "session">, loopEnded: ReadonlySet<string>): Map<string, Call> {
   const { steps, held, session } = input;
   const calls = new Map<string, Call>();
-  const requests = new Map<string, StepView>();
+  const requests = new Map<string, agent_sessions.AgentStepView>();
   for (const step of steps) {
     if (step.type === "model_response") {
       for (const use of step.tool_uses) {
@@ -640,9 +640,9 @@ export function timeline(given: TimelineInput): Timeline {
           break;
         }
         if (step.agent) {
-          const parent = input.parent?.id === step.agent.session_id ? input.parent.title : null;
+          const parent = input.parent?.id === step.agent.agent_session_id ? input.parent.title : null;
           const title = parent ?? (step.origin === "parent" ? "its parent" : `an agent (${step.agent.kind})`);
-          entries.push({ kind: "from", key, seq: step.seq, at: step.created_at, sessionId: step.agent.session_id, title, text: step.text });
+          entries.push({ kind: "from", key, seq: step.seq, at: step.created_at, sessionId: step.agent.agent_session_id, title, text: step.text });
           break;
         }
         const label = noteLabel(step);
@@ -849,13 +849,13 @@ function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; b
 /** The id of the session a spawn started, when its answer names one. */
 function childOf(output: string | null): string | null {
   const answer = parseJsonText(output ?? "") as Record<string, unknown> | undefined;
-  return field(answer, "session_id", "child_id", "id");
+  return field(answer, "agent_session_id", "child_id", "id");
 }
 
 /** The sessions its hand-offs started, each once, in order, by the id each
  * answer names: what is read to show how each stands, since a session a
  * hand-off starts is no child of it. */
-export function handedTo(steps: readonly StepView[]): string[] {
+export function handedTo(steps: readonly agent_sessions.AgentStepView[]): string[] {
   const asIdle = { status: "idle" as const, park: null, archived_at: null };
   const ids = new Set<string>();
   for (const call of pairCalls({ steps, held: [], session: asIdle }, new Set()).values()) {
@@ -878,9 +878,9 @@ const STARTS: Record<CallState, string> = {
 
 /** The child a message reports on: a message a sub-agent wrote into its
  * parent, which names it, never the objective a parent wrote into it. */
-function reportOf(step: StepView, children: ReadonlyMap<string, ChildState>): string | null {
+function reportOf(step: agent_sessions.AgentStepView, children: ReadonlyMap<string, ChildState>): string | null {
   if (step.type !== "message" || !step.agent || step.origin === "parent") return null;
-  const id = step.agent.session_id;
+  const id = step.agent.agent_session_id;
   return children.has(id) || step.text.startsWith(`Sub-agent ${id} (`) ? id : null;
 }
 
@@ -933,7 +933,7 @@ export function outline(entries: readonly Entry[]): OutlineMark[] {
 }
 
 /** The question the agent asked last in these steps, when it asked one. */
-export function askedIn(steps: readonly StepView[]): string | null {
+export function askedIn(steps: readonly agent_sessions.AgentStepView[]): string | null {
   for (const step of [...steps].reverse()) {
     if (step.type !== "model_response") continue;
     const use = [...step.tool_uses].reverse().find((one) => ASK_TOOLS.has(one.name));

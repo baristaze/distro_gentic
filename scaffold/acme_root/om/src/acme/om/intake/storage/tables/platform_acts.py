@@ -20,4 +20,4 @@ class PlatformActs(IdentifiableMixin, CreatedMixin, Base):
     )
     integration: Mapped[str]
     ref: Mapped[str]
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]

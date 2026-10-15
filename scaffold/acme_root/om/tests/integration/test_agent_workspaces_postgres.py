@@ -9,14 +9,13 @@ from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
-from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
-from contracts.loops import ASSISTANT, reply, said
-from contracts.platform_loops import platform_loop_over
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
 from acme.om.agent_workspaces.impl.manager import CREATED
 from acme.om.agent_workspaces.types.egress import (
     EgressAllowlist,
@@ -30,10 +29,12 @@ from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.platform_root import PlatformRootOptions, build_platform_managers
-from acme.om.steps.types.header import LoopOutcome, ParkReason
-from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
+from contracts.loops import ASSISTANT, reply, said
+from contracts.platform_loops import platform_loop_over
 
 pytestmark = pytest.mark.integration
 
@@ -100,14 +101,14 @@ async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_rea
         rules=(EgressRule(destination="git.example.com", methods=(EgressMethod.GET,)),),
     )
     await workspaces.write_allowlist(owner, listed)
-    session_id = await loop.start("twinned")
+    agent_session_id = await loop.start("twinned")
 
-    pinned = await workspaces.get_workspace(owner, session_id)
+    pinned = await workspaces.get_workspace(owner, agent_session_id)
     assert (pinned.agent_project_id, pinned.egress) == (
         agent_projects.agent_project_id,
         EgressMode.ALLOWLIST,
     )
-    events = await loop.managers.events.get_events(owner, 0, 100)
+    events = await loop.managers.change_events.get_change_events(owner, 0, 100)
     assert CREATED in {event.kind for event in events}, "the write was announced"
 
     def ask(address: str, method: EgressMethod) -> EgressRequest:
@@ -116,7 +117,7 @@ async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_rea
         )
 
     assert (
-        await workspaces.egress(owner, session_id, ask("93.184.215.14", EgressMethod.GET))
+        await workspaces.egress(owner, agent_session_id, ask("93.184.215.14", EgressMethod.GET))
     ).allowed
     refused = [
         ask("93.184.215.14", EgressMethod.POST),
@@ -124,7 +125,7 @@ async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_rea
         ask("10.1.2.3", EgressMethod.GET),
     ]
     for request in refused:
-        assert not (await workspaces.egress(owner, session_id, request)).allowed
+        assert not (await workspaces.egress(owner, agent_session_id, request)).allowed
 
 
 async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
@@ -144,16 +145,16 @@ async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
             SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
     )
-    session_id = await loop.start("twinned")
-    await loop.say(session_id, "Answer it.")
+    agent_session_id = await loop.start("twinned")
+    await loop.say(agent_session_id, "Answer it.")
     loop.anthropic.add(reply(said("Never asked.")))
 
-    run = await loop.loops.run(owner, session_id)
+    run = await loop.loops.run(owner, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None
-    assert run.park.reason is ParkReason.RESOURCE and loop.anthropic.calls == []
-    session = await loop.managers.agent_sessions.get_session(owner, session_id)
-    assert session.park is not None and session.park.reason is ParkReason.RESOURCE
+    assert run.park.reason is ParkReason.LEASABLE_RESOURCE and loop.anthropic.calls == []
+    session = await loop.managers.agent_sessions.get_agent_session(owner, agent_session_id)
+    assert session.park is not None and session.park.reason is ParkReason.LEASABLE_RESOURCE
 
 
 async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
@@ -172,15 +173,19 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
             workspace_reader=ReaderTwin(),
         ),
     )
-    session_id = await loop.start("twinned")
+    agent_session_id = await loop.start("twinned")
     for text, leaves_work in (("First.", False), ("Second.", True), ("Third.", False)):
         git.dirty = leaves_work
-        await loop.say(session_id, text)
+        await loop.say(agent_session_id, text)
         loop.anthropic.add(reply(said("Done.")))
-        assert (await loop.loops.run(owner, session_id)).outcome is LoopOutcome.SUCCEEDED
+        assert (await loop.loops.run(owner, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
 
     (kept,) = list(git.pushed)
-    held = await loop.platform.agent_workspaces.get_workspace(owner, session_id)
+    held = await loop.platform.agent_workspaces.get_workspace(owner, agent_session_id)
     assert held.snapshot_ref == kept and held.notices == () and held.version > 1
-    told = [s for s in await loop.history(session_id) if s.type is StepType.ENVIRONMENT_CHANGED]
+    told = [
+        s
+        for s in await loop.history(agent_session_id)
+        if s.type is AgentStepType.ENVIRONMENT_CHANGED
+    ]
     assert len(told) == 1 and kept in told[0].as_text()

@@ -70,16 +70,18 @@ class AgentKnowledgeStorageMemoryImpl(MemoryStorageBase, AgentKnowledgeStorageIn
     async def create_recalls(self, org_id: UUID, recalls: tuple[AgentKnowledgeRecall, ...]) -> None:
         async with self._lock:
             # One recall of an entry in a session: the unique index the table holds.
-            held = {(r.session_id, r.entry_id) for r in self._rows(self._recalls, org_id)}
+            held = {(r.agent_session_id, r.entry_id) for r in self._rows(self._recalls, org_id)}
             for recall in recalls:
-                if (recall.session_id, recall.entry_id) not in held:
+                if (recall.agent_session_id, recall.entry_id) not in held:
                     self._put(self._recalls, org_id, recall)
-                    held.add((recall.session_id, recall.entry_id))
+                    held.add((recall.agent_session_id, recall.entry_id))
 
     async def read_recalls(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentKnowledgeRecall]:
-        rows = [r for r in self._rows(self._recalls, org_id) if r.session_id == session_id]
+        rows = [
+            r for r in self._rows(self._recalls, org_id) if r.agent_session_id == agent_session_id
+        ]
         return sorted(rows, key=lambda r: (r.created_at, r.id))[:limit]
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:

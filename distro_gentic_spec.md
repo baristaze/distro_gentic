@@ -55,7 +55,7 @@ These are the invariants. Each links the section that states it.
 
 - [A loop is closed by evidence and returning
   feedback](#what-closes-a-loop), and the platform enforces it.
-- [The brain runs in the platform's cloud, always](#session-runners); a
+- [The brain runs in the platform's cloud, always](#agent-session-runners); a
   runner never runs inside the sandbox it drives.
 - [Hosts pull; the platform never calls into a customer's
   wall](#workspace-hosts), and a host advertises only what it probed.
@@ -75,7 +75,7 @@ These are the invariants. Each links the section that states it.
 - [What Closes a Loop](#what-closes-a-loop)
 - [At a Glance](#at-a-glance)
 - [Sessions Are Work](#sessions-are-work)
-- [Session Runners](#session-runners)
+- [Agent Session Runners](#agent-session-runners)
 - [Placement and Workspace Hosts](#placement-and-workspace-hosts)
 - [Workspaces and Isolation](#workspaces-and-isolation)
 - [Watching and Steering](#watching-and-steering)
@@ -152,7 +152,7 @@ flowchart LR
         CP[Control plane:<br/>gateway, sessions, intake,<br/>agent automations, policy, approvals]
         CW[Control workers:<br/>intake, agent automations]
         Q[(Work queue)]
-        SR[Session runners:<br/>the engine, the brain]
+        SR[Agent session runners:<br/>the engine, the brain]
         CWS[Cloud workspace hosts:<br/>a VM per session]
         Rec[(Steps, records,<br/>artifacts)]
         Money[Metering, limits,<br/>agent billing, model matrix]
@@ -178,7 +178,7 @@ flowchart LR
 | Plane | Parts | Where it runs |
 |---|---|---|
 | **Control** | The gateway, sessions, intake and routing, agent automations, policy, approvals, realtime; the control workers | The platform's cloud |
-| **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
+| **Brain** | Agent session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
 | **Records and money** | Steps, execution records, artifacts; metering, limits, agent billing, the model matrix | The platform's cloud |
 
@@ -196,7 +196,7 @@ several kinds of work, and each must run where its environment is:
 
 | Work | Runs on | Claimed from |
 |---|---|---|
-| `loop`: run or resume a session's loop | Any session runner | The loop lanes |
+| `loop`: run or resume a session's loop | Any agent session runner | The loop lanes |
 | `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
 | Platform work: intake, agent automations | Control workers | Their own lanes |
@@ -227,11 +227,11 @@ holds both, as the guideline's [work queue][g-workq] holds every cap: a
 tenant at its cap is passed over, and its loops wait unwritten and
 spend no attempt. The claim order within a lane stays the guideline's.
 
-## Session Runners
+## Agent Session Runners
 
 `core`
 
-A **session runner** is a worker role ([Worker Roles][g-workers]) that
+An **agent session runner** is a worker role ([Worker Roles][g-workers]) that
 claims `loop` work and hosts the engine while it runs a session's loop.
 It holds nothing that cannot be rebuilt from storage, so any runner
 resumes any session; a session's first run and its second, a week
@@ -281,7 +281,7 @@ resolves only to fills eligible for its policy.
 `core`
 
 A **workspace host** prepares workspaces and runs tool calls in them.
-The platform runs a pool of them in its cloud, a machine per session
+The platform runs a pool of them in its cloud, a VM per session
 ([The Cloud Pool](#the-cloud-pool)), and a customer installs the same
 program inside their wall. A host outside the cloud is a client
 of the gateway, like the CLI, never a process of the platform's
@@ -328,40 +328,40 @@ in.
 `default`
 
 A session of the platform's cloud whose workspace is a VM runs on a
-machine of its own, from the **cloud pool**: one virtual machine per
+VM of its own, from the **cloud pool**: one VM per
 session, which boots the pool's image, named by the id its cloud gives
 it, and runs the same host program a customer installs, with a
 container engine inside. The runner reaches it through the exec relay,
-as it reaches any host: the machine pulls, and the platform never calls
+as it reaches any host: the VM pulls, and the platform never calls
 in.
 
-- **Its own credential, for one session.** The pool hands each machine,
+- **Its own credential, for one session.** The pool hands each VM,
   as it starts, a one-use key, and its host trades the key once for a
   credential of the session's own pool. That host is handed the
   session's work and no other session's, whatever lane it reaches.
-- **Nothing to steal.** A machine holds no database credential, no model
+- **Nothing to steal.** A VM holds no database credential, no model
   key, no history, and no role in the cloud. Its key and its credential
-  live in its memory, never on its disk. Its commands hold the machine
-  whole: the machine is the session's wall.
-- **Closed at its network.** A machine's egress is closed outside its
+  live in its memory, never on its disk. Its commands hold the VM
+  whole: the VM is the session's wall.
+- **Closed at its network.** A VM's egress is closed outside its
   guest, to the gateway and what its session's egress allows, never by a
   rule its own commands could undo.
 - **Its whole disk is its snapshot.** For a session kept by snapshots,
   the run's end pushes what the workspace holds, ends the host's
-  credential, stops the machine, and keeps its disk. The next loop starts
-  a machine from that disk: its files, its packages, and its images
+  credential, stops the VM, and keeps its disk. The next loop starts
+  a VM from that disk: its files, its packages, and its images
   stand, and its processes start again.
-- **No host, no compute; its disk stays.** A machine whose host never
+- **No host, no compute; its disk stays.** A VM whose host never
   enrolled, was ended, or went silent is stopped, its disk kept, and the
   session's next loop starts it again under a new key, its host with it.
-  The sweep destroys no disk a live session's machine ran on: the
+  The sweep destroys no disk a live session's VM ran on: the
   session's release, its purge, or its end does.
-- **Warm, and always let go.** A few machines may stand started ahead of
-  demand, and a new session claims one. Every path that starts a machine
+- **Warm, and always let go.** A few VMs may stand started ahead of
+  demand, and a new session claims one. Every path that starts a VM
   has the one that lets it go: the run's release, the sweep past the
   grace, a session or a tenant that is gone, a purge, and a key's
-  revocation, since a machine left running is money. A revocation the
-  API takes reaches no machine, so the sweep destroys its disks.
+  revocation, since a VM left running is money. A revocation the
+  API takes reaches no VM, so the sweep destroys its disks.
 
 ### The Exec Relay Transport
 
@@ -441,7 +441,7 @@ workspace itself stays a cache.
   brought over it. A person who takes control gets that tree too.
 - **Where it lives follows the wall.** A workspace in the platform's
   cloud keeps its snapshots in the platform's own stores: the object
-  store, sealed under the session's key, or, for a machine of the cloud
+  store, sealed under the session's key, or, for a VM of the cloud
   pool, the cloud's disk snapshots, encrypted at rest. A workspace on a
   customer's host keeps them in that host's own store, inside the wall.
   Their bytes never cross: the platform records the reference and the
@@ -512,7 +512,7 @@ Snapshots][e-snapshots]), as an agent project names it.
 
 | Level | Separates | Typical use |
 |---|---|---|
-| A microVM or VM per session | Filesystem, processes, network, and kernel, across sessions and tenants | The cloud's level, on a machine of the cloud pool |
+| A microVM or VM per session | Filesystem, processes, network, and kernel, across sessions and tenants | The cloud's level, on a VM of the cloud pool |
 | A container per session | Processes and filesystem; the host kernel is shared, unless a user-space kernel stands between | Validation executors; a customer's laptop |
 | A directory on the host | Only what a dedicated user and the directory separate | Work that needs the host itself: GUI tools, GPU drivers |
 | A twin | Nothing; it plays the lifecycle for tests and says so | `local` only |
@@ -569,10 +569,10 @@ paths:
   open stream from the part it last saw.
 
 A live part is a cache whose loss costs nothing, because the step or
-artifact it adds up to is the record. The stream service holds a bounded
+tool output it adds up to is the record. The stream service holds a bounded
 buffer per open stream, which is all the state a lightly stateful service
 may hold ([Stateless vs Stateful Services][g-stateful]). A late viewer of
-an artifact reads its bytes so far; a late viewer of a model stream sees
+a tool output reads its bytes so far; a late viewer of a model stream sees
 the buffered tail. A video stream is an index of encoded segments, and a
 slow viewer drops the oldest, never the newest. The live view is a
 window onto the evidence, never a second world beside it.
@@ -1235,7 +1235,7 @@ story; the rest is its planned shape:
 
   | Group | Prefix | Covers |
   |---|---|---|
-  | `placement` | `PLC` | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
+  | `placement` | `PLC` | Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts |
   | `workspaces` | `WSP` | Workspaces and Isolation |
   | `watch` | `WAT` | Watching and Steering |
   | `intake` | `INT` | Work In, Results Out |
@@ -1247,7 +1247,7 @@ story; the rest is its planned shape:
 - **Skills**, named `distro-*` and following the Agent Skills standard: a
   review per lens group and a full review, `distro-explain`,
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
-  platform, and scaffolds for a session runner, a workspace host, a
+  platform, and scaffolds for an agent session runner, a workspace host, a
   workspace provider, an integration with its twin, an agent kind, an
   agent automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of
@@ -1260,6 +1260,12 @@ story; the rest is its planned shape:
   (`product_namespaces.py`), and their routes and services
   (`product_api.py`). So a base move meets the layer below only where
   that layer's own lines change.
+
+**Its names.** A noun a product could own is named for the agent or the
+mechanism it serves, on every surface a copy shares: `agent_automations`,
+`agent_playbooks`, `agent_knowledge`, `agent_billing`, `park_alerts`. The
+bare word stays the product's, as the guideline's naming rule holds of
+every noun a scaffold brings ([Naming Entities][g-naming], OM-19).
 
 **Its first commit.** `distro_gentic` takes its base from
 `agentic_core`'s first stable release, by its tag, as [`agentic_core`
@@ -1278,30 +1284,31 @@ price table; and the threat model each deployment writes.
 
 `rodeo` is the reference product built on `distro_gentic`.
 
-[g]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md
-[g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-work-queue
-[g-lro]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#long-running-orchestrations
-[g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#leases-on-a-resource
-[g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#shape-of-a-worker
-[g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#worker-roles
-[g-scale]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#scalability-by-design
-[g-gateway]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-gateway
-[g-public]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#public-types
-[g-ids]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#identifiers
-[g-realtime]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#realtime-at-the-edge
-[g-client]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#client-rendering
-[g-stateful]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#stateless-vs-stateful-services
-[g-queues]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#queues
-[g-twins]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#twins-for-external-services
-[g-tests]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#tests
-[g-operator]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-operator-context
-[g-kmap]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-knowledge-map
-[g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#maintenance-without-a-scheduler
-[g-decoration]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#composition-by-decoration
-[g-opskills]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#operational-skills
-[g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/architecture.md#the-telemetry-round-trip
-[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/lenses/README.md
-[g-adopting]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/docs/adopting.md#upgrade-a-copy-of-the-scaffold
+[g]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md
+[g-naming]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#naming-entities
+[g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-work-queue
+[g-lro]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#long-running-orchestrations
+[g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#leases-on-a-leasable-resource
+[g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#shape-of-a-worker
+[g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#worker-roles
+[g-scale]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#scalability-by-design
+[g-gateway]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-gateway
+[g-public]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#public-types
+[g-ids]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#identifiers
+[g-realtime]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#realtime-at-the-edge
+[g-client]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#client-rendering
+[g-stateful]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#stateless-vs-stateful-services
+[g-queues]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#queues
+[g-twins]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#twins-for-external-services
+[g-tests]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#tests
+[g-operator]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-operator-context
+[g-kmap]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-knowledge-map
+[g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#maintenance-without-a-scheduler
+[g-decoration]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#composition-by-decoration
+[g-opskills]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#operational-skills
+[g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/architecture.md#the-telemetry-round-trip
+[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/lenses/README.md
+[g-adopting]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/docs/adopting.md#upgrade-a-copy-of-the-scaffold
 [e]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md
 [e-read]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#how-to-read-this
 [e-durable]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#durable-by-default

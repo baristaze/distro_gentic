@@ -10,10 +10,10 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 
+from acme.infra.agent_workspaces import IsolationSpec
 from acme.infra.transports import FileEntry, SecretUse
-from acme.infra.workspaces import IsolationSpec
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
-from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
+from acme.om.base import Created, FrozenMapping, Identifiable, OmBase, Trackable
 from acme.om.placement.types.work import ExecEffect, ExecOperation
 
 Stream = Literal["stdout", "stderr"]
@@ -44,7 +44,7 @@ class StopKind(StrEnum):
     REVOKE = "revoke"  # its lease is no longer the host's: what it pushes is refused
 
 
-class RunRequest(Platform):
+class RunRequest(OmBase):
     operation: Literal[ExecOperation.RUN] = ExecOperation.RUN
     argv: tuple[str, ...] = Field(min_length=1)
     cwd: str = "."
@@ -53,7 +53,7 @@ class RunRequest(Platform):
     max_output: int = Field(default=1_000_000, gt=0)
 
 
-class ReadRequest(Platform):
+class ReadRequest(OmBase):
     operation: Literal[ExecOperation.READ_FILE] = ExecOperation.READ_FILE
     path: str
     max_bytes: int = Field(gt=0)
@@ -62,19 +62,19 @@ class ReadRequest(Platform):
     offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
 
 
-class WriteRequest(Platform):
+class WriteRequest(OmBase):
     operation: Literal[ExecOperation.WRITE_FILE] = ExecOperation.WRITE_FILE
     path: str
     data: str  # base64
 
 
-class ListRequest(Platform):
+class ListRequest(OmBase):
     operation: Literal[ExecOperation.LIST_FILES] = ExecOperation.LIST_FILES
     path: str
     limit: int = Field(gt=0)
 
 
-class McpRequest(Platform):
+class McpRequest(OmBase):
     """A call of a tool of an MCP server the host runs, by the name its
     owner gives the server. The host lists the server's tools, calls this
     one only when it lists it as `definition` holds it, the definition a
@@ -99,10 +99,10 @@ REQUESTS: TypeAdapter[ExecRequest] = TypeAdapter(ExecRequest)
 """Reads and writes an `ExecRequest` whole, as it is sealed and opened."""
 
 
-class ExecCall(Platform):
+class ExecCall(OmBase):
     """What the runner's transport sends for one operation of a call."""
 
-    session_id: UUID
+    agent_session_id: UUID
     key: UUID  # the tool request's idempotency key
     request: ExecRequest
     effect: ExecEffect
@@ -114,7 +114,7 @@ class ExecCall(Platform):
     by_person: bool = False
 
 
-class ExecOutcome(Platform):
+class ExecOutcome(OmBase):
     """How an item ended, in the clear: what recovery decides by."""
 
     exit_code: int | None = None
@@ -128,7 +128,7 @@ class ExecOutcome(Platform):
     secrets: tuple[str, ...] = ()  # the secrets it used, by name
 
 
-class ExecOutput(Platform):
+class ExecOutput(OmBase):
     """What it printed or read, or why its host refused it: content."""
 
     stdout: str = ""
@@ -142,7 +142,7 @@ class ExecOutput(Platform):
     detail: str = ""
 
 
-class ExecResult(Platform):
+class ExecResult(OmBase):
     """What a host pushes once an item ends, as it crosses the wall."""
 
     outcome: ExecOutcome
@@ -157,7 +157,7 @@ class ExecItem(Identifiable, Trackable):
 
     model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
-    session_id: UUID
+    agent_session_id: UUID
     key: UUID
     operation: ExecOperation
     effect: ExecEffect
@@ -188,7 +188,7 @@ class ExecPart(Identifiable, Created):
 
     model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
-    session_id: UUID
+    agent_session_id: UUID
     row_id: UUID
     seq: int = Field(ge=0)
     stream: Stream
@@ -196,13 +196,13 @@ class ExecPart(Identifiable, Created):
     sha256: str
 
 
-class PartText(Platform):
+class PartText(OmBase):
     seq: int
     stream: Stream
     text: str
 
 
-class ExecProgress(Platform):
+class ExecProgress(OmBase):
     """What the runner reads of an item it waits on: its state, the parts
     after the last it read, and its result once it is done."""
 
@@ -212,14 +212,14 @@ class ExecProgress(Platform):
     output: ExecOutput | None = None
 
 
-class ExecDetail(Platform):
+class ExecDetail(OmBase):
     """What the host that holds an item reads of it: the call, where the
     workspace is, and the operation opened."""
 
     item_id: UUID
     key: UUID
     org_id: UUID  # the host's own tenant, which its secret store is keyed by
-    session_id: UUID
+    agent_session_id: UUID
     effect: ExecEffect
     deadline: datetime
     epoch: int | None
@@ -232,7 +232,7 @@ class ExecControl(Identifiable, Trackable):
     """One message of a host's control stream about an item it holds. The
     item stays the record; this is what reaches the host at once."""
 
-    session_id: UUID
+    agent_session_id: UUID
     item_id: UUID
     host_id: UUID
     kind: StopKind
@@ -247,7 +247,7 @@ class AgentWorkspaceBinding(Identifiable, Trackable):
     owner holds the instance's work to. None for a session's own
     workspace."""
 
-    session_id: UUID
+    agent_session_id: UUID
     host_id: UUID
     host_name: str = Field(min_length=1, max_length=64)
     location: str = Field(min_length=1, max_length=1024)
@@ -255,7 +255,7 @@ class AgentWorkspaceBinding(Identifiable, Trackable):
     version: int = Field(default=1, ge=1)
 
 
-class PrepareAnswer(Platform):
+class PrepareAnswer(OmBase):
     """A host's answer to a prepare it claimed: where on it the workspace
     it made is, or why it made none. Exactly one of the two. A refusal is
     `lost` when the snapshot the host was asked to start it from is not in
@@ -281,7 +281,7 @@ class PrepareAnswer(Platform):
         return self
 
 
-class SnapshotAnswer(Platform):
+class SnapshotAnswer(OmBase):
     """A host's answer to a snapshot it claimed: kept in its own store, under
     the reference the store knows it by, with the digest of its bytes and
     their size, never the bytes; or why it kept none. Exactly one of the

@@ -20,7 +20,12 @@ class AgentSessionRetentionRows(IdentifiableMixin, CreatedMixin, Base):
     # gets no index of its own.
     __org_id_index__ = False
     __table_args__ = (
-        Index("uq_agent_session_retention_org_id_session_id", "org_id", "session_id", unique=True),
+        Index(
+            "uq_agent_session_retention_org_id_agent_session_id",
+            "org_id",
+            "agent_session_id",
+            unique=True,
+        ),
         Index("ix_agent_session_retention_org_id_policy_version", "org_id", "policy_version"),
         # The sweep's reads across tenants: the content and the shape still
         # to expire, by when they do.
@@ -35,7 +40,7 @@ class AgentSessionRetentionRows(IdentifiableMixin, CreatedMixin, Base):
             postgresql_where=text("shape_expires_at IS NOT NULL AND shape_expired_at IS NULL"),
         ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     agent_project_id: Mapped[UUID | None]
     policy: Mapped[dict[str, Any]] = mapped_column(JSONB())
     policy_version: Mapped[int]

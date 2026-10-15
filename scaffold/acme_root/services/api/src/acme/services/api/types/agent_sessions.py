@@ -1,39 +1,52 @@
 """The wire types of agent sessions: a session, one step of its history,
-an artifact it keeps, and what a person sends it. A step's view is flat:
+a tool output it keeps, and what a person sends it. A step's view is flat:
 what it is, who wrote it, what it says as text, and the few fields of its
 header a reader acts on. Its content is the session's, so whoever the
 session is visible to reads it as the session's own reader does."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, JsonValue, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
-from acme.integrations.model_providers.types import StopReason
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin
+from acme.om.agent_steps.types.content import MAX_NAME
+from acme.om.agent_steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.authority import Visibility
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.steps.types.content import MAX_NAME
-from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
-from acme.om.steps.types.step import Actor, Origin, StepType
 from acme.om.tools.types.call import MAX_REPORT, Verdict
 from acme.services.api.types.common import RequestBody, View
+
+
+class StopReason(StrEnum):
+    """Why a model's response stopped, as the wire carries it: the model
+    providers' own reason, by value. A refusal is a response the agent kind
+    handles, never a provider error."""
+
+    END_TURN = "end_turn"
+    TOOL_USE = "tool_use"
+    OUTPUT_LIMIT = "output_limit"  # cut by its output bound: never complete
+    REFUSAL = "refusal"
+    CONTENT_FILTER = "content_filter"
+    PAUSE = "pause"  # the provider paused a long turn; the next call continues it
+
 
 MAX_MESSAGE = 100_000
 """The most characters one message carries."""
 
 
-class LineParkView(View):
-    """The line a loop waits in: the request, what it asked for (a kind,
-    and the resource when it named one), its place (1 is next in some line
-    it stands in), and the estimate of its wait."""
+class WaitLineParkView(View):
+    """The wait line a loop stands in: the request, what it asked for (a
+    kind, and the leasable resource when it named one), its place (1 is next
+    in some wait line it stands in), and the estimate of its wait."""
 
     request_id: UUID
     kind: str
-    resource_id: UUID | None
+    leasable_resource_id: UUID | None
     place: int | None
     estimate_seconds: float | None
 
@@ -49,7 +62,7 @@ class ParkView(View):
     reason: ParkReason
     unlock: str
     retry_at: datetime | None
-    line: LineParkView | None = None
+    wait_line: WaitLineParkView | None = None
     cause: str | None
     holder: UUID | None = None
 
@@ -71,7 +84,7 @@ class AgentSessionView(View):
     title: str
     kind: str
     kind_version: int
-    status: SessionStatus
+    status: AgentSessionStatus
     park: ParkView | None
     parent_id: UUID | None
     root_id: UUID
@@ -92,7 +105,7 @@ class AgentSessionPageView(View):
     next_cursor: str | None
 
 
-class StepUsageView(View):
+class AgentStepUsageView(View):
     """What a model call used, as its provider reported it, in disjoint
     classes, so no token is counted twice."""
 
@@ -115,7 +128,7 @@ class ToolUseView(View):
 
     id: str
     name: str
-    input: dict[str, JsonValue]
+    input: dict[str, Any]
 
 
 class AgentRefView(View):
@@ -125,7 +138,7 @@ class AgentRefView(View):
     its parent."""
 
     kind: str
-    session_id: UUID
+    agent_session_id: UUID
 
 
 class SnapshotView(View):
@@ -136,10 +149,10 @@ class SnapshotView(View):
     id: UUID
     hash: str
     size: int
-    workspace_id: UUID
+    agent_workspace_id: UUID
 
 
-class StepView(View):
+class AgentStepView(View):
     """One step of a session's history, in its order. `text` is what it
     says: a message's words, a model's answer, a tool's result. A model
     response also says what it thought (`thinking`) and the calls it made
@@ -161,7 +174,7 @@ class StepView(View):
     id: UUID
     seq: int
     loop_id: UUID
-    type: StepType
+    type: AgentStepType
     actor: Actor
     origin: Origin
     responds_to: UUID | None
@@ -174,7 +187,7 @@ class StepView(View):
     agent: AgentRefView | None
     tools: list[str]
     stop_reason: StopReason | None
-    usage: StepUsageView | None
+    usage: AgentStepUsageView | None
     tool: str | None
     failure: ToolFailure | None
     command: ControlCommand | None
@@ -188,11 +201,11 @@ class StepView(View):
     visibility: Visibility | None
 
 
-class StepPageView(View):
+class AgentStepPageView(View):
     """One page of a session's history, after the seq the request named.
     With `has_more`, the next page starts after the last step's seq."""
 
-    items: list[StepView]
+    items: list[AgentStepView]
     has_more: bool
 
 
@@ -202,7 +215,7 @@ class QuestionView(View):
     principal to name. `unlock` is what clears it, sent as a control; `seq`
     is the step that parked it."""
 
-    session_id: UUID
+    agent_session_id: UUID
     seq: int
     asked_at: datetime
     unlock: str
@@ -214,7 +227,7 @@ class ApprovalView(View):
     principal it runs under. Its input stays in the history; the request
     names only its hash."""
 
-    session_id: UUID
+    agent_session_id: UUID
     seq: int
     requested_at: datetime
     tool: str
@@ -308,7 +321,7 @@ class FillUsageView(View):
     thinking: int
 
 
-class SessionModelUsageView(View):
+class AgentSessionModelUsageView(View):
     """What a session's model calls used, as each provider reported it, per
     model and in total."""
 
@@ -321,19 +334,19 @@ class SessionModelUsageView(View):
     fills: list[FillUsageView]
 
 
-class ArtifactPageView(View):
+class ToolOutputPageView(View):
     """A page of what a session keeps whole outside its window, such as a
-    long tool result: its characters from `start`, the whole artifact's
+    long tool result: its characters from `start`, the whole tool output's
     length, and whether more follow."""
 
-    artifact_id: UUID
+    tool_output_id: UUID
     start: int
     text: str
     characters: int
     has_more: bool
 
 
-class StartSessionRequest(RequestBody):
+class StartAgentSessionRequest(RequestBody):
     """A session to start on the latest version of a kind the product runs,
     in an agent project of the caller's tenant. Outside a local stack a session
     starts in an agent project or not at all."""
@@ -350,7 +363,7 @@ class MessageRequest(RequestBody):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE)
 
 
-class SessionControl(StrEnum):
+class AgentSessionControl(StrEnum):
     """The controls a person sends a session out of band. A decision on one
     tool call is a route of its own."""
 
@@ -369,15 +382,15 @@ class ControlRequest(RequestBody):
     its workspace's next prepare starts from; no other control names
     either."""
 
-    command: SessionControl
+    command: AgentSessionControl
     request_seq: int | None = Field(default=None, ge=1)
     snapshot_id: UUID | None = None
 
     @model_validator(mode="after")
     def _an_interrupt_names_its_call(self) -> Self:
-        if (self.command is SessionControl.INTERRUPT) != (self.request_seq is not None):
+        if (self.command is AgentSessionControl.INTERRUPT) != (self.request_seq is not None):
             raise ValueError("an interrupt names the call it stops, and no other control names one")
-        if (self.command is SessionControl.RESTORE) != (self.snapshot_id is not None):
+        if (self.command is AgentSessionControl.RESTORE) != (self.snapshot_id is not None):
             raise ValueError(
                 "a restore names the snapshot it starts from, and no other control names one"
             )
@@ -431,3 +444,74 @@ class JobCompletionRequest(RequestBody):
     handle: str = Field(min_length=1, max_length=MAX_NAME)
     text: str = Field(default="", max_length=MAX_REPORT)
     failure: ToolFailure | None = None
+
+
+class UsageRecordView(View):
+    """One model call a provider billed, as the ledger keeps it: ids, tokens
+    by disjoint class, reference cost in millionths (null when no price
+    applied), the provider's latency, and the labels of what served it. It
+    holds no content, so it reads the same in every storage mode. `agent_step_id`
+    is the call's response step; `spend_hold_id` its hold; `tree_id` the
+    session's tree; `kind_version` the agent kind's version the session
+    ran. `settled_whole` marks a call whose usage was never reported whole
+    (a broken stream, a lost run): its cost is its whole hold, and its
+    tokens are what a partial reply reported, else 0."""
+
+    id: UUID
+    created_at: datetime
+    spend_hold_id: UUID
+    agent_session_id: UUID
+    tree_id: UUID
+    loop_id: UUID
+    agent_step_id: UUID
+    agent_kind: str
+    kind_version: int
+    role: str
+    provider: str
+    model: str
+    input_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    output_tokens: int
+    thinking_tokens: int
+    cost_micros: int | None
+    latency_ms: int
+    settled_whole: bool
+
+
+class UsageRollupView(View):
+    """The sum of some records. `unpriced` counts the calls no price applied
+    to, whose cost is in no figure here: a rollup with any is a floor.
+    `settled_whole` counts the calls settled at their whole hold, whose cost
+    is in `cost_micros` at the hold, as the ledger counts it."""
+
+    calls: int
+    input_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    output_tokens: int
+    thinking_tokens: int
+    cost_micros: int
+    unpriced: int
+    settled_whole: int
+    latency_ms: int
+
+
+class LoopUsageView(View):
+    loop_id: UUID
+    rollup: UsageRollupView
+
+
+class AgentSessionUsageView(View):
+    """A page of a session's usage records, oldest first, with the rollup of
+    each loop, in the order it first called, and of the whole session. The
+    rollups cover every record, whatever the page; `has_more_loops` says the
+    session ran more loops than `loops` holds. With `next_cursor`, the next
+    page of `items` starts there."""
+
+    agent_session_id: UUID
+    items: list[UsageRecordView]
+    next_cursor: str | None
+    loops: list[LoopUsageView]
+    has_more_loops: bool
+    total: UsageRollupView

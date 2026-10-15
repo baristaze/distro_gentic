@@ -9,11 +9,8 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agents.loop_rules import APPROVAL_UNLOCK
-from acme.om.agents.types.kind import AgentKind
-from acme.om.agents.types.tree import AgentTree
-from acme.om.park_alerts.rules import held_calls, needs_person, parked_step
-from acme.om.steps.types.header import (
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
+from acme.om.agent_steps.types.header import (
     ControlCommand,
     ControlHeader,
     ModelRequestHeader,
@@ -23,15 +20,18 @@ from acme.om.steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.steps.types.step import Step, StepType
+from acme.om.agents.loop_rules import APPROVAL_UNLOCK
+from acme.om.agents.types.kind import AgentKind
+from acme.om.agents.types.tree import AgentTree
+from acme.om.park_alerts.rules import held_calls, needs_person, parked_step
 from acme.om.tools.types.call import Verdict
 from acme.services.api.types.agent_sessions import (
+    AgentSessionModelUsageView,
     ApprovalView,
     BoundsView,
     FillUsageView,
     LoopLimitsView,
     QuestionView,
-    SessionModelUsageView,
     ToolCallView,
     TreeBoundsView,
 )
@@ -41,7 +41,7 @@ def waits_on_approval(park: Park | None) -> bool:
     return park is not None and park.reason is ParkReason.PERSON and park.unlock == APPROVAL_UNLOCK
 
 
-def questions_of(session: AgentSession, history: Sequence[Step]) -> list[QuestionView]:
+def questions_of(session: AgentSession, history: Sequence[AgentStep]) -> list[QuestionView]:
     """The park on a person the session waits on, when it is no call's
     decision and nothing clears it by itself."""
     park = session.park
@@ -52,12 +52,15 @@ def questions_of(session: AgentSession, history: Sequence[Step]) -> list[Questio
         return []
     return [
         QuestionView(
-            session_id=session.id, seq=parked.seq, asked_at=parked.created_at, unlock=park.unlock
+            agent_session_id=session.id,
+            seq=parked.seq,
+            asked_at=parked.created_at,
+            unlock=park.unlock,
         )
     ]
 
 
-def approvals_of(session: AgentSession, history: Sequence[Step]) -> list[ApprovalView]:
+def approvals_of(session: AgentSession, history: Sequence[AgentStep]) -> list[ApprovalView]:
     """The calls a session parked on approval holds for a person's decision;
     none when it waits on nothing of the kind."""
     if not waits_on_approval(session.park):
@@ -68,7 +71,7 @@ def approvals_of(session: AgentSession, history: Sequence[Step]) -> list[Approva
         assert isinstance(header, ToolRequestHeader)
         held.append(
             ApprovalView(
-                session_id=session.id,
+                agent_session_id=session.id,
                 seq=request.seq,
                 requested_at=request.created_at,
                 tool=header.tool,
@@ -79,18 +82,18 @@ def approvals_of(session: AgentSession, history: Sequence[Step]) -> list[Approva
     return held
 
 
-def tool_calls_of(history: Sequence[Step], now: datetime) -> list[ToolCallView]:
+def tool_calls_of(history: Sequence[AgentStep], now: datetime) -> list[ToolCallView]:
     """Every tool request in order, each with the latest decision a person
     made on it and the response that answered it. A decision reads as of
     its call's response when the call has one: an approval that let a
     call run stays approved once its lifetime passes."""
     decisions: dict[UUID, ControlHeader] = {}
-    responses: dict[UUID, Step] = {}
+    responses: dict[UUID, AgentStep] = {}
     for step in history:
         header = step.header
         if isinstance(header, ControlHeader) and header.call is not None and step.refs:
             decisions[step.refs[0]] = header
-        elif step.type is StepType.TOOL_RESPONSE and step.responds_to is not None:
+        elif step.type is AgentStepType.TOOL_RESPONSE and step.responds_to is not None:
             responses[step.responds_to] = step
     calls: list[ToolCallView] = []
     for step in history:
@@ -127,7 +130,7 @@ def verdict_of(decided: ControlHeader, now: datetime) -> Verdict:
     return Verdict.EXPIRED if expires is not None and expires <= now else Verdict.APPROVED
 
 
-def usage_of(history: Sequence[Step]) -> SessionModelUsageView:
+def usage_of(history: Sequence[AgentStep]) -> AgentSessionModelUsageView:
     """The usage every model response reported, summed per model by the
     request it answers, and in total. A response with no usage reported
     counts as a call and adds no tokens."""
@@ -162,7 +165,7 @@ def usage_of(history: Sequence[Step]) -> SessionModelUsageView:
         )
         for fill, row in sorted(totals.items())
     ]
-    return SessionModelUsageView(
+    return AgentSessionModelUsageView(
         calls=sum(f.calls for f in per_fill),
         input=sum(f.input for f in per_fill),
         cache_read=sum(f.cache_read for f in per_fill),

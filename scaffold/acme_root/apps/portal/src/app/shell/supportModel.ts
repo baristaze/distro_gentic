@@ -5,7 +5,7 @@
 // another kind, or an archived or deleted one is never read through the
 // dock, and the next message starts a new conversation instead. The lists
 // of work leave support conversations out. No React, no storage.
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 
 /** The agent the dock talks to, whatever readers a product gives it. */
 export const ASSISTANT_KIND = "platform_assistant";
@@ -16,14 +16,14 @@ export const SUPPORT_TITLE = "Support";
 /** Whether a session is a support conversation: the kind and the title the
  * dock starts one under, which no session changes after it starts. One the
  * platform assistant runs from the composer carries the person's words. */
-export function isSupport(session: Pick<AgentSessionView, "kind" | "title">): boolean {
+export function isSupport(session: Pick<agent_sessions.AgentSessionView, "kind" | "title">): boolean {
   return session.kind === ASSISTANT_KIND && session.title === SUPPORT_TITLE;
 }
 
 /** Whether a list of work shows this session under its agent filter: the
  * session's own agent, or with none named, any session but a support
  * conversation. */
-export function listedFor(session: Pick<AgentSessionView, "kind" | "title">, kind: string): boolean {
+export function listedFor(session: Pick<agent_sessions.AgentSessionView, "kind" | "title">, kind: string): boolean {
   return kind ? session.kind === kind : !isSupport(session);
 }
 
@@ -34,7 +34,7 @@ export function conversationKey(org: string | null, user: string | null): string
 }
 
 /** Whether the dock continues this session for this person. */
-export function continues(session: Pick<AgentSessionView, "kind" | "created_by" | "archived_at" | "deleted_at"> | undefined, me: string | null): boolean {
+export function continues(session: Pick<agent_sessions.AgentSessionView, "kind" | "created_by" | "archived_at" | "deleted_at"> | undefined, me: string | null): boolean {
   return (
     session !== undefined &&
     me !== null &&

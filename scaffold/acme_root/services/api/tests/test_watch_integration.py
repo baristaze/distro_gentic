@@ -11,17 +11,18 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
 from test_hosts_api import a_host, a_pool, a_token, bearer, created, tenant_of
 from test_rate_limits_integration import over_the_stack
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.stream import TextPart
 from acme.om.base import new_id
 from acme.om.exceptions import StaleWriter
 from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.stream import TextPart
 from acme.om.watch.impl.manager import SENT
+
+from contracts.agent_session_storage import make_agent_session
 
 pytestmark = pytest.mark.integration
 
@@ -38,18 +39,18 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         host = await a_host(client, await a_token(client, owner, pool_id))
         ctx = await tenant_of(container, owner)
         # The session offers no tool: the stack's catalog classes none of
-        # the names `make_session` gives, and a control is checked against
+        # the names `make_agent_session` gives, and a control is checked against
         # the class of every tool the session offers.
-        offers_none = make_session().model_copy(update={"tools": ()})
-        session = await managers.agent_sessions.create_session(ctx, offers_none)
+        offers_none = make_agent_session().model_copy(update={"tools": ()})
+        session = await managers.agent_sessions.create_agent_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
         await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
         await managers.agent_workspaces.pinned(ctx, session.id, SPEC)
-        agents_epoch = await managers.steps.begin_run(ctx, session.id)
+        agents_epoch = await managers.agent_steps.begin_run(ctx, session.id)
 
         step = new_id()
         container.stream.emit(
-            TextPart(session_id=session.id, step_id=step, n=0, index=0, text="Looking")
+            TextPart(agent_session_id=session.id, agent_step_id=step, n=0, index=0, text="Looking")
         )
         await container.stream.flush()
         opened = await client.post(f"/v1/agent-sessions/{session.id}/live", headers=owner)
@@ -61,7 +62,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         assert (await client.post(control, headers=owner)).status_code == 200
         note = message_step(new_id(), session.created_at, session.id, ctx, "still mine")
         with pytest.raises(StaleWriter):
-            await managers.steps.append_steps(ctx, session.id, agents_epoch, [note])
+            await managers.agent_steps.append_agent_steps(ctx, session.id, agents_epoch, [note])
 
         sent = await client.post(
             f"{control}/commands", headers=created(owner), json={"argv": ["make", "test"]}
@@ -93,7 +94,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
 
         ended = await client.get(f"{control}/commands/{run['command_key']}", headers=owner)
         assert (ended.json()["state"], ended.json()["stdout"]) == ("done", "ok\n")
-        events = await managers.events.get_events(ctx, 0, 200)
+        events = await managers.change_events.get_change_events(ctx, 0, 200)
         (record,) = [event for event in events if event.kind == SENT]
         assert (record.actor_id, str(record.target_id)) == (ctx.user_id, item_id)
 
@@ -110,32 +111,44 @@ async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_c
     async with over_the_stack(tmp_path, live_read_key=KEY) as (container, client, owner):
         assert container.infra.get_streams().describe().startswith("streams=valkey")
         ctx = await tenant_of(container, owner)
-        mine = await container.managers.agent_sessions.create_session(ctx, make_session())
-        theirs = await container.managers.agent_sessions.create_session(ctx, make_session())
+        mine = await container.managers.agent_sessions.create_agent_session(
+            ctx, make_agent_session()
+        )
+        theirs = await container.managers.agent_sessions.create_agent_session(
+            ctx, make_agent_session()
+        )
         my_step, their_step = new_id(), new_id()
         for n in range(3):
             container.stream.emit(
-                TextPart(session_id=mine.id, step_id=my_step, n=n, index=0, text=f"mine {n}")
+                TextPart(
+                    agent_session_id=mine.id, agent_step_id=my_step, n=n, index=0, text=f"mine {n}"
+                )
             )
             container.stream.emit(
-                TextPart(session_id=theirs.id, step_id=their_step, n=n, index=0, text="theirs")
+                TextPart(
+                    agent_session_id=theirs.id,
+                    agent_step_id=their_step,
+                    n=n,
+                    index=0,
+                    text="theirs",
+                )
             )
         container.stream.emit(
-            TextPart(session_id=theirs.id, step_id=my_step, n=3, index=0, text="theirs")
+            TextPart(agent_session_id=theirs.id, agent_step_id=my_step, n=3, index=0, text="theirs")
         )
         await container.stream.flush()
 
-        async def read(session_id: UUID) -> list[dict[str, Any]]:
-            opened = await client.post(f"/v1/agent-sessions/{session_id}/live", headers=owner)
+        async def read(agent_session_id: UUID) -> list[dict[str, Any]]:
+            opened = await client.post(f"/v1/agent-sessions/{agent_session_id}/live", headers=owner)
             read = await client.get("/v1/live", params={"handle": opened.json()["handle"]})
             assert read.status_code == 200, read.text
-            assert read.json()["session_id"] == str(session_id)
+            assert read.json()["agent_session_id"] == str(agent_session_id)
             return read.json()["streams"]
 
         (own,) = await read(mine.id)
-        assert own["step_id"] == str(my_step)
+        assert own["agent_step_id"] == str(my_step)
         assert "".join(part["text"] for part in own["parts"]) == "mine 0mine 1mine 2"
         other = await read(theirs.id)
-        assert {stream["step_id"] for stream in other} == {str(their_step), str(my_step)}
+        assert {stream["agent_step_id"] for stream in other} == {str(their_step), str(my_step)}
         texts = {part["text"] for stream in other for part in stream["parts"]}
         assert {text.replace("theirs", "") for text in texts} == {""}

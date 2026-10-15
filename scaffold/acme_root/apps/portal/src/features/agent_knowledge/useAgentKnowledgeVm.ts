@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { AgentKnowledgeStatus } from "@acme/client";
+import type { agent_knowledge } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { useAgentKnowledge, useWriteEntry } from "../../queries/agentKnowledge";
 import { useMe } from "../../queries/tenancy";
@@ -31,7 +31,7 @@ export function useAgentKnowledgeVm() {
   };
   return {
     status,
-    setStatus: (next: AgentKnowledgeStatus) => setParams(next === "reviewed" ? {} : { status: next }),
+    setStatus: (next: agent_knowledge.AgentKnowledgeStatus) => setParams(next === "reviewed" ? {} : { status: next }),
     rows: list.data?.map(entryRow) ?? null,
     error: list.error,
     mayWrite: me.data?.permissions.includes("write") ?? false,

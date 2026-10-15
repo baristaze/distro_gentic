@@ -15,7 +15,7 @@ branch and pull request, for one loop at most."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.infra.workspaces import IsolationSpec, Workspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.types.credential import (
     FetchCredential,
@@ -26,7 +26,7 @@ from acme.om.agent_workspaces.types.egress import EgressAllowlist, EgressDecisio
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.agent_workspaces.types.source import OpenedPullRequest, RepositoryWrite
 from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 from acme.om.evidence.types.validation import WorkProduct
 
 
@@ -54,14 +54,16 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_workspace(self, ctx: TenantContext, session_id: UUID) -> AgentSessionWorkspace:
+    async def get_workspace(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionWorkspace:
         """The session's workspace as pinned and as the cache knows it;
         `NotFound` when it was never pinned."""
         ...
 
     @abstractmethod
     async def pinned(
-        self, ctx: TenantContext, session_id: UUID, asked: IsolationSpec
+        self, ctx: TenantContext, agent_session_id: UUID, asked: IsolationSpec
     ) -> IsolationSpec:
         """The isolation every prepare of the session's workspace is held to:
         the pin, whatever a loop asks. A session never pinned, created
@@ -72,14 +74,14 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def attach(
-        self, ctx: TenantContext, workspace: Workspace, epoch: int, *, restored: bool = False
-    ) -> Workspace:
+        self, ctx: TenantContext, workspace: AgentWorkspace, epoch: int, *, restored: bool = False
+    ) -> AgentWorkspace:
         """The prepared workspace, its checkout brought up to the session's
         branch on the repository its agent project binds (`rules.branch_plan`), and
         what the loop is told of it in `changed`: the snapshot of every
         instance let go since a loop was last told, and a branch rebuilt
         after its pull request closed. A branch the remote held and lost with
-        no known fate is `WorkspaceLost`, which parks the loop for a person,
+        no known fate is `AgentWorkspaceLost`, which parks the loop for a person,
         and nothing is checked out from the default branch in its stead. A session whose agent project binds no
         repository has no checkout. Every command in the checkout carries
         `epoch`, the one the run that prepares it held when it began.
@@ -91,7 +93,7 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def detach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
+    async def detach(self, ctx: TenantContext, workspace: AgentWorkspace, epoch: int) -> None:
         """Before the workspace's instance goes: what its checkout holds that
         the remote lacks is committed and pushed to a snapshot ref, and the
         next loop will be told, beside any notice it has not yet read. Raises
@@ -101,7 +103,7 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def work_product(self, ctx: TenantContext, workspace: Workspace) -> WorkProduct:
+    async def work_product(self, ctx: TenantContext, workspace: AgentWorkspace) -> WorkProduct:
         """The session's work product: its branch as the bound repository
         holds it, read outside the workspace (`RepositoryReaderInterface`),
         with the repository's name as its agent project, the base its branch
@@ -124,7 +126,7 @@ class AgentWorkspacesManagerInterface(ABC):
         base: str | None = None,
         untouched: tuple[str, ...] = (),
     ) -> bytes:
-        """Platform-internal: the tree a validation of the agent project runs on,
+        """System-internal: the tree a validation of the agent project runs on,
         as a tar, read from its bound repository outside every workspace
         with its fetch credential (`RepositoryReaderInterface.tree`): the
         commit `version`, with every path a `protected` pattern matches
@@ -161,7 +163,7 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def egress(
-        self, ctx: TenantContext, session_id: UUID, request: EgressRequest
+        self, ctx: TenantContext, agent_session_id: UUID, request: EgressRequest
     ) -> EgressDecision:
         """The egress proxy's answer to one connection of the session's
         workspace, by the egress it pinned (`rules.egress_decision`): a
@@ -171,7 +173,9 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def outward(self, ctx: TenantContext, session_id: UUID, write: RepositoryWrite) -> bool:
+    async def outward(
+        self, ctx: TenantContext, agent_session_id: UUID, write: RepositoryWrite
+    ) -> bool:
         """Whether a write to source control acts outward, for the rule of
         two: every write but a push to the session's own branch or its
         snapshots, and its own pull request, on the one repository its
@@ -203,7 +207,7 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
+    async def mint_push_token(self, ctx: TenantContext, agent_session_id: UUID) -> PushToken:
         """A push token for the session's own branch on the repository its
         agent project binds: it writes that branch, its snapshots, and its pull
         request, and nothing else, until its lifetime passes or the loop's
@@ -215,7 +219,13 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def open_pull_request(
-        self, ctx: TenantContext, session_id: UUID, token: str, head: str, title: str, body: str
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        token: str,
+        head: str,
+        title: str,
+        body: str,
     ) -> OpenedPullRequest:
         """Points the session's branch at the commit `head` and opens its pull
         request onto the repository's default branch, through source control,
@@ -230,7 +240,7 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def keep_snapshot(self, ctx: TenantContext, snapshot: KeptSnapshot) -> KeptSnapshot:
-        """Platform-internal: records where a snapshot the session keeps
+        """System-internal: records where a snapshot the session keeps
         lives, the platform's bucket or a host's store, by its reference and
         its hash, never its bytes. Once: a snapshot recorded already is
         answered as stored."""
@@ -244,29 +254,32 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def kept_snapshots(
-        self, ctx: TenantContext, session_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID
     ) -> tuple[KeptSnapshot, ...]:
         """Where each snapshot the session keeps lives, oldest first, at most
         the options' `snapshots_read` of them."""
         ...
 
     @abstractmethod
-    async def snapshot_hosts(self, org_id: UUID, session_id: UUID) -> frozenset[UUID]:
-        """Platform-internal: each host whose store keeps a snapshot of the
+    @stageless
+    async def snapshot_hosts(self, org_id: UUID, agent_session_id: UUID) -> frozenset[UUID]:
+        """System-internal: each host whose store keeps a snapshot of the
         session, by the records, at most the options' `snapshots_read` of
         them read; for no principal."""
         ...
 
     @abstractmethod
-    async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
-        """Platform-internal: the records of the session's snapshots go, once
+    @stageless
+    async def forget_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
+        """System-internal: the records of the session's snapshots go, once
         their bytes went with its content or its purge; for no principal.
         Returns how many went."""
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
-        """Platform-internal: the workspace row of a session the sweep has
+    @stageless
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        """System-internal: the workspace row of a session the sweep has
         claimed for its purge goes with its history, in the tenant named;
         for no principal. False when none was left."""
         ...

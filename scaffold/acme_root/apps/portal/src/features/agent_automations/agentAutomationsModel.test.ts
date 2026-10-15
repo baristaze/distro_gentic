@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentAutomationView } from "@acme/client";
+import type { agent_automations } from "@acme/client";
 import { actionLine, agentOptions, agentAutomationRequest, agentAutomationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AgentAutomationDraft } from "./agentAutomationsModel";
 
 const SESSION = "0b8e5d2a-1c3f-4e6a-9b7d-2f4c6e8a0b1c";
@@ -14,11 +14,11 @@ const draft = (fields: Partial<AgentAutomationDraft>): AgentAutomationDraft => (
   ...fields,
 });
 
-const saved: AgentAutomationView = {
+const saved: agent_automations.AgentAutomationView = {
   id: "a1",
   name: "Triage",
   trigger: { kind: "event", integrations: ["forge"], arrivals: ["comment"], effects: [], every: null },
-  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, session_id: SESSION, params: {}, agent_playbook: null },
+  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, agent_session_id: SESSION, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
   runs_as: "agent_automation_principal",
   own_events: true,
@@ -52,7 +52,7 @@ describe("agentAutomationRequest", () => {
       request: {
         name: "Nightly tidy",
         trigger: { kind: "schedule", every: "PT86400S", integrations: [], arrivals: [], effects: [] },
-        action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy the docs", agent_project_id: "p1", session_id: null },
+        action: { kind: "start_agent_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy the docs", agent_project_id: "p1", agent_session_id: null },
         limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
         runs_as: "creator",
         enabled: true,
@@ -89,7 +89,7 @@ describe("agentAutomationRequest", () => {
       request: {
         name: "Triage",
         trigger: { kind: "event", every: null, integrations: ["forge"], arrivals: ["comment"], effects: [] },
-        action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, session_id: SESSION },
+        action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, agent_project_id: null, agent_session_id: SESSION },
         limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
         runs_as: "agent_automation_principal",
         enabled: false,
@@ -98,18 +98,18 @@ describe("agentAutomationRequest", () => {
     });
   });
   it("keeps the agent playbook a saved start invokes through an edit, and refuses a name no publish could have", () => {
-    const start: AgentAutomationView = {
+    const start: agent_automations.AgentAutomationView = {
       ...saved,
-      action: { kind: "start_session", brief: "Look.", agent_kind: "assistant", title: "Triage", agent_project_id: null, session_id: null, params: {}, agent_playbook: "triage-a-comment" },
+      action: { kind: "start_agent_session", brief: "Look.", agent_kind: "assistant", title: "Triage", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: "triage-a-comment" },
     };
     const made = agentAutomationRequest(draftOf(start) ?? EMPTY_DRAFT, { kept: start });
     expect("request" in made && made.request.action).toEqual({
-      kind: "start_session",
+      kind: "start_agent_session",
       brief: "Look.",
       agent_kind: "assistant",
       title: "Triage",
       agent_project_id: null,
-      session_id: null,
+      agent_session_id: null,
       agent_playbook: "triage-a-comment",
     });
     expect(actionLine(start.action, [])).toBe("start a session of the kind assistant, invoking triage-a-comment");
@@ -130,7 +130,7 @@ it("shows a row in words", () => {
 });
 
 it("shows a product's own action by its kind, and offers no form to edit it", () => {
-  const product: AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, agent_project_id: null, session_id: null, params: { steps: 2 }, agent_playbook: null } };
+  const product: agent_automations.AgentAutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, agent_project_id: null, agent_session_id: null, params: { steps: 2 }, agent_playbook: null } };
   expect(actionLine(product.action, [])).toBe("run the product's action run_job");
   expect(draftOf(product)).toBeNull();
 });

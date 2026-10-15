@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import EnrolledClaimant, Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
@@ -40,6 +41,7 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_enrollment_token_by_digest(
         self, digest: str
     ) -> tuple[UUID, EnrollmentToken] | None:
@@ -101,6 +103,7 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         """Cross-tenant, for the platform's gauge of hosts, in the system
         scope: the hosts not revoked, of the host kind alone, by whether they called since
@@ -109,6 +112,7 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_claimant_by_credential_digest(
         self, digest: str
     ) -> tuple[UUID, HostCredential, EnrolledClaimant] | None:
@@ -157,7 +161,9 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None: ...
+    async def read_placement(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionPlacement | None: ...
 
     @abstractmethod
     async def write_placement(

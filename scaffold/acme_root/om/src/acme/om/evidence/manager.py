@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 from acme.om.evidence.types.inference import Inference, InferencePage
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, ExecutionRecordPage, RunPurpose
@@ -37,7 +37,7 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def protection(
-        self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
+        self, ctx: TenantContext, agent_session_id: UUID, paths: Sequence[str]
     ) -> Target:
         """What a call of the session that changes `paths` acts on, for
         policy to read: whether the policy of the session's agent project, as the
@@ -58,7 +58,7 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def get_runs(
-        self, ctx: TenantContext, session_id: UUID, after: UUID | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> ExecutionRecordPage:
         """One page of the session's runs, oldest first, strictly after
         `after`; `limit` is clamped."""
@@ -73,7 +73,7 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def get_inferences(
-        self, ctx: TenantContext, session_id: UUID, after: UUID | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> InferencePage:
         """One page of the session's hypotheses and findings, oldest first."""
         ...
@@ -82,7 +82,7 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def validate(
-        self, ctx: TenantContext, session_id: UUID, purpose: RunPurpose
+        self, ctx: TenantContext, agent_session_id: UUID, purpose: RunPurpose
     ) -> tuple[Validation, ...]:
         """Runs the session's checks on a fresh executor and keeps what it
         wrote: a `validation` at the committed head, of the checks the
@@ -104,15 +104,15 @@ class EvidenceManagerInterface(ABC):
     async def run_check(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         agent_project_id: UUID,
         check: str,
         version: str,
         source: str,
     ) -> Validation:
-        """Platform-internal: one check the agent project's policy declares, run
+        """System-internal: one check the agent project's policy declares, run
         on a fresh executor at `version`, with the checks, fixtures, and
-        runner from `source`, for `session_id`, a session with no agent (a
+        runner from `source`, for `agent_session_id`, a session with no agent (a
         validation session). It runs once, or, when a requirement rates it,
         its declared trials, stopping where the rate's rule stops them. What
         it wrote is kept as `validate` keeps it. A session runs its check
@@ -125,7 +125,7 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def get_validations(
-        self, ctx: TenantContext, session_id: UUID, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, limit: int
     ) -> tuple[Validation, ...]:
         """The session's validations and baselines, oldest first; `limit` is
         clamped."""
@@ -134,8 +134,9 @@ class EvidenceManagerInterface(ABC):
     # The purges.
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> int:
-        """Platform-internal: a purged session's runs, validations, and
+    @stageless
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> int:
+        """System-internal: a purged session's runs, validations, and
         hypotheses and findings, under the purge login, in the tenant
         named; for no principal. Returns how many went."""
         ...

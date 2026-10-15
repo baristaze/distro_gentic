@@ -16,13 +16,13 @@ class MatrixPins(IdentifiableMixin, CreatedMixin, Base):
     __org_id_index__ = False
     __table_args__ = (
         Index(
-            "uq_matrix_pins_org_id_session_id_fill_set_version",
+            "uq_matrix_pins_org_id_agent_session_id_fill_set_version",
             "org_id",
-            "session_id",
+            "agent_session_id",
             "fill_set_version",
             unique=True,
         ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     fill_set_version: Mapped[int]
     matrix_version: Mapped[int]

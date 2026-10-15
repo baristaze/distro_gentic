@@ -17,6 +17,7 @@ from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_root import LOCAL, AgentRootOptions
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
@@ -35,7 +36,7 @@ from acme.om.platform_root import (
     PlatformRootOptions,
     build_platform_managers,
 )
-from acme.om.root import LOCAL, TenancyOperatorOptions, TenancyOptions
+from acme.om.root import TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.root import StorageInterface
 from acme.om.trust import KeyProbeInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl, KeyProbeTwinImpl
@@ -69,7 +70,7 @@ def key_probe(settings: ApiSettings) -> KeyProbeInterface:
     are refused outside a local stack, the probe's twin takes every key; with
     no probe configured, the absent one refuses every save, so no key is ever
     saved unasked."""
-    if settings.model_providers == "scripted":
+    if settings.llm_providers == "scripted":
         return KeyProbeTwinImpl()
     return KeyProbeAbsentImpl()
 
@@ -112,19 +113,21 @@ def build_platform_api(
         tenancy,
         operator,
         integrations,
-        environment=settings.environment,
-        tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
-        budget_gate=ports.budget_gate or build_money_gate(storage),
-        result_gate=ports.result_gate,
         platform_root_options=PlatformRootOptions(
             platform_agents=platform_agents,
             executor=ports.executor,
-            executor_options=ExecutorOptions(image=settings.workspace_image),
+            executor_options=ExecutorOptions(image=settings.agent_workspace_image),
             work_product=ports.work_product,
             agent_session_projects=ports.agent_session_projects,
             workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
             agents_layer=agent_playbooks.agents,
+        ),
+        agent_root_options=AgentRootOptions(
+            environment=settings.environment,
+            tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
+            spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
         ),
     )
     refuse_open_money(settings.environment, managers)
@@ -147,7 +150,7 @@ def build_platform_api(
     intake = build_intake(storage, managers, integrations=integrations)
     held.append(intake)
     # The streams the runners write, read from the shared cache.
-    stream = build_stream(infra, lambda: managers.events, product_kinds=ports.kinds)
+    stream = build_stream(infra, lambda: managers.change_events, product_kinds=ports.kinds)
     # A product's claimants write its streams for the items they hold.
     watch = build_watch(
         managers,
@@ -165,6 +168,7 @@ def build_platform_api(
         intake=intake,
         agent_projects=managers.agent_projects,
         agent_project_required=agent_project_required,
+        kinds=managers.kinds,
     )
     services = build_platform_services(
         engine,

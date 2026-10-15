@@ -20,11 +20,11 @@ class HostPool(Identifiable, Trackable):
     """One row a pool. Its hosts enroll into it with a token issued for it,
     and the pool is the only place their claims come from. A pool that names
     a session is the platform's, not the tenant's: the pool of one that the
-    cloud pool's machine of that session enrolls into, with the key the
-    platform handed the machine, never a token. No session is placed on it,
+    cloud pool's VM of that session enrolls into, with the key the
+    platform handed the VM, never a token. No session is placed on it,
     and no person issues a token for it."""
 
     name: PoolName
     region: Region
     labels: tuple[Label, ...] = ()
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None

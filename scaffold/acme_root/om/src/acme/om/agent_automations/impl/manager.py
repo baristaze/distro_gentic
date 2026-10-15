@@ -26,25 +26,25 @@ from acme.om.agent_playbooks import AgentPlaybooksManagerInterface
 from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybook
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import Content, TextBlock
+from acme.om.agent_steps.types.header import InputHeader
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform, derived_id, new_id, utcnow
-from acme.om.budgets import BudgetsManagerInterface
-from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
+from acme.om.base import OmBase, derived_id, new_id, utcnow
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, Role, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
-from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, ValidationFailed
+from acme.om.exceptions import NotAuthorized, NotFound, OmException, ValidationFailed
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import InputHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import role_at_most
 
@@ -64,7 +64,7 @@ Its bytes are fixed, whatever the noun is called, so the id stays the one
 every release derived: an event delivered again finds the run it made."""
 
 
-class AgentAutomationsOptions(Platform):
+class AgentAutomationsOptions(OmBase):
     # The most agent automations one firing reads a page, and runs one read takes.
     page: int = Field(default=200, gt=0)
     # A started run that names no session, and no work of a product's
@@ -81,10 +81,10 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         storage: AgentAutomationStorageInterface,
         agents: AgentsManagerInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
+        budgets: SpendBudgetsManagerInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         agent_projects: AgentProjectsManagerInterface,
         principal_context: PrincipalContext,
         options: AgentAutomationsOptions,
@@ -108,7 +108,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         self._budgets = budgets
         self._tenancy = tenancy
         self._relay = relay
-        self._events = events
+        self._change_events = events
         self._live = principal_context
         self._options = options
         self._clock = clock
@@ -332,12 +332,12 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             return await self._refuse(ctx, run, Refusal.PRINCIPAL)
         await self._close_finished(ctx, agent_automation)
         landed = await self._storage.admit(ctx.org_id, run, agent_automation.limits, self._clock())
-        acted = landed.session_id is not None or landed.work_id is not None
+        acted = landed.agent_session_id is not None or landed.work_id is not None
         if landed.status is not RunStatus.STARTED or acted:
             return landed
         try:
             return await self._act(ctx, creator, agent_automation, landed)
-        except PlatformException:
+        except OmException:
             # An action the engine refuses never runs: the run says so, and
             # its share of the cap goes back.
             refused = landed.model_copy(
@@ -387,47 +387,51 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         # In its agent project from its first moment, so the agent project's budget
         # and policies hold every call it makes.
         session = (
-            await self._agents.start_session(creator, start)
+            await self._agents.start_agent_session(creator, start)
             if action.agent_project_id is None
-            else await self._agent_projects.start_session(creator, action.agent_project_id, start)
+            else await self._agent_projects.start_agent_session(
+                creator, action.agent_project_id, start
+            )
         )
-        budget = Budget(
+        budget = SpendBudget(
             id=derived_id(run.id, run.created_at, "budget"),
             created_at=run.created_at,
             updated_at=run.created_at,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            scope_kind=BudgetScopeKind.TREE,
+            scope_kind=SpendBudgetScopeKind.TREE,
             scope_key=str(session.root_id),
             window_kind=WindowKind.LIFE,
             cost_micros=run.reserved_micros,
         )
-        await self._budgets.create_budget(ctx, budget)
-        session_id, budget_id = session.id, budget.id
+        await self._budgets.create_spend_budget(ctx, budget)
+        agent_session_id, spend_budget_id = session.id, budget.id
         if agent_playbook is not None and self._agent_playbooks is not None:
             # Its gates hold before anything else arrives, and its brief is
             # the creator's message, as an invocation in person is.
-            await self._agent_playbooks().invoke_version(creator, session_id, agent_playbook.id)
-        inputs: list[Step] = []
+            await self._agent_playbooks().invoke_version(
+                creator, agent_session_id, agent_playbook.id
+            )
+        inputs: list[AgentStep] = []
         if run.event_text:
-            inputs.append(self._event_step(ctx, run, session_id))
+            inputs.append(self._event_step(ctx, run, agent_session_id))
         brief = message_step(
             derived_id(run.id, run.created_at, "brief"),
             self._clock(),
-            session_id,
+            agent_session_id,
             creator,
             action.brief,
         )
         inputs.append(brief)
-        await self._sessions.receive(creator, session_id, inputs)
+        await self._sessions.receive(creator, agent_session_id, inputs)
         # The session's history holds the event from here on, under its key;
         # the run keeps none of it. A run lost before this write is acted on
         # again, under the same ids, and lands nothing twice.
         acted = run.model_copy(
             update={
-                "session_id": session_id,
+                "agent_session_id": agent_session_id,
                 "opened": True,
-                "budget_id": budget_id,
+                "spend_budget_id": spend_budget_id,
                 "event_text": "",
             }
         )
@@ -455,16 +459,18 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         await self._storage.write_run(ctx.org_id, acted)
         return acted
 
-    def _event_step(self, ctx: TenantContext, run: AgentAutomationRun, session_id: UUID) -> Step:
+    def _event_step(
+        self, ctx: TenantContext, run: AgentAutomationRun, agent_session_id: UUID
+    ) -> AgentStep:
         """The event that fired a run, as data: it never waits to wake the
         session, since the brief that follows it does."""
-        step_id = derived_id(run.id, run.created_at, "event")
-        return Step(
-            id=step_id,
+        agent_step_id = derived_id(run.id, run.created_at, "event")
+        return AgentStep(
+            id=agent_step_id,
             created_at=self._clock(),
-            session_id=session_id,
-            loop_id=step_id,
-            type=StepType.EVENT,
+            agent_session_id=agent_session_id,
+            loop_id=agent_step_id,
+            type=AgentStepType.EVENT,
             actor=Actor.EXTERNAL,
             origin=Origin.AUTOMATION,
             header=InputHeader(
@@ -500,10 +506,10 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             if run.work_id is not None:
                 outcome = await self._ended(ctx, agent_automation, run)
                 done = outcome is not None
-            elif run.session_id is None:
+            elif run.agent_session_id is None:
                 done = now - run.created_at >= self._options.lost_after
             else:
-                done = await self._tree_idle(ctx, run.session_id)
+                done = await self._tree_idle(ctx, run.agent_session_id)
             if done:
                 closed = run.model_copy(
                     update={"closed_at": now, "event_text": "", "outcome": outcome}
@@ -529,8 +535,8 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         """Each session of the tree with its version, from the root down,
         when every one is idle; None at the first one that is not. The
         tree's own bounds keep the walk short."""
-        root = await self._sessions.get_session(ctx, root_id)
-        if root.status is not SessionStatus.IDLE:
+        root = await self._sessions.get_agent_session(ctx, root_id)
+        if root.status is not AgentSessionStatus.IDLE:
             return None
         seen = [(root.id, root.version)]
         parents = [root.id]
@@ -539,7 +545,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             while True:
                 page = await self._sessions.get_children(ctx, parent_id, after, self._options.page)
                 for child in page.items:
-                    if child.status is not SessionStatus.IDLE:
+                    if child.status is not AgentSessionStatus.IDLE:
                         return None
                     seen.append((child.id, child.version))
                     parents.append(child.id)
@@ -700,7 +706,9 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
 
     async def _audit(self, ctx: TenantContext, granted: AgentAutomationPrincipal) -> None:
         facts = {"role": granted.role.value}
-        await self._events.append_event(ctx, audit_event(ctx, new_id(), GRANTED, granted.id, facts))
+        await self._change_events.append_change_event(
+            ctx, audit_change_event(ctx, new_id(), GRANTED, granted.id, facts)
+        )
 
     async def _enabled(self, ctx: TenantContext) -> list[AgentAutomation]:
         found: list[AgentAutomation] = []

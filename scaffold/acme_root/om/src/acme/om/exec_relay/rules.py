@@ -7,7 +7,7 @@ import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 
-from acme.infra.workspaces import EgressMode, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec
 from acme.om.base import derived_id, thaw_mapping
 from acme.om.exec_relay.types.exec import ExecItem, ExecState
 from acme.om.placement.types.work import ExecEffect, HostIsolation

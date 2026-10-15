@@ -27,7 +27,7 @@ variable "maintenance_image" {
   type        = string
 }
 
-variable "session_runner_image" {
+variable "agent_session_runner_image" {
   description = "The session runner image by digest; the deploy workflows pass it."
   type        = string
 }
@@ -137,19 +137,19 @@ variable "maintenance_memory" {
   type = number
 }
 
-variable "session_runner_desired_count" {
+variable "agent_session_runner_desired_count" {
   type = number
 }
 
-variable "session_runner_cpu" {
+variable "agent_session_runner_cpu" {
   type = number
 }
 
-variable "session_runner_memory" {
+variable "agent_session_runner_memory" {
   type = number
 }
 
-variable "session_runner_database_pool_size" {
+variable "agent_session_runner_database_pool_size" {
   description = "The size of each of the session runner's two pools, the runtime login's and the system login's; it counts in the pool rule of deployment/cloud/README.md."
   type        = number
 }
@@ -185,7 +185,7 @@ variable "maintenance_autoscaling" {
   })
 }
 
-variable "session_runner_autoscaling" {
+variable "agent_session_runner_autoscaling" {
   description = "The session runner's lever: its ceiling, the CPU percent it tracks, and whether it takes part when the switch is on. The ceiling bounds what the environment spends on runners."
   type = object({
     enabled    = optional(bool, true)

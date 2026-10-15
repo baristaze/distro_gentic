@@ -5,7 +5,7 @@ record of a benchmark result and of a retired model."""
 from abc import ABC, abstractmethod
 
 from acme.om.context import OperatorContext, TenantContext
-from acme.om.models.types.fill import ModelRole
+from acme.om.language_models.types.fill import ModelRole
 from acme.services.api.types.matrix import (
     BenchmarkResultRequest,
     BenchmarkResultView,

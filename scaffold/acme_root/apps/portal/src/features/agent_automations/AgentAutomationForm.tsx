@@ -74,12 +74,12 @@ export function AgentAutomationForm({
         label="Action"
         value={draft.actionKind}
         options={[
-          { value: "start_session", label: "Start a session" },
+          { value: "start_agent_session", label: "Start a session" },
           { value: "message_session", label: "Message a session" },
         ]}
         onChange={set("actionKind")}
       />
-      {draft.actionKind === "start_session" ? (
+      {draft.actionKind === "start_agent_session" ? (
         <div style={row}>
           <Select
             label="Agent"

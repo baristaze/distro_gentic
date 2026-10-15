@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from uuid import UUID
 
-from acme.infra.workspaces import WorkspaceBase
+from acme.infra.agent_workspaces import AgentWorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
 from acme.om.agent_workspaces.types.source import RepositoryBinding
@@ -124,5 +124,5 @@ class OnDisk(WorkspaceAgentProjectsInterface):
 
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
+    ) -> AgentWorkspaceBase | None:
         return None

@@ -15,8 +15,8 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.transports import ENV_NAME
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.base import Identifiable, Trackable
-from acme.om.steps.types.content import MAX_NAME, Stored
 
 SECRET_NAME = r"^[^/\s][^/]*$"
 """A secret's name is one segment, as a store keys it under its tenant."""

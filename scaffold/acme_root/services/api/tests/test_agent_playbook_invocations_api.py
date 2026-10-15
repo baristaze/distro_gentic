@@ -12,13 +12,14 @@ from uuid import uuid4
 import httpx
 import pytest
 from api_support import build_container
-from contracts.loops import ASSISTANT, tools
 from tenant_support import person, refused, tenant
 
 from acme.om.agents.types.request import MAX_STANDING
 from acme.om.base import new_id
 from acme.om.context import Role
 from acme.services.api.container import AppContainer
+
+from contracts.loops import ASSISTANT, tools
 
 DRAFT = {
     "name": "release-check",
@@ -57,31 +58,33 @@ async def test_a_person_invokes_a_agent_playbook_into_a_session_once_a_version(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     await client.post("/v1/agent-playbooks", headers=ajax.owner, json=DRAFT)
-    session_id = await started(client, ajax.owner)
+    agent_session_id = await started(client, ajax.owner)
     url = "/v1/agent-playbooks/release-check/invocations"
-    invoked = await client.post(url, headers=ajax.owner, json={"session_id": session_id})
+    invoked = await client.post(
+        url, headers=ajax.owner, json={"agent_session_id": agent_session_id}
+    )
     assert invoked.status_code == 201, invoked.text
-    assert invoked.json()["session_id"] == session_id
+    assert invoked.json()["agent_session_id"] == agent_session_id
     assert (invoked.json()["version"], invoked.json()["pinned"]) == (1, False)
-    again = await client.post(url, headers=ajax.owner, json={"session_id": session_id})
+    again = await client.post(url, headers=ajax.owner, json={"agent_session_id": agent_session_id})
     assert again.json() == invoked.json()
-    steps = await client.get(f"/v1/agent-sessions/{session_id}/steps", headers=ajax.owner)
+    steps = await client.get(f"/v1/agent-sessions/{agent_session_id}/steps", headers=ajax.owner)
     (brief,) = [step for step in steps.json()["items"] if step["type"] == "message"]
     assert "name: release-check" in brief["text"]
 
     viewer = await person(client, container, ajax.org_id, Role.VIEWER)
     refused(
-        await client.post(url, headers=viewer, json={"session_id": session_id}),
+        await client.post(url, headers=viewer, json={"agent_session_id": agent_session_id}),
         403,
         "not_authorized",
     )
     bravo = await tenant(client, container, "bravo")
     await client.post("/v1/agent-playbooks", headers=bravo.owner, json=DRAFT)
-    other = await client.post(url, headers=bravo.owner, json={"session_id": session_id})
+    other = await client.post(url, headers=bravo.owner, json={"agent_session_id": agent_session_id})
     assert other.status_code in (403, 404), other.text
     missing = "/v1/agent-playbooks/no-such-agent-playbook/invocations"
     refused(
-        await client.post(missing, headers=ajax.owner, json={"session_id": session_id}),
+        await client.post(missing, headers=ajax.owner, json={"agent_session_id": agent_session_id}),
         404,
         "not_found",
     )
@@ -101,8 +104,8 @@ async def test_a_pinned_agent_playbook_is_the_standing_text_of_a_session_started
     assert listed.json() == [pinned.json()]
     after = await started(client, ajax.owner)
 
-    async def standing(session_id: str) -> list[str]:
-        steps = await client.get(f"/v1/agent-sessions/{session_id}/steps", headers=ajax.owner)
+    async def standing(agent_session_id: str) -> list[str]:
+        steps = await client.get(f"/v1/agent-sessions/{agent_session_id}/steps", headers=ajax.owner)
         return [s["text"] for s in steps.json()["items"] if s["type"] == "switched"]
 
     assert await standing(before) == []

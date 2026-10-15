@@ -28,6 +28,9 @@ from acme.om.placement.kinds import HOST
 PRODUCT_KIND = "batch"
 """A product's claimant kind, which the storage keeps by name alone."""
 
+INTERFACE = HostsStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_pool",
@@ -146,7 +149,7 @@ def make_credential(host_id: UUID, lives: timedelta = timedelta(hours=1)) -> Hos
     )
 
 
-def make_placement(session_id: UUID, pool_id: UUID | None) -> SessionPlacement:
+def make_placement(agent_session_id: UUID, pool_id: UUID | None) -> SessionPlacement:
     now = utcnow()
     actor = new_id()
     return SessionPlacement(
@@ -155,7 +158,7 @@ def make_placement(session_id: UUID, pool_id: UUID | None) -> SessionPlacement:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         pool_id=pool_id,
     )
 

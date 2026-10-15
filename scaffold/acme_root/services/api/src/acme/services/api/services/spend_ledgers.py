@@ -6,7 +6,7 @@ from uuid import UUID
 
 from acme.om.agent_billing.types.spend_ledger import EntryKind
 from acme.om.context import OperatorContext
-from acme.services.api.types.spend_ledgers import (
+from acme.services.api.types.agent_billing import (
     SpendLedgerEntryView,
     SpendLedgerPageView,
     SpendUnitsGrantRequest,
@@ -21,8 +21,8 @@ class SpendLedgersServiceInterface(ABC):
         org_id: UUID,
         *,
         kind: EntryKind | None,
-        hold_id: UUID | None,
-        session_id: UUID | None,
+        spend_hold_id: UUID | None,
+        agent_session_id: UUID | None,
         limit: int,
     ) -> SpendLedgerPageView:
         """The tenant's entries, the newest first, of one kind, one hold, or

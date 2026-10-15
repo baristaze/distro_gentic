@@ -8,16 +8,13 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import in_agent_project
-from contracts.evidence import ScriptedExecutor, checkout_policy, delivered
-from contracts.evidence_storage import make_record
-from contracts.loops import reply, said
-from contracts.platform_loops import platform_loop_over
-from contracts.tools import result_text
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.content import ToolUseBlock
+from acme.om.agent_steps.types.header import AcceptedResult, LoopOutcome, ToolResponseHeader
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -25,11 +22,15 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.platform_root import PlatformRootOptions, build_platform_managers
-from acme.om.steps.types.content import ToolUseBlock
-from acme.om.steps.types.header import AcceptedResult, LoopOutcome, ToolResponseHeader
-from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.evidence import ScriptedExecutor, checkout_policy, delivered
+from contracts.evidence_storage import make_record
+from contracts.loops import reply, said
+from contracts.platform_loops import platform_loop_over
+from contracts.tools import result_text
 
 pytestmark = pytest.mark.integration
 
@@ -90,35 +91,39 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
         platform=PlatformRootOptions(executor=ScriptedExecutor(), work_product=work),
     )
     evidence = loop.platform.evidence
-    session_id = await loop.start("delivery")
+    agent_session_id = await loop.start("delivery")
     agent_project = await in_agent_project(
-        storage.get_agent_project_storage(), owner.org_id, session_id
+        storage.get_agent_project_storage(), owner.org_id, agent_session_id
     )
     await evidence.write_policy(owner, checkout_policy(agent_project=agent_project))
-    run = make_record(session_id, step_id=new_id())
+    run = make_record(agent_session_id, agent_step_id=new_id())
     await evidence.record_run(owner, run)
-    work.deliver(owner.org_id, session_id, delivered())
-    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
+    work.deliver(owner.org_id, agent_session_id, delivered())
+    await evidence.validate(owner, agent_session_id, RunPurpose.BASELINE)
 
     # A baseline, and no validation at the head: the success goes back refused, and the
     # model concludes it cannot show it.
-    await loop.say(session_id, "Fix the cart.")
+    await loop.say(agent_session_id, "Fix the cart.")
     loop.anthropic.add(
         reply(said("Fixed."), submit("succeeded", run.id)),
         reply(said("I cannot show it yet."), submit("failed", run.id)),
     )
-    first = await loop.loops.run(owner, session_id)
+    first = await loop.loops.run(owner, agent_session_id)
     assert (first.end, first.outcome) == (RunEnd.ENDED, LoopOutcome.FAILED)
-    answers = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+    answers = [
+        s for s in await loop.history(agent_session_id) if s.type is AgentStepType.TOOL_RESPONSE
+    ]
     assert "no validation ran at the head c0ffee" in result_text(answers[0])
 
     # Validated at the head by the executor: the same claim succeeds, verified.
-    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
-    await loop.say(session_id, "Validation ran. Submit again.")
+    await evidence.validate(owner, agent_session_id, RunPurpose.VALIDATION)
+    await loop.say(agent_session_id, "Validation ran. Submit again.")
     loop.anthropic.add(reply(said("Submitting."), submit("succeeded", run.id)))
-    second = await loop.loops.run(owner, session_id)
+    second = await loop.loops.run(owner, agent_session_id)
     assert (second.end, second.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
-    last = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE][-1]
+    last = [
+        s for s in await loop.history(agent_session_id) if s.type is AgentStepType.TOOL_RESPONSE
+    ][-1]
     header = last.header
     assert isinstance(header, ToolResponseHeader)
     assert header.accepted == AcceptedResult(outcome=LoopOutcome.SUCCEEDED, verified=True)

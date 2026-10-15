@@ -19,8 +19,9 @@ from uuid import UUID
 
 from acme.client.claimant.credential import Credential, load_credential, save_credential
 from acme.client.claimant.settings import ClaimantSettings
-from acme.client.client import ApiClient, ApiError
-from acme.client.types import IssuedClaimantCredentialView
+from acme.client.client import ApiClient
+from acme.client.transport import ApiError
+from acme.client.types.hosts import IssuedClaimantCredentialView
 
 log = logging.getLogger(__name__)
 

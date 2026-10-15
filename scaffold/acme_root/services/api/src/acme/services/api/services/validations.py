@@ -6,21 +6,23 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.validations import StartValidationRequest, ValidationSessionView
+from acme.services.api.types.platform_agents import StartValidationRequest, ValidationSessionView
 
 
 class ValidationsServiceInterface(ABC):
     @abstractmethod
     async def start_validation(
-        self, ctx: TenantContext, body: StartValidationRequest, session_id: UUID
+        self, ctx: TenantContext, body: StartValidationRequest, agent_session_id: UUID
     ) -> ValidationSessionView:
-        """A session under `session_id`, its work queued for the platform's
+        """A session under `agent_session_id`, its work queued for the platform's
         worker. Started again under the same id, it answers the session as
         stored."""
         ...
 
     @abstractmethod
-    async def get_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSessionView:
+    async def get_validation(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> ValidationSessionView:
         """The session, with its verdict once its run is recorded; another
         tenant's answers as one that never existed."""
         ...

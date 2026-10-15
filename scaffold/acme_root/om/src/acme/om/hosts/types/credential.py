@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.base import Created, Identifiable, OmBase, Trackable
 
 
 class EnrollmentToken(Identifiable, Trackable):
@@ -33,7 +33,7 @@ class HostCredential(Identifiable, Created):
     `host_id` is the claimant's id. It rotates once: the rotation mints the
     next, marks this one rotated, and moves its end to a short grace, so a
     call in flight with it still lands. A second rotation of it means two
-    machines hold it, and ends the claimant."""
+    VMs hold it, and ends the claimant."""
 
     host_id: UUID
     digest: str
@@ -49,14 +49,14 @@ class Rotation(StrEnum):
     MISSING = "missing"  # no such credential of the host; nothing landed
 
 
-class IssuedEnrollmentToken(Platform):
+class IssuedEnrollmentToken(OmBase):
     """An enrollment token in the clear, once."""
 
     token: str
     enrollment: EnrollmentToken
 
 
-class IssuedCredential(Platform):
+class IssuedCredential(OmBase):
     """A claimant's credential in the clear, once, with the identity it
     carries: its kind, its id, and its pool."""
 

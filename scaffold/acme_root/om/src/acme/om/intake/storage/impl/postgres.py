@@ -149,11 +149,11 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             return None if row is None else to_model(row, WorkBinding)
 
     async def read_session_bindings(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[WorkBinding]:
         stmt = (
             select(WorkBindings)
-            .where(WorkBindings.org_id == org_id, WorkBindings.session_id == session_id)
+            .where(WorkBindings.org_id == org_id, WorkBindings.agent_session_id == agent_session_id)
             .order_by(WorkBindings.created_at, WorkBindings.id)
             .limit(limit)
         )
@@ -168,7 +168,11 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             .values(**to_values(act, PlatformActs), org_id=org_id)
             .on_conflict_do_update(
                 index_elements=[PlatformActs.org_id, PlatformActs.integration, PlatformActs.ref],
-                set_={"id": act.id, "created_at": act.created_at, "session_id": act.session_id},
+                set_={
+                    "id": act.id,
+                    "created_at": act.created_at,
+                    "agent_session_id": act.agent_session_id,
+                },
             )
         )
         async with self._session_for(stmt, org_id=org_id) as session:

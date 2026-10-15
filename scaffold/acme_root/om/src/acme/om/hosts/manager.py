@@ -6,7 +6,7 @@ product's claimant enrolls and claims through the same path."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, transition
 from acme.om.hosts.types.credential import (
     EnrollmentToken,
     IssuedCredential,
@@ -38,7 +38,7 @@ class HostsManagerInterface(ABC):
         """A pool under the caller's tenant, its provenance stamped from the
         context. A retry under the same id answers the row as stored.
         Requires the members permission, an owner's or an admin's: a pool is
-        where machines join the tenant's work, as a member joins its people."""
+        where VMs join the tenant's work, as a member joins its people."""
         ...
 
     @abstractmethod
@@ -91,8 +91,8 @@ class HostsManagerInterface(ABC):
         """Ends the host and every credential it holds at once: its next call
         is refused, and it is handed no more work. Requires the members
         permission. NotFound for a claimant of another kind;
-        `ValidationFailed` for the host of a machine of the cloud pool, which
-        is the platform's and ends with its machine."""
+        `ValidationFailed` for the host of a VM of the cloud pool, which
+        is the platform's and ends with its VM."""
         ...
 
     @abstractmethod
@@ -104,7 +104,7 @@ class HostsManagerInterface(ABC):
 
     @abstractmethod
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, pool_id: UUID | None
+        self, ctx: TenantContext, agent_session_id: UUID, pool_id: UUID | None
     ) -> SessionPlacement:
         """A principal sets where the session runs: one of the tenant's pools,
         or the cloud with None. This is the one way a session's placement
@@ -114,7 +114,7 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
         """Where the session runs and how many of its pool's hosts are online:
         a pinned session with none online waits, and reads so here. A
         sub-agent reads its root's. NotFound when the tenant holds no such
@@ -122,10 +122,10 @@ class HostsManagerInterface(ABC):
         ...
 
     # The cloud pool's side: the pool of one each session that runs on a
-    # machine of the platform's cloud gets, and its machine's host.
+    # VM of the platform's cloud gets, and its VM's host.
 
     @abstractmethod
-    async def work_placement(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+    async def work_placement(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
         """Where the session's work runs, as the relay routes it: the pool a
         principal pinned it to, as `placement_of` reads it, or, for a session
         of the cloud, its pool of one in the cloud pool once it has one, or
@@ -133,7 +133,9 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
+    async def session_pool(
+        self, ctx: TenantContext, agent_session_id: UUID, region: str
+    ) -> HostPool:
         """The session's pool in the cloud pool, made the first time it is
         asked for, under an id read off the tenant and the session, so every
         process asks for the same one. It is the platform's: hidden from the
@@ -142,7 +144,8 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def admit_machine(
+    @transition
+    async def admit_vm(
         self,
         rctx: RequestContext,
         org_id: UUID,
@@ -151,31 +154,33 @@ class HostsManagerInterface(ABC):
         enrolled_with: UUID,
         enrollment: Enrollment,
     ) -> IssuedCredential:
-        """Platform-internal: the cloud pool enrolls the host of a machine it
+        """System-internal: the cloud pool enrolls the host of a VM it
         started for a session, which calls from the request stage as every
         host does, into the session's pool of one, and gives it its first
         credential: its tenant, its pool, and its session are the
         platform's, never the host's to name. A pool that is the tenant's
         own is refused. The
-        machine handed its key over once (`enrolled_with`), and the person
+        VM handed its key over once (`enrolled_with`), and the person
         its session's work is for answers for it (`created_by`). Its claims
         are its session's work alone."""
         ...
 
     @abstractmethod
-    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
-        """Platform-internal: the host of a machine of the cloud pool,
+    @transition
+    async def vm_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
+        """System-internal: the host of a VM of the cloud pool,
         revoked or not, as the pool's sweep reads it for no principal: when
         it last called, and whether it was ended. None when the tenant holds
         no such host."""
         ...
 
     @abstractmethod
+    @transition
     async def retire_host(
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
     ) -> None:
-        """Platform-internal: the cloud pool ends its machine's host and every
-        credential it holds as it lets the machine go, from its sweep and
+        """System-internal: the cloud pool ends its VM's host and every
+        credential it holds as it lets the VM go, from its sweep and
         its purge as from a run: a disk kept after this holds no credential
         that answers. One gone or ended already ends nothing more."""
         ...
@@ -192,10 +197,11 @@ class HostsManagerInterface(ABC):
     # of its own.
 
     @abstractmethod
+    @transition
     async def enroll(
         self, rctx: RequestContext, token: str, enrollment: Enrollment
     ) -> IssuedCredential:
-        """Platform-internal: a host enrolls with an enrollment token of the
+        """System-internal: a host enrolls with an enrollment token of the
         host kind, once, and gets a credential of its kind and prefix,
         short-lived, in the clear once. The tenant and the pool are the
         token's, never the host's. Refuses any credential but a live
@@ -204,10 +210,11 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def enroll_claimant(
         self, rctx: RequestContext, token: str, enrollment: ClaimantEnrollment
     ) -> IssuedCredential:
-        """Platform-internal: a claimant of a product's kind enrolls as a host
+        """System-internal: a claimant of a product's kind enrolls as a host
         does, and gets a credential under its kind's prefix. The kind, the
         tenant, and the pool are the token's, never the claimant's. Refuses
         any credential but a live enrollment token, one of the host kind,
@@ -216,19 +223,21 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def authenticate(self, rctx: RequestContext, credential: str) -> HostIdentity:
-        """Platform-internal: the host behind a host credential. Refuses any
+        """System-internal: the host behind a host credential. Refuses any
         other kind of credential, an expired one, and a revoked host's. A
-        rotated credential presented past its grace means two machines hold
+        rotated credential presented past its grace means two VMs hold
         the host's identity: it is refused, and the host and every
         credential it holds are revoked."""
         ...
 
     @abstractmethod
+    @transition
     async def authenticate_claimant(
         self, rctx: RequestContext, credential: str
     ) -> ClaimantIdentity:
-        """Platform-internal: the claimant of a product's kind behind its
+        """System-internal: the claimant of a product's kind behind its
         credential, held as `authenticate` holds a host's: its kind is its
         prefix's, and its tenant and pool its enrollment's. Refuses a host's
         credential, since a host claims with the version of `exec` work it
@@ -236,27 +245,30 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def rotate(self, rctx: RequestContext, claimant: ClaimantIdentity) -> IssuedCredential:
-        """Platform-internal: the claimant's next credential, a host's or a
+        """System-internal: the claimant's next credential, a host's or a
         product's, in the clear once. The one it called with ends after a
         short grace, so a call in flight with it lands, and every older one
         ends now. A credential rotates once: a second rotation of it means
-        two machines hold it, so it is refused with CredentialExpired, and
+        two VMs hold it, so it is refused with CredentialExpired, and
         the claimant and every credential it holds are revoked."""
         ...
 
     @abstractmethod
+    @transition
     async def heartbeat(self, rctx: RequestContext, host: HostIdentity, report: HostReport) -> Host:
-        """Platform-internal: the host is online, and states what it probed
+        """System-internal: the host is online, and states what it probed
         and the version it reads; the platform keeps what it is told and adds
         nothing to it."""
         ...
 
     @abstractmethod
+    @transition
     async def claim(
         self, rctx: RequestContext, host: HostIdentity, exec_version: int
     ) -> tuple[TenantContext, WorkItem] | None:
-        """Platform-internal: the next item for the host, claimed by
+        """System-internal: the next item for the host, claimed by
         placement from the lanes of its identity alone: its own and its
         pool's, never one its call names. Refused, before any claim, when the
         version it reads is below the floor. Renews the host as a heartbeat
@@ -264,35 +276,39 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def claim_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity
     ) -> tuple[TenantContext, WorkItem] | None:
-        """Platform-internal: the next item for a claimant of a product's
+        """System-internal: the next item for a claimant of a product's
         kind, claimed by placement from the lanes of its identity alone and
         only the kinds registered for its kind (`placement.claim_for`). None
         when nothing is ready."""
         ...
 
     @abstractmethod
+    @transition
     async def held_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
     ) -> WorkItem:
-        """Platform-internal: the item the claimant holds under the claim
+        """System-internal: the item the claimant holds under the claim
         token, in its own tenant (`placement.held_for`)."""
         ...
 
     @abstractmethod
+    @transition
     async def extend_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
     ) -> WorkItem:
-        """Platform-internal: renews the lease on an item the claimant holds,
+        """System-internal: renews the lease on an item the claimant holds,
         by the claim's lease (`placement.extend_for`)."""
         ...
 
     @abstractmethod
+    @transition
     async def report_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity, report: ClaimantReport
     ) -> WorkItem:
-        """Platform-internal: the claimant's answer for an item it holds
+        """System-internal: the claimant's answer for an item it holds
         (`placement.report_for`)."""
         ...

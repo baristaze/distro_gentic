@@ -7,8 +7,8 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.base import Created, Identifiable
-from acme.om.steps.types.content import MAX_NAME, Stored
 
 
 class Installation(Identifiable, Created):
@@ -41,7 +41,7 @@ class WorkBinding(Identifiable, Created):
     """A pull request or a branch that is a session's work, as the session
     opened it. One session a handle in a tenant."""
 
-    session_id: UUID
+    agent_session_id: UUID
     kind: HandleKind
     handle: Stored = Field(min_length=1, max_length=MAX_NAME)
 
@@ -55,4 +55,4 @@ class PlatformAct(Identifiable, Created):
 
     integration: Stored = Field(min_length=1, max_length=MAX_NAME)
     ref: Stored = Field(min_length=1, max_length=MAX_NAME)
-    session_id: UUID
+    agent_session_id: UUID

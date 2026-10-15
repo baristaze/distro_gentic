@@ -16,12 +16,11 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import build_container
-from contracts.agent_session_storage import make_session
 from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, tenant_of
 
 import acme.om.exec_relay
 import acme.om.hosts
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exec_relay.types.exec import ExecCall, RunRequest
@@ -29,6 +28,8 @@ from acme.om.hosts.types.host import Host
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 from acme.services.api.types.hosts import HostView
+
+from contracts.agent_session_storage import make_agent_session
 
 RUNNER = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
 
@@ -74,13 +75,13 @@ async def a_held_item(
     host = await a_host(client, await a_token(client, owner, pool_id))
     ctx = await tenant_of(container, owner)
     managers = container.managers
-    session = await managers.agent_sessions.create_session(ctx, make_session())
+    session = await managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
     await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
-    epoch = await managers.steps.begin_run(ctx, session.id)
+    epoch = await managers.agent_steps.begin_run(ctx, session.id)
     spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     call = ExecCall(
-        session_id=session.id,
+        agent_session_id=session.id,
         key=new_id(),
         request=RunRequest(argv=("make", "deploy")),
         effect="unsafe",

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { FindingView } from "@acme/client";
+import type { levers } from "@acme/client";
 import { CHECK_LABEL, findingLines } from "./findingsModel";
 
 it("names every check in words", () => {
@@ -7,7 +7,7 @@ it("names every check in words", () => {
 });
 
 it("keeps each finding's detail and excerpt, in order", () => {
-  const found: FindingView[] = [
+  const found: levers.FindingView[] = [
     { check: "unbounded_retry", detail: "“keep retrying” with no stopping condition", excerpt: "Keep retrying until it is green." },
     { check: "past_session_bound", detail: "9000 characters, past the 8000 a session holds whole", excerpt: null },
   ];

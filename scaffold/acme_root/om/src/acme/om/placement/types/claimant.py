@@ -1,4 +1,4 @@
-"""Who claims work through the gateway: a machine outside the platform's
+"""Who claims work through the gateway: a VM outside the platform's
 processes, such as a workspace host or a product's own. The gateway
 resolves one from the caller's own credential; nothing in the call names a
 lane or a kind."""
@@ -9,22 +9,22 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class Claimant(Platform):
+class Claimant(OmBase):
     """A claimant's identity, as its credential says it: its kind, a name
     the claimant kinds' registry knows (`placement.kinds`), its id, the
     tenant whose wall it sits in, and the pool it serves. `org_id` None is
     a claimant of the platform's own pool, which serves every tenant.
-    `session_id` names the one session a machine of the cloud pool serves:
+    `agent_session_id` names the one session a VM of the cloud pool serves:
     it is handed that session's work and no other."""
 
     kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     id: UUID
     org_id: UUID | None = None
     pool_id: UUID
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
 
     @property
     def worker_id(self) -> str:
@@ -37,7 +37,7 @@ class ReportOutcome(StrEnum):
     FAILED = "failed"  # the work failed: the item is retried until its attempts are spent
 
 
-class ClaimantReport(Platform):
+class ClaimantReport(OmBase):
     """What a claimant answers for an item it holds: done, or failed with
     why, under the claim token its claim was handed. It comes from outside
     the platform's processes, so it is held to its shape before anything

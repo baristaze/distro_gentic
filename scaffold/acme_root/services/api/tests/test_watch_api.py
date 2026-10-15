@@ -9,21 +9,22 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import build_container, seed_request
-from contracts.agent_session_storage import make_session
-from contracts.tools import stand_ins
 from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, created, tenant_of
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_steps.types.stream import TextPart
 from acme.om.base import new_id
 from acme.om.exceptions import Unavailable
 from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.retention.crossing import CrossingKind, declared
-from acme.om.steps.types.stream import TextPart
 from acme.services.api.container import AppContainer
+
+from contracts.agent_session_storage import make_agent_session
+from contracts.tools import stand_ins
 
 KEY = "a-live-read-key-for-tests-only-32+"
 SPEC = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
-# What `make_session` names, so the agents manager classes every tool it
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
@@ -35,16 +36,22 @@ def container(tmp_path: Path) -> AppContainer:
     )
 
 
-def part(session_id: UUID, step_id: UUID, n: int) -> TextPart:
-    return TextPart(session_id=session_id, step_id=step_id, n=n, index=0, text=f"word{n} ")
+def part(agent_session_id: UUID, agent_step_id: UUID, n: int) -> TextPart:
+    return TextPart(
+        agent_session_id=agent_session_id,
+        agent_step_id=agent_step_id,
+        n=n,
+        index=0,
+        text=f"word{n} ",
+    )
 
 
 async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:
     ctx = await tenant_of(container, owner)
-    mine = await container.managers.agent_sessions.create_session(ctx, make_session())
-    other = await container.managers.agent_sessions.create_session(ctx, make_session())
+    mine = await container.managers.agent_sessions.create_agent_session(ctx, make_agent_session())
+    other = await container.managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     step = new_id()
     for n in range(3):
         container.stream.emit(part(mine.id, step, n))
@@ -62,7 +69,10 @@ async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
     # The first part goes at once; the two behind it within its window are
     # joined, and the joined part names the places it holds.
     parts = [(p["n"], p["last"], p["text"]) for p in stream["parts"]]
-    assert stream["step_id"] == str(step) and parts == [(0, 0, "word0 "), (1, 2, "word1 word2 ")]
+    assert stream["agent_step_id"] == str(step) and parts == [
+        (0, 0, "word0 "),
+        (1, 2, "word1 word2 "),
+    ]
 
     container.stream.emit(part(mine.id, step, 3))
     await container.stream.flush()
@@ -84,7 +94,7 @@ async def test_with_no_key_every_live_read_is_refused(tmp_path: Path) -> None:
     ctx, _ = await keyless.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@ajax.test", "Ann"
     )
-    session = await keyless.managers.agent_sessions.create_session(ctx, make_session())
+    session = await keyless.managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     watch = keyless.services.get_watch_service()
     with pytest.raises(Unavailable):
         await watch.open_live(ctx, session.id)
@@ -97,7 +107,7 @@ async def test_a_person_takes_control_runs_a_command_as_theirs_and_gives_it_back
     host = await a_host(client, await a_token(client, owner, pool_id))
     ctx = await tenant_of(container, owner)
     managers = container.managers
-    session = await managers.agent_sessions.create_session(ctx, make_session())
+    session = await managers.agent_sessions.create_agent_session(ctx, make_agent_session())
     await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
     await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/work/s1")
     await managers.agent_workspaces.pinned(ctx, session.id, SPEC)

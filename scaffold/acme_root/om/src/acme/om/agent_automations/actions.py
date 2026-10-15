@@ -5,7 +5,7 @@ started ended, so the run closes on that end rather than as lost, and a
 check of the person who writes the agent automation, so one its firings would
 refuse is refused when it is written. Each
 root builds the one registry from what the product hands it
-(`root.ProductKinds.actions`), and a name the platform's actions hold, or
+(`platform_root.ProductKinds.actions`), and a name the platform's actions hold, or
 one registered twice, is refused at boot."""
 
 import re
@@ -21,7 +21,7 @@ from acme.om.agent_automations.types.agent_automation import (
     RunOutcome,
     RunsAs,
 )
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 
 
@@ -31,16 +31,16 @@ class AgentAutomationActionInterface(ABC):
     when a person writes the agent automation."""
 
     name: str
-    params: type[Platform]
+    params: type[OmBase]
 
     @abstractmethod
-    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: Platform) -> UUID:
+    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: OmBase) -> UUID:
         """Does the action of a started run, as the agent automation runs, under
         `ctx`: its creator's or its principal's live context. `run` carries
         the event that fired it in `event_text`, as data. Answers the id of
         the work it started, which the run keeps and `ended` reads. A run
         lost before it records that id is acted on again, so the work takes
-        an id derived from the run's and lands once. A `PlatformException`
+        an id derived from the run's and lands once. A `OmException`
         refuses the run, and its share of the cap goes back."""
         ...
 
@@ -52,7 +52,7 @@ class AgentAutomationActionInterface(ABC):
         ...
 
     @abstractmethod
-    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
+    async def check_writer(self, ctx: TenantContext, params: OmBase, runs_as: RunsAs) -> None:
         """Refuses the person writing an enabled agent automation of this kind,
         under `ctx`, their own context in person, with `params` already held
         to the kind's shape and `runs_as` naming whose context its firings
@@ -60,7 +60,7 @@ class AgentAutomationActionInterface(ABC):
         written, not by a refused run at each firing, and so is one set to
         run as the tenant's principal where `act` refuses the principal: it
         raises `NotAuthorized` with the reason, which the create or the edit
-        answers as is, and any other `PlatformException` answers as itself.
+        answers as is, and any other `OmException` answers as itself.
         A kind with no rule of its own returns, and admits every writer the
         platform admits. A disabled agent automation is never asked about, so its
         writer can always turn it off. The firing still runs `act` under the

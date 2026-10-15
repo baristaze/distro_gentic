@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, transition
 from acme.om.exec_relay.types.exec import ExecProgress
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.watch.types.control import HandCommand, HandRun
@@ -35,7 +35,7 @@ class WatchManagerInterface(ABC):
     # The live read.
 
     @abstractmethod
-    async def open_live(self, ctx: TenantContext, session_id: UUID) -> LiveRead:
+    async def open_live(self, ctx: TenantContext, agent_session_id: UUID) -> LiveRead:
         """A handle to the session's open streams, for a viewer who may read
         the session, that lasts the options' lifetime. A session the viewer
         cannot see is `NotFound`; a platform with no signing key is
@@ -43,8 +43,9 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_live(self, rctx: RequestContext, handle: str, seen: Sequence[Seen]) -> LivePage:
-        """Platform-internal: the open streams of the one session the handle
+        """System-internal: the open streams of the one session the handle
         names, each from the part after the last `seen` names for it. The
         handle is the authority, as a presigned URL is, so this runs below
         any principal. A handle that does not verify, or has expired, is
@@ -54,6 +55,7 @@ class WatchManagerInterface(ABC):
     # A product's streams, by the item a claimant holds.
 
     @abstractmethod
+    @transition
     async def append_as(
         self,
         rctx: RequestContext,
@@ -62,7 +64,7 @@ class WatchManagerInterface(ABC):
         kind: str,
         appended: Appended,
     ) -> None:
-        """Platform-internal: the claimant appends to a stream of `kind` for
+        """System-internal: the claimant appends to a stream of `kind` for
         the item it holds, in that item's group, under the kind's bounds. A
         kind its own kind does not write, the step's, and one nobody
         registered are `NotFound`, as is an item it does not hold: another
@@ -76,6 +78,7 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_as(
         self,
         rctx: RequestContext,
@@ -85,7 +88,7 @@ class WatchManagerInterface(ABC):
         claim_token: UUID,
         seen: Sequence[ItemSeen],
     ) -> ItemPage:
-        """Platform-internal: the claimant reads the item's open streams of
+        """System-internal: the claimant reads the item's open streams of
         `kind`, each from the entry after the last `seen` names for it, for
         the item it holds under `claim_token` with a live lease. A kind its
         own kind does not read, the step's, and one nobody registered are
@@ -103,10 +106,11 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_item_live(
         self, rctx: RequestContext, handle: str, seen: Sequence[ItemSeen]
     ) -> ItemPage:
-        """Platform-internal: the open streams the handle names, each from
+        """System-internal: the open streams the handle names, each from
         the entry after the last `seen` names for it. The handle is the
         authority, as a session's is; one that does not verify as an item's,
         or has expired, is `LiveReadRefused`, and reads nothing."""
@@ -115,7 +119,7 @@ class WatchManagerInterface(ABC):
     # Take control, give back.
 
     @abstractmethod
-    async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSession:
+    async def take_control(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession:
         """A person, in person, who may instruct the session takes its
         environment: a new writer epoch fences the run that held the loop,
         which parks on a hand-over, and what that run's items still run on the
@@ -125,7 +129,7 @@ class WatchManagerInterface(ABC):
         latest snapshot its history names before it is handed over, as its
         next run's would be, unless something touched it since:
         `IsolationRefused` while the host has not restored it in time, and
-        `WorkspaceLost` when its store lost it, each with nothing handed
+        `AgentWorkspaceLost` when its store lost it, each with nothing handed
         over. Parked on a hand-over already, it stays, and nothing is
         restored over the person's work; one another person holds is
         `Conflict`. Audited as that person."""
@@ -133,7 +137,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def run_command(
-        self, ctx: TenantContext, session_id: UUID, command: HandCommand
+        self, ctx: TenantContext, agent_session_id: UUID, command: HandCommand
     ) -> HandRun:
         """A command the person runs while the agent stands down: audited as
         theirs before it is sent, then sent as unsafe `exec` work marked as
@@ -147,7 +151,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def command(
-        self, ctx: TenantContext, session_id: UUID, key: UUID, after_seq: int
+        self, ctx: TenantContext, agent_session_id: UUID, key: UUID, after_seq: int
     ) -> ExecProgress:
         """How the session's command under `key` stands, for a viewer of the
         session: its state, the parts of its output after `after_seq`, and
@@ -157,7 +161,7 @@ class WatchManagerInterface(ABC):
 
     @abstractmethod
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
+        self, ctx: TenantContext, agent_session_id: UUID, summary: str, stop: bool = False
     ) -> AgentSession:
         """The person gives the environment back: their summary arrives as
         their message, an `environment_changed` step says a person acted

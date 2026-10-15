@@ -18,7 +18,7 @@ class AcceptanceHarnessInterface(ABC):
         self,
         ctx: TenantContext,
         scenario: Scenario,
-        session_id: UUID,
+        agent_session_id: UUID,
         result: Result,
         surfaces: Mapping[Surface, Mapping[str, str]],
     ) -> AcceptanceVerdict:

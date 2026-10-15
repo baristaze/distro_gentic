@@ -24,24 +24,25 @@ from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.exec_relay import HOST_MODES, ExecutorRelayImpl
-from acme.apps.host.machine import machine_probes
 from acme.apps.host.mcp import HostServers
+from acme.apps.host.pool_vm import pool_vm_probes
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import IsolationMode as HostIsolation
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.hosts import IsolationMode as HostIsolation
+from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface, IsolationMode
+from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
+from acme.infra.agent_workspaces.network import HostNetwork
+from acme.infra.agent_workspaces.pool_vm import AgentWorkspacePoolVmImpl
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.transports.machine import TransportMachineImpl
-from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
-from acme.infra.workspaces.container import WorkspaceContainerImpl
-from acme.infra.workspaces.machine import WorkspaceMachineImpl
-from acme.infra.workspaces.network import HostNetwork
+from acme.infra.transports.pool_vm import TransportPoolVmImpl
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def probe() -> None:
     settings = settings_from_env()
 
     async def go() -> None:
-        probes = machine_probes() if settings.machine else real_probes(settings.workspace_user)
+        probes = pool_vm_probes() if settings.vm else real_probes(settings.workspace_user)
         async with build_client(settings.api_url, None) as client:
             probed = await startup(probes, client, settings.max_clock_skew_seconds)
         for result in probed.results:
@@ -103,12 +104,10 @@ def run() -> None:
     async def go() -> None:
         agents: list[HostAgent] = []
         workspaces = host_workspaces(settings)
-        # A machine of the cloud pool keeps no snapshot store: its pool keeps
-        # the machine's whole disk.
+        # A VM of the cloud pool keeps no snapshot store: its pool keeps
+        # the VM's whole disk.
         store = (
-            None
-            if settings.machine
-            else HostSnapshots(settings.snapshots_path, settings.secrets_path)
+            None if settings.vm else HostSnapshots(settings.snapshots_path, settings.secrets_path)
         )
         # One broker: what the transport attaches, a snapshot takes back.
         broker = BrokerNullImpl()
@@ -122,7 +121,7 @@ def run() -> None:
             snapshot_modes=lambda: frozenset(
                 ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
             ),
-            kept_whole=KEPT_WHOLE if settings.machine else frozenset(),
+            kept_whole=KEPT_WHOLE if settings.vm else frozenset(),
             # The servers the owner names, each started for one call with a
             # credential from the host's own store.
             servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),
@@ -130,7 +129,7 @@ def run() -> None:
         agent = HostAgent(
             settings,
             owner,
-            machine_probes()
+            pool_vm_probes()
             if store is None
             else real_probes(settings.workspace_user, host_snapshots(workspaces, store)),
             lambda token: build_client(settings.api_url, token),
@@ -138,9 +137,9 @@ def run() -> None:
         )
         agents.append(agent)
         await agent.start()
-        if settings.machine_seed is not None:
+        if settings.vm_seed is not None:
             # Traded: a key is spent once.
-            forget_key(settings.machine_seed)
+            forget_key(settings.vm_seed)
         await serve(agent, settings)
 
     _guarded(go())
@@ -165,9 +164,9 @@ def host_transports(
     refused rather than run as the host's own user. A command under open
     egress goes through the host's proxy and trusts its CA file."""
     secrets = SecretsLocalImpl(settings.secrets_path)
-    if settings.machine:
+    if settings.vm:
         return {
-            IsolationMode.VM: TransportMachineImpl(
+            IsolationMode.VM: TransportPoolVmImpl(
                 settings.records_path,
                 secrets,
                 broker or BrokerNullImpl(),
@@ -184,16 +183,16 @@ def host_transports(
     return {IsolationMode.CONTAINER: container}
 
 
-def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProviderInterface]:
+def host_workspaces(settings: Settings) -> dict[IsolationMode, AgentWorkspaceProviderInterface]:
     """What makes a workspace its pool asks this host to prepare, by the
     mode its transport runs: a container per session, of the image its
     owner names, holding a copy of the host's CA file under open egress. A
-    machine of the cloud pool makes its one session's workspace in itself."""
-    if settings.machine:
-        return {IsolationMode.VM: WorkspaceMachineImpl(settings.machine_workspace)}
+    VM of the cloud pool makes its one session's workspace in itself."""
+    if settings.vm:
+        return {IsolationMode.VM: AgentWorkspacePoolVmImpl(settings.vm_workspace)}
     return {
-        IsolationMode.CONTAINER: WorkspaceContainerImpl(
-            settings.workspace_image,
+        IsolationMode.CONTAINER: AgentWorkspaceContainerImpl(
+            settings.agent_workspace_image,
             timedelta(seconds=30),
             f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
@@ -209,7 +208,7 @@ ENGINE_MODES: dict[HostIsolation, IsolationMode] = {
 
 
 def host_snapshots(
-    workspaces: Mapping[IsolationMode, WorkspaceProviderInterface], store: HostSnapshots
+    workspaces: Mapping[IsolationMode, AgentWorkspaceProviderInterface], store: HostSnapshots
 ) -> dict[HostIsolation, Callable[[], bool]]:
     """The modes whose snapshots this host keeps: each one a provider of its
     own snapshots, once its store takes one and gives it back. The
@@ -219,8 +218,8 @@ def host_snapshots(
 
 
 KEPT_WHOLE = frozenset({IsolationMode.VM})
-"""The level a machine of the cloud pool holds a workspace kept by snapshots
-at: its pool keeps the machine's whole disk, and the host takes none."""
+"""The level a VM of the cloud pool holds a workspace kept by snapshots
+at: its pool keeps the VM's whole disk, and the host takes none."""
 
 SNAPSHOTTING = frozenset({IsolationMode.CONTAINER})
 """The engine's modes whose providers here snapshot a workspace whole: the

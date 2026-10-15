@@ -27,7 +27,7 @@ async function shoot(page: Page, name: string): Promise<void> {
  *  over the API; the portal has no control for it. */
 async function shareWithOrg(page: Page, sessionId: string): Promise<void> {
   const status = await page.evaluate(async (id) => {
-    const { state } = JSON.parse(sessionStorage.getItem("acme.portal.session")!) as { state: { token: string } };
+    const { state } = JSON.parse(sessionStorage.getItem("acme.portal.authSession")!) as { state: { token: string } };
     const answer = await fetch(`/v1/agent-sessions/${id}/visibility`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${state.token}`, "Content-Type": "application/json" },

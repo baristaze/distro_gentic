@@ -33,14 +33,14 @@ from acme.om.agent_billing.types.spend_ledger import (
     Turned,
 )
 from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
-from acme.om.base import Platform
-from acme.om.budgets.rules import EPOCH, HOLD_RETRY, breaches, window_bounds
-from acme.om.budgets.types.amount import Amount
-from acme.om.budgets.types.breach import BreachAction, Refusal
-from acme.om.budgets.types.budget import Budget, BudgetWindow, WindowKind
-from acme.om.budgets.types.hold import HoldLine, Settlement, Tally
+from acme.om.agent_steps.types.header import Park, ParkReason
+from acme.om.base import OmBase
 from acme.om.exceptions import SpenderUnknown
-from acme.om.steps.types.header import Park, ParkReason
+from acme.om.spend_budgets.rules import EPOCH, HOLD_RETRY, breaches, window_bounds
+from acme.om.spend_budgets.types.amount import Amount
+from acme.om.spend_budgets.types.spend_breach import Refusal, SpendBreachAction
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetWindow, WindowKind
+from acme.om.spend_budgets.types.spend_hold import SpendHoldLine, SpendSettlement, SpendTally
 
 FUNDS_UNLOCK = "funds"
 """A budget park's unlock when no bucket covers the call: a top-up, a
@@ -130,7 +130,7 @@ def billing_period(anchor: datetime, at: datetime) -> tuple[datetime, datetime]:
 
 
 def window_of(
-    window: BudgetWindow, spend_account: SpendAccount, at: datetime
+    window: SpendBudgetWindow, spend_account: SpendAccount, at: datetime
 ) -> tuple[datetime, datetime | None]:
     """The start of the window `at` falls in, and when it resets (None for
     one that never does). Days and weeks follow the tenant's time zone,
@@ -146,16 +146,16 @@ def window_of(
 
 
 def lines_of(
-    budgets: Iterable[Budget], spend_account: SpendAccount, now: datetime
-) -> tuple[HoldLine, ...]:
+    budgets: Iterable[SpendBudget], spend_account: SpendAccount, now: datetime
+) -> tuple[SpendHoldLine, ...]:
     """Each budget as a line of a hold made at `now`, in its window as the
     tenant counts it, in the order the ledger locks them: by budget."""
     lines = []
     for budget in sorted(budgets, key=lambda b: b.id):
         start, resets_at = window_of(budget.window, spend_account, now)
         lines.append(
-            HoldLine(
-                budget_id=budget.id,
+            SpendHoldLine(
+                spend_budget_id=budget.id,
                 scope=budget.scope,
                 window_start=start,
                 resets_at=resets_at,
@@ -265,19 +265,19 @@ CountKey = tuple[str, datetime]
 """A counter and the start of its period."""
 
 
-def line_keys(line: HoldLine) -> tuple[CountKey, CountKey]:
+def line_keys(line: SpendHoldLine) -> tuple[CountKey, CountKey]:
     """A budget line's two counters in its window: reference cost and native
     tokens."""
     return (
-        (f"budget:{line.budget_id}:cost", line.window_start),
-        (f"budget:{line.budget_id}:tokens", line.window_start),
+        (f"budget:{line.spend_budget_id}:cost", line.window_start),
+        (f"budget:{line.spend_budget_id}:tokens", line.window_start),
     )
 
 
-def raise_keys(budget_id: UUID, window_start: datetime) -> tuple[CountKey, CountKey]:
+def raise_keys(spend_budget_id: UUID, window_start: datetime) -> tuple[CountKey, CountKey]:
     return (
-        (f"budget:{budget_id}:cost", window_start),
-        (f"budget:{budget_id}:tokens", window_start),
+        (f"budget:{spend_budget_id}:cost", window_start),
+        (f"budget:{spend_budget_id}:tokens", window_start),
     )
 
 
@@ -309,8 +309,8 @@ def _count(counts: Mapping[CountKey, Count], key: CountKey) -> Count:
 
 
 def with_raises(
-    lines: Sequence[HoldLine], counts: Mapping[CountKey, Count]
-) -> tuple[HoldLine, ...]:
+    lines: Sequence[SpendHoldLine], counts: Mapping[CountKey, Count]
+) -> tuple[SpendHoldLine, ...]:
     """Each line's amount with the one-time raise of its window added: a
     raise counts in the window it was made for and in no other."""
     raised = []
@@ -327,11 +327,11 @@ def with_raises(
     return tuple(raised)
 
 
-def tally_of(line: HoldLine, counts: Mapping[CountKey, Count]) -> Tally:
+def tally_of(line: SpendHoldLine, counts: Mapping[CountKey, Count]) -> SpendTally:
     """A line's window as the engine's breaches read it."""
     cost, tokens = (_count(counts, key) for key in line_keys(line))
-    return Tally(
-        budget_id=line.budget_id,
+    return SpendTally(
+        spend_budget_id=line.spend_budget_id,
         window_start=line.window_start,
         held_cost_micros=cost.held,
         held_tokens=tokens.held,
@@ -413,7 +413,7 @@ def open_answer(
     is unknown is turned away by a shortfall no period clears."""
     lines = with_raises(hold.hold.lines, counts)
     checked = hold.hold.model_copy(update={"lines": lines})
-    tallies = {(line.budget_id, line.window_start): tally_of(line, counts) for line in lines}
+    tallies = {(line.spend_budget_id, line.window_start): tally_of(line, counts) for line in lines}
     found = breaches(checked, tallies)
     refusal = Refusal(breaches=found) if found else None
     shortfall = None
@@ -446,7 +446,7 @@ def opened(hold: FundedHold) -> dict[CountKey, tuple[int, int]]:
 
 
 def closed(
-    hold: FundedHold, settlement: Settlement, charge: Charge
+    hold: FundedHold, settlement: SpendSettlement, charge: Charge
 ) -> dict[CountKey, tuple[int, int]]:
     """What a settlement moves on each counter of its hold: the hold's
     reserve leaves what is held, and what was spent joins what was spent.
@@ -500,7 +500,9 @@ def taken_by(hold: FundedHold, units: int) -> Draw:
     return Draw(**taken)
 
 
-def charge_of(hold: FundedHold, settlement: Settlement, charge_id: UUID, now: datetime) -> Charge:
+def charge_of(
+    hold: FundedHold, settlement: SpendSettlement, charge_id: UUID, now: datetime
+) -> Charge:
     """The bill of one call: its spent reference cost in units, and what
     each bucket paid; what the tenant is billed is what the money buckets
     paid. A call on the tenant's own key draws no bucket and is billed
@@ -510,7 +512,7 @@ def charge_of(hold: FundedHold, settlement: Settlement, charge_id: UUID, now: da
     return Charge(
         id=charge_id,
         created_at=now,
-        hold_id=hold.id,
+        spend_hold_id=hold.id,
         price_version=None if hold.priced is None else hold.priced.version,
         units=units,
         draw=draw,
@@ -521,7 +523,7 @@ def charge_of(hold: FundedHold, settlement: Settlement, charge_id: UUID, now: da
 # The anomaly guard.
 
 
-class AnomalyGuard(Platform):
+class AnomalyGuard(OmBase):
     factor: int = Field(default=10, ge=2)  # how many times the norm is far above it
     min_calls: int = Field(default=5, ge=1)  # the calls a session makes before it has a norm
     recent: int = Field(default=20, ge=1)  # the calls the norm is read over
@@ -550,7 +552,7 @@ def price_park(now: datetime, price_retry: timedelta = PRICE_RETRY) -> Park:
     after a wait: an operator prices the model in a release, and the next
     try reads the price. Its cause says who acts."""
     return Park(
-        reason=ParkReason.BUDGET,
+        reason=ParkReason.SPEND_BUDGET,
         unlock=PRICE_UNLOCK,
         retry_at=now + price_retry,
         cause=f"the call's model has no price: {OPERATOR} prices it",
@@ -560,7 +562,7 @@ def price_park(now: datetime, price_retry: timedelta = PRICE_RETRY) -> Park:
 def priced_out(refusal: Refusal) -> bool:
     """Whether a limit refused a call because no price gives it a cost: a
     price, not a raise, clears it."""
-    return any(breach.action is BreachAction.PRICE for breach in refusal.breaches)
+    return any(breach.action is SpendBreachAction.PRICE for breach in refusal.breaches)
 
 
 def shortfall_park(shortfall: Shortfall, now: datetime, hold_retry: timedelta = HOLD_RETRY) -> Park:
@@ -574,8 +576,8 @@ def shortfall_park(shortfall: Shortfall, now: datetime, hold_retry: timedelta = 
     if shortfall.short <= shortfall.reserved:
         soon = now + hold_retry
         retry_at = soon if shortfall.resets_at is None else min(soon, shortfall.resets_at)
-        return Park(reason=ParkReason.BUDGET, unlock=HELD_UNLOCK, retry_at=retry_at)
-    return Park(reason=ParkReason.BUDGET, unlock=FUNDS_UNLOCK, retry_at=shortfall.resets_at)
+        return Park(reason=ParkReason.SPEND_BUDGET, unlock=HELD_UNLOCK, retry_at=retry_at)
+    return Park(reason=ParkReason.SPEND_BUDGET, unlock=FUNDS_UNLOCK, retry_at=shortfall.resets_at)
 
 
 def anomaly_park() -> Park:
@@ -589,7 +591,7 @@ class LimitKind(StrEnum):
     OTHER = "other"
 
 
-class Notice(Platform):
+class Notice(OmBase):
     """What a person is told of a parked session."""
 
     limit: LimitKind
@@ -618,13 +620,13 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again on its own; adding credit does not change it."
                 ),
             )
-        case ParkReason.BUDGET if park.unlock == FUNDS_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == FUNDS_UNLOCK:
             when = "a person adds credit" if park.retry_at is None else "the next billing period"
             return Notice(
                 limit=LimitKind.SPEND,
                 text=f"The spend account's balance does not cover this call. It waits until {when}.",
             )
-        case ParkReason.BUDGET if park.unlock == HELD_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == HELD_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=(
@@ -632,7 +634,7 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again when they settle."
                 ),
             )
-        case ParkReason.BUDGET if park.unlock == PRICE_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == PRICE_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=(
@@ -640,7 +642,7 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again on its own, and takes the price at its next try."
                 ),
             )
-        case ParkReason.BUDGET:
+        case ParkReason.SPEND_BUDGET:
             when = "a person raises it" if park.retry_at is None else "its window resets"
             return Notice(
                 limit=LimitKind.SPEND,

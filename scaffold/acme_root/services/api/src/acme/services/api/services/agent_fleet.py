@@ -10,15 +10,11 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import OperatorContext
-from acme.services.api.types.agent_fleet import (
-    HostStandingView,
-    SessionStandingView,
-    SetShareRequest,
-    ShapePageView,
-    ShareView,
-)
-from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.agent_sessions import AgentStepPageView
+from acme.services.api.types.hosts import HostStandingView
 from acme.services.api.types.levers import LeverReadingView
+from acme.services.api.types.placement import AgentSessionStandingView, SetShareRequest, ShareView
+from acme.services.api.types.trust import ShapePageView
 
 
 class AgentFleetServiceInterface(ABC):
@@ -29,8 +25,8 @@ class AgentFleetServiceInterface(ABC):
 
     @abstractmethod
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
-    ) -> SessionStandingView: ...
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionStandingView: ...
 
     @abstractmethod
     async def get_host_standing(
@@ -39,13 +35,23 @@ class AgentFleetServiceInterface(ABC):
 
     @abstractmethod
     async def get_session_shape(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
     ) -> ShapePageView: ...
 
     @abstractmethod
     async def get_session_content(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPageView: ...
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
+    ) -> AgentStepPageView: ...
 
     @abstractmethod
     async def read_levers(

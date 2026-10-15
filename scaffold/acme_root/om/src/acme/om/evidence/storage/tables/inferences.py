@@ -14,9 +14,11 @@ class Inferences(IdentifiableMixin, CreatedMixin, Base):
 
     __tablename__ = "inferences"
     __org_id_index__ = False
-    __table_args__ = (Index("ix_inferences_org_id_session_id_id", "org_id", "session_id", "id"),)
-    session_id: Mapped[UUID]
-    step_id: Mapped[UUID]
+    __table_args__ = (
+        Index("ix_inferences_org_id_agent_session_id_id", "org_id", "agent_session_id", "id"),
+    )
+    agent_session_id: Mapped[UUID]
+    agent_step_id: Mapped[UUID]
     kind: Mapped[str]
     resolves: Mapped[UUID | None]
     stance: Mapped[str | None]

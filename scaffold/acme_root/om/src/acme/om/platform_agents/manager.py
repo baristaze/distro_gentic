@@ -32,14 +32,14 @@ class PlatformAgentsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
+    async def get_validation(self, ctx: TenantContext, agent_session_id: UUID) -> ValidationSession:
         """A validation session of the tenant; `NotFound` when another tenant
         holds it, or none does."""
         ...
 
     @abstractmethod
-    async def run_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
-        """Platform-internal, the work its start asked for: the session's
+    async def run_validation(self, ctx: TenantContext, agent_session_id: UUID) -> ValidationSession:
+        """System-internal, the work its start asked for: the session's
         check run on a fresh executor, through the evidence namespace, at
         its head with the checks, fixtures, and runner from its base (once,
         or its declared trials when a requirement rates it), and the session
@@ -59,9 +59,9 @@ class PlatformAgentsManagerInterface(ABC):
 
     @abstractmethod
     async def finish_validation(
-        self, ctx: TenantContext, session_id: UUID, run_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, run_id: UUID
     ) -> ValidationSession:
-        """Platform-internal: the session's run is recorded as `run_id`, the
+        """System-internal: the session's run is recorded as `run_id`, the
         execution record every run is, and the session is finished. Asked
         again with the same run, it answers the session as stored; with
         another, or once the session is refused, `PreconditionFailed`, since
@@ -70,9 +70,9 @@ class PlatformAgentsManagerInterface(ABC):
 
     @abstractmethod
     async def refuse_validation(
-        self, ctx: TenantContext, session_id: UUID, reason: str
+        self, ctx: TenantContext, agent_session_id: UUID, reason: str
     ) -> ValidationSession:
-        """Platform-internal: the session's check cannot run here, for good,
+        """System-internal: the session's check cannot run here, for good,
         or its work failed on its last attempt, and the session is refused
         with `reason`, its first characters kept, so its read ends rather
         than waiting for ever. A session refused already answers as stored;

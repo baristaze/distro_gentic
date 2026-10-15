@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 
 CHECK = r"^[a-z][a-z0-9_.-]{0,99}$"
 """A check's name, as its agent project's policy declares it."""
@@ -30,7 +30,7 @@ class ValidationStatus(StrEnum):
     REFUSED = "refused"  # its check cannot run here, or its work spent its attempts: no run
 
 
-class ValidationStart(Platform):
+class ValidationStart(OmBase):
     """A check of an agent project's policy to run at `head`, the delivered commit,
     with the checks, fixtures, and runner taken from `base`, where the work
     started. `id` is the caller's, so a start asked again answers the

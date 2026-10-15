@@ -1,8 +1,9 @@
 import pytest
-from contracts.agent_knowledge_storage import AgentKnowledgeStorageContract
 
 from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_knowledge.storage.impl.memory import AgentKnowledgeStorageMemoryImpl
+
+from contracts.agent_knowledge_storage import AgentKnowledgeStorageContract
 
 
 class TestAgentKnowledgeStorageMemory(AgentKnowledgeStorageContract):

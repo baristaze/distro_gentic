@@ -49,27 +49,26 @@ and texts carry the renamed nouns, so its rendered bytes change and its
 pinned digest is re-pinned. Its version stays: the old names cannot be
 kept, so no version could hold them.
 
-**What another layer owns stays.** The engine's own identifiers move
-with the next base move: its budget scope value `project`, its
-workspace providers, and its machines. A run's results stream keeps its
+**What another layer owns stays as that layer names it.** The engine's
+budget scope value is `agent_project`, its workspace providers are its
+agent workspaces', and its machines its VMs. A run's results stream keeps its
 `environment` key, which a product's runner writes under schema 1. The
 lens group `workspaces` and its two skills keep their names.
 
 ## Consequences
 
-- A rollback across this release is not supported. The release before
-  reads the names this release renames, so its integration tests that
-  read them are left out of the release-before run
+- A rollback across a rename is not supported. The release before reads
+  the names a rename moves, so its integration tests that read them are
+  left out of the release-before run
   (`scripts/release_before_deselect.txt`).
 - A secret's value is kept in its tenant's store under its owner kind,
-  its owner, and its name. No migration reaches the store, so a value an
-  agent project declared before this release stays under the old owner
-  kind. Its owner puts it again after the upgrade; a downgrade reads the
-  old one again.
+  its owner, and its name. No migration reaches the store, so a value
+  declared under an owner kind a rename moves stays under the old one.
+  Its owner puts it again after the upgrade; a downgrade reads the old
+  one again.
 - A host's ceilings file names `agent_projects`.
 - The change stream keeps each past event's payload as it was written.
   Only its kind moves.
 - A lens group's id may carry a hyphen, as `agent-fleet` does.
-- At the next base move, the platform's `AgentWorkspaceBase` and the
-  engine's class of the same name meet in one module. A module-qualified
-  import keeps them apart.
+- An agent project's workspace base is `AgentProjectWorkspaceBase`,
+  apart from the engine's `AgentWorkspaceBase`.

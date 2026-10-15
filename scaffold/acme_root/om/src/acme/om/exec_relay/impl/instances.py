@@ -1,7 +1,7 @@
 """An instance a run makes inside a pinned session's wall: a new workspace
 under an id of its own, made by a host of the session's pool, reached
 through the exec relay, and destroyed when the run ends. The fresh executor
-runs a pinned session's checks on one, never on the platform's machines
+runs a pinned session's checks on one, never on the platform's VMs
 and never in the session's own workspace."""
 
 import asyncio
@@ -9,8 +9,8 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import TransportInterface
-from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_workspaces.placed import PlacedInstancesInterface
 from acme.om.base import utcnow
 from acme.om.context import RequestContext, TenantContext
@@ -49,23 +49,23 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
     async def make(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         instance_id: UUID,
         spec: IsolationSpec,
         by: datetime,
-    ) -> tuple[Workspace, TransportInterface]:
+    ) -> tuple[AgentWorkspace, TransportInterface]:
         relay = self._exec_relay()
-        await relay.ask_instance(ctx, session_id, instance_id, spec)
+        await relay.ask_instance(ctx, agent_session_id, instance_id, spec)
         wait = self._first_poll
         while (binding := await relay.binding_of(ctx, instance_id)) is None:
             left = (by - self._clock()).total_seconds()
             if left <= 0:
                 raise Unavailable(
-                    f"no host of session {session_id}'s pool made an instance for its run in time"
+                    f"no host of session {agent_session_id}'s pool made an instance for its run in time"
                 )
             await self._sleep(min(wait.total_seconds(), left))
             wait = min(wait * 2, self._last_poll)
-        workspace = Workspace(
+        workspace = AgentWorkspace(
             id=instance_id, org_id=ctx.org_id, spec=spec, location=binding.location
         )
         return workspace, self._transport(lambda: ctx)
@@ -73,4 +73,4 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
     async def destroy(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> None:
         relay = self._exec_relay()
         await relay.ask_purge(ctx, instance_id, spec)
-        await relay.purge_session(ctx.org_id, instance_id)
+        await relay.purge_agent_session(ctx.org_id, instance_id)

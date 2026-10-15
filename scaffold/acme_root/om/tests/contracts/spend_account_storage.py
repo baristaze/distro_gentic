@@ -13,6 +13,9 @@ from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccount,
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, TenantMismatch
 
+INTERFACE = SpendAccountStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {"create_spend_account", "purge_tenant", "read_spend_account", "write_spend_account"}
 )

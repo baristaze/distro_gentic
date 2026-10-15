@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationSpec
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
     CapabilityMissing,
@@ -26,11 +27,11 @@ from acme.infra.transports import (
     TransportInterface,
     file_offset,
 )
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
 from acme.integrations.mcp import McpAnswer
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
-from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
+from acme.om.exceptions import OmException, ToolFailed, Unavailable
 from acme.om.exec_relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import READ_BYTES
@@ -51,7 +52,6 @@ from acme.om.exec_relay.types.exec import (
     WriteRequest,
 )
 from acme.om.placement.types.work import ExecEffect
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.types.tool import Effect
 from acme.om.trust.placement import PlacementInterface
 
@@ -116,7 +116,7 @@ class TransportRelayImpl(TransportInterface):
 
     async def run(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         command: CommandSpec,
         on_output: OutputSink | None = None,
         *,
@@ -151,7 +151,7 @@ class TransportRelayImpl(TransportInterface):
         return _command_result(command.key, outcome, output)
 
     async def outcome(
-        self, workspace: Workspace, key: UUID, epoch: int, *, seal: RecordSeal
+        self, workspace: AgentWorkspace, key: UUID, epoch: int, *, seal: RecordSeal
     ) -> CommandResult | None:
         rctx = self._stage()
         try:
@@ -172,13 +172,13 @@ class TransportRelayImpl(TransportInterface):
             return None  # cut off before it ended, or never ran
         return _command_result(key, outcome, progress.output or ExecOutput())
 
-    async def purge_records(self, workspace_id: UUID) -> None:
+    async def purge_records(self, agent_workspace_id: UUID) -> None:
         """The exec relay's records of a session go with it in the sweep's purge;
         a host's own go with the workspace it holds."""
         return None
 
     async def read_file(
-        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+        self, workspace: AgentWorkspace, path: str, max_bytes: int, offset: int = 0
     ) -> bytes:
         """One item, whose result crosses the wall whole: it asks for no more
         than `READ_BYTES` and a byte from `offset`, which the host's transport
@@ -203,12 +203,14 @@ class TransportRelayImpl(TransportInterface):
             raise FileTooLarge(READ_BYTES)
         return data
 
-    async def write_file(self, workspace: Workspace, path: str, data: bytes, epoch: int) -> None:
+    async def write_file(
+        self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
         request = WriteRequest(path=path, data=base64.b64encode(data).decode())
         progress = await self._file(workspace, request, "idempotent", epoch)
         _completed(*_ended(progress))
 
-    async def list_files(self, workspace: Workspace, path: str, limit: int) -> list[FileEntry]:
+    async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         request = ListRequest(path=path, limit=limit)
         progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
@@ -227,7 +229,7 @@ class TransportRelayImpl(TransportInterface):
     # Helpers.
 
     async def _file(
-        self, workspace: Workspace, request: ExecRequest, effect: ExecEffect, epoch: int | None
+        self, workspace: AgentWorkspace, request: ExecRequest, effect: ExecEffect, epoch: int | None
     ) -> ExecProgress:
         """A file operation. The engine's carry no call's key, so each is an
         item keyed by itself: a read, or a whole file written under the
@@ -239,7 +241,7 @@ class TransportRelayImpl(TransportInterface):
 
     async def call_mcp(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: McpRequest,
         *,
         key: UUID,
@@ -263,7 +265,7 @@ class TransportRelayImpl(TransportInterface):
 
     @staticmethod
     def _call(
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: ExecRequest,
         key: UUID,
         effect: ExecEffect,
@@ -273,7 +275,7 @@ class TransportRelayImpl(TransportInterface):
         """One operation of a call in the session's workspace, which the
         engine prepares under the session's id."""
         return ExecCall(
-            session_id=workspace.id,
+            agent_session_id=workspace.id,
             key=key,
             request=request,
             effect=effect,
@@ -284,7 +286,7 @@ class TransportRelayImpl(TransportInterface):
 
     async def _through(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         call: ExecCall,
         occurrence: int,
         on_output: OutputSink | None,
@@ -385,7 +387,7 @@ class TransportRelayImpl(TransportInterface):
 
 class TransportPlacedImpl(TransportInterface):
     """The runner's one transport: per session, the exec relay when its placement
-    is inside its tenant's wall, or when its workspace runs on a machine of
+    is inside its tenant's wall, or when its workspace runs on a VM of
     the cloud pool (`pooled`), and the direct transport otherwise. The
     engine and its tools see this alone, and never what is behind it."""
 
@@ -403,7 +405,7 @@ class TransportPlacedImpl(TransportInterface):
 
     async def run(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         command: CommandSpec,
         on_output: OutputSink | None = None,
         *,
@@ -413,24 +415,26 @@ class TransportPlacedImpl(TransportInterface):
         return await transport.run(workspace, command, on_output, seal=seal)
 
     async def outcome(
-        self, workspace: Workspace, key: UUID, epoch: int, *, seal: RecordSeal
+        self, workspace: AgentWorkspace, key: UUID, epoch: int, *, seal: RecordSeal
     ) -> CommandResult | None:
         transport = await self._for(workspace)
         return await transport.outcome(workspace, key, epoch, seal=seal)
 
-    async def purge_records(self, workspace_id: UUID) -> None:
-        await self._direct.purge_records(workspace_id)
-        await self._relayed.purge_records(workspace_id)
+    async def purge_records(self, agent_workspace_id: UUID) -> None:
+        await self._direct.purge_records(agent_workspace_id)
+        await self._relayed.purge_records(agent_workspace_id)
 
     async def read_file(
-        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+        self, workspace: AgentWorkspace, path: str, max_bytes: int, offset: int = 0
     ) -> bytes:
         return await (await self._for(workspace)).read_file(workspace, path, max_bytes, offset)
 
-    async def write_file(self, workspace: Workspace, path: str, data: bytes, epoch: int) -> None:
+    async def write_file(
+        self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
+    ) -> None:
         await (await self._for(workspace)).write_file(workspace, path, data, epoch)
 
-    async def list_files(self, workspace: Workspace, path: str, limit: int) -> list[FileEntry]:
+    async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         return await (await self._for(workspace)).list_files(workspace, path, limit)
 
     def describe(self) -> str:
@@ -443,7 +447,7 @@ class TransportPlacedImpl(TransportInterface):
     async def close(self) -> None:
         return None
 
-    async def _for(self, workspace: Workspace) -> TransportInterface:
+    async def _for(self, workspace: AgentWorkspace) -> TransportInterface:
         """The transport of the workspace's session, by its placement. A
         session's workspace is prepared under the session's id. The absent
         workspace goes to the direct transport, which refuses it loudly."""
@@ -459,7 +463,7 @@ class TransportPlacedImpl(TransportInterface):
 def _final(error: Exception) -> bool:
     """A failure that waiting does not mend: the platform's refusal, never
     its `Unavailable`. A backend's or the wire's is waited out."""
-    return isinstance(error, PlatformException) and not isinstance(error, Unavailable)
+    return isinstance(error, OmException) and not isinstance(error, Unavailable)
 
 
 def _ended(progress: ExecProgress) -> tuple[ExecOutcome, ExecOutput]:

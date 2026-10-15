@@ -1,6 +1,6 @@
 ---
 name: distro-review-placement
-description: "Platform review through the Placement lenses of the distro_gentic spec: Sessions Are Work; Session Runners; Placement and Workspace Hosts. For a change in this area, or as one leg of distro-review-full."
+description: "Platform review through the Placement lenses of the distro_gentic spec: Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts. For a change in this area, or as one leg of distro-review-full."
 allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git show:*), Bash(git log:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git merge-base:*), Bash(git symbolic-ref:*), Bash(git ls-files:*)
 ---
 
@@ -14,7 +14,7 @@ needs its source read in full. A path that starts with `../` is read
 from this skill's folder as `realpath` resolves it. If either file is
 missing, stop and say the installation is incomplete.
 
-This pass covers these sections of the spec: Sessions Are Work; Session Runners; Placement and Workspace Hosts.
+This pass covers these sections of the spec: Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts.
 
 A lens that leans on a rule of the engine or of the guideline judges
 the platform's rule only. The engine's own rule is its own review's

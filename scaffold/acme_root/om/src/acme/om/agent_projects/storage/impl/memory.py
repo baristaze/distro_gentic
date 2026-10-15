@@ -62,14 +62,16 @@ class AgentProjectStorageMemoryImpl(MemoryStorageBase, AgentProjectStorageInterf
                 raise TenantMismatch(f"agent session {binding.id} is not in {org_id}")
             return stored
 
-    async def read_binding(self, org_id: UUID, session_id: UUID) -> SessionAgentProject | None:
-        return self._get(self._bindings, org_id, session_id)
+    async def read_binding(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> SessionAgentProject | None:
+        return self._get(self._bindings, org_id, agent_session_id)
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
         async with self._lock:
-            if self._get(self._bindings, org_id, session_id) is None:
+            if self._get(self._bindings, org_id, agent_session_id) is None:
                 return False
-            del self._bindings[session_id]
+            del self._bindings[agent_session_id]
             return True
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:

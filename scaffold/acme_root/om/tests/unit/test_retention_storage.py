@@ -1,8 +1,9 @@
 import pytest
-from contracts.retention_storage import RetentionStorageContract
 
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
+
+from contracts.retention_storage import RetentionStorageContract
 
 
 class TestRetentionStorageMemory(RetentionStorageContract):

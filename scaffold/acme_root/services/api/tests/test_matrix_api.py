@@ -13,15 +13,17 @@ import httpx
 import pytest
 from api_support import OWNER, build_container, enrol_operator, seed_request, sign_in_as
 
+from acme.integrations.model_providers import types as model_providers
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agent_billing.root import build_agent_billing
 from acme.om.agent_billing.types.spend_account import FundingMode, SpendAccountRequest
 from acme.om.context import OperatorRole, TenantContext
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.types.record import ModelRef
-from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import BENCHMARK, seed_matrix
+from acme.services.api.types import matrix as wire
 
 SONNET: dict[str, Any] = {
     "provider": "anthropic",
@@ -37,7 +39,7 @@ OPUS: dict[str, Any] = {**SONNET, "model": "claude-opus-5-5"}
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    return build_container(tmp_path, model_providers="scripted")
+    return build_container(tmp_path, llm_providers="scripted")
 
 
 async def tenant_on(
@@ -59,6 +61,17 @@ async def tenant_on(
         ),
     )
     return ctx, await sign_in_as(client, email, org.id)
+
+
+def test_the_wire_names_every_provider_and_effort_the_providers_do() -> None:
+    """The wire repeats the providers' two enums, since a wire type lives in
+    this layer: each holds the same values, so no fill the matrix qualifies
+    fails to render."""
+    for ours, theirs in (
+        (wire.ProviderName, model_providers.ProviderName),
+        (wire.Effort, model_providers.Effort),
+    ):
+        assert [m.value for m in ours] == [m.value for m in theirs]
 
 
 async def test_a_tenant_on_its_own_keys_chooses_only_among_its_options(

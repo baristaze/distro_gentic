@@ -13,12 +13,10 @@ and a tenant's own cap on a lane in its place, which an operator sets
 The claim passes over a tenant at its cap in its one statement, so the
 tenant's item is not written and spends no attempt.
 
-A guard of the platform's own beside it
-([ADR 2002](2002-a-tenants-loops-are-held-at-the-claim-in-the-claim-order.md))
-is a second cap, which can disagree with the first. It also costs more:
-a loop over its share is claimed, handed back, and claimed again after a
-delay, a write each time, while a freed runner idles until the delay
-passes.
+A guard of the platform's own beside it would be a second cap, which
+can disagree with the first. It would also cost more: a loop over its
+share is claimed, handed back, and claimed again after a delay, a write
+each time, while a freed runner idles until the delay passes.
 
 The plan tiers stay the platform's own: each tier's lane, and how many
 loops one tenant holds there. So does an operator's move of a tenant to
@@ -42,14 +40,15 @@ a lane of its own, and the share route an operator writes.
   move back writes it again. The cap lands before the share, so a
   failure between leaves a cap on a lane the tenant's loops do not reach
   yet, which the operator's retry writes again.
-- **The platform holds no guard of its own.** ADR 2002's guard goes, and
-  with it the runner's guard and its delay. The lanes ADR 2002 places at
-  every enqueue stay. So does its count of a tenant's loops ahead of an
-  item, for the standings, which say why a loop waits.
+- **The platform holds no guard of its own,** and a runner holds none
+  with a delay: the work queue's cap is the one number. The lane
+  placement answers at every enqueue, and its count of a tenant's loops
+  ahead of an item for the standings, are
+  [ADR 2002](2002-a-loop-goes-to-its-tenants-lane-and-a-host-is-claimed-for-by-its-identity.md)'s.
 - **A share the release before wrote is carried once.** Its concurrency
   lives in `core` and the caps in `queue`, and nothing crosses a role, so
   no migration can carry it. The release before still reads the column,
-  so it stays, with a default for a share this release writes, beside a
+  so it stays, with a default for a share the head writes, beside a
   marker, `cap_carried`, false on every share there is. The maintenance
   sweep writes each unmarked share's concurrency as the tenant's own cap
   on its loop lane, unless the tenant holds one there already, then

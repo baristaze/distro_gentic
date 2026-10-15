@@ -24,11 +24,11 @@ Example: `microvm --mode vm --setting workspace_vm_kernel=<path>`,
 for "a microVM per workspace, its files on a volume that outlives the
 VM".
 
-- `<backend>` is the value of `ACME_WORKSPACE_BACKEND` that selects it,
+- `<backend>` is the value of `ACME_AGENT_WORKSPACE_BACKEND` that selects it,
   snake case, with `ACME_` read as the tree's prefix. `<Backend>` is its
   CamelCase.
 - `--mode` is the `IsolationMode` the backend holds, from
-  `infra/src/<name>/infra/workspaces/__init__.py`. A backend holds one
+  `infra/src/<name>/infra/agent_workspaces/__init__.py`. A backend holds one
   mode, and refuses every other.
 - `--transport` names a transport under
   `infra/src/<name>/infra/transports/` that already runs commands in
@@ -39,15 +39,15 @@ VM".
 
 ## Created
 
-The shape of a provider is `WorkspaceContainerImpl` in
-`infra/src/<name>/infra/workspaces/container.py`, over
-`WorkspaceProviderInterface` in `infra/src/<name>/infra/workspaces/__init__.py`.
+The shape of a provider is `AgentWorkspaceContainerImpl` in
+`infra/src/<name>/infra/agent_workspaces/container.py`, over
+`AgentWorkspaceProviderInterface` in `infra/src/<name>/infra/agent_workspaces/__init__.py`.
 The shape of a transport is `TransportContainerImpl` in
 `infra/src/<name>/infra/transports/container.py`.
 
 | File | Holds |
 |------|-------|
-| `infra/src/<name>/infra/workspaces/<backend>.py` | `Workspace<Backend>Impl(WorkspaceProviderInterface)`, and the client it reaches its machines through, typed by an interface it takes in its constructor |
+| `infra/src/<name>/infra/agent_workspaces/<backend>.py` | `AgentWorkspace<Backend>Impl(AgentWorkspaceProviderInterface)`, and the client it reaches its machines through, typed by an interface it takes in its constructor |
 | `infra/src/<name>/infra/transports/<backend>.py` (no `--transport`) | `Transport<Backend>Impl(TransportInterface)` |
 
 ## Changed
@@ -56,12 +56,12 @@ The shape of a transport is `TransportContainerImpl` in
 |------|--------|
 | `infra/src/<name>/infra/impl/settings.py` | `<backend>` in `workspace_backend`'s `Literal`, and each `--setting` field |
 | `infra/src/<name>/infra/impl/configured.py` | a branch in `_build_runtime` that answers the provider and its transport as a pair; with a mode below `container`, a row in `UNSAFE_IN_CLOUD` |
-| `.env.example` | `<backend>` in the comment on `ACME_WORKSPACE_BACKEND`, and each setting, commented, with its default |
+| `.env.example` | `<backend>` in the comment on `ACME_AGENT_WORKSPACE_BACKEND`, and each setting, commented, with its default |
 | `services/api/tests/test_settings.py`, `workers/maintenance/tests/test_settings.py` | each `--setting` in `LOCAL_DEFAULT_SERVES_THE_CLOUD` with its reason, as `workspace_image` is, since neither process prepares a workspace; `test_every_setting_the_cloud_needs_is_wired` fails on a setting the cloud sets no value for and no reason excuses |
-| `infra/tests/test_workspaces.py` | the cases of step 5 |
+| `infra/tests/test_agent_workspaces.py` | the cases of step 5 |
 | `infra/tests/test_transports.py` (no `--transport`) | `TestTransport<Backend>(TransportContract)` |
 | `infra/tests/test_configured.py` | the backend in the cases of step 5 |
-| `infra/README.md` | the backend in the Workspaces row, and its transport in the Transport row |
+| `infra/README.md` | the backend in the Agent workspaces row, and its transport in the Transport row |
 
 ## Procedure
 
@@ -79,7 +79,7 @@ The shape of a transport is `TransportContainerImpl` in
    image) refuses rather than fall back to another backend, as
    `test_a_container_spec_with_no_docker_is_refused_and_never_swapped_for_a_directory`
    holds. A workspace whose machine vanished under a running command
-   raises `WorkspaceLost`.
+   raises `AgentWorkspaceLost`.
 3. The provider and its transport are one pair: `_build_runtime`
    answers both, and the transport runs commands only in what the
    provider prepared, by the workspace's own handle. Secrets reach a
@@ -92,7 +92,7 @@ The shape of a transport is `TransportContainerImpl` in
    row in `UNSAFE_IN_CLOUD` names the field, the value, and the
    variable, as `host` does.
 5. The tests reach no real machine in a unit test. The provider takes a
-   fake of its client, shape `LocalDocker` in `infra/tests/test_workspaces.py`;
+   fake of its client, shape `LocalDocker` in `infra/tests/test_agent_workspaces.py`;
    a test that needs the real one is marked `integration` and skipped
    when the machine lacks it, as `TestTransportContainer` is:
    - each spec it cannot hold is refused before the client is called,

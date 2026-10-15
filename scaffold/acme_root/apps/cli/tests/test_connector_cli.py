@@ -88,7 +88,7 @@ def test_a_member_connects_nothing_and_a_connector_without_a_place_is_usage(
         "Read the team's tickets.",
         "--host-server",
         "tracker",
-        token=stack.session_token(BOB["email"]),
+        token=stack.auth_session_token(BOB["email"]),
     )
     assert member.exit_code == 1 and "not_authorized" in member.output
     assert stack.acme("connector", "connect", "tracker", "Read tickets.").exit_code == 2

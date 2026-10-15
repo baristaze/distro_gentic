@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.benchmarks import rules
 from acme.om.benchmarks.manager import BenchmarksManagerInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
@@ -14,7 +14,7 @@ from acme.om.exceptions import NotFound, ValidationFailed
 log = logging.getLogger(__name__)
 
 
-class BenchmarksOptions(Platform):
+class BenchmarksOptions(OmBase):
     max_limit: int = 200  # benchmarks one read of a history holds
 
 

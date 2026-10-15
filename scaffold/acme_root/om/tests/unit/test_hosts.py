@@ -10,7 +10,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
 from unit.test_placement import exec_on
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -32,7 +31,7 @@ from acme.om.hosts.rules import ENROLLMENT_PREFIX, WireType
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostReport, IsolationMode
 from acme.om.hosts.types.pool import HostPool
-from acme.om.placement.kinds import HOST, HOST_PREFIX, platform_claimant_kinds
+from acme.om.placement.kinds import HOST, HOST_PREFIX, PlacementWorkKind, platform_claimant_kinds
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import WorkspaceOperation
@@ -40,7 +39,9 @@ from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
+
+from contracts.agent_session_storage import make_agent_session
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 HOST_APP = AppContext(type=AppType.API, version="host@test")
@@ -127,7 +128,7 @@ def a_pool(name: str = "build") -> HostPool:
     )
 
 
-def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -> WorkItem:
+def an_item(ctx: TenantContext, kind: str, payload: Mapping[str, object]) -> WorkItem:
     now = utcnow()
     return WorkItem(
         id=new_id(),
@@ -312,7 +313,7 @@ async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
     # The copy rotates first, at half the credential's life, for a fresh hour.
     clock.advance(timedelta(minutes=30))
     forked = await hosts.rotate(request(), await hosts.authenticate(request(), copy))
-    # The host rotates the same credential: two machines hold it, and both end.
+    # The host rotates the same credential: two VMs hold it, and both end.
     with pytest.raises(CredentialExpired):
         await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
     with pytest.raises(CredentialExpired):
@@ -357,7 +358,9 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
     pool = await hosts.create_pool(owner, a_pool())
     host = await enrolled(hosts, owner, pool)
     identity = await hosts.authenticate(request(), host.credential)
-    await managers.work.enqueue(owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(pool.id)))
+    await managers.work.enqueue(
+        owner, an_item(owner, PlacementWorkKind.WORKSPACE, prepare_in(pool.id))
+    )
     await hosts.revoke_host(owner, host.claimant_id)
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), host.credential)
@@ -410,16 +413,16 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
     ours_host = await enrolled(hosts, owner, ours, "host-a")
     theirs_host = await enrolled(hosts, owner, theirs, "host-b")
     mine = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(ours.id))
+        owner, an_item(owner, PlacementWorkKind.WORKSPACE, prepare_in(ours.id))
     )
     pinned_elsewhere = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(theirs.id))
+        owner, an_item(owner, PlacementWorkKind.WORKSPACE, prepare_in(theirs.id))
     )
     on_their_host = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.EXEC, exec_on(theirs_host.claimant_id))
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(theirs_host.claimant_id))
     )
     from_another_tenant = await managers.work.enqueue(
-        other, an_item(other, WorkKind.WORKSPACE, prepare_in(foreign.id))
+        other, an_item(other, PlacementWorkKind.WORKSPACE, prepare_in(foreign.id))
     )
     assert (mine.lane, pinned_elsewhere.lane) == (pool_lane(ours.id), pool_lane(theirs.id))
     assert on_their_host.lane == host_lane(theirs_host.claimant_id)
@@ -437,7 +440,7 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
     assert from_another_tenant.id not in handed
 
 
-# A session of the cloud pool runs on a machine of its own, whose host
+# A session of the cloud pool runs on a VM of its own, whose host
 # enrolls into the session's pool of one and claims that session's work.
 
 
@@ -445,10 +448,10 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
-    assert pool.session_id == session.id
+    assert pool.agent_session_id == session.id
     assert await hosts.session_pool(service, session.id, "cloud") == pool, "the same one"
     assert await hosts.get_pools(owner) == (), "hidden from the tenant's pools"
     with pytest.raises(ValidationFailed, match="platform's"):
@@ -456,52 +459,52 @@ async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.issue_enrollment_token(owner, pool.id)
     with pytest.raises(ValidationFailed, match="platform's"):
-        await hosts.create_pool(owner, a_pool().model_copy(update={"session_id": session.id}))
+        await hosts.create_pool(owner, a_pool().model_copy(update={"agent_session_id": session.id}))
     # Its work runs there once it has one; its placement stays the cloud.
     state = await hosts.work_placement(owner, session.id)
     assert state.pool == pool
     assert (await hosts.placement_of(owner, session.id)).pool is None
 
 
-async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions_work(
+async def test_a_vms_host_names_its_session_and_is_handed_no_other_sessions_work(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
     mine, other = (
-        await managers.agent_sessions.create_session(owner, make_session()),
-        await managers.agent_sessions.create_session(owner, make_session()),
+        await managers.agent_sessions.create_agent_session(owner, make_agent_session()),
+        await managers.agent_sessions.create_agent_session(owner, make_agent_session()),
     )
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, mine.id, "cloud")
     tenants = await hosts.create_pool(owner, a_pool())
     with pytest.raises(InvalidCredential):
-        await hosts.admit_machine(
+        await hosts.admit_vm(
             request(),
             owner.org_id,
             tenants.id,
             owner.user_id,
             new_id(),
-            Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+            Enrollment(name="vm", advertisement=PROBED, exec_version=1),
         )
-    issued = await hosts.admit_machine(
+    issued = await hosts.admit_vm(
         request(),
         owner.org_id,
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
     )
     identity = await hosts.authenticate(request(), issued.credential)
-    assert (identity.pool_id, identity.session_id) == (pool.id, mine.id)
+    assert (identity.pool_id, identity.agent_session_id) == (pool.id, mine.id)
 
     host_id = issued.claimant_id
     stray = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.EXEC, exec_on(host_id, other.id))
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(host_id, other.id))
     )
     assert await hosts.claim(request(), identity, 1) is None
     assert stray.lane == host_lane(host_id)
     own = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.EXEC, exec_on(host_id, mine.id))
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(host_id, mine.id))
     )
     claimed = await hosts.claim(request(), identity, 1)
     assert claimed is not None and claimed[1].id == own.id
@@ -512,34 +515,34 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)  # once is all
 
 
-async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ended(
+async def test_no_person_revokes_a_vms_host_and_the_pool_reads_when_it_ended(
     managers: PlatformManagers, hosts: HostsManagerImpl
 ) -> None:
     owner = await an_owner(managers)
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
     pool = await hosts.session_pool(service, session.id, "cloud")
-    issued = await hosts.admit_machine(
+    issued = await hosts.admit_vm(
         request(),
         owner.org_id,
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
     )
     host_id = issued.claimant_id
-    # Its machine would run on with no host: the host ends with its machine.
+    # Its VM would run on with no host: the host ends with its VM.
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.revoke_host(owner, host_id)
     with pytest.raises(ValidationFailed, match="platform's"):
         await hosts.revoke_claimant(owner, host_id)
     await hosts.authenticate(request(), issued.credential)
-    read = await hosts.machine_host(request(), owner.org_id, host_id)
-    assert read is not None and read.revoked_at is None and read.session_id == session.id
+    read = await hosts.vm_host(request(), owner.org_id, host_id)
+    assert read is not None and read.revoked_at is None and read.agent_session_id == session.id
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
-    ended = await hosts.machine_host(request(), owner.org_id, host_id)
+    ended = await hosts.vm_host(request(), owner.org_id, host_id)
     assert ended is not None and ended.revoked_at is not None
-    assert await hosts.machine_host(request(), owner.org_id, new_id()) is None
+    assert await hosts.vm_host(request(), owner.org_id, new_id()) is None
 
 
 async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
@@ -549,7 +552,7 @@ async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
     pool = await hosts.create_pool(owner, a_pool())
     host = await enrolled(hosts, owner, pool)
     item = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(pool.id))
+        owner, an_item(owner, PlacementWorkKind.WORKSPACE, prepare_in(pool.id))
     )
     identity = await hosts.authenticate(request(), host.credential)
     with pytest.raises(VersionBelowFloor):
@@ -599,7 +602,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     assert not (await hosts.placement_of(owner, session.id)).waiting  # the cloud, unplaced
     await hosts.place_session(owner, session.id, pool.id)
     state = await hosts.placement_of(owner, session.id)
@@ -607,7 +610,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
     # Its workspace is asked of its pool, and no cloud host is handed it,
     # however long it waits.
     prepare = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(pool.id))
+        owner, an_item(owner, PlacementWorkKind.WORKSPACE, prepare_in(pool.id))
     )
     assert prepare.lane == pool_lane(pool.id)
     cloud = Claimant(kind=HOST, id=new_id(), pool_id=CLOUD_POOL)
@@ -635,8 +638,8 @@ async def test_only_a_principal_with_write_moves_a_session(
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
     # Org-wide, so the viewer sees it: what the viewer lacks is the write.
-    shared = make_session(visibility=Visibility.ORG_WIDE)
-    session = await managers.agent_sessions.create_session(owner, shared)
+    shared = make_agent_session(visibility=Visibility.ORG_WIDE)
+    session = await managers.agent_sessions.create_agent_session(owner, shared)
     placed = await hosts.place_session(owner, session.id, pool.id)
     viewer = await a_member(managers, "ajax", Role.VIEWER)
     with pytest.raises(NotAuthorized):
@@ -649,7 +652,7 @@ async def test_only_a_principal_with_write_moves_a_session(
     other = await an_owner(managers, "fabrikam")
     with pytest.raises(NotFound):
         await hosts.place_session(other, session.id, None)
-    other_session = await managers.agent_sessions.create_session(other, make_session())
+    other_session = await managers.agent_sessions.create_agent_session(other, make_agent_session())
     with pytest.raises(NotFound):
         await hosts.place_session(other, other_session.id, pool.id)
 
@@ -668,7 +671,7 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
     placement = PlacementHostsImpl(
         storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
@@ -691,9 +694,13 @@ async def test_a_sub_agent_runs_where_its_root_runs(
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    root = await managers.agent_sessions.create_session(owner, make_session())
-    child = await managers.agent_sessions.create_session(owner, make_session(parent=root))
-    grandchild = await managers.agent_sessions.create_session(owner, make_session(parent=child))
+    root = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    child = await managers.agent_sessions.create_agent_session(
+        owner, make_agent_session(parent=root)
+    )
+    grandchild = await managers.agent_sessions.create_agent_session(
+        owner, make_agent_session(parent=child)
+    )
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
     placement = PlacementHostsImpl(
         storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
@@ -704,7 +711,7 @@ async def test_a_sub_agent_runs_where_its_root_runs(
         with pytest.raises(PinnedToHosts):
             await placement.executor_of(owner.org_id, sub.id)
         state = await hosts.placement_of(owner, sub.id)
-        assert state.session_id == sub.id and state.pool == pool and state.waiting
+        assert state.agent_session_id == sub.id and state.pool == pool and state.waiting
     # A sub-agent is never placed apart from its root.
     with pytest.raises(ValidationFailed):
         await hosts.place_session(owner, child.id, None)

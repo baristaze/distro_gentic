@@ -4,11 +4,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.placement_storage import PlacementStorageContract, WrittenBefore, make_share
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
     AppContext,
@@ -30,7 +30,9 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tenancy.rules import operator_permissions_of
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
+
+from contracts.placement_storage import PlacementStorageContract, WrittenBefore, make_share
 
 pytestmark = pytest.mark.integration
 
@@ -119,7 +121,12 @@ async def test_the_sweeps_carry_makes_a_shares_concurrency_the_cap_the_claim_hol
     claimed = []
     for _ in range(3):
         found = await managers.work.claim(
-            rctx, lane, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(lane)
+            rctx,
+            lane,
+            [AgentSessionWorkKind.LOOP],
+            "runner",
+            LEASE,
+            PlacementOptions().lane_cap(lane),
         )
         claimed.append(None if found is None else found[0].org_id)
     assert claimed == [ann.org_id, bob.org_id, None], "Ann waits at its carried cap of one"
@@ -145,7 +152,7 @@ def a_loop(ctx: TenantContext) -> WorkItem:
         updated_at=now,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
-        kind=WorkKind.LOOP,
+        kind=AgentSessionWorkKind.LOOP,
         target_id=new_id(),
         idempotency_key=new_id(),
         request_id=new_id(),

@@ -9,6 +9,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.result import Claim, Result, Verdict
 from acme.om.evidence.rules import baseline, named, protected_paths
 from acme.om.evidence.types.acceptance import Break, Leak, Link, Scenario
@@ -16,7 +17,6 @@ from acme.om.evidence.types.inference import Inference, InferenceKind
 from acme.om.evidence.types.policy import Grade
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
 from acme.om.evidence.types.validation import Validation, WorkProduct
-from acme.om.steps.types.header import LoopOutcome
 
 
 def scenario_refusal(scenario: Scenario) -> str | None:

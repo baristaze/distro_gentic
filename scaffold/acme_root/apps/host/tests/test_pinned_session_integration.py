@@ -25,24 +25,24 @@ from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agent_steps.rules import message_step
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.platform_root import PlatformPorts, ProductKinds
-from acme.om.steps.rules import message_step
-from acme.om.steps.types.header import LoopOutcome, ParkReason
-from acme.om.steps.types.step import StepType
-from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
-from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.agent_session_runner.container import RunnerContainer
+from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
 
 pytestmark = pytest.mark.integration
 
 KIND = assistant()
 
 
-SETTINGS = SessionRunnerSettings.model_validate(
+SETTINGS = AgentSessionRunnerSettings.model_validate(
     {"_env_file": None, "environment": "test", "runner_id": "runner-pinned"}
 )
 
@@ -82,7 +82,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     model = runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(model, ModelProviderScriptedImpl)
     pool = await api.pool("pool-a")
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=KIND.name, title="where it runs")
     )
     await api.container.managers.hosts.place_session(owner, session.id, pool.id)
@@ -93,9 +93,9 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     # model call is made.
     parked = await managers.loop.run(owner, session.id)
     assert parked.end is RunEnd.PARKED and parked.park is not None
-    assert parked.park.reason is ParkReason.RESOURCE
+    assert parked.park.reason is ParkReason.LEASABLE_RESOURCE
     assert model.calls == []
-    assert await managers.work.has_open(owner, WorkKind.WORKSPACE, session.id)
+    assert await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
     assert await managers.exec_relay.binding_of(owner, session.id) is None
 
     # A host comes online, claims the prepare, and makes the workspace: the
@@ -106,10 +106,10 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     binding = await managers.exec_relay.binding_of(owner, session.id)
     assert binding is not None and binding.host_id == UUID(host.credential.claimant_id)
     assert Path(binding.location).is_relative_to(root.resolve())
-    assert not await managers.work.has_open(owner, WorkKind.WORKSPACE, session.id)
+    assert not await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
 
     # The next loop's tool call runs on that host, in the directory it made.
-    await managers.agent_sessions.wake_session(owner, session.id, parked.park)
+    await managers.agent_sessions.wake_agent_session(owner, session.id, parked.park)
     model.add(runs("pwd"))
     model.add(answers("On a host of my pool."))
     running = asyncio.ensure_future(managers.loop.run(owner, session.id))
@@ -118,8 +118,8 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
         await pace.after(await host.claim_once() is not None)
     ended = await running
     assert ended.outcome is LoopOutcome.SUCCEEDED, ended
-    page = await managers.steps.get_steps(owner, session.id, 0, 100)
-    assert [s.type for s in page.items].count(StepType.TOOL_RESPONSE) == 1
+    page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 100)
+    assert [s.type for s in page.items].count(AgentStepType.TOOL_RESPONSE) == 1
     # What the command printed, as the model read it on its second call: the
     # directory the host made.
     assert len(model.calls) == 2

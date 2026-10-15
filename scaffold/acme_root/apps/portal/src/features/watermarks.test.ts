@@ -13,8 +13,8 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type AgentAutomationView, type AgentKnowledgeView, type MeView, type AgentProjectView } from "@acme/client";
-import { useSessionStore } from "../store/session";
+import { ApiError, type agent_automations, type agent_knowledge, type agent_projects, type agent_sessions, type tenancy } from "@acme/client";
+import { useAuthSessionStore } from "../store/authSession";
 import { MOVED } from "../app/platform";
 import { shellRoutes } from "../app/product";
 import { queryClient } from "../app/queryClient";
@@ -23,25 +23,25 @@ import { routes, SLOT } from "../app/routes";
 const at = "2026-10-03T10:00:00Z";
 const user = { id: "u1", email: "ada@example.test", display_name: "Ada", created_at: at };
 const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at, deleted_at: null };
-const ME = { app: "portal", role: "owner", permissions: ["read", "write", "manage_members", "manage_keys"], user, org } as unknown as MeView;
+const ME = { app: "portal", role: "owner", permissions: ["read", "write", "manage_members", "manage_keys"], user, org } as unknown as tenancy.MeView;
 const page = <T>(items: T[]) => ({ items, next_cursor: null });
 
-const AGENT_PROJECT: AgentProjectView = {
+const AGENT_PROJECT: agent_projects.AgentProjectView = {
   id: "p1",
   name: "Storefront",
   repository: { host: "github.com", path: "your-org/storefront" },
   workspace_snapshots: true,
-  workspace_base: null,
+  agent_workspace_base: null,
   created_at: at,
   created_by: user.id,
   updated_at: at,
   updated_by: user.id,
 };
-const AGENT_AUTOMATION: AgentAutomationView = {
+const AGENT_AUTOMATION: agent_automations.AgentAutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_agent_session", brief: "Update dependencies.", agent_kind: "software_engineer", title: "Update dependencies", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -50,8 +50,8 @@ const AGENT_AUTOMATION: AgentAutomationView = {
   created_by: user.id,
   updated_at: at,
   updated_by: user.id,
-} as AgentAutomationView;
-const ENTRY: AgentKnowledgeView = {
+} as agent_automations.AgentAutomationView;
+const ENTRY: agent_knowledge.AgentKnowledgeView = {
   id: "k1",
   title: "How we name migrations",
   trigger: ["migration"],
@@ -63,7 +63,7 @@ const ENTRY: AgentKnowledgeView = {
   version: 1,
   created_at: at,
   updated_at: at,
-} as AgentKnowledgeView;
+} as agent_knowledge.AgentKnowledgeView;
 const SESSION = {
   id: "s1",
   root_id: "s1",
@@ -80,7 +80,7 @@ const SESSION = {
   visibility: "org_wide",
   participants: [],
   steerer: user.id,
-} as AgentSessionView;
+} as agent_sessions.AgentSessionView;
 
 /** A param of a screen's address, as a fixture's id. */
 const PARAMS: Record<string, string> = { sessionId: "s1", agentAutomationId: "a1", entryId: "k1", agentProjectId: "p1" };
@@ -101,7 +101,7 @@ function answer(path: string): unknown {
   if (bare === "/v1/agent-projects/p1") return AGENT_PROJECT;
   if (bare === "/v1/agent-automations") return [AGENT_AUTOMATION];
   if (bare === "/v1/agent-automations/a1") return AGENT_AUTOMATION;
-  if (bare === "/v1/provider-keys" || bare === "/v1/matrix/options" || bare === "/v1/matrix/choices" || bare === "/v1/events/recent") return [];
+  if (bare === "/v1/provider-keys" || bare === "/v1/matrix/options" || bare === "/v1/matrix/choices" || bare === "/v1/change-events/recent") return [];
   if (bare.startsWith("/v1/agent-sessions/s1")) {
     const part = bare.split("/")[4];
     if (part === undefined) return SESSION;
@@ -160,18 +160,18 @@ const SCREENS = [
 
 beforeEach(() => {
   queryClient.clear();
-  useSessionStore.getState().setSession("ses_ajax", "ajax");
+  useAuthSessionStore.getState().setAuthSession("ses_ajax", "ajax");
   root = createRoot(container);
 });
 afterEach(async () => {
   await act(async () => root.render(null));
-  useSessionStore.getState().clear();
+  useAuthSessionStore.getState().clear();
 });
 
 /** The fields a screen draws once its reads settle and its closed forms are opened. */
 async function fieldsOf(address: string): Promise<{ title: string; fields: { name: string; placeholder: string }[] }> {
   // The sign-in is a signed-out person's screen.
-  if (address.startsWith("/login")) useSessionStore.getState().clear();
+  if (address.startsWith("/login")) useAuthSessionStore.getState().clear();
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   await act(async () => root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
   await settle();

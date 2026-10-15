@@ -71,14 +71,14 @@ class EvidenceStorageInterface(ABC):
 
     @abstractmethod
     async def read_records(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[ExecutionRecord]:
         """The session's runs by id, strictly after `after`, at most `limit`."""
         ...
 
     @abstractmethod
     async def read_cited(
-        self, org_id: UUID, session_id: UUID, ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         """The session's runs a citation names: by their own id, the id of the
         agent's step that ran them, or the id of the validation that ran
@@ -87,7 +87,7 @@ class EvidenceStorageInterface(ABC):
 
     @abstractmethod
     async def read_validations(
-        self, org_id: UUID, session_id: UUID, version: str | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, version: str | None, limit: int
     ) -> list[Validation]:
         """The session's validations by id, oldest first, at `version` when
         one is named, at most `limit`."""
@@ -95,7 +95,7 @@ class EvidenceStorageInterface(ABC):
 
     @abstractmethod
     async def read_validation_records(
-        self, org_id: UUID, session_id: UUID, validation_ids: Sequence[UUID], limit: int
+        self, org_id: UUID, agent_session_id: UUID, validation_ids: Sequence[UUID], limit: int
     ) -> list[ExecutionRecord]:
         """Every run of the session that names one of these validations, by
         id, at most `limit`."""
@@ -103,7 +103,7 @@ class EvidenceStorageInterface(ABC):
 
     @abstractmethod
     async def read_inferences(
-        self, org_id: UUID, session_id: UUID, after: UUID | None, limit: int
+        self, org_id: UUID, agent_session_id: UUID, after: UUID | None, limit: int
     ) -> list[Inference]:
         """The session's hypotheses and findings by id, strictly after
         `after`, at most `limit`."""
@@ -118,7 +118,7 @@ class EvidenceStorageInterface(ABC):
     # The purges.
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         """At most `limit` rows of each of a purged session's runs,
         validations, and hypotheses and findings, under the purge login;
         returns how many went."""

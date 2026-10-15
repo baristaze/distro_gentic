@@ -6,19 +6,19 @@ from collections.abc import Collection
 from uuid import UUID
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.header import ToolRequestHeader, ToolResponseHeader
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.types.result import Result, Verdict
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import Permission, TenantContext
 from acme.om.platform_agents import kinds, rules
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ToolRequestHeader, ToolResponseHeader
 
 REVIEWING: frozenset[str] = frozenset({kinds.REVIEWER})
 """The kinds whose results are reviews, by name, at every version."""
 
 
-class ReviewGateOptions(Platform):
+class ReviewGateOptions(OmBase):
     max_cited: int = 500  # ids one review may cite
     max_steps: int = 20_000  # steps of the session's history the gate reads, at most
     page: int = 200  # steps one read of the history takes
@@ -36,7 +36,7 @@ class ResultGateReviewImpl(ResultGateInterface):
         self,
         inner: ResultGateInterface,
         sessions: AgentSessionsManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         options: ReviewGateOptions | None = None,
     ) -> None:
         self._inner = inner
@@ -44,18 +44,18 @@ class ResultGateReviewImpl(ResultGateInterface):
         self._steps = steps
         self._options = options or ReviewGateOptions()
 
-    async def check(self, ctx: TenantContext, session_id: UUID, result: Result) -> Verdict:
+    async def check(self, ctx: TenantContext, agent_session_id: UUID, result: Result) -> Verdict:
         ctx.require(Permission.READ)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if session.kind not in REVIEWING:
-            return await self._inner.check(ctx, session_id, result)
+            return await self._inner.check(ctx, agent_session_id, result)
         cited = set(result.evidence)
         if len(cited) > self._options.max_cited:
             return Verdict(
                 accepted=False,
                 reason=f"a review cites at most {self._options.max_cited} reads and findings",
             )
-        calls = await self._calls(ctx, session_id, cited)
+        calls = await self._calls(ctx, agent_session_id, cited)
         if calls is None:
             return Verdict(
                 accepted=False,
@@ -65,14 +65,16 @@ class ResultGateReviewImpl(ResultGateInterface):
         return rules.review_verdict(result.claim, cited, calls)
 
     async def _calls(
-        self, ctx: TenantContext, session_id: UUID, cited: Collection[UUID]
+        self, ctx: TenantContext, agent_session_id: UUID, cited: Collection[UUID]
     ) -> dict[UUID, rules.Call] | None:
         """The calls `cited` names, each with its answer, as the history
         holds them; None when the history runs past what the gate reads."""
         calls: dict[UUID, rules.Call] = {}
         after, read = 0, 0
         while True:
-            page = await self._steps.get_steps(ctx, session_id, after, self._options.page)
+            page = await self._steps.get_agent_steps(
+                ctx, agent_session_id, after, self._options.page
+            )
             for step in page.items:
                 header = step.header
                 if step.id in cited and isinstance(header, ToolRequestHeader):

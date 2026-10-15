@@ -10,26 +10,28 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.evidence import checkout_policy, evidence_over
-from contracts.factories import make_org
-from contracts.tools import put_call, registry_of, result_text, tools_over, twin_transport
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import Workspace
-from acme.om.base import Platform, new_id
+from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_steps.types.header import ToolFailure, ToolResponseHeader
+from acme.om.base import OmBase, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import CEILINGS, PROTECTED_CEILING
 from acme.om.platform_agents.tools.code import EditFileImpl, WriteFileImpl
 from acme.om.platform_root import build_platform_managers
-from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.call import GateOutcome
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
+from acme.om.tools.types.policy import Decision, Target, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
+
+from contracts.doubles import context
+from contracts.evidence import checkout_policy, evidence_over
+from contracts.factories import make_org
+from contracts.tools import put_call, registry_of, result_text, tools_over, twin_transport
 
 
 class WriteInput(ToolInput):
@@ -39,7 +41,7 @@ class WriteInput(ToolInput):
     protected: bool = False
 
 
-class Written(Platform):
+class Written(OmBase):
     path: str
 
 
@@ -48,9 +50,9 @@ class WriteFile(ToolInterface):
     protected is read from the policy of the session's agent project, never from
     the input."""
 
-    def __init__(self, evidence: EvidenceManagerInterface, session_id: UUID) -> None:
+    def __init__(self, evidence: EvidenceManagerInterface, agent_session_id: UUID) -> None:
         self._evidence = evidence
-        self._session_id = session_id
+        self._session_id = agent_session_id
         self.written: list[str] = []
         self._spec = ToolSpec(
             name="write_file",
@@ -76,16 +78,14 @@ class WriteFile(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, WriteInput)
         self.written.append(call_input.path)
         return Written(path=call_input.path)
 
 
-ALLOW_WRITES = PolicyLayer(
-    rules=(PolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.ALLOW),)
+ALLOW_WRITES = ToolPolicyLayer(
+    rules=(ToolPolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.ALLOW),)
 )
 
 
@@ -101,7 +101,7 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
     ctx = context(Role.SERVICE, org)
     write = WriteFile(evidence.manager, new_id())
     registry = registry_of(write)
-    workspace = Workspace.absent(ctx.org_id, new_id())
+    workspace = AgentWorkspace.absent(ctx.org_id, new_id())
     for path, claim in (
         ("tests/test_cart.py", {}),
         ("tests/test_cart.py", {"protected": False}),
@@ -152,7 +152,7 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
         "write",
     )
     registry = registry_of(WriteFile(evidence.manager, new_id()))
-    workspace = Workspace.absent(ctx.org_id, new_id())
+    workspace = AgentWorkspace.absent(ctx.org_id, new_id())
     gate = await tools.manager.gate(
         ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
     )
@@ -181,8 +181,8 @@ async def test_the_software_engineers_change_to_a_protected_path_is_refused_at_t
     # agent project that declares no policy.
     elsewhere = new_id()
     evidence.agent_projects.sessions[elsewhere] = new_id()
-    for session_id, refused in ((new_id(), True), (elsewhere, False)):
-        workspace = Workspace.absent(ctx.org_id, session_id)
+    for agent_session_id, refused in ((new_id(), True), (elsewhere, False)):
+        workspace = AgentWorkspace.absent(ctx.org_id, agent_session_id)
         call = await put_call(
             tools.manager,
             tools.steps,
@@ -190,7 +190,7 @@ async def test_the_software_engineers_change_to_a_protected_path_is_refused_at_t
             tool,
             {"path": "tests/test_cart.py", **change},
             "write",
-            session_id,
+            agent_session_id,
         )
         gate = await tools.manager.gate(
             ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
@@ -209,7 +209,9 @@ async def test_the_root_keeps_the_protected_ceiling_whatever_options_it_is_given
 ) -> None:
     for options in (None, ToolsOptions(purge_batch=5)):
         managers = build_platform_managers(
-            StorageMemoryImpl(), InfraLocalImpl(tmp_path), tools_options=options
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            agent_root_options=AgentRootOptions(tools_options=options),
         )
         # The engine's tools manager, beneath the layers the root puts on it.
         tools: object = managers.tools

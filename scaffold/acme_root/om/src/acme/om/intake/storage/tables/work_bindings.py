@@ -16,6 +16,6 @@ class WorkBindings(IdentifiableMixin, CreatedMixin, Base):
     __table_args__ = (
         Index("uq_work_bindings_org_id_kind_handle", "org_id", "kind", "handle", unique=True),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     kind: Mapped[str]
     handle: Mapped[str]

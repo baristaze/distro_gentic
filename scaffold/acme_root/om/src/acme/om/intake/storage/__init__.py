@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.intake.types.link import (
     HandleKind,
     IdentityLink,
@@ -28,6 +29,7 @@ class IntakeStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_installation_org(self, integration: str, installation: str) -> UUID | None:
         """Cross-tenant: the tenant that connected the installation, read
         among every tenant's in the system scope, since a delivery names no
@@ -75,7 +77,7 @@ class IntakeStorageInterface(ABC):
 
     @abstractmethod
     async def read_session_bindings(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[WorkBinding]:
         """The first `limit` handles bound to a session as its work, oldest
         first."""

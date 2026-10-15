@@ -7,11 +7,13 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.agent_steps.types.header import ParkReason
+from acme.om.base import OmBase, new_id, utcnow
+from acme.om.change_events.storage import ChangeEventStorageInterface
+from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import OperatorContext, OperatorPermission
-from acme.om.events.storage import EventStorageInterface
-from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound, PreconditionFailed, UniqueKeyTaken, ValidationFailed
 from acme.om.hosts.rules import WIRE_FLOOR, HostState, WireType, host_state, online
 from acme.om.hosts.storage import HostsStorageInterface
@@ -38,12 +40,10 @@ from acme.om.placement.types.standing import (
     LoopStanding,
     SessionStanding,
 )
-from acme.om.steps.types.header import ParkReason
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.work.manager import WorkOperatorManagerInterface
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.types.tenant_cap import MAX_CAP, TenantCap
-from acme.om.work.types.work_item import WorkKind
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ SHARE_SET_KIND = "placement.share.set"
 """The audit event an operator's write of a share leaves in the tenant's stream."""
 
 
-class PlacementOperatorOptions(Platform):
+class PlacementOperatorOptions(OmBase):
     """What a standing reads beside the rows: the tier of a tenant no
     operator gave a share, and each tier's share, as placement's options
     set them, and how long a host counts as online, as the hosts' options
@@ -74,7 +74,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         self,
         storage: PlacementStorageInterface,
         tenancy: TenancyStorageInterface,
-        events: EventStorageInterface,
+        events: ChangeEventStorageInterface,
         topics: TopicsInterface,
         sessions: AgentSessionStorageInterface,
         work: WorkStorageInterface,
@@ -85,7 +85,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
     ) -> None:
         self._storage = storage
         self._tenancy = tenancy
-        self._events = events
+        self._change_events = events
         self._topics = topics
         self._sessions = sessions
         self._work = work
@@ -172,18 +172,20 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         )
 
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
     ) -> SessionStanding:
         admin.require(OperatorPermission.READ)
-        session = await self._sessions.read_session(org_id, session_id)
+        session = await self._sessions.read_agent_session(org_id, agent_session_id)
         if session is None:
-            raise NotFound(f"agent session {session_id} is not in {org_id}")
+            raise NotFound(f"agent session {agent_session_id} is not in {org_id}")
         self._trail(admin, org_id, "a session's standing")
         now = self._clock()
         stored = await self._storage.read_share(org_id)
         tier = self._options.default_tier if stored is None else stored.plan_tier
         moved = stored is not None and stored.own_lane
-        item = await self._work.read_latest_for_target(org_id, WorkKind.LOOP, session_id)
+        item = await self._work.read_latest_for_target(
+            org_id, AgentSessionWorkKind.LOOP, agent_session_id
+        )
         # The cap of the lane the loop stands on, which a move leaves where
         # it is; with no loop, of the lane its next one goes to.
         if item is not None:
@@ -191,7 +193,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         else:
             lane = own_lane(org_id) if moved else tier_lane(tier)
         own = await self._work.read_tenant_cap(org_id, lane)
-        placement = await self._hosts.read_placement(org_id, session_id)
+        placement = await self._hosts.read_placement(org_id, agent_session_id)
         pool_id = None if placement is None else placement.pool_id
         hosts_online = None
         if pool_id is not None:
@@ -214,7 +216,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
                 running_ahead=await self._work.count_claimed_ahead(org_id, item, now),
             )
         return SessionStanding(
-            session_id=session.id,
+            agent_session_id=session.id,
             status=session.status,
             park=session.park,
             changed_at=session.updated_at,
@@ -343,10 +345,10 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         holds. The share lands first and the stream after, as the queue's
         operator requeue does: a crash between the two loses the entry,
         never the share."""
-        (event,) = await self._events.append_events(
+        (event,) = await self._change_events.append_change_events(
             org_id,
             [
-                Event(
+                ChangeEvent(
                     id=new_id(),
                     org_id=org_id,
                     kind=SHARE_SET_KIND,

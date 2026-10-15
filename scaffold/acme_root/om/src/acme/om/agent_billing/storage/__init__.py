@@ -24,8 +24,9 @@ from acme.om.agent_billing.types.spend_ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Hold, Settlement
+from acme.om.context import tenantless
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendSettlement
 
 
 class SpendAccountStorageInterface(ABC):
@@ -66,7 +67,7 @@ class SpendAccountStorageInterface(ABC):
 
 class SpendLedgerStorageInterface(ABC):
     @abstractmethod
-    async def open_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
+    async def open_spend_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
         """The gate's one write, in one transaction: the counts of every
         counter the hold moves (its lines' windows, its buckets) are made
         where missing and locked in one order; the hold is checked against
@@ -79,12 +80,12 @@ class SpendLedgerStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_hold(self, org_id: UUID, hold_id: UUID) -> FundedHold | None: ...
+    async def read_hold(self, org_id: UUID, spend_hold_id: UUID) -> FundedHold | None: ...
 
     @abstractmethod
-    async def close_hold(
-        self, org_id: UUID, settlement: Settlement, charge: Charge
-    ) -> tuple[Settlement, Charge]:
+    async def close_spend_hold(
+        self, org_id: UUID, settlement: SpendSettlement, charge: Charge
+    ) -> tuple[SpendSettlement, Charge]:
         """The settlement of the hold it names and its charge, in one
         transaction with the counts of the hold, locked in the same order:
         the reserve leaves what is held, and what was spent joins. A hold
@@ -94,9 +95,10 @@ class SpendLedgerStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold, datetime]]:
+    ) -> list[tuple[UUID, SpendHold, datetime]]:
         """Cross-tenant, for the sweep, in the system scope: at most `limit`
         holds due at or after `after` and before `before` that no
         settlement has closed, whatever their tenant, each with its tenant
@@ -137,8 +139,8 @@ class SpendLedgerStorageInterface(ABC):
         org_id: UUID,
         *,
         kind: EntryKind | None = None,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         limit: int,
     ) -> list[Entry]:
         """The tenant's entries, newest first, at most `limit`: of one kind,

@@ -227,7 +227,7 @@ api_image=""
 maintenance_image=""
 # The session runner is in the state only when the deployed commit runs
 # one, and only then does that commit's root declare its image.
-session_runner_image=""
+agent_session_runner_image=""
 resources=""
 if ! $dry_run; then
   # A state that cannot be read is never an empty one.
@@ -242,11 +242,11 @@ fi
 if $dry_run; then
   api_image="<api image in state>"
   maintenance_image="<maintenance image in state>"
-  session_runner_image="<session-runner image in state>"
+  agent_session_runner_image="<agent-session-runner image in state>"
 elif ! $root_destroyed; then
   api_image="$(image_in_state api)"
   maintenance_image="$(image_in_state maintenance)"
-  session_runner_image="$(image_in_state session-runner)"
+  agent_session_runner_image="$(image_in_state agent-session-runner)"
   [ -n "$api_image" ] && [ -n "$maintenance_image" ] || refuse "the state holds no task definitions; nothing to destroy, or the backend is wrong"
 fi
 
@@ -279,8 +279,8 @@ root_vars=(
   -var "alarm_email=$alarm_email"
   -var "destroyable=true"
 )
-if [ -n "$session_runner_image" ]; then
-  root_vars+=(-var "session_runner_image=$session_runner_image")
+if [ -n "$agent_session_runner_image" ]; then
+  root_vars+=(-var "agent_session_runner_image=$agent_session_runner_image")
 fi
 
 if $root_destroyed; then

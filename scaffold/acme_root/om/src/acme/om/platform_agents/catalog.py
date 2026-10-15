@@ -14,11 +14,11 @@ from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_knowledge import AgentKnowledgeManagerInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
-from acme.om.base import Platform
-from acme.om.budgets import BudgetsManagerInterface
+from acme.om.base import OmBase
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.exec_relay import ExecRelayManagerInterface
@@ -58,7 +58,7 @@ from acme.om.platform_agents.tools.work_product import (
     ValidateImpl,
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
-from acme.om.steps import StepsManagerInterface
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.tool import ToolClass
@@ -67,7 +67,7 @@ from acme.om.work import WorkManagerInterface
 KNOWLEDGE_MAP = "llms.txt"
 
 
-class PlatformAgents(Platform):
+class PlatformAgents(OmBase):
     """What a process hands its root to ship the platform's agents: the
     corpus the assistant answers from."""
 
@@ -96,7 +96,7 @@ def with_shipped(
     domain_classes: Iterable[str],
     *,
     sessions: Callable[[], AgentSessionsManagerInterface],
-    steps: Callable[[], StepsManagerInterface],
+    steps: Callable[[], AgentStepsManagerInterface],
     agent_projects: Callable[[], AgentProjectsManagerInterface],
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
@@ -109,7 +109,7 @@ def with_shipped(
     intake: Callable[[], IntakeManagerInterface],
     agent_knowledge: Callable[[], AgentKnowledgeManagerInterface],
     integrations: Callable[[str], IntegrationInterface],
-    budgets: Callable[[], BudgetsManagerInterface],
+    budgets: Callable[[], SpendBudgetsManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
     callables the root answers once it has built them; `intake`,

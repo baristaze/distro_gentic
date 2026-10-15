@@ -8,9 +8,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from acme.infra.workspaces import IsolationSpec
+from acme.infra.agent_workspaces import IsolationSpec
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, stageless, transition
 from acme.om.exec_relay.types.exec import (
     AgentWorkspaceBinding,
     ExecCall,
@@ -32,9 +32,9 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def bind_workspace(
-        self, ctx: TenantContext, session_id: UUID, host_id: UUID, location: str
+        self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID, location: str
     ) -> AgentWorkspaceBinding:
-        """Platform-internal: the host that prepared the session's workspace
+        """System-internal: the host that prepared the session's workspace
         holds it from now on, at `location` on the host, and every item of
         the session goes to that host. Refused (`ValidationFailed`) unless
         the session is pinned to the host's pool and the host is not
@@ -43,14 +43,16 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def binding_of(
-        self, ctx: TenantContext, session_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID
     ) -> AgentWorkspaceBinding | None:
         """The host that holds the session's workspace; None when none does."""
         ...
 
     @abstractmethod
-    async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
-        """Platform-internal: asks a host of the session's pool to prepare its
+    async def ask_prepare(
+        self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec
+    ) -> bool:
+        """System-internal: asks a host of the session's pool to prepare its
         workspace to `spec`, as `workspace` work on the pool's lane, which any
         host of the pool may claim; nothing when a prepare asked of this
         pool before still waits for a host or runs. One that waits on a pool
@@ -60,9 +62,9 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def ask_instance(
-        self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
+        self, ctx: TenantContext, agent_session_id: UUID, instance_id: UUID, spec: IsolationSpec
     ) -> None:
-        """Platform-internal: asks a host of the session's pool to make a new
+        """System-internal: asks a host of the session's pool to make a new
         instance under `instance_id` to `spec`, for one run, as `workspace`
         work on the pool's lane, which any host of the pool may claim. The
         instance carries the session: its pool routes it, and its agent project is
@@ -73,14 +75,16 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def ask_purge(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> bool:
-        """Platform-internal: asks the host that holds the instance to destroy
+        """System-internal: asks the host that holds the instance to destroy
         it and its files, as `workspace` work on that host's lane; when no
         host holds it yet, the prepare that waits for one is ended, so none
         makes it. Whether a host was asked."""
         ...
 
     @abstractmethod
-    async def holder(self, ctx: TenantContext, session_id: UUID) -> AgentWorkspaceBinding | None:
+    async def holder(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         """The binding of the session's workspace while the host that holds
         it is a live host of the session's pool and online now: the only
         host a release, or the snapshot before it, can reach. None
@@ -88,8 +92,10 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
-        """Platform-internal: asks the host that holds the session's
+    async def ask_release(
+        self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec
+    ) -> bool:
+        """System-internal: asks the host that holds the session's
         workspace to let its instance go and keep its files, as `workspace`
         work on that host's lane. Nothing when no host holds it, or when a
         release asked of it before still waits or runs. Whether it asked
@@ -98,9 +104,13 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def ask_restore(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot: HostSnapshot
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        spec: IsolationSpec,
+        snapshot: HostSnapshot,
     ) -> UUID:
-        """Platform-internal: asks for the session's workspace started from
+        """System-internal: asks for the session's workspace started from
         `snapshot`, which a host's store keeps inside the session's wall,
         replaced whole: by the host that holds the workspace, on its lane,
         while it is not revoked, online or not; else by any host of the
@@ -115,13 +125,13 @@ class ExecRelayManagerInterface(ABC):
     async def ask_snapshot(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         snapshot_id: UUID,
         *,
         kept_for: UUID | None = None,
     ) -> UUID | None:
-        """Platform-internal: asks the host that holds the session's
+        """System-internal: asks the host that holds the session's
         workspace, live and online, to keep a snapshot of it in its own
         store under `snapshot_id`, as `workspace` work on that host's lane:
         the session's own, or, with `kept_for`, a fork's copy kept as that
@@ -130,22 +140,23 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def ask_erase(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
-        """Platform-internal: asks the host whose store keeps snapshots of the
+    async def ask_erase(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
+        """System-internal: asks the host whose store keeps snapshots of the
         session to let every one go, as `workspace` work on that host's
         lane."""
         ...
 
     @abstractmethod
-    async def prepare_refusal(self, ctx: TenantContext, session_id: UUID) -> str | None:
+    async def prepare_refusal(self, ctx: TenantContext, agent_session_id: UUID) -> str | None:
         """Why a host refused the session's latest prepare, as its work keeps
         it while it waits or once it failed: a base the host failed to
         build. None when it was not refused so, or there is none."""
         ...
 
     @abstractmethod
-    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
-        """Platform-internal: a session's purge asks the host whose store keeps
+    @stageless
+    async def erase_purged(self, org_id: UUID, agent_session_id: UUID, host_id: UUID) -> None:
+        """System-internal: a session's purge asks the host whose store keeps
         snapshots of it to let every one go, as `workspace` work on that
         host's lane; for no principal."""
         ...
@@ -157,10 +168,11 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def snapshotted(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: SnapshotAnswer
     ) -> None:
-        """Platform-internal: a host answers a snapshot it claimed. One it kept
+        """System-internal: a host answers a snapshot it claimed. One it kept
         is recorded where it lives: the host, its pool, the reference its
         store knows it by, and the digest and the size the host declared,
         never its bytes; then its row is done. One it refused fails its row
@@ -169,10 +181,11 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
     ) -> AgentWorkspaceBinding | None:
-        """Platform-internal: a host answers a prepare it claimed. A
+        """System-internal: a host answers a prepare it claimed. A
         workspace it made binds the session to it at the answer's location,
         unless a live host of the pool holds the session's workspace
         already, and the binding is answered; a refusal hands the work back
@@ -189,8 +202,9 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
-        """Platform-internal: a host answers a release, a purge, or an erase
+        """System-internal: a host answers a release, a purge, or an erase
         it claimed, once what it names is gone: its row completes. `ItemNotHeld` for one
         the host does not hold under a live claim."""
         ...
@@ -199,10 +213,11 @@ class ExecRelayManagerInterface(ABC):
     # so each call mints the service context of the session's tenant.
 
     @abstractmethod
+    @transition
     async def send(
         self, rctx: RequestContext, org_id: UUID, call: ExecCall, occurrence: int
     ) -> ExecItem:
-        """Platform-internal: the item of one operation of a call, made and
+        """System-internal: the item of one operation of a call, made and
         put on the queue of the host that holds the session's workspace, or
         met when the same call sent it before (`rules.exec_id`). One met is
         answered as it stands, so a resumed run attaches to the first
@@ -215,44 +230,51 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def watch(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
     ) -> ExecProgress:
-        """Platform-internal: the item's state, the parts of its output after
+        """System-internal: the item's state, the parts of its output after
         `after_seq`, opened, and how it ended once it has."""
         ...
 
     @abstractmethod
+    @transition
     async def stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
     ) -> ExecItem:
-        """Platform-internal: ends the item at once. One no host holds yet
+        """System-internal: ends the item at once. One no host holds yet
         never runs, and its queue row ends with it; one a host holds is
         stopped over its control stream. `StaleExec` from a run below the
         item's epoch, whose stop would end another run's command."""
         ...
 
     @abstractmethod
-    async def running(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> list[ExecItem]:
-        """Platform-internal: the session's items a host runs now, oldest
+    @transition
+    async def running(
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID
+    ) -> list[ExecItem]:
+        """System-internal: the session's items a host runs now, oldest
         first, at most the options' page."""
         ...
 
     @abstractmethod
+    @transition
     async def interrupt_running(
-        self, rctx: RequestContext, org_id: UUID, session_id: UUID, below: int | None
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID, below: int | None
     ) -> list[ExecItem]:
-        """Platform-internal: every item a host runs for the session now, or,
+        """System-internal: every item a host runs for the session now, or,
         with `below`, those of a run below that writer epoch alone, each
         answered `interrupted` as a principal's stop, its host told over its
         control stream to end it and push nothing. What it answered."""
         ...
 
     @abstractmethod
+    @transition
     async def outcome_of(
-        self, rctx: RequestContext, org_id: UUID, session_id: UUID, key: UUID, epoch: int
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID, key: UUID, epoch: int
     ) -> ExecItem | None:
-        """Platform-internal: the command the call under `key` sent, for a
+        """System-internal: the command the call under `key` sent, for a
         run that recovers it, or None. It admits `epoch` first, as a command
         does: a command of a lost run that no host took yet never runs.
         `StaleExec` for an epoch below the session's."""
@@ -262,7 +284,7 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     async def start(self, ctx: TenantContext, row: WorkItem) -> bool:
-        """Platform-internal: a host's claim took the item's queue row.
+        """System-internal: a host's claim took the item's queue row.
         Whether the host is handed it: never a row the item no longer runs
         under, an unsafe item a claim took before, an item settled already,
         or a command whose epoch is below the session's; each such row is
@@ -270,12 +292,14 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
-        """Platform-internal: what the host that holds the item runs, opened.
+        """System-internal: what the host that holds the item runs, opened.
         `ItemNotHeld` for any other host, and once the item is settled."""
         ...
 
     @abstractmethod
+    @transition
     async def push_part(
         self,
         rctx: RequestContext,
@@ -286,13 +310,14 @@ class ExecRelayManagerInterface(ABC):
         crossing: Crossing,
         data: bytes,
     ) -> None:
-        """Platform-internal: one part of the item's output, verified against
+        """System-internal: one part of the item's output, verified against
         the hash it crossed with before anything reads it, then kept sealed.
         A part sent again lands once. `CrossingRefused` for bytes that are
         not the ones declared; `ItemNotHeld` as `detail` says."""
         ...
 
     @abstractmethod
+    @transition
     async def push_result(
         self,
         rctx: RequestContext,
@@ -301,7 +326,7 @@ class ExecRelayManagerInterface(ABC):
         crossing: Crossing,
         data: bytes,
     ) -> ExecItem:
-        """Platform-internal: how the item ended, verified against the hash
+        """System-internal: how the item ended, verified against the hash
         it crossed with before anything reads it, stored under the call's
         key, and its queue row completed. The first settlement wins: a
         result for an item its lease, a stop, or the sweep settled already,
@@ -311,17 +336,19 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def extend(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> datetime:
-        """Platform-internal: renews the host's lease on the item and answers
+        """System-internal: renews the host's lease on the item and answers
         when it ends now. `ItemNotHeld`, or `LeaseLost` when the queue row
         is no longer the host's."""
         ...
 
     @abstractmethod
+    @transition
     async def controls(
         self, rctx: RequestContext, host: HostIdentity, after: UUID | None
     ) -> list[ExecControl]:
-        """Platform-internal: the host's control messages after `after`, or
+        """System-internal: the host's control messages after `after`, or
         those of the last window when it names none: what a host that
         reconnects is told again."""
         ...
@@ -329,8 +356,9 @@ class ExecRelayManagerInterface(ABC):
     # The sweep.
 
     @abstractmethod
+    @transition
     async def settle_expired(self, rctx: RequestContext) -> int:
-        """Platform-internal: across tenants, each running item whose lease
+        """System-internal: across tenants, each running item whose lease
         ended. An unsafe one completes `interrupted`, outcome unknown, and is
         never requeued; a repeatable one waits for its row to come back to
         its host's lane. Either way the host that held it is told its lease
@@ -338,15 +366,17 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def bindings(self, after: UUID | None) -> list[tuple[UUID, AgentWorkspaceBinding]]:
-        """Platform-internal: across tenants, for the sweep, the bindings in id
+        """System-internal: across tenants, for the sweep, the bindings in id
         order after the one `after` names, each with its tenant, at most the
         options' sweep batch."""
         ...
 
     @abstractmethod
+    @transition
     async def end_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> int:
-        """Platform-internal: the work that waits on a host its tenant
+        """System-internal: the work that waits on a host its tenant
         revoked. Every item on its lane, queued or held, ends, since no claim
         would take it and a hold of its is refused, and each command among
         them that had not ended is settled `interrupted`, as stopped by the
@@ -354,8 +384,9 @@ class ExecRelayManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
-        """Platform-internal: what the exec relay keeps of a session the sweep
+    @stageless
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> None:
+        """System-internal: what the exec relay keeps of a session the sweep
         purges: its items with their queue rows, their output, its controls,
         and its binding."""
         ...

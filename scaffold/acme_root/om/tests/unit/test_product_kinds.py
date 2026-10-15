@@ -13,26 +13,15 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import context
-from contracts.evidence import (
-    CHECKOUT,
-    CHECKOUT_KEY,
-    ScriptedExecutor,
-    checkout_policy,
-    delivered,
-    evidence_over,
-)
-from contracts.evidence_storage import make_record, make_validation
-from contracts.factories import make_org
-from contracts.platform_doubles import SessionAgentProjectsMemory
-from contracts.tools import INJECTED_TOKEN
-from contracts.trust import trusted
 from pydantic import Field, ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
+from acme.om.agent_root import AgentRootOptions
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.result import Claim, Result
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, AppType, Permission, RequestContext, Role, TenantContext
 from acme.om.evidence.executor import Executors
 from acme.om.evidence.rules import CEILINGS
@@ -47,30 +36,33 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
-from acme.om.leases.impl.kinds import NoopResourceKindImpl
-from acme.om.leases.kinds import ResourceKindSpec
-from acme.om.leases.types.request import NoopAsk
-from acme.om.leases.types.resource import ResourceKind
+from acme.om.intake.kinds import IntakeWorkKind
+from acme.om.leases.impl.kinds import NoopLeasableResourceKindImpl
+from acme.om.leases.types.leasable_resource import LeasableResourceKind
 from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
     HOST,
     ClaimantKindSpec,
+    PlacedKindSpec,
+    PlacementWorkKind,
+    claimed_by,
     platform_claimant_kinds,
-    platform_work_kinds,
 )
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,
     ProductKinds,
+    ProductResourceKind,
     build_platform_managers,
 )
-from acme.om.steps.types.header import LoopOutcome
+from acme.om.root import KINDS
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.rules import decide
-from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyCall, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.trust.owners import AgentProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
@@ -81,6 +73,21 @@ from acme.om.watch.root import build_kind_streams, build_stream
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
 
+from contracts.doubles import context
+from contracts.evidence import (
+    CHECKOUT,
+    CHECKOUT_KEY,
+    ScriptedExecutor,
+    checkout_policy,
+    delivered,
+    evidence_over,
+)
+from contracts.evidence_storage import make_record, make_validation
+from contracts.factories import make_org
+from contracts.platform_doubles import SessionAgentProjectsMemory
+from contracts.tools import INJECTED_TOKEN
+from contracts.trust import trusted
+
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 GATEWAY = AppContext(type=AppType.API, version="api@test")
@@ -89,7 +96,7 @@ RENDER = "RENDER"
 BATCH = "batch"
 
 
-class RenderPayload(Platform):
+class RenderPayload(OmBase):
     """A render job: the batch pool that runs it, and its frames."""
 
     pool_id: UUID
@@ -104,7 +111,9 @@ def _render_lane(payload: RenderPayload) -> str:
     return batch_lane(payload.pool_id)
 
 
-RENDER_KIND = WorkKindSpec(RENDER, RenderPayload, Permission.WRITE, _render_lane, claimant=BATCH)
+RENDER_KIND = PlacedKindSpec(
+    RENDER, RenderPayload, Permission.WRITE, place=_render_lane, claimant=BATCH
+)
 BATCH_CLAIMANT = ClaimantKindSpec(
     BATCH, lambda node: ((batch_lane(node.pool_id), (RENDER,)),), prefix="bat_"
 )
@@ -328,13 +337,15 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
         await managers.work.enqueue(ajax, a_render(ajax, new_id(), frames=0))
     with pytest.raises(ValueError, match="capitals"):
         WorkKindSpec("render", RenderPayload, Permission.WRITE)
-    with pytest.raises(ValueError, match="names its lane"):
-        WorkKindSpec("UNPLACED", RenderPayload, Permission.WRITE, claimant=BATCH)
+    with pytest.raises(ValueError, match="names both"):
+        PlacedKindSpec("UNPLACED", RenderPayload, Permission.WRITE, claimant=BATCH)
 
     # A product never takes over a kind of the platform's, nor leaves its
     # work to a claimant kind nobody registered.
     takeovers = (
-        ProductKinds(work=(replace(RENDER_KIND, name=WorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)),
+        ProductKinds(
+            work=(replace(RENDER_KIND, name=PlacementWorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)
+        ),
         ProductKinds(claimants=(ClaimantKindSpec(HOST, lambda _: (), prefix="hsx_"),)),
         ProductKinds(work=(RENDER_KIND,)),
         # Nor a prefix another credential carries: a host's, a person's, or
@@ -357,15 +368,21 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
 
 
 def test_the_platforms_kinds_go_through_the_same_registries(managers: PlatformManagers) -> None:
-    work = platform_work_kinds()
-    assert {spec.name for spec in work} == set(WorkKind)
-    assert work.claimed_by(HOST) == {WorkKind.EXEC, WorkKind.WORKSPACE}
+    platforms = {
+        *WorkKind,
+        *AgentSessionWorkKind,
+        *IntakeWorkKind,
+        *PlacementWorkKind,
+        *ValidationWorkKind,
+    }
+    assert {spec.name for spec in KINDS} == platforms
+    assert claimed_by(KINDS, HOST) == {PlacementWorkKind.EXEC, PlacementWorkKind.WORKSPACE}
     assert [spec.name for spec in platform_claimant_kinds()] == [HOST]
     placement = managers.placement
     assert isinstance(placement, PlacementManagerImpl)
     held = placement._kinds  # pyright: ignore[reportPrivateUsage] (the root's one registry)
-    assert {spec.name for spec in held} == set(WorkKind) | {RENDER}
-    assert held.claimed_by(BATCH) == {RENDER} and held.claimed_by("greedy") == frozenset()
+    assert {spec.name for spec in held} == platforms | {RENDER}
+    assert claimed_by(held, BATCH) == {RENDER} and claimed_by(held, "greedy") == frozenset()
     platform = ScriptedExecutor()
     with pytest.raises(ValueError, match="registered twice"):
         Executors(platform, {PLATFORM_EXECUTOR: ScriptedExecutor(name="batch-1")})
@@ -377,11 +394,11 @@ RENDER_CLASS = "render"
 """A class of the product's whose every call waits for a person."""
 PREVIEW_CLASS = "preview"
 """A class of the product's with no ceiling of its own."""
-EVERYTHING = PolicyLayer(rules=(PolicyRule(decision=Decision.ALLOW),))
+EVERYTHING = ToolPolicyLayer(rules=(ToolPolicyRule(decision=Decision.ALLOW),))
 """A tenant's layer that allows every call."""
 
 
-def engine_ceilings(managers: PlatformManagers) -> PolicyLayer:
+def engine_ceilings(managers: PlatformManagers) -> ToolPolicyLayer:
     """The ceilings the root hands the engine's tools manager, beneath the
     layers the root puts on it."""
     tools: object = managers.tools
@@ -394,7 +411,7 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
     product = ProductKinds(
         classes=(RENDER_CLASS, PREVIEW_CLASS), ceilings={RENDER_CLASS: Decision.APPROVE}
     )
-    render = PolicyCall(
+    render = ToolPolicyCall(
         tool="render_frames", authorization_class=RENDER_CLASS, effect=Effect.UNSAFE
     )
     preview = render.model_copy(update={"authorization_class": PREVIEW_CLASS})
@@ -402,25 +419,25 @@ def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path:
         managers = build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            tools_options=options,
             platform_root_options=PlatformRootOptions(
                 product_kinds=product,
             ),
+            agent_root_options=AgentRootOptions(tools_options=options),
         )
         ceilings = engine_ceilings(managers)
-        assert decide(render, PolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
+        assert decide(render, ToolPolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
         # A class with no ceiling runs as the tenant allows, and the
         # platform's own ceilings stay as they were.
-        assert decide(preview, PolicyLayer(), EVERYTHING, ceilings) is Decision.ALLOW
+        assert decide(preview, ToolPolicyLayer(), EVERYTHING, ceilings) is Decision.ALLOW
         assert all(rule in ceilings.rules for rule in CEILINGS.rules)
 
 
 def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
     capped = ToolsOptions(
-        ceilings=PolicyLayer(
+        ceilings=ToolPolicyLayer(
             rules=(
                 *CEILINGS.rules,
-                PolicyRule(authorization_class=RENDER_CLASS, decision=Decision.DENY),
+                ToolPolicyRule(authorization_class=RENDER_CLASS, decision=Decision.DENY),
             )
         )
     )
@@ -450,10 +467,10 @@ def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
             build_platform_managers(
                 StorageMemoryImpl(),
                 InfraLocalImpl(tmp_path),
-                tools_options=options,
                 platform_root_options=PlatformRootOptions(
                     product_kinds=product,
                 ),
+                agent_root_options=AgentRootOptions(tools_options=options),
             )
 
 
@@ -473,8 +490,8 @@ class BatchPools(SecretOwnerInterface):
     async def holds(self, ctx: TenantContext, owner_id: UUID) -> bool:
         return owner_id in self.held
 
-    async def owner_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return self.placed.get(session_id)
+    async def owner_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
+        return self.placed.get(agent_session_id)
 
 
 def on_pool(pool_id: UUID, store: SecretStore = SecretStore.CLOUD) -> SecretDeclaration:
@@ -649,7 +666,7 @@ async def gate_reads(executor: str, script: dict[str, Any]) -> str:
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
     await evidence.manager.write_policy(owner, policy_in(executor))
-    work = make_record(session, step_id=new_id())
+    work = make_record(session, agent_step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
     # A baseline came first, written apart from the executors the case compares.
@@ -707,7 +724,7 @@ async def test_a_change_needing_checks_of_two_executors_validates_on_each() -> N
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     session = new_id()
     await evidence.manager.write_policy(owner, two_executors())
-    work = make_record(session, step_id=new_id())
+    work = make_record(session, agent_step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
     await evidence.manager.validate(ctx, session, RunPurpose.BASELINE)
@@ -764,7 +781,7 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
     kinds' shape is refused where it is declared."""
     taken = ProductKinds(
         resources=lambda _managers: (
-            ResourceKindSpec(ResourceKind.NOOP, NoopAsk, NoopResourceKindImpl()),
+            ProductResourceKind(LeasableResourceKind.NOOP, NoopLeasableResourceKindImpl()),
         )
     )
     with pytest.raises(ValueError, match="resource kind noop is registered twice"):
@@ -773,5 +790,12 @@ def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path)
             InfraLocalImpl(tmp_path),
             platform_root_options=PlatformRootOptions(product_kinds=taken),
         )
-    with pytest.raises(ValueError, match="lower case"):
-        ResourceKindSpec("Dock", NoopAsk, NoopResourceKindImpl())
+    misnamed = ProductKinds(
+        resources=lambda _managers: (ProductResourceKind("Dock", NoopLeasableResourceKindImpl()),)
+    )
+    with pytest.raises(ValueError, match="snake case"):
+        build_platform_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            platform_root_options=PlatformRootOptions(product_kinds=misnamed),
+        )

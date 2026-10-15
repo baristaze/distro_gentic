@@ -15,7 +15,7 @@ class OperatorPagerLogImpl(OperatorPagerInterface):
         log.error(
             "anomaly in org %s, session %s: expected %d micros against a norm of %d",
             page.org_id,
-            page.session_id,
+            page.agent_session_id,
             page.expected_micros,
             page.norm_micros,
         )

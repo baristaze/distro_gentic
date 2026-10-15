@@ -113,7 +113,7 @@ The limits are asked inside the write that records a run
 (`AgentAutomationStorageInterface.admit`, which holds the agent
 automation's row in Postgres), from `rules.admitted`. A started
 session's tree gets a `LIFE` budget of `run_cap_micros` before its brief
-wakes it, and starts through the agent projects' `start_session`. A
+wakes it, and starts through the agent projects' `start_agent_session`. A
 `message_session` action is refused while enabled, when it is written
 and at each firing (`impl/manager.py` `UNHELD`): no budget on a session
 ends with a run, so nothing would hold its run to its cap (ADR 2036).

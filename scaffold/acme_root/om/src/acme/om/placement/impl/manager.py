@@ -6,10 +6,18 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.observability import OUTCOMES
-from acme.om.base import EMPTY_UUID, Platform, derived_id, utcnow
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.base import EMPTY_UUID, OmBase, derived_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
-from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
+from acme.om.placement.kinds import (
+    HOST,
+    ClaimantKinds,
+    claimed_by,
+    claims_of,
+    held_to,
+    placed_lane,
+)
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, another_session, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
@@ -19,12 +27,12 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.kinds import WorkKinds
 from acme.om.work.types.tenant_cap import MAX_CAP
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 log = logging.getLogger(__name__)
 
 
-class PlacementOptions(Platform):
+class PlacementOptions(OmBase):
     default_tier: str = DEFAULT_TIER  # the plan tier of a tenant with no share
     # Each plan tier's share: the most loops one tenant holds claimed on the
     # tier's lane, the cap its runners pass to the claim. A tier it does not
@@ -63,7 +71,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         self._clock = clock
 
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
-        if item.kind == WorkKind.LOOP:
+        if item.kind == AgentSessionWorkKind.LOOP:
             return loop_lane(org_id, await self._share(org_id))
         return placed_lane(self._kinds.get(item.kind), item.payload) or item.lane
 
@@ -79,7 +87,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
                 foreign = claimant.org_id is not None and ctx.org_id != claimant.org_id
                 if not foreign and not another_session(claimant, item):
                     return claimed
-                # Routed into another tenant's wall, or to a machine that
+                # Routed into another tenant's wall, or to a VM that
                 # serves another session: never handed over, and never
                 # claimed again, since no claimant of that lane may run it.
                 OUTCOMES.labels(subsystem="placement", outcome="foreign_claim").inc()
@@ -90,7 +98,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
                     ctx.org_id,
                     claimant.worker_id,
                     claimant.org_id,
-                    claimant.session_id,
+                    claimant.agent_session_id,
                 )
                 whose = "another tenant" if foreign else "another session"
                 await self._work.fail_for_good(
@@ -156,7 +164,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         if (
             item.status is not WorkStatus.CLAIMED
             or item.claimed_by != claimant.worker_id
-            or item.kind not in self._kinds.claimed_by(claimant.kind)
+            or item.kind not in claimed_by(self._kinds, claimant.kind)
         ):
             raise missing
         if item.claim_token != claim_token:

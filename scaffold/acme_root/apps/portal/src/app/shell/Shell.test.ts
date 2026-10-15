@@ -11,9 +11,9 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView, MeView, OrgView, UserView } from "@acme/client";
+import type { agent_sessions, tenancy } from "@acme/client";
 import { PREFERENCES_STORAGE_KEY, usePreferencesStore } from "../../store/preferences";
-import { useSessionStore } from "../../store/session";
+import { useAuthSessionStore } from "../../store/authSession";
 import { useSupportStore } from "../../store/support";
 import { EMPTY_PRODUCT, type PortalProduct } from "../product";
 import { queryClient } from "../queryClient";
@@ -31,10 +31,10 @@ const net = vi.hoisted(() => ({
 }));
 
 const at = "2026-10-05T10:00:00Z";
-const user = { id: "u1", email: "owner@example.test", display_name: "Owner", created_at: at } as UserView;
-const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at, deleted_at: null } as OrgView;
+const user = { id: "u1", email: "owner@example.test", display_name: "Owner", created_at: at } as tenancy.UserView;
+const org = { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: at, deleted_at: null } as tenancy.OrgView;
 
-const session = (id: string, over: Partial<AgentSessionView> = {}): AgentSessionView => ({
+const session = (id: string, over: Partial<agent_sessions.AgentSessionView> = {}): agent_sessions.AgentSessionView => ({
   id,
   title: id,
   kind: "software_engineer",
@@ -58,10 +58,10 @@ vi.mock("../api", () => ({
     get: (path: string) => {
       net.gets.push(path);
       if (path === "/v1/me") {
-        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as MeView);
+        return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as tenancy.MeView);
       }
       if (path.startsWith("/v1/auth/memberships")) return Promise.resolve({ items: [{ org, user, role: "owner" }], next_cursor: null });
-      const all = net.sessions as AgentSessionView[];
+      const all = net.sessions as agent_sessions.AgentSessionView[];
       const one = /^\/v1\/agent-sessions\/([^/?]+)(\/[a-z-]+)?/.exec(path);
       if (one) {
         const found = all.find((each) => each.id === one[1]);
@@ -71,13 +71,13 @@ vi.mock("../api", () => ({
         if (one[2] === "/children") return Promise.resolve({ items: all.filter((each) => each.parent_id === found.id), next_cursor: null });
         // The call it holds for a decision, while it is parked on one.
         if (one[2] === "/approvals")
-          return Promise.resolve(found.park?.unlock === "approval" ? [{ session_id: found.id, tool: "run_command", seq: 3, authorization_class: "write" }] : []);
+          return Promise.resolve(found.park?.unlock === "approval" ? [{ agent_session_id: found.id, tool: "run_command", seq: 3, authorization_class: "write" }] : []);
         return Promise.resolve(found);
       }
       if (path.startsWith("/v1/agent-sessions?")) {
         // As the API lists them: roots alone, the person's own or every one they see.
         const query = new URLSearchParams(path.split("?")[1]);
-        const own = (each: AgentSessionView) => each.created_by === user.id || each.participants.includes(user.id);
+        const own = (each: agent_sessions.AgentSessionView) => each.created_by === user.id || each.participants.includes(user.id);
         const items = all.filter(
           (each) => each.parent_id === null && (query.get("among") !== "mine" || own(each)) && (query.get("status") !== "parked" || each.status === "parked"),
         );
@@ -174,12 +174,12 @@ beforeEach(async () => {
   useSupportStore.setState({ conversations: {} });
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   usePreferencesStore.setState({ theme: "system", sidebarFolded: false, sessionFilter: DEFAULT_FILTER, foldedTrees: [] });
-  useSessionStore.getState().setSession("ses_ajax", "ajax");
+  useAuthSessionStore.getState().setAuthSession("ses_ajax", "ajax");
   root = createRoot(container);
 });
 afterEach(async () => {
   await act(async () => root.render(null));
-  useSessionStore.getState().clear();
+  useAuthSessionStore.getState().clear();
   vi.unstubAllGlobals();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
@@ -445,20 +445,20 @@ it("signs out: the server session first, then the token here", async () => {
   await act(async () => item("Sign out").click());
   await settle();
   expect(net.posts.map((post) => post.path)).toEqual(["/v1/auth/logout"]);
-  expect(useSessionStore.getState().token).toBeNull();
+  expect(useAuthSessionStore.getState().token).toBeNull();
 });
 
 it("goes to the identity provider's logout when the server names one", async () => {
   await mount();
   const assign = vi.fn();
   vi.stubGlobal("location", { origin: "http://localhost:5173", assign });
-  net.logout = { provider_logout_url: "https://api.workos.com/user_management/sessions/logout?session_id=s1" };
+  net.logout = { provider_logout_url: "https://api.workos.com/user_management/sessions/logout?agent_session_id=s1" };
   await act(async () => trigger().click());
   await act(async () => item("Sign out").click());
   await settle();
   expect(net.posts[0]!.body).toEqual({ return_to: "http://localhost:5173/signed-out" });
-  expect(useSessionStore.getState().token).toBeNull();
-  expect(assign).toHaveBeenCalledWith("https://api.workos.com/user_management/sessions/logout?session_id=s1");
+  expect(useAuthSessionStore.getState().token).toBeNull();
+  expect(assign).toHaveBeenCalledWith("https://api.workos.com/user_management/sessions/logout?agent_session_id=s1");
 });
 
 describe("the support dock", () => {

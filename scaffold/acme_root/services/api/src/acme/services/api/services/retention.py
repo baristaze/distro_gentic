@@ -6,9 +6,9 @@ from uuid import UUID
 
 from acme.om.context import TenantContext
 from acme.services.api.types.retention import (
+    AgentSessionRetentionView,
     RetentionRequest,
     RetentionView,
-    SessionRetentionView,
 )
 
 
@@ -26,7 +26,9 @@ class RetentionServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetentionView:
+    async def erase_content(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionRetentionView:
         """The session's content erased, its shape kept, and its snapshot as
         the erasure left it."""
         ...

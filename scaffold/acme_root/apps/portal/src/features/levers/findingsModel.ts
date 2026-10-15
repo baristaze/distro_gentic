@@ -1,10 +1,10 @@
 // Pure: what the lever checks found in an agent playbook version or an agent knowledge
 // entry, as its page shows it. A finding advises: the version stands as it
 // was published. No React, no fetch.
-import type { FindingView, LeverCheck } from "@acme/client";
+import type { levers } from "@acme/client";
 
 /** What each check looks for, in words. */
-export const CHECK_LABEL: Record<LeverCheck, string> = {
+export const CHECK_LABEL: Record<levers.LeverCheck, string> = {
   repeated_phrase: "A phrase said again and again",
   contradiction: "A must and a must-not on one subject",
   unknown_name: "A name no kind holds",
@@ -23,6 +23,6 @@ export interface FindingLine {
 }
 
 /** The findings as lines, in the order the checks answered them. */
-export function findingLines(findings: readonly FindingView[]): FindingLine[] {
+export function findingLines(findings: readonly levers.FindingView[]): FindingLine[] {
   return findings.map((finding) => ({ label: CHECK_LABEL[finding.check], detail: finding.detail, excerpt: finding.excerpt ?? null }));
 }

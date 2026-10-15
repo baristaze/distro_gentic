@@ -1,0 +1,92 @@
+"""A VM handed a file of its own as it starts, and sealed once it has
+read it: how the platform's cloud pool gives each VM the one-use key
+its host enrolls with. Nothing else enters a VM from outside.
+
+Two ways hand it over. Through the VMs' channel, the hypervisor's own
+(`SeedsChannelImpl`): the VM starts, then a command inside writes the
+file from its standard input, so the file never appears on a command line.
+Or at the start itself, through the cloud's own first-boot data, which the
+VM's image reads at each boot, closed once read (the EC2 backend's
+`launch_seeded` and `seal`). The file sits on the guest's memory-backed
+`/run`, never on its disk, so a snapshot of the disk never holds it."""
+
+from datetime import timedelta
+
+from acme.infra.exceptions import BackendFailed, InfraValidationFailed
+from acme.infra.vms import (
+    SEED_FILE,
+    SEED_FOLDER,
+    SEED_OWNER,
+    SeedsInterface,
+    VmsInterface,
+    VmSpec,
+    VmState,
+)
+
+GUEST_WRITE = (
+    "set -eu; umask 077; "
+    f"sudo -n install -d -m 0700 -o {SEED_OWNER} -g {SEED_OWNER} /{SEED_FOLDER}; "
+    f"sudo -n tee /{SEED_FILE}.partial >/dev/null; "
+    f"sudo -n chown {SEED_OWNER}:{SEED_OWNER} /{SEED_FILE}.partial; "
+    f"sudo -n mv /{SEED_FILE}.partial /{SEED_FILE}; "
+    f"sudo -n systemctl restart {SEED_OWNER}.service"
+)
+"""Writes the seed from standard input as the guest's own user, owned by the
+host's user alone, whole or not at all, then starts the host again on it:
+its unit, of the same name as its user, starts only once a seed stands."""
+
+PLAIN_WRITE = (
+    f"set -eu; umask 077; mkdir -p {SEED_FOLDER}; "
+    f"cat > {SEED_FILE}.partial; mv {SEED_FILE}.partial {SEED_FILE}"
+)
+"""Writes the seed from standard input as the channel's own user, under the
+VM's root: the twin's, whose VM is a folder of this host."""
+
+
+class SeedsChannelImpl(SeedsInterface):
+    """The seed written through the VMs' channel, once the VM runs,
+    by `write`: a shell script that reads it from standard input."""
+
+    def __init__(self, vms: VmsInterface, timeout: timedelta, write: str = GUEST_WRITE) -> None:
+        self._vms = vms
+        self._timeout = timeout
+        self._write = write
+
+    async def launch_seeded(
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
+    ) -> None:
+        new = await self._vms.state(name) is VmState.ABSENT
+        await self._vms.launch(name, spec, snapshot)
+        try:
+            reply = await self._vms.run(
+                name, ("sh", "-c", self._write), bound=self._timeout, stdin=seed
+            )
+            if not reply.ok:
+                raise BackendFailed("vm", "seed", reply.reason())
+        except BaseException:
+            if new:
+                await self._vms.destroy(name)
+            raise
+
+    async def seal(self, name: str) -> None:
+        # The channel is the hypervisor's: nothing in the guest reads the
+        # seed but from the file.
+        return None
+
+    def describe(self) -> str:
+        return "seeds=channel"
+
+
+class SeedsNullImpl(SeedsInterface):
+    """A process that starts no VM."""
+
+    async def launch_seeded(
+        self, name: str, spec: VmSpec, snapshot: str | None, seed: bytes
+    ) -> None:
+        raise InfraValidationFailed("this process starts no VM")
+
+    async def seal(self, name: str) -> None:
+        return None
+
+    def describe(self) -> str:
+        return "seeds=none"

@@ -16,7 +16,7 @@ AGENT_PLAYBOOK = {
 
 def published(stack: Stack) -> None:
     headers = {
-        "Authorization": f"Bearer {stack.session_token(OWNER['email'])}",
+        "Authorization": f"Bearer {stack.auth_session_token(OWNER['email'])}",
         "Idempotency-Key": "publish-answer-from-the-ledger",
     }
     made = stack.tc.post("/v1/agent-playbooks", headers=headers, json=AGENT_PLAYBOOK)
@@ -25,7 +25,7 @@ def published(stack: Stack) -> None:
 
 def started(stack: Stack) -> str:
     result = stack.acme(
-        "session", "start", "assistant", "the ledger", "--agent-project", AGENT_PROJECT_ID
+        "agent-session", "start", "assistant", "the ledger", "--agent-project", AGENT_PROJECT_ID
     )
     assert result.exit_code == 0, result.output
     return result.output.split()[1]
@@ -35,15 +35,15 @@ def test_a_agent_playbook_is_invoked_into_a_session_and_its_brief_is_the_callers
     stack: Stack,
 ) -> None:
     published(stack)
-    session_id = started(stack)
-    invoked = stack.acme("agent-playbook", "invoke", session_id, AGENT_PLAYBOOK["name"])
+    agent_session_id = started(stack)
+    invoked = stack.acme("agent-playbook", "invoke", agent_session_id, AGENT_PLAYBOOK["name"])
     assert invoked.exit_code == 0, invoked.output
-    assert invoked.output == f"invoked {AGENT_PLAYBOOK['name']} 1 into {session_id}\n"
-    steps = stack.acme("session", "steps", session_id)
+    assert invoked.output == f"invoked {AGENT_PLAYBOOK['name']} 1 into {agent_session_id}\n"
+    steps = stack.acme("agent-session", "steps", agent_session_id)
     assert steps.exit_code == 0, steps.output
     assert "message" in steps.output and "name: answer-from-the-ledger" in steps.output
 
-    refused = stack.acme("agent-playbook", "invoke", session_id, "no-such-agent-playbook")
+    refused = stack.acme("agent-playbook", "invoke", agent_session_id, "no-such-agent-playbook")
     assert refused.exit_code != 0
     assert "not found" in refused.output
 

@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, transition
 from acme.om.retention.types.policy import TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 
@@ -54,12 +54,12 @@ class RetentionManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def get_snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         """The session's snapshot; `NotFound` when the tenant holds none."""
         ...
 
     @abstractmethod
-    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+    async def erase_content(self, ctx: TenantContext, agent_session_id: UUID) -> SessionRetention:
         """Erases the session's content now, as one who manages the tenant's
         members may, the way the sweep does past its content's life: the
         engine revokes its key, a session marked deleted included, the
@@ -71,8 +71,9 @@ class RetentionManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def sweep(self, rctx: RequestContext) -> int:
-        """Platform-internal: the sweep, across tenants, once a pass, under a
+        """System-internal: the sweep, across tenants, once a pass, under a
         service context minted for each tenant from `rctx`. First, at most a
         batch of snapshots take what their tenant's policy has tightened
         since they last read it. Then, at most a batch of sessions past an

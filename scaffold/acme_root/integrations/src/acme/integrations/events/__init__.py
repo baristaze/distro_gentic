@@ -59,7 +59,7 @@ class ProvidedEvent(BaseModel):
     author_kind: str
     author_id: str
     author_name: str
-    session_id: str | None = None
+    agent_session_id: str | None = None
     pull_request: str | None = None
     branch: str | None = None
     refs: tuple[str, ...] = ()

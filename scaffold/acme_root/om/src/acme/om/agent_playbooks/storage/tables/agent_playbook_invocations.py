@@ -8,7 +8,7 @@ from acme.om.storage.tables.base import Base, CreatedMixin, IdentifiableMixin
 
 class AgentPlaybookInvocations(IdentifiableMixin, CreatedMixin, Base):
     """The agent playbooks each session invoked: one row a version in a session,
-    which the unique index on (org_id, session_id, agent_playbook_id) holds and
+    which the unique index on (org_id, agent_session_id, agent_playbook_id) holds and
     the read of a session's gates uses, so org_id gets no index of its own."""
 
     __tablename__ = "agent_playbook_invocations"
@@ -17,12 +17,12 @@ class AgentPlaybookInvocations(IdentifiableMixin, CreatedMixin, Base):
         Index(
             "uq_agent_playbook_invocations_org_id_session_id_agent_playbook",
             "org_id",
-            "session_id",
+            "agent_session_id",
             "agent_playbook_id",
             unique=True,
         ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     agent_playbook_id: Mapped[UUID]
     name: Mapped[str]
     version: Mapped[int]

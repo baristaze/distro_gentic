@@ -166,7 +166,7 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_PROF
 export AWS_PROFILE="$profile"
 export AWS_REGION="$region"
 if [ -n "$exported" ]; then
-  echo "note: the shell exported$exported; cleared for this run. An exported key is a long-lived one, and this platform uses none."
+  echo "note: the shell exported$exported; cleared for this run. An exported key is a long-lived one, and this system uses none."
 fi
 
 # Every command is printed before it runs; a dry run stops at the printing.
@@ -562,7 +562,7 @@ if [ "$environment" = "staging" ]; then
           "integration over the compose stack",
           "the release before passes on this schema",
           "the telemetry round trip over the devx profile",
-          "images build (api)", "images build (maintenance)", "images build (session-runner)",
+          "images build (api)", "images build (maintenance)", "images build (agent-session-runner)",
           "images build (portal)",
           "terraform format and validate (bootstrap/staging)",
           "terraform format and validate (bootstrap/prod)",
@@ -730,7 +730,7 @@ else
 fi
 say "  anthropic_api_key and openai_api_key are the platform's own model keys, which the session runner alone holds. Left \"off\", a model call runs only on a tenant's own key, and nothing is spent on the platform's account."
 say "  Then the tasks read the values at their next start: the next deploy, or now:"
-for service in api maintenance session-runner; do
+for service in api maintenance agent-session-runner; do
   say "    aws ecs update-service --profile $writer_profile --region $region --cluster $cluster --service $service --force-new-deployment"
 done
 say "  The steps, the key permissions, and the checks: docs/runbooks/providers/workos.md."

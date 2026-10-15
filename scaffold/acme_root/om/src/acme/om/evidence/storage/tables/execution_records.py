@@ -20,13 +20,15 @@ class ExecutionRecords(IdentifiableMixin, CreatedMixin, Base):
     __tablename__ = "execution_records"
     __org_id_index__ = False
     __table_args__ = (
-        Index("ix_execution_records_org_id_session_id_id", "org_id", "session_id", "id"),
+        Index(
+            "ix_execution_records_org_id_agent_session_id_id", "org_id", "agent_session_id", "id"
+        ),
         Index("ix_execution_records_org_id_validation_id", "org_id", "validation_id"),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     agent_project: Mapped[str]
     purpose: Mapped[str]
-    step_id: Mapped[UUID | None]
+    agent_step_id: Mapped[UUID | None]
     validation_id: Mapped[UUID | None]
     version: Mapped[str]
     dirty: Mapped[bool]

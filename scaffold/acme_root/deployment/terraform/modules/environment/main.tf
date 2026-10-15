@@ -116,7 +116,7 @@ locals {
   # item on its loop lane, through its database login. The buckets hold the
   # tool results too large for a step, and the key seals a session's
   # content.
-  session_runner_policies = [
+  agent_session_runner_policies = [
     module.buckets.policy_arn,
     module.secrets.runner_policy_arn,
     module.keys.policy_arn,
@@ -126,7 +126,7 @@ locals {
   # serving logins' URLs, the error tracker's DSN, the flags' SDK key (the
   # infra root refuses the launchdarkly backend without it), and the
   # platform's model keys. No purge login, no identity provider's key.
-  session_runner_secrets = merge(local.process_secrets, {
+  agent_session_runner_secrets = merge(local.process_secrets, {
     ACME_ANTHROPIC_API_KEY = module.secrets.model_key_secret_arns["anthropic"]
     ACME_OPENAI_API_KEY    = module.secrets.model_key_secret_arns["openai"]
   })
@@ -191,7 +191,7 @@ module "buckets" {
 
   environment = var.environment
   prefix      = var.bucket_prefix
-  buckets     = ["user-file-uploads", "exports", "artifacts", "snapshots"] # acme.infra.buckets.Buckets
+  buckets     = ["user-file-uploads", "exports", "tool-outputs", "snapshots"] # acme.infra.buckets.Buckets
   destroyable = var.destroyable
   # The portal posts a file straight to the uploads bucket with a form the
   # API signed, and fetches it back by a signed link.
@@ -542,29 +542,29 @@ module "maintenance" {
 # its placement names, over the relay. Its model keys are the platform's;
 # what a tenant spends is held by the money gate before each call, and what
 # the environment spends on runners by the count below and its ceiling.
-module "session_runner" {
+module "agent_session_runner" {
   source = "../service"
 
-  name               = "session-runner"
-  image              = var.session_runner_image
+  name               = "agent-session-runner"
+  image              = var.agent_session_runner_image
   environment        = var.environment
   cluster_arn        = module.cluster.arn
   subnet_ids         = module.network.private_subnet_ids
   security_group_ids = [module.network.app_security_group_id]
-  desired_count      = var.session_runner_desired_count
-  cpu                = var.session_runner_cpu
-  memory             = var.session_runner_memory
+  desired_count      = var.agent_session_runner_desired_count
+  cpu                = var.agent_session_runner_cpu
+  memory             = var.agent_session_runner_memory
   metrics_port       = 9465
-  policy_arns        = local.session_runner_policies
-  secrets            = local.session_runner_secrets
+  policy_arns        = local.agent_session_runner_policies
+  secrets            = local.agent_session_runner_secrets
 
   environment_variables = merge(local.process_environment, {
-    ACME_SERVICE_NAME = "session-runner"
+    ACME_SERVICE_NAME = "agent-session-runner"
     # Its pools are its own size: it holds a few loops at once, and each
     # task's connections count in the pool rule (deployment/cloud/README.md).
-    ACME_DATABASE_POOL_SIZE = tostring(var.session_runner_database_pool_size)
-    ACME_MODEL_PROVIDERS    = "live"
-    ACME_WORKSPACE_BACKEND  = "none"
+    ACME_DATABASE_POOL_SIZE      = tostring(var.agent_session_runner_database_pool_size)
+    ACME_LLM_PROVIDERS           = "live"
+    ACME_AGENT_WORKSPACE_BACKEND = "none"
     # The image carries the knowledge map and the documents it lists here,
     # as the API's does; a deployed runner refuses to boot with no corpus.
     ACME_CORPUS_ROOT = "/app"
@@ -576,14 +576,14 @@ module "session_runner" {
   ]
 
   deployment_maximum_percent         = 100
-  deployment_minimum_healthy_percent = floor(100 * (var.session_runner_desired_count - 1) / var.session_runner_desired_count)
+  deployment_minimum_healthy_percent = floor(100 * (var.agent_session_runner_desired_count - 1) / var.agent_session_runner_desired_count)
   stop_timeout_seconds               = 120
   rollout_after                      = module.api.rollout_gate
 
   autoscaling = {
-    enabled    = var.autoscaling_enabled && var.session_runner_autoscaling.enabled
-    max        = var.session_runner_autoscaling.max
-    target_cpu = var.session_runner_autoscaling.target_cpu
+    enabled    = var.autoscaling_enabled && var.agent_session_runner_autoscaling.enabled
+    max        = var.agent_session_runner_autoscaling.max
+    target_cpu = var.agent_session_runner_autoscaling.target_cpu
   }
 }
 
@@ -595,7 +595,7 @@ module "dashboard" {
 
   environment              = var.environment
   cluster_name             = module.cluster.name
-  service_names            = [module.api.service_name, module.maintenance.service_name, module.session_runner.service_name]
+  service_names            = [module.api.service_name, module.maintenance.service_name, module.agent_session_runner.service_name]
   database_identifier      = module.database.identifier
   load_balancer_arn_suffix = module.load_balancer.arn_suffix
   cache_node_ids           = module.cache.member_clusters
@@ -615,5 +615,5 @@ module "alarms" {
   api_log_group_name         = module.api.log_group_name
   maintenance_log_group_name = module.maintenance.log_group_name
   queue_names                = module.queue.queue_names
-  service_names              = [module.api.service_name, module.maintenance.service_name, module.session_runner.service_name]
+  service_names              = [module.api.service_name, module.maintenance.service_name, module.agent_session_runner.service_name]
 }

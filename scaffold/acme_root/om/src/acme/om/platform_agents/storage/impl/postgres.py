@@ -13,9 +13,11 @@ from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 
 class PlatformAgentsStoragePostgresImpl(PgStorageBase, PlatformAgentsStorageInterface):
-    async def read_validation(self, org_id: UUID, session_id: UUID) -> ValidationSession | None:
+    async def read_validation(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> ValidationSession | None:
         stmt = select(ValidationSessions).where(
-            ValidationSessions.id == session_id, ValidationSessions.org_id == org_id
+            ValidationSessions.id == agent_session_id, ValidationSessions.org_id == org_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()

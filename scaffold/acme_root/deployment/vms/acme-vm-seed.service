@@ -1,0 +1,16 @@
+# Reads the VM's seed from the cloud's first-boot data at each boot,
+# while the metadata endpoint answers: the pool closes it once the host has
+# traded its key. On a VM with no such endpoint, such as Lima's, it
+# writes nothing, and the pool writes the seed itself.
+[Unit]
+Description=The seed the cloud pool handed this VM
+After=network-online.target
+Wants=network-online.target
+Before=acme-host.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/acme-vm-seed
+
+[Install]
+WantedBy=multi-user.target

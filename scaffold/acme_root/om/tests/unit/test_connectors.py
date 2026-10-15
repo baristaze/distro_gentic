@@ -2,7 +2,9 @@
 and attaches it to a kind; a session of the kind loads the toolset and
 calls a tool, whose answer renders as data. A changed definition is
 refused until a person reviews it, the credential reaches no step and no
-log line, and a server inside the wall is called through its host alone."""
+log line, and a server inside the wall is called through its host alone.
+A child attached a connector that carries its tenant's credential holds
+it, and its report says so to its parent."""
 
 import json
 import logging
@@ -18,19 +20,18 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.doubles import APP
-from contracts.loops import ALLOWED, call, reply, said
-from contracts.platform_loops import PlatformLoop, platform_loop_over
-from contracts.tools import failure_of, result_text
 from pydantic import SecretStr
 from unit.test_tools_mcp_servers import SERVER, free_port, logged
 
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports.redaction import forms
-from acme.infra.workspaces import Workspace
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
+from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
@@ -48,8 +49,6 @@ from acme.om.connectors.types.connector import (
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import Conflict, NotAuthorized, ValidationFailed
 from acme.om.exec_relay.types.exec import McpRequest
-from acme.om.steps.types.header import LoopOutcome, ToolFailure
-from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.mcp import definition_of
@@ -58,6 +57,11 @@ from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.tools.types.toolset import LOAD_TOOLSET, Toolset
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor
+
+from contracts.doubles import APP
+from contracts.loops import ALLOWED, LEAD, WORKER, call, reply, said
+from contracts.platform_loops import PlatformLoop, platform_loop_over
+from contracts.tools import failure_of, result_text
 
 TOKEN = "tok-5be0c3a91d7f24"
 
@@ -122,10 +126,10 @@ class Placed(PlacementInterface):
     def __init__(self, inside: bool) -> None:
         self.inside = inside
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
         return self.inside
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
         raise NotImplementedError
 
 
@@ -155,7 +159,7 @@ class HostCalls:
 
     async def __call__(
         self,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: McpRequest,
         *,
         key: UUID,
@@ -179,6 +183,7 @@ def tenant(
     inside: bool = False,
     client: McpClientSdkImpl | None = None,
     host: HostCalls | None = None,
+    kinds: tuple[AgentKind, ...] = (OPS_ANALYST,),
 ) -> Tenant:
     """A tenant whose sessions run on one side of the wall, its servers
     reached through `client` from the cloud and through `host` inside it."""
@@ -193,13 +198,13 @@ def tenant(
         options=ConnectorsOptions(private_addresses=True),
     )
     loop = platform_loop_over(
-        tmp_path, kinds=(OPS_ANALYST,), attached=layer.attached, storage=storage, infra=infra
+        tmp_path, kinds=kinds, loop_hooks=layer.loop_hooks, storage=storage, infra=infra
     )
     return Tenant(loop, layer.build(loop.platform))
 
 
 def acting(
-    at: Tenant, role: Role, credential: CredentialKind = CredentialKind.SESSION_TOKEN
+    at: Tenant, role: Role, credential: CredentialKind = CredentialKind.AUTH_SESSION_TOKEN
 ) -> TenantContext:
     """Someone of the tenant, in `role`, on `credential`."""
     return build_context(
@@ -212,14 +217,14 @@ def acting(
     )
 
 
-async def ran(loop: PlatformLoop, session_id: UUID) -> list[Step]:
-    run = await loop.loops.run(loop.owner, session_id)
+async def ran(loop: PlatformLoop, agent_session_id: UUID) -> list[AgentStep]:
+    run = await loop.loops.run(loop.owner, agent_session_id)
     assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
-    return await loop.history(session_id)
+    return await loop.history(agent_session_id)
 
 
-def responses(steps: list[Step]) -> list[Step]:
-    return [step for step in steps if step.type is StepType.TOOL_RESPONSE]
+def responses(steps: list[AgentStep]) -> list[AgentStep]:
+    return [step for step in steps if step.type is AgentStepType.TOOL_RESPONSE]
 
 
 def leaks(text: str) -> bool:
@@ -246,24 +251,24 @@ async def review(at: Tenant, connector_id: UUID, *tools: str) -> None:
     await at.connectors.review(owner, connector_id, ConnectorReview(tools=named))
 
 
-async def connected(at: Tenant, url: str, *tools: str) -> UUID:
+async def connected(at: Tenant, url: str, *tools: str, kind: str = "ops_analyst") -> UUID:
     """A cloud connector at `url`, its credential `TOKEN`, with `tools`
-    reviewed, attached to the ops analyst."""
+    reviewed, attached to `kind`."""
     owner = at.loop.owner
     connector = await at.connectors.connect_server(
         owner, ConnectorDraft(name="words", summary="Look words up.", url=url)
     )
     await at.connectors.put_credential(owner, connector.id, SecretStr(TOKEN))
     await review(at, connector.id, *tools)
-    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="ops_analyst"))
+    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind=kind))
     return connector.id
 
 
-async def asked(at: Tenant, session_id: UUID, text: str, *replies: Any) -> list[Step]:
+async def asked(at: Tenant, agent_session_id: UUID, text: str, *replies: Any) -> list[AgentStep]:
     """One loop of the session: a message, the model's replies, its run."""
-    await at.loop.say(session_id, text)
+    await at.loop.say(agent_session_id, text)
     at.loop.anthropic.add(*replies)
-    return await ran(at.loop, session_id)
+    return await ran(at.loop, agent_session_id)
 
 
 # Check 1: a tenant connects a server, reviews its tools, and attaches it;
@@ -275,11 +280,11 @@ async def test_a_session_loads_a_connected_server_and_its_answer_renders_as_data
 ) -> None:
     at = tenant(tmp_path)
     await connected(at, words.url, "lookup", "whoami")
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
-        session_id,
+        agent_session_id,
         "Look the word up.",
         reply(call("load_toolset", toolset="words")),
         reply(call("words__lookup", word="cat")),
@@ -395,17 +400,17 @@ async def test_a_withdrawn_tool_stops_at_its_next_call_in_a_session_that_pinned_
 ) -> None:
     at = tenant(tmp_path)
     connector_id = await connected(at, words.url, "lookup")
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
     await asked(
         at,
-        session_id,
+        agent_session_id,
         "Load the words.",
         reply(call("load_toolset", toolset="words")),
         reply(said("Loaded.")),
     )
     await at.connectors.review(at.loop.owner, connector_id, ConnectorReview())
     steps = await asked(
-        at, session_id, "Look.", reply(call("words__lookup", word="cat")), reply(said("No."))
+        at, agent_session_id, "Look.", reply(call("words__lookup", word="cat")), reply(said("No."))
     )
     assert failure_of(responses(steps)[-1]) is ToolFailure.PERMANENT
     later = await at.loop.start("ops_analyst")
@@ -495,10 +500,10 @@ async def test_the_credential_reaches_no_step_and_no_log_line(
         connector = await at.connectors.get_connector(at.loop.owner, connector_id)
         assert connector.secret == connector_secret(connector_id), "a name, never a value"
         assert not leaks(connector.model_dump_json())
-        session_id = await at.loop.start("ops_analyst")
+        agent_session_id = await at.loop.start("ops_analyst")
         steps = await asked(
             at,
-            session_id,
+            agent_session_id,
             "Who am I?",
             reply(call("load_toolset", toolset="words")),
             reply(call("words__whoami")),
@@ -515,6 +520,46 @@ async def test_the_credential_reaches_no_step_and_no_log_line(
         assert not leaks(request.model_dump_json())
     assert "probe" in written.getvalue(), "the log is read"
     assert not leaks(written.getvalue())
+
+
+# The rule of two reads what the platform's hooks attach: a child given a
+# connector's credential holds it, and its report carries it to its parent.
+
+
+async def test_a_child_attached_a_credentialed_connector_reports_to_its_parent_as_private(
+    tmp_path: Path, words: Served
+) -> None:
+    """Neither kind holds private data, and the connector reaches both
+    through the platform's loop hooks alone, a sub-agent pinning what its
+    parent pinned: the child holds the tenant's credential, so the report
+    it submits marks its parent, which nothing else marked."""
+    lead = LEAD.model_copy(update={"name": "public_lead", "private_data": False})
+    worker = WORKER.model_copy(update={"private_data": False})
+    at = tenant(tmp_path, kinds=(lead, worker))
+    owner = at.loop.owner
+    connector_id = await connected(at, words.url, "whoami", kind=lead.name)
+    await at.connectors.attach(owner, connector_id, ConnectorAttachment(kind=worker.name))
+    parent_id = await at.loop.start(lead.name)
+    await at.loop.say(parent_id, "Find out who I am.")
+    at.loop.anthropic.add(reply(said("A sub-agent will find it.")))
+    await at.loop.loops.run(owner, parent_id)
+    spawn = Spawn(id=new_id(), kind=worker.name, title="who", objective="Find who I am.")
+    child_id = (await at.loop.managers.agents.spawn(owner, parent_id, spawn)).id
+    child = await at.loop.managers.agent_sessions.get_agent_session(owner, child_id)
+    parent = await at.loop.managers.agent_sessions.get_agent_session(owner, parent_id)
+    assert not (child.holds_private or parent.holds_private), "no kind's own mark"
+    (objective,) = await at.loop.history(child_id)
+    submit = call("submit", claim="succeeded", evidence=[str(objective.id)])
+    at.loop.anthropic.add(reply(said("You are the tenant's owner."), submit))
+
+    run = await at.loop.loops.run(owner, child_id)
+
+    assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED)
+    report = (await at.loop.history(parent_id))[-1].header
+    assert isinstance(report, InputHeader) and report.agent is not None
+    assert report.holds_private, "the report carries the credential the child holds"
+    parent = await at.loop.managers.agent_sessions.get_agent_session(owner, parent_id)
+    assert parent.holds_private, "and marks the parent that reads it"
 
 
 # Check 2: a server inside the wall is called by its host alone.
@@ -560,11 +605,11 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
         owner, ConnectorDraft(name="words", summary="Look words up.", url=words.url)
     )
     await at.connectors.attach(owner, outside.id, ConnectorAttachment(kind="ops_analyst"))
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
 
     steps = await asked(
         at,
-        session_id,
+        agent_session_id,
         "Find the ticket.",
         reply(call("load_toolset", toolset="tracker")),
         reply(call("tracker__find", q="login")),
@@ -612,9 +657,9 @@ async def test_a_host_servers_failure_is_the_calls_and_its_review_carries_defini
     await at.connectors.attach(
         owner, inside.id, ConnectorAttachment(kind="ops_analyst", deferred=False)
     )
-    session_id = await at.loop.start("ops_analyst")
+    agent_session_id = await at.loop.start("ops_analyst")
     steps = await asked(
-        at, session_id, "Find it.", reply(call("tracker__find")), reply(said("Not there."))
+        at, agent_session_id, "Find it.", reply(call("tracker__find")), reply(said("Not there."))
     )
     assert [tool.name for tool in at.loop.anthropic.calls[0].tools] == ["lookup", "tracker__find"]
     refused = responses(steps)[-1]

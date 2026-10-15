@@ -48,4 +48,4 @@ records asks `read`. No call returns a value.
 - The grant job writes and ends a grant by the operator's email and the
   tenant's id (`acme-api grant-operator --grant-content`,
   `--revoke-content`), and the operator plane opens content at
-  `/v1/admin/orgs/{org_id}/sessions/{session_id}/content`.
+  `/v1/admin/orgs/{org_id}/agent-sessions/{agent_session_id}/content`.

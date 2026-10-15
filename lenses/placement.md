@@ -1,6 +1,6 @@
 # Placement
 
-Group id: `placement`. Covers Sessions Are Work, Session Runners, and
+Group id: `placement`. Covers Sessions Are Work, Agent Session Runners, and
 Placement and Workspace Hosts of `distro_gentic_spec.md`, and the rule
 At a Glance states for every connection that crosses a customer's wall.
 
@@ -8,7 +8,7 @@ This group judges where each part of a session runs and how its work
 reaches it: the kinds of work and their lanes, the session runner that
 hosts the brain, placement, the workspace host and what it holds, the
 exec relay transport that carries a tool call into a customer's wall,
-and the cloud pool's machine per session. It leaves a workspace's
+and the cloud pool's VM per session. It leaves a workspace's
 isolation and egress to `workspaces`, a person's commands on a workspace
 to `watch`, the four identities and how a secret is resolved to `wall`,
 and the sweep's duties to `agent-fleet`.
@@ -78,7 +78,7 @@ and hosts the engine while it runs a session's loop. It runs in the
 platform's cloud, always. Model keys, the history, and the budget gate
 never leave it, and a runner never runs inside the sandbox it drives.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where the session runner is deployed and which process
 hosts the engine; every path that sends a model key, the history, or the
@@ -100,7 +100,7 @@ made from a host.
 versioned, and policy-checked there; no host carries one, and no
 customer install runs its own.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where an agent kind is defined and versioned, and where its
 policy is checked; what a host's install ships and what it can load.
@@ -120,7 +120,7 @@ or its policy check.
 storage, so any runner resumes any session. A session's first run and
 its second, a week later, rarely share a machine.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** What a runner keeps in memory or on disk between runs;
 whether a session's loop is routed to a particular runner.
@@ -139,7 +139,7 @@ another.
 engine adds the writer epoch, which refuses a stale run's steps and
 commands. A lost claim stops a runner's writes, whatever its clock says.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** The runner's lease and its renewal; where a run takes its
 writer epoch; every write and command a runner sends, and whether it
@@ -161,7 +161,7 @@ placement: a direct transport to a cloud workspace, or an exec relay
 transport to a host inside a customer's wall. The engine sees one
 transport interface either way.
 
-**Source.** Session Runners.
+**Source.** Agent Session Runners.
 
 **Look for.** Where the runner picks a transport; any code in the engine
 or in a tool that branches on where the workspace is.
@@ -477,9 +477,9 @@ host other than the one that holds its workspace.
 
 **Check.** review
 
-## PLC-21 A cloud machine is its session's alone, holds nothing, and goes
+## PLC-21 A cloud VM is its session's alone, holds nothing, and goes
 
-**Principle.** A cloud session whose workspace is a VM runs on a machine
+**Principle.** A cloud session whose workspace is a VM runs on a VM
 of its own, which runs the host program and pulls its work through the
 exec relay. Its host trades a one-use key for a credential of the
 session's own pool, and is handed that session's work alone. It holds no
@@ -487,26 +487,26 @@ database credential, no model key, no history, and no cloud role, and
 its key and its credential never reach its disk. Its egress is closed
 outside its guest, to the gateway and what its session's egress allows.
 Its whole disk is the session's snapshot, kept while the session lives;
-a machine with no host stops. Every path that starts a machine has the
+a VM with no host stops. Every path that starts a VM has the
 one that lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
-**Look for.** How a machine's host gets its credential and what its
-claims are held to; what a machine's image, its settings, its seed, and
-its role hold; the network rules a machine starts in; what ends before a
-machine's disk is kept; each path that starts a machine and the one that
-lets it go, the sweep's among them; what a machine with no host to work
+**Look for.** How a VM's host gets its credential and what its
+claims are held to; what a VM's image, its settings, its seed, and
+its role hold; the network rules a VM starts in; what ends before a
+VM's disk is kept; each path that starts a VM and the one that
+lets it go, the sweep's among them; what a VM with no host to work
 for comes to; where a revocation's erasure runs.
 
-**Violation.** A machine's host enrolled with a tenant's token, or handed
+**Violation.** A VM's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
-secret, or a cloud role in a machine; a key or a live credential on a
+secret, or a cloud role in a VM; a key or a live credential on a
 disk the pool keeps; egress closed by a rule inside the guest, or open
 to more than the gateway and the session's egress; the platform calling
-into a machine; a machine that nothing lets go, warm or bound; a machine
-that runs with no host; a disk a live session's machine ran on destroyed
-by the sweep; an erasure asked where no machine is reached and never
+into a VM; a VM that nothing lets go, warm or bound; a VM
+that runs with no host; a disk a live session's VM ran on destroyed
+by the sweep; an erasure asked where no VM is reached and never
 finished.
 
 **Severity.** high

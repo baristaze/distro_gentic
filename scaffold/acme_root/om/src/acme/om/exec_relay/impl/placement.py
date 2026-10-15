@@ -10,31 +10,32 @@ from uuid import UUID
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 
 class PlacementRelayedImpl(PlacementInterface):
     """A session pinned to its tenant's hosts runs each call on the host that
     holds its workspace, its executor. Until one does, `inner` answers, and
-    refuses the call: it never runs on one of the platform's machines."""
+    refuses the call: it never runs on one of the platform's VMs."""
 
     def __init__(self, inner: PlacementInterface, storage: ExecRelayStorageInterface) -> None:
         self._inner = inner
         self._storage = storage
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        return await self._inner.inside_wall(org_id, session_id)
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        return await self._inner.inside_wall(org_id, agent_session_id)
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
-        if not await self._inner.inside_wall(org_id, session_id):
-            return await self._inner.executor_of(org_id, session_id)
-        binding = await self._storage.read_binding(org_id, session_id)
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
+        if not await self._inner.inside_wall(org_id, agent_session_id):
+            return await self._inner.executor_of(org_id, agent_session_id)
+        binding = await self._storage.read_binding(org_id, agent_session_id)
         if binding is None:
-            return await self._inner.executor_of(org_id, session_id)
+            return await self._inner.executor_of(org_id, agent_session_id)
         # A host is named by itself: its credentials rotate under it.
         return Executor(
             kind=ExecutorKind.HOST, credential_id=binding.host_id, label=binding.host_name
@@ -65,7 +66,7 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
             if claimed is None:
                 return None
             ctx, item = claimed
-            if item.kind != WorkKind.EXEC or await self._exec_relay().start(ctx, item):
+            if item.kind != PlacementWorkKind.EXEC or await self._exec_relay().start(ctx, item):
                 return claimed
 
     async def held_for(

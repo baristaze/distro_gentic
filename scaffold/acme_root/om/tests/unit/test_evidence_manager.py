@@ -5,10 +5,6 @@ executor that keeps only what the executor wrote and hashed."""
 from collections.abc import Callable
 
 import pytest
-from contracts.doubles import context
-from contracts.evidence import CHECKOUT, ScriptedExecutor, checkout_policy, delivered, evidence_over
-from contracts.evidence_storage import make_finding, make_hypothesis, make_record
-from contracts.factories import make_org
 from pydantic import ValidationError
 
 from acme.om.base import new_id
@@ -28,6 +24,11 @@ from acme.om.exceptions import (
     Unavailable,
     ValidationFailed,
 )
+
+from contracts.doubles import context
+from contracts.evidence import CHECKOUT, ScriptedExecutor, checkout_policy, delivered, evidence_over
+from contracts.evidence_storage import make_finding, make_hypothesis, make_record
+from contracts.factories import make_org
 
 
 async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
@@ -285,7 +286,7 @@ async def test_the_purges_take_a_sessions_runs_and_an_expired_tenants_rows() -> 
     await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     for session in (gone, kept):
         await evidence.manager.record_run(ctx, make_record(session))
-    assert await evidence.manager.purge_session(org.id, gone) == 1
+    assert await evidence.manager.purge_agent_session(org.id, gone) == 1
     assert (await evidence.manager.get_runs(ctx, gone, None, 10)).items == ()
     assert len((await evidence.manager.get_runs(ctx, kept, None, 10)).items) == 1
     service = context(Role.SERVICE, org)

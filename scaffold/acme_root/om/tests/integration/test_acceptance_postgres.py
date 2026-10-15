@@ -7,12 +7,13 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-from contracts.acceptance import COMPLETE, ScriptedRun, whole
-from contracts.rehearsal import world_over
 
 from acme.om.evidence.types.acceptance import Link
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.acceptance import COMPLETE, ScriptedRun, whole
+from contracts.rehearsal import world_over
 
 pytestmark = pytest.mark.integration
 

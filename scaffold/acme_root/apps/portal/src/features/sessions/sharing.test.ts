@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type MeView, type StepView } from "@acme/client";
+import { ApiError, type agent_sessions, type tenancy } from "@acme/client";
 import { PLATFORM } from "../../app/platform";
 import { SlotProvider } from "../../app/slot";
 import { usePanesStore } from "../../store/panes";
@@ -22,8 +22,8 @@ const at = "2026-10-12T10:00:00Z";
 
 const server = vi.hoisted(() => ({
   me: "u1",
-  sessions: [] as AgentSessionView[],
-  steps: {} as Record<string, StepView[]>,
+  sessions: [] as agent_sessions.AgentSessionView[],
+  steps: {} as Record<string, agent_sessions.AgentStepView[]>,
   writes: [] as { method: string; path: string; body?: unknown }[],
 }));
 
@@ -36,10 +36,10 @@ const PEOPLE = [
 const ROLES: Record<string, { role: string; permissions: string[] }> = {
   u1: { role: "member", permissions: ["read", "write"] },
   u2: { role: "member", permissions: ["read", "write"] },
-  u3: { role: "admin", permissions: ["read", "write", "manage_members", "manage_sessions"] },
+  u3: { role: "admin", permissions: ["read", "write", "manage_members", "manage_agent_sessions"] },
 };
 
-function sessionOf(id: string, by: string, visibility: AgentSessionView["visibility"], participants: string[] = []): AgentSessionView {
+function sessionOf(id: string, by: string, visibility: agent_sessions.AgentSessionView["visibility"], participants: string[] = []): agent_sessions.AgentSessionView {
   return {
     id,
     root_id: id,
@@ -59,7 +59,7 @@ function sessionOf(id: string, by: string, visibility: AgentSessionView["visibil
   };
 }
 
-function stepOf(seq: number, fields: Partial<StepView>): StepView {
+function stepOf(seq: number, fields: Partial<agent_sessions.AgentStepView>): agent_sessions.AgentStepView {
   return {
     id: `st${seq}`,
     seq,
@@ -93,15 +93,15 @@ function stepOf(seq: number, fields: Partial<StepView>): StepView {
   };
 }
 
-const takesPart = (session: AgentSessionView, person: string) => session.created_by === person || session.participants.includes(person);
-const sees = (session: AgentSessionView, person: string) =>
-  takesPart(session, person) || session.visibility === "org_wide" || ROLES[person]!.permissions.includes("manage_sessions");
+const takesPart = (session: agent_sessions.AgentSessionView, person: string) => session.created_by === person || session.participants.includes(person);
+const sees = (session: agent_sessions.AgentSessionView, person: string) =>
+  takesPart(session, person) || session.visibility === "org_wide" || ROLES[person]!.permissions.includes("manage_agent_sessions");
 const refused = (status: number, path: string) => new ApiError(status, status === 404 ? "not_found" : "forbidden", `refused ${path}`, "req-1");
 
 function read(path: string): unknown {
   const [bare = "", query = ""] = path.split("?");
   const me = server.me;
-  if (bare === "/v1/me") return { app: "portal", role: ROLES[me]!.role, permissions: ROLES[me]!.permissions, user: PEOPLE.find((one) => one.id === me), org: { id: "o1" } } as unknown as MeView;
+  if (bare === "/v1/me") return { app: "portal", role: ROLES[me]!.role, permissions: ROLES[me]!.permissions, user: PEOPLE.find((one) => one.id === me), org: { id: "o1" } } as unknown as tenancy.MeView;
   if (bare === "/v1/users") return { items: PEOPLE, next_cursor: null };
   if (bare === "/v1/memberships") return { items: PEOPLE.map((one) => ({ id: `m-${one.id}`, user_id: one.id, role: ROLES[one.id]!.role, teams: [] })), next_cursor: null };
   if (bare === "/v1/agent-sessions") {

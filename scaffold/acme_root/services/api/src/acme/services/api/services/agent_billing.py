@@ -8,14 +8,21 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.agent_billing import CostApprovalRequest, RaiseRequest
-from acme.services.api.types.spend_ledgers import SpendLedgerEntryView
+from acme.services.api.types.agent_billing import (
+    CostApprovalRequest,
+    RaiseRequest,
+    SpendLedgerEntryView,
+)
 
 
 class AgentBillingServiceInterface(ABC):
     @abstractmethod
     async def approve_call(
-        self, ctx: TenantContext, session_id: UUID, body: CostApprovalRequest, approval_id: UUID
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        body: CostApprovalRequest,
+        approval_id: UUID,
     ) -> SpendLedgerEntryView:
         """The approval of the session's next call past its norm, up to the
         cost the body names, posted under `approval_id` once; the session
@@ -24,7 +31,7 @@ class AgentBillingServiceInterface(ABC):
 
     @abstractmethod
     async def raise_once(
-        self, ctx: TenantContext, budget_id: UUID, body: RaiseRequest, raise_id: UUID
+        self, ctx: TenantContext, spend_budget_id: UUID, body: RaiseRequest, raise_id: UUID
     ) -> SpendLedgerEntryView:
         """The budget raised for the window open now, under `raise_id` once;
         the sessions parked on a budget wake."""

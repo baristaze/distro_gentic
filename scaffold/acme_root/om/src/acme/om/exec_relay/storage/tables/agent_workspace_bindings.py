@@ -14,9 +14,14 @@ class AgentWorkspaceBindings(IdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "agent_workspace_bindings"
     __org_id_index__ = False
     __table_args__ = (
-        Index("uq_agent_workspace_bindings_org_id_session_id", "org_id", "session_id", unique=True),
+        Index(
+            "uq_agent_workspace_bindings_org_id_agent_session_id",
+            "org_id",
+            "agent_session_id",
+            unique=True,
+        ),
     )
-    session_id: Mapped[UUID]
+    agent_session_id: Mapped[UUID]
     host_id: Mapped[UUID]
     host_name: Mapped[str]
     location: Mapped[str]

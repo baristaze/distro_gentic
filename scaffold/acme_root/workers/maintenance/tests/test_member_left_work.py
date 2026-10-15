@@ -11,12 +11,12 @@ from uuid import UUID
 import pytest
 from worker_support import build_container, request, sign_in, signing
 
+from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import Role, TenantContext
-from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound
 from acme.om.intake.impl.manager import UNLINKED
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.tenancy.types.user import User
-from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 
@@ -42,13 +42,15 @@ async def bob_signs_in(container: WorkerContainer, org_id: UUID) -> TenantContex
 async def run_member_left(container: WorkerContainer) -> None:
     """The MEMBER_LEFT item the commit queued, run as the worker runs it."""
     work = container.managers.work
-    claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE)
+    claimed = await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE)
     assert claimed is not None
     ctx, item = claimed
     await build_loop(container)._handlers[item.kind].handle(ctx, item)  # pyright: ignore[reportPrivateUsage]
     await work.complete(ctx, item)
     # One item a place that ended: nothing else is queued.
-    assert await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE) is None
+    assert (
+        await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE) is None
+    )
 
 
 async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
@@ -121,7 +123,7 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     container = build_container(tmp_path)
     intake, events, work = (
         container.platform.intake,
-        container.managers.events,
+        container.managers.change_events,
         container.managers.work,
     )
     ann = await sign_in(container)
@@ -131,17 +133,17 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
         await intake.link_account(ann, "forge", "bob-gh", bob.id),
     ]
     await container.managers.tenancy.members.remove_member(ann, bob.id)
-    claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE)
+    claimed = await work.claim(request(), "default", [IntakeWorkKind.MEMBER_LEFT], "test", LEASE)
     assert claimed is not None
     ctx, item = claimed
     handler = build_loop(container)._handlers[item.kind]  # pyright: ignore[reportPrivateUsage]
-    append = events.append_event
+    append = events.append_change_event
 
-    async def appended_then_stopped(ctx: TenantContext, entry: Event) -> Event:
+    async def appended_then_stopped(ctx: TenantContext, entry: ChangeEvent) -> ChangeEvent:
         await append(ctx, entry)
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(events, "append_event", appended_then_stopped)
+    monkeypatch.setattr(events, "append_change_event", appended_then_stopped)
     with pytest.raises(asyncio.CancelledError):
         await handler.handle(ctx, item)
     monkeypatch.undo()
@@ -150,6 +152,6 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     await handler.handle(ctx, item)
     await work.complete(ctx, item)
     assert await intake.get_links(ann, bob.id) == ()
-    entries = await events.get_events(ann, 0, 100)
+    entries = await events.get_change_events(ann, 0, 100)
     audited = [e.target_id for e in entries if e.kind == UNLINKED]
     assert sorted(audited) == sorted(link.id for link in linked)

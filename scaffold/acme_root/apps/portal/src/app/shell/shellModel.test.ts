@@ -2,12 +2,12 @@
 // nested under their parent, a folded parent saying what it holds, and
 // nothing that needs a person hidden in a quieter group; and the toast a
 // session raises when it starts to need its person.
-import type { AgentSessionView, ParkView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import { expect, it } from "vitest";
 import { ago, DEFAULT_FILTER, groupOf, needingYou, nextToasts, NO_TOASTS, parseFilter, RECENT_MAX, shellGroups, statusWords, treeWords, waitingBeneath, type ShellRow } from "./shellModel";
 
 let clock = 0;
-function session(id: string, over: Partial<AgentSessionView> = {}): AgentSessionView {
+function session(id: string, over: Partial<agent_sessions.AgentSessionView> = {}): agent_sessions.AgentSessionView {
   clock += 1;
   return {
     id,
@@ -28,7 +28,7 @@ function session(id: string, over: Partial<AgentSessionView> = {}): AgentSession
     ...over,
   };
 }
-const park = (reason: ParkView["reason"], unlock: string): ParkView => ({ reason, unlock, retry_at: null, cause: null });
+const park = (reason: agent_sessions.ParkView["reason"], unlock: string): agent_sessions.ParkView => ({ reason, unlock, retry_at: null, cause: null });
 const ids = (rows: readonly ShellRow[]) => rows.map((row) => row.id);
 const options = { filter: DEFAULT_FILTER };
 
@@ -37,7 +37,7 @@ it("groups rows into Needs you, Running, and Recent", () => {
     session("asks", { status: "parked", park: park("person", "approval") }),
     session("runs", { status: "running" }),
     session("starts", { status: "pending" }),
-    session("waits", { status: "parked", park: park("resource", "workspace") }),
+    session("waits", { status: "parked", park: park("leasable_resource", "agent_workspace") }),
     session("done"),
   ];
   const groups = shellGroups(sessions, options);
@@ -117,7 +117,7 @@ it("leaves support conversations out of every group, and shows them under the pl
 it("says each status in words", () => {
   expect(statusWords(session("a", { status: "parked", park: park("person", "approval") }))).toBe("Needs your decision");
   expect(statusWords(session("b", { status: "parked", park: park("person", "principal") }))).toBe("Needs you: naming a principal for it");
-  expect(statusWords(session("c", { status: "parked", park: park("resource", "workspace") }))).toBe("Waiting for a workspace");
+  expect(statusWords(session("c", { status: "parked", park: park("leasable_resource", "agent_workspace") }))).toBe("Waiting for a workspace");
   expect(statusWords(session("d", { status: "parked", park: park("pause", "resume") }))).toBe("Paused");
   expect(statusWords(session("e", { status: "pending" }))).toBe("Starting");
   expect(statusWords(session("f"))).toBe("Done");

@@ -15,4 +15,4 @@ class AgentProjects(IdentifiableMixin, TrackableMixin, Base):
     name: Mapped[str]
     repository: Mapped[dict[str, Any]] = mapped_column(JSONB())
     workspace_snapshots: Mapped[bool] = mapped_column(server_default=text("true"))
-    workspace_base: Mapped[dict[str, Any] | None] = mapped_column(JSONB())
+    agent_workspace_base: Mapped[dict[str, Any] | None] = mapped_column(JSONB())

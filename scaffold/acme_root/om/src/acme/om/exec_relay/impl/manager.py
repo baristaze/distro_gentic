@@ -6,11 +6,12 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from acme.infra.agent_workspaces import IsolationSpec
 from acme.infra.observability import OUTCOMES
-from acme.infra.workspaces import IsolationSpec
 from acme.om.agent_projects import AgentProjectsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
-from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.context import AppType, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
     InvalidCredential,
@@ -58,7 +59,7 @@ from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.placement.kinds import HOST
+from acme.om.placement.kinds import HOST, PlacementWorkKind
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import (
@@ -68,11 +69,10 @@ from acme.om.placement.types.work import (
     WorkspacePayload,
 )
 from acme.om.retention.crossing import Crossing, CrossingKind, CrossingRefused, verified
-from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
+from acme.om.work.types.work_item import WorkItem, WorkStatus, work_row_kind
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ BINDING_KIND = "exec_relay.agent_workspace_binding.updated"
 STREAMS = frozenset({"stdout", "stderr"})
 
 
-class ExecRelayOptions(Platform):
+class ExecRelayOptions(OmBase):
     # How long a renewal holds an item: a host renews at a third of it, so
     # one missed renewal costs nothing and a lost host is known within it.
     lease: timedelta = timedelta(seconds=60)
@@ -140,7 +140,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self,
         storage: ExecRelayStorageInterface,
         work: WorkManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         tenancy: TenancyManagerInterface,
         hosts: HostsManagerInterface,
         agent_projects: AgentProjectsManagerInterface,
@@ -166,23 +166,23 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     # Where a session's workspace is.
 
     async def bind_workspace(
-        self, ctx: TenantContext, session_id: UUID, host_id: UUID, location: str
+        self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID, location: str
     ) -> AgentWorkspaceBinding:
-        return await self._bind(ctx, session_id, host_id, location, None)
+        return await self._bind(ctx, agent_session_id, host_id, location, None)
 
     async def _bind(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         host_id: UUID,
         location: str,
         instance_of: UUID | None,
     ) -> AgentWorkspaceBinding:
-        """Binds the workspace under `session_id` to the host: a session's
+        """Binds the workspace under `agent_session_id` to the host: a session's
         own, or an instance made for the session `instance_of` names, which
         is held to that session's pool."""
         ctx.require(Permission.WRITE)
-        owner = instance_of or session_id
+        owner = instance_of or agent_session_id
         placed = await self._hosts.work_placement(ctx, owner)
         if placed.pool is None:
             raise ValidationFailed(f"session {owner} runs in the cloud; no host holds it")
@@ -190,7 +190,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         host = None if status is None else status.host
         if host is None or host.revoked_at is not None:
             raise ValidationFailed(f"host {host_id} is no live host of session {owner}'s pool")
-        stored = await self._storage.read_binding(ctx.org_id, session_id)
+        stored = await self._storage.read_binding(ctx.org_id, agent_session_id)
         now = self._clock()
         if stored is None:
             binding = AgentWorkspaceBinding(
@@ -199,7 +199,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                session_id=session_id,
+                agent_session_id=agent_session_id,
                 host_id=host.id,
                 host_name=host.name,
                 location=location,
@@ -216,32 +216,38 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                     "version": stored.version + 1,
                 }
             )
-        rows = (versioned_row(ctx, BINDING_KIND, session_id, binding.version),)
+        rows = (versioned_row(ctx, BINDING_KIND, agent_session_id, binding.version),)
         expected = 0 if stored is None else stored.version
         await self._storage.write_binding(ctx.org_id, binding, expected, rows)
         await self._relay.relay_all(ctx.org_id, rows)
         return binding
 
     async def binding_of(
-        self, ctx: TenantContext, session_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID
     ) -> AgentWorkspaceBinding | None:
         ctx.require(Permission.READ)
-        return await self._storage.read_binding(ctx.org_id, session_id)
+        return await self._storage.read_binding(ctx.org_id, agent_session_id)
 
-    async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+    async def ask_prepare(
+        self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec
+    ) -> bool:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.work_placement(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, agent_session_id)
         if placed.pool is None:
-            raise ValidationFailed(f"session {session_id} runs in the cloud; no host prepares it")
-        if await self._asked_of(ctx, session_id, placed.pool.id):
+            raise ValidationFailed(
+                f"session {agent_session_id} runs in the cloud; no host prepares it"
+            )
+        if await self._asked_of(ctx, agent_session_id, placed.pool.id):
             return False
-        await self._ask_prepare(ctx, session_id, placed.pool.id, spec, None)
+        await self._ask_prepare(ctx, agent_session_id, placed.pool.id, spec, None)
         OUTCOMES.labels(subsystem="exec_relay", outcome="prepare_asked").inc()
         return True
 
-    async def prepare_refusal(self, ctx: TenantContext, session_id: UUID) -> str | None:
+    async def prepare_refusal(self, ctx: TenantContext, agent_session_id: UUID) -> str | None:
         ctx.require(Permission.READ)
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is None or latest.status not in REFUSED or latest.last_error is None:
             return None
         try:
@@ -253,51 +259,61 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         return latest.last_error
 
     async def ask_instance(
-        self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
+        self, ctx: TenantContext, agent_session_id: UUID, instance_id: UUID, spec: IsolationSpec
     ) -> None:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.work_placement(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, agent_session_id)
         if placed.pool is None:
-            raise ValidationFailed(f"session {session_id} runs in the cloud; no host makes it")
-        await self._ask_prepare(ctx, instance_id, placed.pool.id, spec, session_id)
+            raise ValidationFailed(
+                f"session {agent_session_id} runs in the cloud; no host makes it"
+            )
+        await self._ask_prepare(ctx, instance_id, placed.pool.id, spec, agent_session_id)
         OUTCOMES.labels(subsystem="exec_relay", outcome="instance_asked").inc()
 
     async def ask_purge(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> bool:
         ctx.require(Permission.WRITE)
         binding = await self._storage.read_binding(ctx.org_id, instance_id)
         if binding is None:
-            latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, instance_id)
+            latest = await self._work.latest_for_target(
+                ctx, PlacementWorkKind.WORKSPACE, instance_id
+            )
             if latest is not None and latest.status is WorkStatus.QUEUED:
                 await self._work.end_queued(ctx, latest, "its run ended before a host made it")
             return False
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PURGE,
             host_id=binding.host_id,
-            session_id=instance_id,
+            agent_session_id=instance_id,
             spec=spec,
         )
         await self._enqueue_workspace(ctx, instance_id, payload)
         OUTCOMES.labels(subsystem="exec_relay", outcome="purge_asked").inc()
         return True
 
-    async def holder(self, ctx: TenantContext, session_id: UUID) -> AgentWorkspaceBinding | None:
+    async def holder(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentWorkspaceBinding | None:
         ctx.require(Permission.READ)
-        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        binding = await self._storage.read_binding(ctx.org_id, agent_session_id)
         if binding is None:
             return None
-        placed = await self._hosts.work_placement(ctx, binding.instance_of or session_id)
+        placed = await self._hosts.work_placement(ctx, binding.instance_of or agent_session_id)
         if placed.pool is None:
             return None
         status = await self._hosts.get_host(ctx, placed.pool.id, binding.host_id)
         live = status is not None and status.host.revoked_at is None and status.online
         return binding if live else None
 
-    async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+    async def ask_release(
+        self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec
+    ) -> bool:
         ctx.require(Permission.WRITE)
-        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        binding = await self._storage.read_binding(ctx.org_id, agent_session_id)
         if binding is None:
             return False
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if (
             latest is not None
             and latest.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
@@ -309,21 +325,29 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         payload = WorkspacePayload(
             operation=WorkspaceOperation.RELEASE,
             host_id=binding.host_id,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             spec=spec,
         )
-        await self._enqueue_workspace(ctx, session_id, payload)
+        await self._enqueue_workspace(ctx, agent_session_id, payload)
         OUTCOMES.labels(subsystem="exec_relay", outcome="release_asked").inc()
         return True
 
     async def ask_restore(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot: HostSnapshot
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        spec: IsolationSpec,
+        snapshot: HostSnapshot,
     ) -> UUID:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.work_placement(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, agent_session_id)
         if placed.pool is None:
-            raise ValidationFailed(f"session {session_id} runs in the cloud; no host restores it")
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+            raise ValidationFailed(
+                f"session {agent_session_id} runs in the cloud; no host restores it"
+            )
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is not None and latest.status in OPEN:
             try:
                 waiting = WorkspacePayload.model_validate(latest.payload)
@@ -343,73 +367,73 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         # made beside it: while it is not revoked, the restore waits on its
         # lane, offline or not, as the workspace does. With none, any host of
         # the pool whose store keeps the snapshot makes it.
-        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        binding = await self._storage.read_binding(ctx.org_id, agent_session_id)
         held_by = None
-        if binding is not None and await self._holds(ctx, session_id, binding.host_id):
+        if binding is not None and await self._holds(ctx, agent_session_id, binding.host_id):
             held_by = binding.host_id
         isolation, egress, _ = asks(spec, "")
-        agent_project = await self._agent_projects.agent_project_of(ctx, session_id)
+        agent_project = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=placed.pool.id,
             host_id=held_by,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             spec=spec,
             isolation=isolation,
             egress=egress,
             agent_project_id=None if agent_project is None else agent_project.id,
             snapshot=snapshot,
         )
-        item_id = await self._enqueue_workspace(ctx, session_id, payload)
+        item_id = await self._enqueue_workspace(ctx, agent_session_id, payload)
         OUTCOMES.labels(subsystem="exec_relay", outcome="restore_asked").inc()
         return item_id
 
     async def ask_snapshot(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
         snapshot_id: UUID,
         *,
         kept_for: UUID | None = None,
     ) -> UUID | None:
         ctx.require(Permission.WRITE)
-        holder = await self.holder(ctx, session_id)
+        holder = await self.holder(ctx, agent_session_id)
         if holder is None:
             return None
         payload = WorkspacePayload(
             operation=WorkspaceOperation.SNAPSHOT,
             host_id=holder.host_id,
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             spec=spec,
             snapshot=HostSnapshot(id=snapshot_id),
             kept_for=kept_for,
         )
-        item_id = await self._enqueue_workspace(ctx, session_id, payload)
+        item_id = await self._enqueue_workspace(ctx, agent_session_id, payload)
         OUTCOMES.labels(subsystem="exec_relay", outcome="snapshot_asked").inc()
         return item_id
 
-    async def ask_erase(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
+    async def ask_erase(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
         ctx.require(Permission.WRITE)
         payload = WorkspacePayload(
-            operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
+            operation=WorkspaceOperation.ERASE, host_id=host_id, agent_session_id=agent_session_id
         )
-        await self._enqueue_workspace(ctx, session_id, payload)
+        await self._enqueue_workspace(ctx, agent_session_id, payload)
         OUTCOMES.labels(subsystem="exec_relay", outcome="erase_asked").inc()
 
-    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+    async def erase_purged(self, org_id: UUID, agent_session_id: UUID, host_id: UUID) -> None:
         # A purge runs below any principal, so the ask lands as the
         # machinery's, from a row of its own, on the lane of the host its
         # payload names.
         payload = WorkspacePayload(
-            operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
+            operation=WorkspaceOperation.ERASE, host_id=host_id, agent_session_id=agent_session_id
         )
         row = OutboxRow(
             id=new_id(),
             created_at=self._clock(),
             org_id=org_id,
-            kind=work_row_kind(WorkKind.WORKSPACE),
-            target_id=session_id,
+            kind=work_row_kind(PlacementWorkKind.WORKSPACE),
+            target_id=agent_session_id,
             payload=payload.model_dump(mode="json"),
             actor_id=EMPTY_UUID,
             request_id=new_id(),
@@ -421,7 +445,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         ctx.require(Permission.READ)
         row = await self._work.get_item(ctx, item_id)
-        if row.kind != WorkKind.WORKSPACE:
+        if row.kind != PlacementWorkKind.WORKSPACE:
             raise NotFound(f"workspace item {item_id} does not exist")
         return row
 
@@ -431,7 +455,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         ctx = await self._service(rctx, host.org_id)
         row = await self._workspace_held(ctx, host, item_id, (WorkspaceOperation.SNAPSHOT,))
         payload = WorkspacePayload.model_validate(row.payload)
-        assert payload.session_id is not None and payload.snapshot is not None  # its own rule
+        assert payload.agent_session_id is not None and payload.snapshot is not None  # its own rule
         refused = answer.refused
         if refused is None and self._kept is None:
             refused = "this deployment records no snapshot a host keeps"
@@ -449,7 +473,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
         # Recorded before its row is done: the run that waits for it reads
         # the record once the row says it is kept.
-        await self._kept(ctx, payload.session_id, kept, host.pool_id, host.host_id)
+        await self._kept(ctx, payload.agent_session_id, kept, host.pool_id, host.host_id)
         try:
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
@@ -461,9 +485,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     ) -> AgentWorkspaceBinding | None:
         ctx = await self._service(rctx, host.org_id)
         row, payload = await self._prepare_held(ctx, host, item_id)
-        assert payload.session_id is not None  # `_prepare_held` holds it
-        session_id = payload.session_id
-        owner = payload.instance_of or session_id
+        assert payload.agent_session_id is not None  # `_prepare_held` holds it
+        agent_session_id = payload.agent_session_id
+        owner = payload.instance_of or agent_session_id
         if (
             answer.refused is not None
             and answer.lost
@@ -493,7 +517,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             OUTCOMES.labels(subsystem="exec_relay", outcome="prepare_refused").inc()
             return None
         assert answer.location is not None  # the answer's own rule
-        binding = await self._storage.read_binding(host.org_id, session_id)
+        binding = await self._storage.read_binding(host.org_id, agent_session_id)
         if (
             # A restore replaced the workspace whole: the host that made it
             # holds it, so no run is told of a restore another host's lacks.
@@ -503,7 +527,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             or not await self._holds(ctx, owner, binding.host_id)
         ):
             binding = await self._bind(
-                ctx, session_id, host.host_id, answer.location, payload.instance_of
+                ctx, agent_session_id, host.host_id, answer.location, payload.instance_of
             )
         try:
             await self._work.complete(ctx, row)
@@ -532,29 +556,31 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self, rctx: RequestContext, org_id: UUID, call: ExecCall, occurrence: int
     ) -> ExecItem:
         ctx = await self._service(rctx, org_id)
-        await self._admit(ctx, call.session_id, call.epoch)
+        await self._admit(ctx, call.agent_session_id, call.epoch)
         request = REQUESTS.dump_json(call.request)
         item_id = exec_id(call.key, request, occurrence)
         stored = await self._storage.read_item(org_id, item_id)
         if stored is not None:
             return await self._attach(ctx, stored, call)
-        binding = await self._storage.read_binding(org_id, call.session_id)
+        binding = await self._storage.read_binding(org_id, call.agent_session_id)
         if binding is None:
             raise NoWorkspaceHost(
-                f"session {call.session_id} is pinned to its tenant's hosts, and no host "
-                "holds its workspace yet; its calls never run on the platform's machines"
+                f"session {call.agent_session_id} is pinned to its tenant's hosts, and no host "
+                "holds its workspace yet; its calls never run on the platform's VMs"
             )
-        if not await self._holds(ctx, binding.instance_of or call.session_id, binding.host_id):
+        if not await self._holds(
+            ctx, binding.instance_of or call.agent_session_id, binding.host_id
+        ):
             # A revoked host never claims again: a command queued on its lane
             # would wait for good. The run prepares again on the pool.
             raise NoWorkspaceHost(
-                f"the host that held session {call.session_id}'s workspace is no longer a live "
+                f"the host that held session {call.agent_session_id}'s workspace is no longer a live "
                 "host of its pool; its workspace is made again before its calls run"
             )
-        sealed = await self._seal.seal(ctx, call.session_id, call.key, request)
+        sealed = await self._seal.seal(ctx, call.agent_session_id, call.key, request)
         if sealed is None:
             raise ContentNotKept(
-                f"session {call.session_id} keeps no content at rest, so its commands "
+                f"session {call.agent_session_id} keeps no content at rest, so its commands "
                 "are not relayed into its tenant's wall"
             )
         now = self._clock()
@@ -564,7 +590,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            session_id=call.session_id,
+            agent_session_id=call.agent_session_id,
             key=call.key,
             operation=ExecOperation(call.request.operation),
             effect=call.effect,
@@ -581,7 +607,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             if met is None:
                 raise NotFound(f"exec item {item_id} not found")
             return await self._attach(ctx, met, call)
-        await self._enqueue(ctx, item, call.by_person, binding.instance_of or item.session_id)
+        await self._enqueue(ctx, item, call.by_person, binding.instance_of or item.agent_session_id)
         OUTCOMES.labels(subsystem="exec_relay", outcome="sent").inc()
         return item
 
@@ -612,7 +638,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     ) -> ExecItem:
         ctx = await self._service(rctx, org_id)
         item = await self._item(org_id, item_id)
-        await self._admit(ctx, item.session_id, epoch)
+        await self._admit(ctx, item.agent_session_id, epoch)
         if item.state is ExecState.QUEUED:
             # No host took it: it never runs. Its row ends with it, unless a
             # host claimed the row first: the claim that finds the item
@@ -625,15 +651,19 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._control(ctx, item, kind)
         return item
 
-    async def running(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> list[ExecItem]:
+    async def running(
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID
+    ) -> list[ExecItem]:
         await self._service(rctx, org_id)
-        return await self._storage.read_running(org_id, session_id, self._options.call_items)
+        return await self._storage.read_running(org_id, agent_session_id, self._options.call_items)
 
     async def interrupt_running(
-        self, rctx: RequestContext, org_id: UUID, session_id: UUID, below: int | None
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID, below: int | None
     ) -> list[ExecItem]:
         ctx = await self._service(rctx, org_id)
-        running = await self._storage.read_running(org_id, session_id, self._options.call_items)
+        running = await self._storage.read_running(
+            org_id, agent_session_id, self._options.call_items
+        )
         answered: list[ExecItem] = []
         for item in running:
             if below is not None and not stale(item.epoch, below):
@@ -646,14 +676,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         return answered
 
     async def outcome_of(
-        self, rctx: RequestContext, org_id: UUID, session_id: UUID, key: UUID, epoch: int
+        self, rctx: RequestContext, org_id: UUID, agent_session_id: UUID, key: UUID, epoch: int
     ) -> ExecItem | None:
         ctx = await self._service(rctx, org_id)
-        await self._admit(ctx, session_id, epoch)
+        await self._admit(ctx, agent_session_id, epoch)
         commands = [
             item
             for item in await self._storage.read_items_by_key(
-                org_id, session_id, key, self._options.call_items
+                org_id, agent_session_id, key, self._options.call_items
             )
             if item.operation is ExecOperation.RUN
         ]
@@ -694,7 +724,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.fail_for_good(ctx, row, "an unsafe exec item runs once")
             OUTCOMES.labels(subsystem="exec_relay", outcome="unsafe_reclaimed").inc()
             return False
-        cursor = await self._steps.get_cursor(ctx, item.session_id)
+        cursor = await self._steps.get_cursor(ctx, item.agent_session_id)
         if stale(item.epoch, cursor.epoch):
             outcome = ExecOutcome(refused=StaleExec.code, refused_status=StaleExec.http_status)
             await self._settle(ctx, item, outcome)
@@ -718,14 +748,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
-        opened = await self._seal.open(ctx, item.session_id, item.key, item.request)
+        opened = await self._seal.open(ctx, item.agent_session_id, item.key, item.request)
         if opened is None:
             raise NotFound(f"exec item {item_id}: its session's content is gone")
         return ExecDetail(
             item_id=item.id,
             key=item.key,
             org_id=host.org_id,
-            session_id=item.session_id,
+            agent_session_id=item.agent_session_id,
             effect=item.effect,
             deadline=item.deadline,
             epoch=item.epoch,
@@ -755,11 +785,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             )
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
-        sealed = await self._seal.seal(ctx, item.session_id, item.key, text.encode())
+        sealed = await self._seal.seal(ctx, item.agent_session_id, item.key, text.encode())
         part = ExecPart(
             id=part_id(item.row_id, seq),
             created_at=self._clock(),
-            session_id=item.session_id,
+            agent_session_id=item.agent_session_id,
             row_id=item.row_id,
             seq=seq,
             stream="stdout" if stream == "stdout" else "stderr",
@@ -785,7 +815,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
         sealed = await self._seal.seal(
-            ctx, item.session_id, item.key, result.output.model_dump_json().encode()
+            ctx, item.agent_session_id, item.key, result.output.model_dump_json().encode()
         )
         token = claimed_row(item).claim_token
         while True:
@@ -884,7 +914,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
         settled = 0
         for row in ended:
-            if row.kind != WorkKind.EXEC:
+            if row.kind != PlacementWorkKind.EXEC:
                 continue
             try:
                 payload = ExecPayload.model_validate(row.payload)
@@ -899,13 +929,15 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 OUTCOMES.labels(subsystem="exec_relay", outcome="interrupted").inc()
         return settled
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> None:
         # Its commands' queue rows end first: a row whose item is gone would
         # wait for good on the lane of a host that never claims again.
         await self._work.end_open_for_target(
-            org_id, WorkKind.EXEC, session_id, "its session was purged"
+            org_id, PlacementWorkKind.EXEC, agent_session_id, "its session was purged"
         )
-        while await self._storage.purge_session(org_id, session_id, self._options.purge_batch):
+        while await self._storage.purge_agent_session(
+            org_id, agent_session_id, self._options.purge_batch
+        ):
             pass
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -936,7 +968,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=pool_id,
-            session_id=target,
+            agent_session_id=target,
             spec=spec,
             isolation=isolation,
             egress=egress,
@@ -960,7 +992,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                kind=WorkKind.WORKSPACE,
+                kind=PlacementWorkKind.WORKSPACE,
                 target_id=target,
                 idempotency_key=row,
                 request_id=ctx.request_id,
@@ -977,20 +1009,20 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         for the runner's transport and for a host, which is no person."""
         return await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
 
-    async def _admit(self, ctx: TenantContext, session_id: UUID, epoch: int | None) -> None:
+    async def _admit(self, ctx: TenantContext, agent_session_id: UUID, epoch: int | None) -> None:
         """Refuses a run that no longer holds the session: nothing it sends,
         stops, or asks after acts."""
         if epoch is None:
             return
-        cursor = await self._steps.get_cursor(ctx, session_id)
+        cursor = await self._steps.get_cursor(ctx, agent_session_id)
         if stale(epoch, cursor.epoch):
             OUTCOMES.labels(subsystem="exec_relay", outcome="stale").inc()
             raise StaleExec(
-                f"epoch {epoch} is below session {session_id}'s {cursor.epoch}: "
+                f"epoch {epoch} is below session {agent_session_id}'s {cursor.epoch}: "
                 "the run that sent it no longer holds the session"
             )
 
-    async def _asked_of(self, ctx: TenantContext, session_id: UUID, pool_id: UUID) -> bool:
+    async def _asked_of(self, ctx: TenantContext, agent_session_id: UUID, pool_id: UUID) -> bool:
         """Whether the session's prepare waits or runs on `pool_id`'s lane. One
         that waits on another pool's, as the session moved since, is ended,
         so no host of a pool it left makes it. One a host of that pool holds
@@ -999,7 +1031,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         a prepare is asked only when no live host holds the workspace, so
         none is left for it to let go. A snapshot or an erase is a host's
         store's, and is left to run."""
-        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        latest = await self._work.latest_for_target(
+            ctx, PlacementWorkKind.WORKSPACE, agent_session_id
+        )
         if latest is None or latest.status not in OPEN:
             return False
         try:
@@ -1025,7 +1059,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         always a session's workspace, or an instance made for one."""
         row = await self._workspace_held(ctx, host, item_id, (WorkspaceOperation.PREPARE,))
         payload = WorkspacePayload.model_validate(row.payload)
-        if payload.pool_id != host.pool_id or payload.session_id is None:
+        if payload.pool_id != host.pool_id or payload.agent_session_id is None:
             raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
         return row, payload
 
@@ -1045,7 +1079,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             row = None
         held = (
             row is not None
-            and row.kind == WorkKind.WORKSPACE
+            and row.kind == PlacementWorkKind.WORKSPACE
             and _operation(row) in operations
             and row.status is WorkStatus.CLAIMED
             and row.claimed_by == worker_of(host)
@@ -1073,11 +1107,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             and await self._holds(ctx, owner, kept_by)
         )
 
-    async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
+    async def _holds(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> bool:
         """Whether the host is a live host of the session's pool: one that was
         neither revoked nor moved holds what it prepared, for the session or
         for an instance made for it."""
-        placed = await self._hosts.work_placement(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, agent_session_id)
         if placed.pool is None:
             return False
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
@@ -1088,7 +1122,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         run attaches to its execution or reads its result; or put on the
         queue again, when a repeat cannot harm it and its last run did not
         end its command."""
-        if item.session_id != call.session_id:
+        if item.agent_session_id != call.agent_session_id:
             raise ValidationFailed(f"exec item {item.id} is another session's")
         now = self._clock()
         if resent(item):
@@ -1111,8 +1145,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             written = await self._storage.write_item(ctx.org_id, again, item.version)
             if written is None:
                 raise PreconditionFailed(f"exec item {item.id} moved while it was sent again")
-            binding = await self._storage.read_binding(ctx.org_id, item.session_id)
-            owner = item.session_id if binding is None else binding.instance_of or item.session_id
+            binding = await self._storage.read_binding(ctx.org_id, item.agent_session_id)
+            owner = (
+                item.agent_session_id
+                if binding is None
+                else binding.instance_of or item.agent_session_id
+            )
             await self._enqueue(ctx, written, call.by_person, owner)
             return written
         newer = call.epoch is not None and (item.epoch is None or item.epoch < call.epoch)
@@ -1138,7 +1176,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         payload = ExecPayload(
             host_id=item.host_id,
             item_id=item.id,
-            session_id=item.session_id,
+            agent_session_id=item.agent_session_id,
             key=item.key,
             operation=item.operation,
             effect=item.effect,
@@ -1158,8 +1196,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                kind=WorkKind.EXEC,
-                target_id=item.session_id,
+                kind=PlacementWorkKind.EXEC,
+                target_id=item.agent_session_id,
                 idempotency_key=item.row_id,
                 request_id=ctx.request_id,
                 traceparent=ctx.traceparent,
@@ -1209,7 +1247,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            session_id=item.session_id,
+            agent_session_id=item.agent_session_id,
             item_id=item.id,
             host_id=item.host_id,
             kind=kind,
@@ -1235,7 +1273,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         """Sealed content of the item, opened; empty once its key is gone."""
         if sealed is None:
             return ""
-        opened = await self._seal.open(ctx, item.session_id, item.key, sealed)
+        opened = await self._seal.open(ctx, item.agent_session_id, item.key, sealed)
         return "" if opened is None else opened.decode()
 
 

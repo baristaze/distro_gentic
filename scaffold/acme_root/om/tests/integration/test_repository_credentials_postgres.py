@@ -18,25 +18,24 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from contracts.agent_workspaces import AgentProjectsTwin, GitTwin
-from contracts.platform_agents import CORPUS
 from pydantic import SecretStr
 
-from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.transports import TransportInterface
-from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
-    WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.transports import TransportInterface
+from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_workspaces import rules
 from acme.om.agent_workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
@@ -52,6 +51,9 @@ from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.agent_workspaces import AgentProjectsTwin, GitTwin
+from contracts.platform_agents import CORPUS
 
 GIT = shutil.which("git")
 pytestmark = [
@@ -205,7 +207,7 @@ class HostInfra(InfraLocalImpl):
         super().__init__(root)
         assert GIT is not None
         found = f"{Path(GIT).parent}:{Path(sys.executable).parent}"
-        self._host = WorkspaceHostImpl(root / "workspaces")
+        self._host = AgentWorkspaceHostImpl(root / "workspaces")
         self._local = TransportLocalImpl(
             root / "records",
             self.get_secrets(),
@@ -213,7 +215,7 @@ class HostInfra(InfraLocalImpl):
             search_path=f"{found}:{DEFAULT_PATH}",
         )
 
-    def get_workspaces(self) -> WorkspaceProviderInterface:
+    def get_agent_workspaces(self) -> AgentWorkspaceProviderInterface:
         return self._host
 
     def get_transport(self) -> TransportInterface:
@@ -263,12 +265,12 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
-        agent_kinds=(WORKER,),
         platform_root_options=PlatformRootOptions(
             workspace_agent_projects=agent_projects,
             workspace_git=GitTwin(),
             workspace_reader=on_loopback(),
         ),
+        agent_root_options=AgentRootOptions(agent_kinds=(WORKER,)),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -277,7 +279,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
         f"ann-{new_id().hex[-8:]}@example.test",
         "Ann",
     )
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=WORKER.name, title="a fix")
     )
 
@@ -294,7 +296,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
     # With no credential, a private repository reads as unavailable, and no
     # workspace is checked out of it.
     with pytest.raises(Unavailable):
-        await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
+        await managers.tools.prepare_agent_workspace(owner, session.id, DIRECTORY)
     assert private_git.authorized == 0 and private_git.refused > 0
 
     # A wrong one too, and its value is in no message.
@@ -303,7 +305,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
         owner, agent_projects.agent_project_id, wrong
     )
     with pytest.raises(Unavailable) as refused:
-        await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
+        await managers.tools.prepare_agent_workspace(owner, session.id, DIRECTORY)
     assert "not-the-password" not in str(refused.value)
 
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
@@ -311,7 +313,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
         owner, agent_projects.agent_project_id, credential
     )
     assert record.version == 2
-    workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
+    workspace = await managers.tools.prepare_agent_workspace(owner, session.id, DIRECTORY)
     here = Path(workspace.location)
     (here / "notes.txt").write_text("the agent's own work\n")
     delivered = await managers.agent_workspaces.work_product(owner, workspace)
@@ -343,13 +345,13 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     managers: PlatformManagers = build_platform_managers(
         storage,
         infra,
-        agent_kinds=(SOFTWARE_ENGINEER,),
         platform_root_options=PlatformRootOptions(
             platform_agents=PlatformAgents(corpus=CORPUS),
             workspace_agent_projects=agent_projects,
             workspace_reader=on_loopback(),
             source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
         ),
+        agent_root_options=AgentRootOptions(agent_kinds=(SOFTWARE_ENGINEER,)),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -363,14 +365,14 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     await managers.agent_workspaces.put_fetch_credential(
         owner, agent_projects.agent_project_id, credential
     )
-    session = await managers.agents.start_session(
+    session = await managers.agents.start_agent_session(
         owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER.name, title="a fix")
     )
     branch = rules.session_branch(session.id)
 
     # The checkout came in from the platform's bundle: the session's branch,
     # cut from the default branch.
-    workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
+    workspace = await managers.tools.prepare_agent_workspace(owner, session.id, DIRECTORY)
     here = Path(workspace.location)
     assert (git(here, "symbolic-ref", "--short", "HEAD"), git(here, "rev-parse", "HEAD")) == (
         branch,
@@ -420,7 +422,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
 
     # Work left uncommitted is kept on a snapshot as the instance goes.
     (here / "draft.txt").write_text("unfinished\n")
-    await managers.tools.release_workspace(owner, workspace)
+    await managers.tools.release_agent_workspace(owner, workspace)
     kept = git(Path(remote), "for-each-ref", "--format=%(refname)", "refs/snapshots")
     assert kept.startswith(f"refs/snapshots/{branch}/"), kept
 

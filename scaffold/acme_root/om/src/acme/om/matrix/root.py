@@ -3,7 +3,10 @@ engine's root, and the matrix managers built over the managers it returns.
 
     matrix = MatrixLayer(storage, options=MatrixOptions(environment=...),
                          clients=lambda: trust.managers.provider_clients)
-    managers = build_platform_managers(storage, infra, ..., models_layer=matrix.layer)
+    managers = build_platform_managers(
+        storage, infra, ...,
+        agent_root_options=AgentRootOptions(..., language_models_layer=matrix.layer),
+    )
     built = matrix.build(managers)
 
 The layer gives the engine four things: the matrix as its resolver, a face
@@ -22,20 +25,20 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
+from acme.om.language_models.credentials import CallCredentialsInterface
+from acme.om.language_models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.language_models.impl.prices import ModelPricesFromPricingImpl
+from acme.om.language_models.impl.resolver import DEFAULT_SIZES, DEFAULT_TABLE
+from acme.om.language_models.layer import LanguageModelsLayer
+from acme.om.language_models.manager import LanguageModelsManagerInterface
+from acme.om.language_models.prices import ModelPricesInterface
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.impl.credentials import CallCredentialsByFundingImpl
 from acme.om.matrix.impl.manager import MatrixManagerImpl, MatrixOperatorManagerImpl
 from acme.om.matrix.impl.models import ModelsManagerMatrixImpl
 from acme.om.matrix.impl.resolver import MatrixOptions, MatrixResolverImpl, Workload
 from acme.om.matrix.manager import MatrixManagerInterface, MatrixOperatorManagerInterface
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow
-from acme.om.models.credentials import CallCredentialsInterface
-from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
-from acme.om.models.impl.prices import ModelPricesFromPricingImpl
-from acme.om.models.impl.resolver import DEFAULT_SIZES, DEFAULT_TABLE
-from acme.om.models.layer import ModelsLayer
-from acme.om.models.manager import ModelsManagerInterface
-from acme.om.models.prices import ModelPricesInterface
-from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
@@ -99,9 +102,9 @@ class MatrixLayer:
         self._built: MatrixManagers | None = None
 
     @property
-    def layer(self) -> ModelsLayer:
+    def layer(self) -> LanguageModelsLayer:
         """What the engine's root takes of the matrix."""
-        return ModelsLayer(
+        return LanguageModelsLayer(
             resolver=self.resolver,
             models=self.models,
             credentials=self.credentials,
@@ -128,8 +131,8 @@ class MatrixLayer:
         return self._resolver
 
     def models(
-        self, inner: ModelsManagerInterface, tenancy: TenancyManagerInterface
-    ) -> ModelsManagerInterface:
+        self, inner: LanguageModelsManagerInterface, tenancy: TenancyManagerInterface
+    ) -> LanguageModelsManagerInterface:
         if self._resolver is None:
             raise RuntimeError("the matrix's face is built before its resolver")
         return ModelsManagerMatrixImpl(
@@ -142,13 +145,13 @@ class MatrixLayer:
             self._clock,
         )
 
-    async def version(self, ctx: TenantContext, session_id: UUID) -> int | None:
+    async def version(self, ctx: TenantContext, agent_session_id: UUID) -> int | None:
         """The matrix version the session's fills came from last, None before
         its first loop resolved them."""
-        pin = await self._storage.get_matrix_tenant_storage().read_pin(ctx.org_id, session_id)
+        pin = await self._storage.get_matrix_tenant_storage().read_pin(ctx.org_id, agent_session_id)
         return None if pin is None else pin.matrix_version
 
-    async def tier(self, ctx: TenantContext, session_id: UUID) -> str:
+    async def tier(self, ctx: TenantContext, agent_session_id: UUID) -> str:
         """The plan tier the session's tenant is served at, the one the
         matrix resolves its fills by: its share's, else the default."""
         share = await self._storage.get_placement_storage().read_share(ctx.org_id)

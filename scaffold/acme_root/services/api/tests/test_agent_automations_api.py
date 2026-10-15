@@ -18,7 +18,7 @@ from tenant_support import Headers, person, refused, tenant
 
 from acme.om.agent_automations.actions import AgentAutomationActionInterface
 from acme.om.agent_automations.types.agent_automation import AgentAutomationRun, RunOutcome, RunsAs
-from acme.om.base import Platform, new_id
+from acme.om.base import OmBase, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
 from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
@@ -36,7 +36,7 @@ def agent_automation(agent_project_id: str) -> dict[str, object]:
         "name": "triage a failed build",
         "trigger": {"kind": "event", "effects": ["ci_failed"]},
         "action": {
-            "kind": "start_session",
+            "kind": "start_agent_session",
             "brief": "Find why the build failed and say so on the pull request.",
             "agent_kind": "assistant",
             "title": "a failed build",
@@ -172,7 +172,7 @@ async def test_a_malformed_agent_automation_is_refused_whole(
     assert (await client.get("/v1/agent-automations", headers=ajax.owner)).json() == []
 
 
-class Sweep(Platform):
+class Sweep(OmBase):
     steps: int
     on: tuple[str, ...]
     where: dict[str, tuple[str, ...]]
@@ -184,13 +184,13 @@ class SweepAction(AgentAutomationActionInterface):
     name = "sweep"
     params = Sweep
 
-    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: Platform) -> UUID:
+    async def act(self, ctx: TenantContext, run: AgentAutomationRun, params: OmBase) -> UUID:
         return new_id()
 
     async def ended(self, ctx: TenantContext, run: AgentAutomationRun) -> RunOutcome | None:
         return None
 
-    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
+    async def check_writer(self, ctx: TenantContext, params: OmBase, runs_as: RunsAs) -> None:
         return None
 
 
@@ -235,7 +235,7 @@ class ApprovedSweep(SweepAction):
     def __init__(self) -> None:
         self.approvers = {Role.OWNER}
 
-    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
+    async def check_writer(self, ctx: TenantContext, params: OmBase, runs_as: RunsAs) -> None:
         if ctx.role not in self.approvers:
             raise NotAuthorized(f"the role {ctx.role.value} is no approver of the sweep")
 

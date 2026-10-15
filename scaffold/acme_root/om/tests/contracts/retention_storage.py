@@ -12,11 +12,14 @@ import pytest
 
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, TenantMismatch, UniqueKeyTaken
-from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention.keys import KeyDestruction
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
+
+INTERFACE = RetentionStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -56,7 +59,7 @@ def make_policy(version: int = 1, policy: RetentionPolicy | None = None) -> Tena
 
 
 def make_snapshot(
-    session_id: UUID | None = None,
+    agent_session_id: UUID | None = None,
     *,
     taken_at: datetime | None = None,
     policy_version: int = 1,
@@ -67,7 +70,7 @@ def make_snapshot(
     return SessionRetention(
         id=new_id(),
         created_at=taken,
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         policy=RetentionPolicy(content_lifetime=content, shape_lifetime=shape),
         policy_version=policy_version,
         at_rest=True,
@@ -127,17 +130,17 @@ class RetentionStorageContract:
         org = new_id()
         first = make_snapshot()
         assert await storage.create_snapshot(org, first) == first
-        again = make_snapshot(first.session_id, content=None, shape=None)
+        again = make_snapshot(first.agent_session_id, content=None, shape=None)
         assert await storage.create_snapshot(org, again) == first, "the first stands"
-        assert await storage.read_snapshot(org, first.session_id) == first
+        assert await storage.read_snapshot(org, first.agent_session_id) == first
         report = KeyDestruction(
             service="keys=local", key="k", destroyed_at=utcnow(), receipt=str(new_id())
         )
         done = moved(first, content_expired_at=utcnow(), destruction=report)
         assert await storage.write_snapshot(org, done, 1)
-        assert await storage.read_snapshot(org, first.session_id) == done
+        assert await storage.read_snapshot(org, first.agent_session_id) == done
         assert not await storage.write_snapshot(org, moved(done), 1), "the version moved"
-        assert await storage.read_snapshot(org, first.session_id) == done
+        assert await storage.read_snapshot(org, first.agent_session_id) == done
 
     async def test_another_tenants_snapshot_is_never_reached(
         self, storage: RetentionStorageInterface
@@ -145,12 +148,12 @@ class RetentionStorageContract:
         org, other = new_id(), new_id()
         snapshot = make_snapshot()
         await storage.create_snapshot(org, snapshot)
-        assert await storage.read_snapshot(other, snapshot.session_id) is None
+        assert await storage.read_snapshot(other, snapshot.agent_session_id) is None
         assert not await storage.write_snapshot(other, moved(snapshot), 1)
         with pytest.raises(TenantMismatch):
             await storage.create_snapshot(other, snapshot)
-        assert await storage.read_snapshot(other, snapshot.session_id) is None
-        assert await storage.read_snapshot(org, snapshot.session_id) == snapshot
+        assert await storage.read_snapshot(other, snapshot.agent_session_id) is None
+        assert await storage.read_snapshot(org, snapshot.agent_session_id) == snapshot
 
     # The sweep's reads across tenants.
 
@@ -225,4 +228,4 @@ class RetentionStorageContract:
         assert await storage.purge_tenant(org, 10) == 0
         assert await storage.read_policy(org) is None
         assert await storage.read_policy(other) is not None
-        assert await storage.read_snapshot(other, theirs.session_id) == theirs
+        assert await storage.read_snapshot(other, theirs.agent_session_id) == theirs

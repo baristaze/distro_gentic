@@ -10,6 +10,9 @@ from acme.om.exceptions import PreconditionFailed
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
 
+INTERFACE = PlatformAgentsStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {"create_validation", "purge_tenant", "read_validation", "write_validation"}
 )

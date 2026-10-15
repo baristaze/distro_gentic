@@ -15,7 +15,11 @@ from acme.om.agent_billing.storage import SpendAccountStorageInterface
 from acme.om.agent_billing.types.spend_account import FundingMode
 from acme.om.context import TenantContext
 from acme.om.exceptions import NoCredential, NotFound, SpenderUnknown, ValidationFailed
-from acme.om.models.credentials import PLATFORM_CREDENTIAL, CallClient, CallCredentialsInterface
+from acme.om.language_models.credentials import (
+    PLATFORM_CREDENTIAL,
+    CallClient,
+    CallCredentialsInterface,
+)
 from acme.om.trust.keys import ProviderClientsInterface
 
 log = logging.getLogger(__name__)

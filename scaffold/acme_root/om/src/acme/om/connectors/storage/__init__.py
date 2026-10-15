@@ -44,7 +44,9 @@ class ConnectorStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> AgentSessionConnectors | None: ...
+    async def read_pin(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionConnectors | None: ...
 
     @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:

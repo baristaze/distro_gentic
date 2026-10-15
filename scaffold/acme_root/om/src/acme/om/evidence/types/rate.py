@@ -6,7 +6,7 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.evidence.types.record import NAME, VERSION
 
 
@@ -28,7 +28,7 @@ class AbortRule(StrEnum):
     INCONCLUSIVE = "inconclusive"  # any such trial leaves the claim without a conclusion
 
 
-class RateRule(Platform):
+class RateRule(OmBase):
     """A rate a check's failures must stay under, declared before its
     trials: the most failures it may show as a rate, the confidence of the
     bound, how the bound is computed, the trials to run, and the rule for a
@@ -55,7 +55,7 @@ class RateRule(Platform):
         return self
 
 
-class RateClaim(Platform):
+class RateClaim(OmBase):
     """What a check's trials at one version show: never a rate, only the
     bound under it. `upper` is above zero for any count of trials, so a run
     with no failure still reports a rate that may be there. `trials`

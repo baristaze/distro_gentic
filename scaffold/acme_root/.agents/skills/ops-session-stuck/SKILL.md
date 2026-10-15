@@ -19,7 +19,7 @@ file are there.
 
 ## Input
 
-`--env local|staging|production --org <org_id> --session <session_id>`
+`--env local|staging|production --org <org_id> --session <agent_session_id>`
 
 All three are required; ask for any that is missing. The ids are the
 ones the tenant or an investigation gave, never found by listing.
@@ -70,7 +70,7 @@ and name the refresh the preamble gives.
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
-   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/sessions/<session_id>/standing" \
+   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/agent-sessions/<agent_session_id>/standing" \
      | jq '{status, park, changed_at, pending_input, plan_tier, own_lane, concurrency, own_cap, share_set, pool_id, hosts_online, loop, error: .error.code}'
    ```
 
@@ -119,7 +119,7 @@ and name the refresh the preamble gives.
 ## Output
 
 ```markdown
-# Session stuck: <env>, org <org_id>, session <session_id>
+# Session stuck: <env>, org <org_id>, session <agent_session_id>
 
 **Credential.** <profile and Arn, or local>; operator <email domain only>, READ
 **Standing.** <status>[, parked on <reason> since <changed_at>, unlock <unlock>, retry <retry_at or none>]

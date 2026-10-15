@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from uuid import UUID
 
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.rules import OUTCOMES
 from acme.om.agents.types.result import Claim, Verdict
 from acme.om.evidence.rates import corrected, rate_claim, stops_at
@@ -20,9 +21,8 @@ from acme.om.evidence.types.policy import Grade, Requirement, ValidationPolicy
 from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest, Validation, WorkProduct
-from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.rules import DEFAULT_CEILINGS
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
+from acme.om.tools.types.policy import Decision, Target, ToolPolicyLayer, ToolPolicyRule
 
 # The policy's key.
 
@@ -40,12 +40,12 @@ PATHS = "paths"
 """The kind of target a call that changes files reports: the paths it
 changes, and whether a policy protects any of them."""
 
-PROTECTED_CEILING = PolicyRule(
+PROTECTED_CEILING = ToolPolicyRule(
     target_kind=PATHS, target={"protected": True}, decision=Decision.DENY
 )
 """The platform's ceiling: no layer lets an agent change a protected path."""
 
-CEILINGS = PolicyLayer(rules=(*DEFAULT_CEILINGS.rules, PROTECTED_CEILING))
+CEILINGS = ToolPolicyLayer(rules=(*DEFAULT_CEILINGS.rules, PROTECTED_CEILING))
 """The engine's ceilings and the platform's, as a root hands them to the
 tools."""
 
@@ -150,7 +150,7 @@ def stopping_rules(requirements: Sequence[Requirement]) -> dict[str, RateRule]:
 
 
 def execution_request(
-    session_id: UUID,
+    agent_session_id: UUID,
     policy: ValidationPolicy,
     work_product: WorkProduct,
     purpose: RunPurpose,
@@ -181,7 +181,7 @@ def execution_request(
     rules = stopping_rules(needed)
     checks = tuple(policy.declared(name) for name in sorted(counts))
     return ExecutionRequest(
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         agent_project=policy.agent_project,
         purpose=purpose,
         version=version,

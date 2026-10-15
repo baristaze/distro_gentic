@@ -20,7 +20,7 @@ from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
 from acme.om.context import Role, TenantContext
-from acme.om.models.layer import ModelsLayer
+from acme.om.language_models.layer import LanguageModelsLayer
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -28,6 +28,7 @@ from acme.om.tenancy.types.org import Org
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
+
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.loops import ASSISTANT, DELIVERY, Clock
@@ -81,7 +82,7 @@ def money_over(
     loop_options: LoopOptions | None = None,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
-    models_layer: ModelsLayer | None = None,
+    language_models_layer: LanguageModelsLayer | None = None,
     tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
     kinds: tuple[AgentKind, ...] = (ASSISTANT, DELIVERY),
     extra: tuple[ToolInterface, ...] = (),
@@ -102,7 +103,7 @@ def money_over(
 
     def gates(managers: PlatformManagers, clock: Clock) -> CallGateInterface:
         gate = MoneyGateImpl(
-            storage.get_budget_storage(),
+            storage.get_spend_budget_storage(),
             spend_accounts,
             ledger,
             pager,
@@ -115,10 +116,10 @@ def money_over(
             gate,
             book,
             managers.agent_sessions,
-            managers.budgets,
-            SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
-            version=None if models_layer is None else models_layer.version,
-            tier=None if models_layer is None else models_layer.tier,
+            managers.spend_budgets,
+            agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+            version=None if language_models_layer is None else language_models_layer.version,
+            tier=None if language_models_layer is None else language_models_layer.tier,
             clock=clock,
         )
         built.append((gate, calls))
@@ -130,7 +131,7 @@ def money_over(
         owner=owner,
         options=loop_options,
         call_gate=gates,
-        models_layer=models_layer,
+        language_models_layer=language_models_layer,
         kinds=kinds,
         extra=extra,
         platform=PlatformRootOptions(tools_layer=tools_layer),
@@ -140,7 +141,7 @@ def money_over(
     agent_billing = AgentBillingManagerImpl(
         spend_accounts,
         ledger,
-        loop.managers.budgets,
+        loop.managers.spend_budgets,
         loop.managers.agent_sessions,
         loop.managers.tenancy,
         payments,

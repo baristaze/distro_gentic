@@ -1,0 +1,827 @@
+{
+  "components": {
+    "schemas": {
+      "AmountRequest": {
+        "additionalProperties": false,
+        "description": "A budget's new amount: reference cost in millionths, native tokens, or\nboth. A unit left out is not bounded, and an amount bounds one at least.",
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          }
+        },
+        "title": "AmountRequest",
+        "type": "object"
+      },
+      "BudgetUsageView": {
+        "description": "A budget and its current window: what open holds reserve and what\nsettled calls spent, in reference cost (millionths) and native tokens,\nagainst the budget's amount.",
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/BudgetView"
+          },
+          "held_cost_micros": {
+            "title": "Held Cost Micros",
+            "type": "integer"
+          },
+          "held_tokens": {
+            "title": "Held Tokens",
+            "type": "integer"
+          },
+          "spent_cost_micros": {
+            "title": "Spent Cost Micros",
+            "type": "integer"
+          },
+          "spent_tokens": {
+            "title": "Spent Tokens",
+            "type": "integer"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "budget",
+          "window_start",
+          "held_cost_micros",
+          "held_tokens",
+          "spent_cost_micros",
+          "spent_tokens"
+        ],
+        "title": "BudgetUsageView",
+        "type": "object"
+      },
+      "BudgetView": {
+        "description": "A budget: its scope, its window, its amount, and the version a change\nof the amount names in `If-Match`.",
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "scope_key": {
+            "title": "Scope Key",
+            "type": "string"
+          },
+          "scope_kind": {
+            "$ref": "#/components/schemas/SpendBudgetScopeKind"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "window_kind": {
+            "$ref": "#/components/schemas/WindowKind"
+          },
+          "window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Seconds"
+          }
+        },
+        "required": [
+          "id",
+          "scope_kind",
+          "scope_key",
+          "window_kind",
+          "window_seconds",
+          "cost_micros",
+          "tokens",
+          "version"
+        ],
+        "title": "BudgetView",
+        "type": "object"
+      },
+      "CreateBudgetRequest": {
+        "additionalProperties": false,
+        "description": "A budget over a scope and a window, in reference cost (millionths),\nnative tokens, or both. A person's and an agent project's scope is keyed by its\nid; a tenant's is the tenant itself, so its key is left out or names the\ntenant. A span window has a length in seconds, and no other window has.",
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "scope_key": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Key"
+          },
+          "scope_kind": {
+            "$ref": "#/components/schemas/SettableScope"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "window_kind": {
+            "$ref": "#/components/schemas/WindowKind"
+          },
+          "window_seconds": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Seconds"
+          }
+        },
+        "required": [
+          "scope_kind",
+          "window_kind"
+        ],
+        "title": "CreateBudgetRequest",
+        "type": "object"
+      },
+      "SettableScope": {
+        "description": "The scopes a person sets a budget over: the ones every model call is\ncharged to and that outlive a session. A session's and a tree's budgets\nare its own bounds, and no call is charged to a team.",
+        "enum": [
+          "person",
+          "agent_project",
+          "tenant"
+        ],
+        "title": "SettableScope",
+        "type": "string"
+      },
+      "SpendBudgetScopeKind": {
+        "enum": [
+          "agent_session",
+          "tree",
+          "person",
+          "agent_project",
+          "team",
+          "tenant"
+        ],
+        "title": "SpendBudgetScopeKind",
+        "type": "string"
+      },
+      "UsagePageView": {
+        "description": "One page of the tenant's budgets with their usage, by budget id.\n`next_cursor` fetches the next page and is null on the last one.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetUsageView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "UsagePageView",
+        "type": "object"
+      },
+      "WindowKind": {
+        "enum": [
+          "life",
+          "hour",
+          "day",
+          "week",
+          "month",
+          "span"
+        ],
+        "title": "WindowKind",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: spend_budgets",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/spend-budgets": {
+      "get": {
+        "description": "The tenant's budgets by id, after the id `after` names.",
+        "operationId": "list_budgets",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BudgetView"
+                  },
+                  "title": "Response List Budgets",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Budgets",
+        "tags": [
+          "spend_budgets"
+        ]
+      },
+      "post": {
+        "description": "A budget every model call charged to its scope is held to, from the\nnext call on.",
+        "operationId": "create_spend_budget",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBudgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Spend Budget",
+        "tags": [
+          "spend_budgets"
+        ]
+      }
+    },
+    "/v1/spend-budgets/{spend_budget_id}": {
+      "get": {
+        "operationId": "get_spend_budget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "spend_budget_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Spend Budget Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Spend Budget",
+        "tags": [
+          "spend_budgets"
+        ]
+      }
+    },
+    "/v1/spend-budgets/{spend_budget_id}/amount": {
+      "put": {
+        "description": "The budget at its new amount, on the version `If-Match` names.",
+        "operationId": "change_amount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "spend_budget_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Spend Budget Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Amount",
+        "tags": [
+          "spend_budgets"
+        ]
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "operationId": "get_usage",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsagePageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Usage",
+        "tags": [
+          "spend_budgets"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "A tenant's budgets: set one over a scope and a window, list and read\nthem, and raise or lower one's amount on the version read. A raise wakes\nthe sessions that wait on the budget. Setting a budget or its amount takes\nthe permission that governs members; reading one is any member's.\n\nThe tenant's usage: each of its budgets with what its current window\nholds and spent, a page at a time. A budget's amount is changed on its own\nroute.",
+      "name": "spend_budgets"
+    }
+  ]
+}

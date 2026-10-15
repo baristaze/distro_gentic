@@ -12,15 +12,15 @@ from pathlib import PurePosixPath
 from typing import NamedTuple
 from uuid import UUID
 
-from acme.infra.workspaces import IsolationMode
+from acme.infra.agent_workspaces import IsolationMode
+from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.result import Claim, Verdict
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.types.corpus import Corpus, Document, Listing, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
-from acme.om.steps.types.header import LoopOutcome, ToolFailure
-from acme.om.tools.types.policy import ApproverRule, PolicyRule, ToolPolicy
+from acme.om.tools.types.policy import ApproverRule, ToolPolicy, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 
 # The reach of the kinds that may only read.
@@ -340,7 +340,7 @@ def search(corpus: Corpus, query: str, limit: int) -> tuple[Passage, ...]:
 
 
 def draft_problems(
-    rules: Iterable[PolicyRule],
+    rules: Iterable[ToolPolicyRule],
     approvers: Iterable[ApproverRule],
     tools: Collection[str],
     classes: Collection[str],
@@ -368,7 +368,7 @@ def draft_problems(
 
 def draft_policy(
     live: ToolPolicy,
-    rules: tuple[PolicyRule, ...],
+    rules: tuple[ToolPolicyRule, ...],
     approvers: tuple[ApproverRule, ...],
     tools: Collection[str],
     classes: Collection[str],

@@ -7,28 +7,26 @@ from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
-from acme.services.api.types.claimants import (
+from acme.services.api.types.hosts import (
     ClaimantClaimView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
     ClaimantWorkView,
-    ExtendLeaseRequest,
-    IssuedClaimantCredentialView,
-)
-from acme.services.api.types.hosts import (
     ClaimRequest,
     ClaimView,
     CreatePoolRequest,
     EnrollmentTokenView,
     EnrollRequest,
+    ExtendLeaseRequest,
     HeartbeatRequest,
     HostView,
+    IssuedClaimantCredentialView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
+    PlaceAgentSessionRequest,
     PlacementView,
-    PlaceSessionRequest,
     PoolView,
 )
 
@@ -74,11 +72,11 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceAgentSessionRequest
     ) -> PlacementView: ...
 
     @abstractmethod
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementView: ...
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementView: ...
 
     # A host's calls.
 
@@ -88,10 +86,10 @@ class HostsServiceInterface(ABC):
     ) -> IssuedHostCredentialView: ...
 
     @abstractmethod
-    async def enroll_machine(
+    async def enroll_vm(
         self, rctx: RequestContext, key: str, body: EnrollRequest
     ) -> IssuedHostCredentialView:
-        """The host of a machine of the cloud pool trades its key, once."""
+        """The host of a VM of the cloud pool trades its key, once."""
         ...
 
     @abstractmethod

@@ -22,6 +22,9 @@ from acme.om.exceptions import TenantMismatch, UniqueKeyTaken
 from acme.om.levers.types.lever import LeverCheck, LeverFinding
 from acme.om.tools.types.policy import Decision
 
+INTERFACE = AgentPlaybookStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_agent_playbook",
@@ -61,12 +64,12 @@ def make_agent_playbook(version: int = 1, name: str = "release-a-build") -> Agen
 
 
 def make_invocation(
-    agent_playbook: AgentPlaybook, session_id: UUID | None = None, *, pinned: bool = False
+    agent_playbook: AgentPlaybook, agent_session_id: UUID | None = None, *, pinned: bool = False
 ) -> AgentPlaybookInvocation:
     return AgentPlaybookInvocation(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         agent_playbook_id=agent_playbook.id,
         name=agent_playbook.name,
         version=agent_playbook.version,
@@ -127,9 +130,9 @@ class AgentPlaybookStorageContract:
         await storage.create_agent_playbook(org, agent_playbook, ())
         first = make_invocation(agent_playbook)
         assert await storage.create_invocation(org, first) == first
-        again = make_invocation(agent_playbook, first.session_id)
+        again = make_invocation(agent_playbook, first.agent_session_id)
         assert await storage.create_invocation(org, again) == first
-        assert await storage.read_invocations(org, first.session_id, 10) == [first]
+        assert await storage.read_invocations(org, first.agent_session_id, 10) == [first]
 
     async def test_a_kind_manual_invocation_reads_back_pinned(
         self, storage: AgentPlaybookStorageInterface
@@ -138,7 +141,9 @@ class AgentPlaybookStorageContract:
         agent_playbook = make_agent_playbook()
         kind_manual = make_invocation(agent_playbook, pinned=True)
         assert await storage.create_invocation(org, kind_manual) == kind_manual
-        assert await storage.read_invocations(org, kind_manual.session_id, 10) == [kind_manual]
+        assert await storage.read_invocations(org, kind_manual.agent_session_id, 10) == [
+            kind_manual
+        ]
 
     async def test_a_kind_holds_one_pin_for_the_tenant_and_one_an_agent_project_never_confused(
         self, storage: AgentPlaybookStorageInterface
@@ -231,16 +236,16 @@ class AgentPlaybookStorageContract:
         agent_playbook = make_agent_playbook()
         mine = make_invocation(agent_playbook)
         await storage.create_invocation(org_a, mine)
-        theirs = make_invocation(agent_playbook, mine.session_id)
+        theirs = make_invocation(agent_playbook, mine.agent_session_id)
         assert await storage.create_invocation(org_b, theirs) == theirs
-        assert await storage.read_invocations(org_a, mine.session_id, 10) == [mine]
+        assert await storage.read_invocations(org_a, mine.agent_session_id, 10) == [mine]
 
     async def test_read_invocations_of_another_tenant_finds_nothing(
         self, storage: AgentPlaybookStorageInterface
     ) -> None:
         invocation = make_invocation(make_agent_playbook())
         await storage.create_invocation(new_id(), invocation)
-        assert await storage.read_invocations(new_id(), invocation.session_id, 10) == []
+        assert await storage.read_invocations(new_id(), invocation.agent_session_id, 10) == []
 
     async def test_purge_tenant_takes_its_rows_and_no_other_tenants(
         self, storage: AgentPlaybookStorageInterface

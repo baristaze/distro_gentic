@@ -10,11 +10,7 @@ agent's workspace, with no agent at all, and write the execution record
 every run is.
 
 The executor port has a loud null and nothing else, so no delivery's
-checks run and the result gate confirms no success. A validation session
-is a record of its own that calls no model, but its work goes to a
-claimant outside the platform, on its group's lane
-([ADR 2013](2013-a-validation-session-is-a-claimants-work-with-a-record-of-its-own.md)),
-so the platform's evidence waits on a domain it does not hold.
+checks run and the result gate confirms no success.
 
 ## Decision
 
@@ -57,15 +53,25 @@ waits is ended, and the exec relay's rows of the instance go at once. A
 root that reaches no pool refuses the run, loudly (`Unavailable`), never
 a run elsewhere.
 
-**A validation session is platform work.** It names its agent project, a
-check its agent project's policy declares, the delivered commit it runs
-at, and the base its checks, fixtures, and runner come from. Starting
-one writes it and asks for one `VALIDATION` item on the platform's own
-lane in the same commit. The maintenance worker claims it and runs the
-check through the evidence namespace on the executor. Finishing the
-session names the execution record the run wrote, the record every run
-is. A session runs its check once: a run kept before a crash is answered
-again, never run again.
+**A validation session is a record of its own,** never an agent
+session. An agent session's loop is the engine's: a message to it asks
+for a loop, and the loop's first act after its gates is a model call. A
+kind must name a main model role, so an agent session with no agent
+would be one whose loop must never run, held shut only by every path
+that could wake it. A validation session is listed, retained, and purged
+on its own, and a tenant past its retention loses it with the sweep.
+
+**A validation session is platform work,** never a claimant's: a
+claimant outside the platform, on its group's lane, would make the
+platform's evidence wait on a domain it does not hold. It names its
+agent project, a check its agent project's policy declares, the
+delivered commit it runs at, and the base its checks, fixtures, and
+runner come from. Starting one writes it and asks for one `VALIDATION`
+item on the platform's own lane in the same commit. The maintenance
+worker claims it and runs the check through the evidence namespace on
+the executor. Finishing the session names the execution record the run
+wrote, the record every run is. A session runs its check once: a run
+kept before a crash is answered again, never run again.
 
 ## Consequences
 
@@ -74,10 +80,6 @@ again, never run again.
 - No domain's lane, kind, or claimant is in its path: its item is the
   platform's own, on the platform's own lane, and the maintenance worker
   claims it.
-- A session's group, its check's own version, and its parameters leave
-  the mapping now and the table a release later
-  ([ADR 0038](0038-a-dead-column-leaves-the-mapping-before-the-table.md)).
-  A row the previous release wrote keeps its group until then.
 - A check its agent project's policy does not declare fails its work for
   good. An instance that could not be made, or a repository that could
   not be read, is tried again.

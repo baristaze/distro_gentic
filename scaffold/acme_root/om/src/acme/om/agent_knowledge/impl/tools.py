@@ -12,20 +12,20 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.infra.transports import OutputSink
-from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot
 from acme.om.attribution.rules import principal_authored
 from acme.om.context import TenantContext
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import WorkspaceSnapshot
-from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.tool import TakenSnapshot
+from acme.om.tools.tool import TakenSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
-from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
+from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
 
 FIRST_STEPS = 200
 """The steps a session's subject is read from: its start, before a call."""
@@ -40,27 +40,29 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         inner: ToolsManagerInterface,
         agent_knowledge: Callable[[], AgentKnowledgeManagerInterface],
         sessions: Callable[[], AgentSessionsManagerInterface],
-        steps: Callable[[], StepsManagerInterface],
+        steps: Callable[[], AgentStepsManagerInterface],
     ) -> None:
         self._inner = inner
         self._agent_knowledge = agent_knowledge
         self._sessions = sessions
         self._steps = steps
 
-    async def prepare_workspace(
+    async def prepare_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: WorkspaceSnapshot | None = None,
-    ) -> Workspace:
-        workspace = await self._inner.prepare_workspace(ctx, session_id, spec, restore)
-        session = await self._sessions().get_session(ctx, session_id)
+        restore: AgentWorkspaceSnapshot | None = None,
+    ) -> AgentWorkspace:
+        workspace = await self._inner.prepare_agent_workspace(ctx, agent_session_id, spec, restore)
+        session = await self._sessions().get_agent_session(ctx, agent_session_id)
         if session.speaker is None:
             # No model request yet: this loop starts the session.
-            page = await self._steps().get_steps(ctx, session_id, 0, FIRST_STEPS)
+            page = await self._steps().get_agent_steps(ctx, agent_session_id, 0, FIRST_STEPS)
             said = [step.as_text() for step in page.items if principal_authored(step)]
-            await self._agent_knowledge().recall(ctx, session_id, "\n".join([session.title, *said]))
+            await self._agent_knowledge().recall(
+                ctx, agent_session_id, "\n".join([session.title, *said])
+            )
         return workspace
 
     # The rest, as beneath.
@@ -69,14 +71,14 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        defaults: PolicyLayer,
-        request: Step,
+        defaults: ToolPolicyLayer,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
-        above: Sequence[PolicyLayer] = (),
+        above: Sequence[ToolPolicyLayer] = (),
     ) -> Gate:
         return await self._inner.gate(
             ctx,
@@ -94,15 +96,15 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.execute(
             ctx,
             registry,
@@ -119,15 +121,15 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.recover(
             ctx,
             registry,
@@ -144,14 +146,14 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         self,
         ctx: TenantContext,
         registry: ToolRegistry,
-        request: Step,
+        request: AgentStep,
         call_input: Mapping[str, Any],
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | JobNotStarted | Step:
+    ) -> JobHandle | JobNotStarted | AgentStep:
         return await self._inner.start_job(
             ctx,
             registry,
@@ -169,36 +171,37 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
     async def write_policy(self, ctx: TenantContext, policy: ToolPolicy) -> ToolPolicy:
         return await self._inner.write_policy(ctx, policy)
 
-    async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
-        await self._inner.release_workspace(ctx, workspace)
+    async def release_agent_workspace(self, ctx: TenantContext, workspace: AgentWorkspace) -> None:
+        await self._inner.release_agent_workspace(ctx, workspace)
 
-    async def snapshot_workspace(
+    async def snapshot_agent_workspace(
         self,
         ctx: TenantContext,
-        session_id: UUID,
-        workspace: Workspace,
+        agent_session_id: UUID,
+        workspace: AgentWorkspace,
         *,
         epoch: int,
         loop_id: UUID,
-    ) -> Step:
-        return await self._inner.snapshot_workspace(
-            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+        tools: Sequence[ToolInterface],
+    ) -> AgentStep:
+        return await self._inner.snapshot_agent_workspace(
+            ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
         )
 
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
-    ) -> WorkspaceSnapshot:
+    ) -> AgentWorkspaceSnapshot:
         return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
 
     async def find_snapshot(
-        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
-    ) -> WorkspaceSnapshot:
-        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
+        self, ctx: TenantContext, agent_session_id: UUID, snapshot_id: UUID
+    ) -> AgentWorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, agent_session_id, snapshot_id)
 
     async def input_hash(
-        self, ctx: TenantContext, session_id: UUID, call_input: Mapping[str, Any]
+        self, ctx: TenantContext, agent_session_id: UUID, call_input: Mapping[str, Any]
     ) -> str:
-        return await self._inner.input_hash(ctx, session_id, call_input)
+        return await self._inner.input_hash(ctx, agent_session_id, call_input)
 
     async def cancel_job(self, ctx: TenantContext, registry: ToolRegistry, job: JobHandle) -> None:
         await self._inner.cancel_job(ctx, registry, job)
@@ -206,21 +209,21 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
     async def decide_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         request_seq: int,
         *,
         approve: bool,
         note: str = "",
-    ) -> Step:
+    ) -> AgentStep:
         return await self._inner.decide_call(
-            ctx, session_id, request_seq, approve=approve, note=note
+            ctx, agent_session_id, request_seq, approve=approve, note=note
         )
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
-        await self._inner.purge_workspace(org_id, session_id)
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> None:
+        await self._inner.purge_agent_workspace(org_id, agent_session_id)
 
-    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
-        await self._inner.erase_snapshots(ctx, session_id)
+    async def erase_snapshots(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        await self._inner.erase_snapshots(ctx, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)

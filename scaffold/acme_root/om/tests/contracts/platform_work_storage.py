@@ -7,9 +7,12 @@ from uuid import UUID
 
 import pytest
 
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.base import new_id, utcnow
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.work.storage import InsertOutcome, WorkStorageInterface
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+
 from contracts.work_storage import LEASE, make_item
 
 
@@ -50,7 +53,11 @@ class PlatformWorkStorageContract:
         org, now = new_id(), utcnow()
 
         def claimed(
-            seconds_ago: int, *, on: str = lane, kind: WorkKind = WorkKind.LOOP, live: bool = True
+            seconds_ago: int,
+            *,
+            on: str = lane,
+            kind: str = AgentSessionWorkKind.LOOP,
+            live: bool = True,
         ) -> WorkItem:
             item = make_item(lane=on).model_copy(
                 update={
@@ -90,7 +97,7 @@ class PlatformWorkStorageContract:
     ) -> None:
         org, other_org, now = new_id(), new_id(), utcnow()
         claim = {
-            "kind": WorkKind.LOOP,
+            "kind": AgentSessionWorkKind.LOOP,
             "status": WorkStatus.CLAIMED,
             "claimed_by": "runner",
             "lease_expires_at": now + LEASE,
@@ -112,7 +119,7 @@ class PlatformWorkStorageContract:
 
         def loop_on(target: UUID, status: WorkStatus) -> WorkItem:
             return make_item(lane=lane).model_copy(
-                update={"kind": WorkKind.LOOP, "target_id": target, "status": status}
+                update={"kind": AgentSessionWorkKind.LOOP, "target_id": target, "status": status}
             )
 
         claimed = loop_on(running, WorkStatus.CLAIMED).model_copy(
@@ -126,11 +133,15 @@ class PlatformWorkStorageContract:
             make_item(lane=lane).model_copy(update={"target_id": settled}),
         ):
             assert await storage.create_item(org, item) is InsertOutcome.INSERTED
-        assert await storage.has_open_item(org, WorkKind.LOOP, waiting)
-        assert await storage.has_open_item(org, WorkKind.LOOP, running), "a lapsed lease too"
-        assert not await storage.has_open_item(org, WorkKind.LOOP, settled), "done, failed, a noop"
-        assert not await storage.has_open_item(org, WorkKind.LOOP, new_id())
-        assert not await storage.has_open_item(other_org, WorkKind.LOOP, waiting)
+        assert await storage.has_open_item(org, AgentSessionWorkKind.LOOP, waiting)
+        assert await storage.has_open_item(org, AgentSessionWorkKind.LOOP, running), (
+            "a lapsed lease too"
+        )
+        assert not await storage.has_open_item(org, AgentSessionWorkKind.LOOP, settled), (
+            "done, failed, a noop"
+        )
+        assert not await storage.has_open_item(org, AgentSessionWorkKind.LOOP, new_id())
+        assert not await storage.has_open_item(other_org, AgentSessionWorkKind.LOOP, waiting)
 
     async def test_the_lanes_depth_counts_what_is_ready_on_each_lane_under_a_prefix(
         self, storage: WorkStorageInterface, lane: str
@@ -180,13 +191,13 @@ class PlatformWorkStorageContract:
         self, storage: WorkStorageInterface, lane: str
     ) -> None:
         org = new_id()
-        loop = make_item(lane=lane).model_copy(update={"kind": WorkKind.LOOP})
+        loop = make_item(lane=lane).model_copy(update={"kind": AgentSessionWorkKind.LOOP})
         await storage.create_item(org, loop)
         await storage.create_item(org, make_item(lane=lane))
         await storage.create_item(org, make_item(lane=lane))
         await storage.create_item(org, make_item(lane=f"{lane}-b", available_in=timedelta(hours=1)))
         found = await storage.count_ready_on_lanes(org, [lane, f"{lane}-b"], utcnow())
-        assert found == {(lane, WorkKind.NOOP): 2, (lane, WorkKind.LOOP): 1}
+        assert found == {(lane, WorkKind.NOOP): 2, (lane, AgentSessionWorkKind.LOOP): 1}
         assert await storage.count_ready_on_lanes(org, [], utcnow()) == {}
 
     async def test_count_ready_on_lanes_of_another_tenant_finds_nothing(
@@ -201,14 +212,22 @@ class PlatformWorkStorageContract:
         org, target = new_id(), new_id()
         hour = timedelta(hours=1)
         older = make_item(lane=lane).model_copy(
-            update={"target_id": target, "created_at": utcnow() - hour, "kind": WorkKind.LOOP}
+            update={
+                "target_id": target,
+                "created_at": utcnow() - hour,
+                "kind": AgentSessionWorkKind.LOOP,
+            }
         )
-        newer = make_item(lane=lane).model_copy(update={"target_id": target, "kind": WorkKind.LOOP})
+        newer = make_item(lane=lane).model_copy(
+            update={"target_id": target, "kind": AgentSessionWorkKind.LOOP}
+        )
         other_kind = make_item(lane=lane).model_copy(update={"target_id": target})
         for item in (older, newer, other_kind):
             await storage.create_item(org, item)
-        assert await storage.read_latest_for_target(org, WorkKind.LOOP, target) == newer
-        assert await storage.read_latest_for_target(org, WorkKind.LOOP, new_id()) is None
+        assert await storage.read_latest_for_target(org, AgentSessionWorkKind.LOOP, target) == newer
+        assert (
+            await storage.read_latest_for_target(org, AgentSessionWorkKind.LOOP, new_id()) is None
+        )
 
     async def test_read_latest_for_target_of_another_tenant_finds_nothing(
         self, storage: WorkStorageInterface, lane: str
@@ -264,7 +283,10 @@ class PlatformWorkStorageContract:
         target = mine.target_id
         now = utcnow()
         assert await storage.end_open_for_target(other, WorkKind.NOOP, target, "x", now, 10) == []
-        assert await storage.end_open_for_target(org, WorkKind.EXEC, target, "x", now, 10) == []
+        assert (
+            await storage.end_open_for_target(org, PlacementWorkKind.EXEC, target, "x", now, 10)
+            == []
+        )
         ended = await storage.end_open_for_target(org, WorkKind.NOOP, target, "x", now, 10)
         assert {item.id for item in ended} == {mine.id, also.id}
         stored = await storage.read_item(org, kept.id)

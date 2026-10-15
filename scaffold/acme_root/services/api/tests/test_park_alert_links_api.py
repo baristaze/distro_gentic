@@ -11,25 +11,31 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
-from contracts.step_storage import make_message, make_request, make_response, make_tool_request
 
 from acme.om.agent_billing.rules import ANOMALY_UNLOCK
 from acme.om.agent_sessions.rules import QUESTION
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import Park, ParkReason
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import EMPTY_UUID, new_id, utcnow
-from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.intake.root import build_intake
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
-from acme.om.steps.types.header import Park, ParkReason
-from acme.om.steps.types.step import Step
+from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScopeKind, WindowKind
 from acme.services.api.container import AppContainer
 from acme.services.api.seed import first_agent_project
+
+from contracts.agent_step_storage import (
+    make_message,
+    make_request,
+    make_response,
+    make_tool_request,
+)
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -43,7 +49,7 @@ ASSISTANT = AgentKind(
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
     # The scripted providers' key probe takes every key, so a key's link saves.
-    return build_container(tmp_path, agent_kinds=(ASSISTANT,), model_providers="scripted")
+    return build_container(tmp_path, agent_kinds=(ASSISTANT,), llm_providers="scripted")
 
 
 class Tenant:
@@ -112,23 +118,27 @@ async def parked(
         },
     )
     assert started.status_code == 201, started.text
-    session_id = UUID(started.json()["id"])
+    agent_session_id = UUID(started.json()["id"])
     ctx = await context_of(container, tenant[Role.MEMBER])
-    sessions, steps = container.managers.agent_sessions, container.managers.steps
+    sessions, steps = container.managers.agent_sessions, container.managers.agent_steps
     member = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
     (message,) = await steps.append_inputs(
-        ctx, session_id, [make_message(session_id, principal=member)]
+        ctx, agent_session_id, [make_message(agent_session_id, principal=member)]
     )
-    epoch = await steps.begin_run(ctx, session_id)
-    written: list[Step] = []
+    epoch = await steps.begin_run(ctx, agent_session_id)
+    written: list[AgentStep] = []
     if call:
-        request = make_request(session_id, message.id, (message.id,))
-        response = make_response(session_id, message.id, request.id)
-        written = [request, response, make_tool_request(session_id, message.id, response.id)]
-        await steps.append_steps(ctx, session_id, epoch, written)
-    await sessions.park(ctx, session_id, epoch, message.id, park)
+        request = make_request(agent_session_id, message.id, (message.id,))
+        response = make_response(agent_session_id, message.id, request.id)
+        written = [request, response, make_tool_request(agent_session_id, message.id, response.id)]
+        await steps.append_agent_steps(ctx, agent_session_id, epoch, written)
+    await sessions.park(ctx, agent_session_id, epoch, message.id, park)
     return LoopRun(
-        session_id=session_id, epoch=epoch, loop_id=message.id, end=RunEnd.PARKED, park=park
+        agent_session_id=agent_session_id,
+        epoch=epoch,
+        loop_id=message.id,
+        end=RunEnd.PARKED,
+        park=park,
     )
 
 
@@ -202,13 +212,13 @@ async def test_a_questions_link_takes_its_requesters_answer_as_a_message(
     notified = await told(container, ajax, run)
     assert await recipients(container, ajax, notified) == {Role.MEMBER}
     (link,) = {n.link for n in notified}
-    assert link == f"/v1/agent-sessions/{run.session_id}/messages"
+    assert link == f"/v1/agent-sessions/{run.agent_session_id}/messages"
     answer = {"json": {"text": "Week 12."}}
     viewer = await follow(client, "POST", link, ajax[Role.VIEWER], **answer)
     assert viewer.status_code == 403, viewer.text
     crossed = await follow(client, "POST", link, ajax.stranger, **answer)
     assert crossed.status_code == 404, crossed.text
-    path = f"/v1/agent-sessions/{run.session_id}"
+    path = f"/v1/agent-sessions/{run.agent_session_id}"
     assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
     answered = await follow(client, "POST", link, ajax[Role.MEMBER], **answer)
     assert answered.status_code == 201, answered.text
@@ -221,27 +231,27 @@ async def test_a_budgets_link_answers_who_sets_budgets_alone(
 ) -> None:
     owner = await context_of(container, ajax[Role.OWNER])
     now = utcnow()
-    budget = await container.managers.budgets.create_budget(
+    budget = await container.managers.spend_budgets.create_spend_budget(
         owner,
-        Budget(
+        SpendBudget(
             id=new_id(),
             created_at=now,
             updated_at=now,
             created_by=owner.user_id,
             updated_by=owner.user_id,
-            scope_kind=BudgetScopeKind.TENANT,
+            scope_kind=SpendBudgetScopeKind.TENANT,
             scope_key=str(ajax.org_id),
             window_kind=WindowKind.LIFE,
             cost_micros=1,
         ),
     )
     run = await parked(
-        client, container, ajax, Park(reason=ParkReason.BUDGET, unlock=str(budget.id))
+        client, container, ajax, Park(reason=ParkReason.SPEND_BUDGET, unlock=str(budget.id))
     )
     notified = await told(container, ajax, run)
     assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}
     (link,) = {n.link for n in notified}
-    assert link == f"/v1/budgets/{budget.id}/amount"
+    assert link == f"/v1/spend-budgets/{budget.id}/amount"
     raised = {"json": {"cost_micros": 5_000_000}}
     for refused in (Role.MEMBER, Role.VIEWER):
         answered = await follow(client, "PUT", link, {**ajax[refused], "If-Match": '"1"'}, **raised)
@@ -269,14 +279,14 @@ async def test_a_cost_approvals_link_answers_who_approves_calls_alone(
     notified = await told(container, ajax, run)
     assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}
     (link,) = {n.link for n in notified}
-    assert link == f"/v1/agent-sessions/{run.session_id}/cost-approval"
+    assert link == f"/v1/agent-sessions/{run.agent_session_id}/cost-approval"
     approval = {"json": {"up_to_micros": 5_000_000}}
     for refused in (Role.MEMBER, Role.VIEWER):
         answered = await follow(client, "POST", link, ajax[refused], **approval)
         assert answered.status_code == 403, f"{refused}: {answered.text}"
     crossed = await follow(client, "POST", link, ajax.stranger, **approval)
     assert crossed.status_code == 404, crossed.text
-    path = f"/v1/agent-sessions/{run.session_id}"
+    path = f"/v1/agent-sessions/{run.agent_session_id}"
     assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
     approved = await follow(client, "POST", link, ajax[Role.ADMIN], **approval)
     assert approved.status_code == 201, approved.text
@@ -303,7 +313,7 @@ async def test_a_missing_keys_link_answers_who_saves_the_orgs_keys_alone(
         assert answered.status_code == 403, f"{refused}: {answered.text}"
     theirs = await follow(client, "PUT", link, ajax.stranger, json={"value": "sk-ant-bravo"})
     assert theirs.status_code == 200, theirs.text
-    path = f"/v1/agent-sessions/{run.session_id}"
+    path = f"/v1/agent-sessions/{run.agent_session_id}"
     assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
     saved = await follow(client, "PUT", link, ajax[Role.ADMIN], **key)
     assert saved.status_code == 200, saved.text

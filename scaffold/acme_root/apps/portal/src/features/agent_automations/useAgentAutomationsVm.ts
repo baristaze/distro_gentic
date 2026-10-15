@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Role } from "@acme/client";
+import type { common } from "@acme/client";
 import { runtimeConfig } from "../../app/config";
 import { useSlot } from "../../app/slot";
 import { errorMessage } from "../../app/errorMessage";
@@ -29,7 +29,7 @@ export function useAgentAutomationsVm() {
   // A new agent automation starts the composer's default agent unless another is chosen.
   const [draft, setDraft] = useState<AgentAutomationDraft>(() => ({ ...EMPTY_DRAFT, agentKind: firstAgent }));
   const [problem, setProblem] = useState<string | null>(null);
-  const [role, setRole] = useState<Role | "">("");
+  const [role, setRole] = useState<common.Role | "">("");
   const [grantProblem, setGrantProblem] = useState<string | null>(null);
   const submit = () => {
     const made = agentAutomationRequest(draft, { agentProjectRequired: required });

@@ -2,12 +2,12 @@
 // which status, on which agent, and whether the archived ones too. The bar
 // holds the person's own sessions, so whose they are is no part of it. It
 // imports no code, so the preferences store reads it without the kit.
-import type { SessionStatus } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 
 /** What the left bar shows of the person's own sessions: in which status,
  * on which agent, and whether the archived ones too. */
 export interface SessionFilter {
-  status: SessionStatus | "any";
+  status: agent_sessions.AgentSessionStatus | "any";
   /** An agent kind; empty for any. */
   kind: string;
   archived: boolean;

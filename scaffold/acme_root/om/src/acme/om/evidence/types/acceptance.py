@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.base import Created, Identifiable, OmBase
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import PATTERN
 from acme.om.evidence.types.record import AGENT_PROJECT, NAME, VERSION, ExecutionRecord
@@ -25,7 +25,7 @@ class Surface(StrEnum):
     PULL_REQUEST = "pull_request"
 
 
-class Leak(Platform):
+class Leak(OmBase):
     """A mention of the hidden suite where the agent can read it: the
     surface, the item in it, and the marker it holds."""
 
@@ -34,7 +34,7 @@ class Leak(Platform):
     marker: str = Field(min_length=1)
 
 
-class HiddenSuite(Platform):
+class HiddenSuite(OmBase):
     """The checks acceptance runs beside the visible ones, which the agent
     never sees, and the markers a scan looks for: the suite's name, its
     paths, its case names. Its checks run on a fresh executor at the head
@@ -57,7 +57,7 @@ class HiddenSuite(Platform):
     markers: tuple[str, ...] = Field(min_length=1, max_length=200)
 
 
-class Scenario(Platform):
+class Scenario(OmBase):
     """One acceptance scenario: the agent project and the version the work starts
     from, the objective the agent reads, the markers of the root cause it
     hides, the checks of the agent project's policy the baseline must fail on, the
@@ -87,7 +87,7 @@ class Link(StrEnum):
     UNMENTIONED = "unmentioned"  # no surface the agent reads names the hidden suite
 
 
-class Break(Platform):
+class Break(OmBase):
     """A link the chain lacks, and why."""
 
     link: Link
@@ -100,7 +100,7 @@ class AcceptanceVerdict(Identifiable, Created):
     kept here and nowhere the agent reads. It passed only with no break."""
 
     scenario: str = Field(pattern=NAME)
-    session_id: UUID
+    agent_session_id: UUID
     head: str | None = Field(default=None, pattern=VERSION)
     breaks: tuple[Break, ...] = ()
     hidden: tuple[ExecutionRecord, ...] = ()

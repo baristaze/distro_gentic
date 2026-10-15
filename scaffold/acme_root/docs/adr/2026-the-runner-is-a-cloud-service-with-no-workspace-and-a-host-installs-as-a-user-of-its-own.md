@@ -24,7 +24,7 @@ workspace.** It ships as an image of its own, built once by the commit
 on `main`, planned and recorded with the API's, and carried to
 production by its digest on `release`. It rolls after the API's
 migration, one task at a time, with a count and a ceiling set in the
-environment's root. It runs with `ACME_WORKSPACE_BACKEND=none`: a
+environment's root. It runs with `ACME_AGENT_WORKSPACE_BACKEND=none`: a
 session's tools run on a host of its tenant's pool, through the exec
 relay, and a session that asks the runner itself for a workspace is
 refused before its first model call.

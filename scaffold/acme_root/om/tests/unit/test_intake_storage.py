@@ -1,8 +1,9 @@
 import pytest
-from contracts.intake_storage import IntakeStorageContract
 
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
+
+from contracts.intake_storage import IntakeStorageContract
 
 
 class TestIntakeStorageMemory(IntakeStorageContract):

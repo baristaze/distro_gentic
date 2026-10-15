@@ -15,7 +15,7 @@ from acme.om.agent_knowledge.types.agent_knowledge import (
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     Conflict,
@@ -35,7 +35,7 @@ CREATED = "agent_knowledge.entry.created"
 REVIEWED = "agent_knowledge.entry.updated"  # a review or an edit
 
 
-class AgentKnowledgeOptions(Platform):
+class AgentKnowledgeOptions(OmBase):
     page: int = Field(default=200, gt=0)
     # The most entries one recall brings into a session.
     most: int = Field(default=10, gt=0)
@@ -66,17 +66,22 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         self._clock = clock
 
     async def suggest(
-        self, ctx: TenantContext, session_id: UUID, title: str, trigger: tuple[str, ...], text: str
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
     ) -> AgentKnowledge:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         return await self._create(
             ctx,
             title,
             trigger,
             text,
-            suggested_by=session_id,
+            suggested_by=agent_session_id,
             agent_project_id=agent_project_id,
             entry_id=new_id(),
         )
@@ -174,10 +179,10 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         return decided
 
     async def recall(
-        self, ctx: TenantContext, session_id: UUID, about: str
+        self, ctx: TenantContext, agent_session_id: UUID, about: str
     ) -> tuple[AgentKnowledge, ...]:
         ctx.require(Permission.WRITE)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         found: list[AgentKnowledge] = []
         after: UUID | None = None
         while len(found) < self._options.most:
@@ -195,18 +200,18 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
             # Which version each recall brought in, kept before the session
             # reads it, so a reading of the sessions that stalled names it.
             await self._storage.create_recalls(
-                ctx.org_id, tuple(self._recall(entry, session_id) for entry in found)
+                ctx.org_id, tuple(self._recall(entry, agent_session_id) for entry in found)
             )
-            steps = [recalled_step(entry, session_id, principal, now) for entry in found]
-            await self._sessions.receive(ctx, session_id, steps)
+            steps = [recalled_step(entry, agent_session_id, principal, now) for entry in found]
+            await self._sessions.receive(ctx, agent_session_id, steps)
         return tuple(found)
 
     async def search(
-        self, ctx: TenantContext, session_id: UUID, query: str, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, query: str, limit: int
     ) -> tuple[AgentKnowledge, ...]:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         # Every entry the session reaches is read, a page at a time: a
         # tenant's reviewed agent knowledge is what its people kept by hand.
         reached: list[AgentKnowledge] = []
@@ -222,16 +227,16 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         most = max(1, min(limit, self._options.most_found))
         return tuple(ranked(reached, query, most))
 
-    async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> AgentKnowledge:
+    async def read(self, ctx: TenantContext, agent_session_id: UUID, slug: str) -> AgentKnowledge:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
-        agent_project_id = await self._agent_projects.agent_project_of(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        agent_project_id = await self._agent_projects.agent_project_of(ctx, agent_session_id)
         entry = await self._storage.read_by_slug(ctx.org_id, agent_project_id, slug)
         if entry is None or not reaches(entry, agent_project_id):
             raise NotFound(f"no agent knowledge {slug!r} this session reaches")
         # An entry read on demand is reached as a recalled one is: its
         # version is kept for the reading of the sessions that stalled.
-        await self._storage.create_recalls(ctx.org_id, (self._recall(entry, session_id),))
+        await self._storage.create_recalls(ctx.org_id, (self._recall(entry, agent_session_id),))
         return entry
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -284,14 +289,14 @@ class AgentKnowledgeManagerImpl(AgentKnowledgeManagerInterface):
         and read again on demand, so it has no bound of a session's to meet."""
         return checked(f"{title}\n{text}", self._reach)
 
-    def _recall(self, entry: AgentKnowledge, session_id: UUID) -> AgentKnowledgeRecall:
+    def _recall(self, entry: AgentKnowledge, agent_session_id: UUID) -> AgentKnowledgeRecall:
         """The record that a session reached an entry's version. Its id is
         the entry's in the session, so a recall or a read again writes
         none."""
         return AgentKnowledgeRecall(
-            id=derived_id(entry.id, entry.created_at, f"recalled:{session_id}"),
+            id=derived_id(entry.id, entry.created_at, f"recalled:{agent_session_id}"),
             created_at=self._clock(),
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             entry_id=entry.id,
             version=entry.version,
         )

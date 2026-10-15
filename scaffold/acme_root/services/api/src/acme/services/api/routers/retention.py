@@ -11,9 +11,9 @@ from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.platform_resolve import RetentionService
 from acme.services.api.gateway.precondition import IfMatch
 from acme.services.api.types.retention import (
+    AgentSessionRetentionView,
     RetentionRequest,
     RetentionView,
-    SessionRetentionView,
 )
 
 router = APIRouter(prefix="/retention", tags=["retention"])
@@ -36,14 +36,14 @@ async def write_policy(
     return await retention.write_policy(ctx, body, version)
 
 
-@router.post("/sessions/{session_id}/erase", response_model=SessionRetentionView)
+@router.post("/agent-sessions/{agent_session_id}/erase", response_model=AgentSessionRetentionView)
 async def erase_content(
-    ctx: Ctx, retention: RetentionService, session_id: UUID
-) -> SessionRetentionView:
+    ctx: Ctx, retention: RetentionService, agent_session_id: UUID
+) -> AgentSessionRetentionView:
     """Erases what the session said, for good: its key is revoked and
     destroyed, and the audit holds the destruction. Its steps keep their
     place, type, and shape, and read as saying nothing; the session takes no
     content again. A session marked deleted is erased too. Once: a second
     call answers as the first left it. `404 not_found` for a session the
     tenant does not hold, which is how another tenant's reads."""
-    return await retention.erase_content(ctx, session_id)
+    return await retention.erase_content(ctx, agent_session_id)

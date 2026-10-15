@@ -1,30 +1,28 @@
 # Infrastructure
 
-The capabilities the platform asks for and never implements itself:
-cache, buckets, topics, queues, secrets, keys, flags, outages, streams,
-observability, and where an agent's tools run: workspaces, the
-machines a VM workspace runs on, and the transport. Each is an
-interface with a twin that runs on a laptop and an implementation that
-runs in the cloud. The object model sees the interface alone, and
-infra imports nothing from the object model.
+The capabilities the system asks for and never implements itself, one
+row each in the table below, each in its own module under
+`src/acme/infra/`. Each is an interface with a twin that runs on a laptop
+and an implementation that runs in the cloud. The object model sees the
+interface alone, and infra imports nothing from the object model.
 
 ## The capabilities
 
 | Capability | What it promises | Locally | In the cloud |
 |------------|------------------|---------|--------------|
 | Cache | Named scopes, so unrelated consumers never share a key; one atomic windowed counter for rate limits and generations; a read cache under the tenant's generation; fails open | In-process, or Valkey | Valkey (ElastiCache) |
-| Buckets | Blobs under the tenant's prefix (`user-file-uploads`, `exports`, `artifacts`): put, get, exists, list, delete, a presigned download, and a presigned form upload bounded by type and size | A folder, or MinIO | S3, one private versioned bucket each |
-| Topics | Wake-ups and live updates (`work_available`, `entity_changed`), best effort; a publish answers whether the bus took it | In-process, or Valkey pub/sub | Valkey pub/sub |
-| Queues | Work whose producer is outside the platform: `webhooks`, what a provider sends; at least once, so the consumer is idempotent | In-process, or ElasticMQ | SQS, with a dead-letter queue |
+| Buckets | Blobs under the tenant's prefix, one bucket per member of `Buckets`: put, get, exists, list, delete, a presigned download, and a presigned form upload bounded by type and size | A folder, or MinIO | S3, one private versioned bucket each |
+| Topics | Wake-ups and live updates, one per member of `Topics`, best effort; a publish answers whether the bus took it | In-process, or Valkey pub/sub | Valkey pub/sub |
+| Queues | Work whose producer is outside the system, such as a provider's delivery, one queue per member of `Queues`; at least once, so the consumer is idempotent | In-process, or ElasticMQ | SQS, with a dead-letter queue |
 | Secrets | Get, has, put, and delete by name; the object model holds a name, never a value | The settings, from `.env` and the environment | Secrets Manager |
 | Keys | Make, unwrap, and re-wrap a data key bound to its tenant, its key, and its version; keeps no copy | In-process, derived from a root key | KMS, under the account's key |
 | Streams | Short numbered logs read live while they are written, one per stream, in a group read together; bounded by entries, bytes, streams a group, streams overall, and an idle time, past which the oldest goes, never the newest; a cache of a record kept elsewhere, so it fails open | In-process, or Valkey streams | Valkey streams, shared by the agent fleet |
 | Flags | Every declared flag's value for an org and a person in it, one call; a user's rule over its org's, over the provider's default, over the code's; a provider that fails reads the code's | A rules file, read on every evaluation | LaunchDarkly through OpenFeature, in process, or none |
 | Outages | A provider marked failing for one credential (the org that holds it and the secret's name) until a retry time; read before a call, cleared by a success; fails open | None in one process, or on Valkey | On Valkey, shared by every process |
 | Observability | Structured logs, Prometheus metrics, OpenTelemetry traces, error reports | Prometheus, Grafana, Jaeger, GlitchTip | CloudWatch, X-Ray, a Sentry-compatible backend |
-| Workspaces | Prepare, release, and purge the place an agent works, to an isolation spec (a mode, an egress policy, limits, whether it must be one a snapshot can keep, and the base it starts from); a spec the provider cannot meet is refused, never weakened; what a workspace is rebuilt from that is gone for good is `WorkspaceLost`, and what changed under the model since its last loop rides on the workspace prepared. A container is snapshotted whole, its writable layer and its volume, and a prepare starts from a snapshot ([ADR 1027](../docs/adr/1027-a-workspace-is-snapshotted-whole-and-a-restore-a-rewind-or-a-fork-starts-from-it.md)), or from a base's: an image and its setup, built once per tenant ([ADR 1028](../docs/adr/1028-a-workspace-base-is-built-once-for-its-tenant-and-kept-as-a-snapshot.md)); a directory on a host refuses both. A VM is a machine per workspace, Docker inside it, and its snapshot is its disk, kept by the machines and named by its digest ([ADR 1029](../docs/adr/1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)) | A directory on this host, one whose commands run as an account of the host ([ADR 1021](../docs/adr/1021-a-host-directory-runs-its-commands-as-an-account-of-its-own-one-workspace-at-a-time.md)), a container on the local Docker, a machine on Lima, or the twin | A container per workspace, a machine on the cloud's, or none; a directory on the host, as an account or not, is refused at boot |
-| Machines | Start a machine from an image or a snapshot, run a command in it, stop it, snapshot its disk, and destroy it, each by name; say up front whether the host has a hypervisor, the egress it closes from outside a guest, the limits it enforces, and whether the store of its snapshots is encrypted at rest ([ADR 1029](../docs/adr/1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)); hand a machine of the cloud pool its seed as it starts, and close what read it ([ADR 2052](../docs/adr/2052-the-cloud-pool-runs-a-machine-per-session-whose-host-pulls-its-work.md)) | Lima on this host's hypervisor, its seed through its channel, or the twin | EC2 instances of the cloud pool's launch template, each seed its first-boot data, which take no command from outside; Lima is refused at boot |
-| Transport | Run a command in a workspace, streamed, and read a file from an offset, write, and list its files; a command is over when its own process exits, what it left holding its output ended after a short drain ([ADR 1023](../docs/adr/1023-a-command-is-over-when-its-own-process-exits-and-a-file-is-read-from-an-offset.md)), and its whole process tree ends at its deadline; a secret is brokered, or injected into the one process and redacted from all it prints ([ADR 1003](../docs/adr/1003-a-secret-that-cannot-be-brokered-is-injected-into-one-process.md)); how each command ended is recorded beside the workspaces, its output sealed under its session's key by the seal the command comes with | This process, as itself or as an account, `docker exec`, `limactl shell`, or the twin | `docker exec`, or the machines' own channel |
+| Agent workspaces | Prepare, release, and purge the place an agent works, to an isolation spec (a mode, an egress policy, limits, whether it must be one a snapshot can keep, and the base it starts from); a spec the provider cannot meet is refused, never weakened; what a workspace is rebuilt from that is gone for good is `AgentWorkspaceLost`, and what changed under the model since its last loop rides on the workspace prepared. A container is snapshotted whole, its writable layer and its volume, and a prepare starts from a snapshot ([ADR 1027](../docs/adr/1027-a-workspace-is-snapshotted-whole-and-a-restore-a-rewind-or-a-fork-starts-from-it.md)), or from a base's: an image and its setup, built once per tenant ([ADR 1028](../docs/adr/1028-a-workspace-base-is-built-once-for-its-tenant-and-kept-as-a-snapshot.md)); a directory on a host refuses both. A VM is a VM per workspace, Docker inside it, and its snapshot is its disk, kept by the VMs and named by its digest ([ADR 1029](../docs/adr/1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)) | A directory on this host, one whose commands run as an account of the host ([ADR 1021](../docs/adr/1021-a-host-directory-runs-its-commands-as-an-account-of-its-own-one-workspace-at-a-time.md)), a container on the local Docker, a VM on Lima, or the twin | A container per workspace, a VM on the cloud's, or none; a directory on the host, as an account or not, is refused at boot |
+| VMs | Start a VM from an image or a snapshot, run a command in it, stop it, snapshot its disk, and destroy it, each by name; say up front whether the host has a hypervisor, the egress it closes from outside a guest, the limits it enforces, and whether the store of its snapshots is encrypted at rest ([ADR 1029](../docs/adr/1029-a-vm-workspace-is-a-machine-of-its-own-and-its-snapshot-is-its-disk.md)); hand a VM of the cloud pool its seed as it starts, and close what read it ([ADR 2052](../docs/adr/2052-the-cloud-pool-runs-a-vm-per-session-whose-host-pulls-its-work.md)) | Lima on this host's hypervisor, its seed through its channel, or the twin | EC2 instances of the cloud pool's launch template, each seed its first-boot data, which take no command from outside; Lima is refused at boot |
+| Transport | Run a command in a workspace, streamed, and read a file from an offset, write, and list its files; a command is over when its own process exits, what it left holding its output ended after a short drain ([ADR 1023](../docs/adr/1023-a-command-is-over-when-its-own-process-exits-and-a-file-is-read-from-an-offset.md)), and its whole process tree ends at its deadline; a secret is brokered, or injected into the one process and redacted from all it prints ([ADR 1003](../docs/adr/1003-a-secret-that-cannot-be-brokered-is-injected-into-one-process.md)); how each command ended is recorded beside the workspaces, its output sealed under its session's key by the seal the command comes with | This process, as itself or as an account, `docker exec`, `limactl shell`, or the twin | `docker exec`, or the VMs' own channel |
 
 The environment name decides what a process may use: `local` and `test`
 may use the in-process and compose backends, and every other
@@ -41,7 +39,7 @@ environment refuses them at boot.
   the AWS impl cuts the call there
   ([ADR 0069](../docs/adr/0069-a-request-has-a-deadline-its-provider-calls-share.md)).
 - **One exception family**, rooted at `InfraException`, with the status
-  and code the platform's own exceptions carry
+  and code the system's own exceptions carry
   ([ADR 0005](../docs/adr/0005-infra-exception-root.md)).
 - **One breaker in front of Valkey.** A run of calls that spend their
   whole timeout opens it. While it is open, a read is a miss, a write
@@ -56,7 +54,7 @@ environment refuses them at boot.
 A manager receives the interfaces it needs from the root at boot and
 passes the org's id on every tenant call, so keys, prefixes, and
 secrets of one org never meet another's. `EMPTY_UUID` names the
-platform's own. A manager that caches a read does it through
+system's own. A manager that caches a read does it through
 `ReadCache`, and every write it makes bumps the tenant's generation
 once its transaction commits
 ([ADR 0095](../docs/adr/0095-a-read-cache-is-keyed-by-the-tenants-generation.md)).

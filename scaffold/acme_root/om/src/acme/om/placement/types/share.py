@@ -7,14 +7,14 @@ from typing import Annotated
 
 from pydantic import Field, StringConstraints
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 from acme.om.work.types.tenant_cap import MAX_CAP
 
 PlanTier = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,31}$")]
 """A plan tier's name: a lane's name holds it, so it is short and plain."""
 
 
-class TierShare(Platform):
+class TierShare(OmBase):
     """A plan tier's share: the most loops one tenant holds claimed on the
     tier's lane, the cap its runners pass to the claim."""
 
@@ -31,7 +31,7 @@ class FairShare(Identifiable, Trackable):
     version: int = 1
 
 
-class ShareStanding(Platform):
+class ShareStanding(OmBase):
     """A tenant's share as an operator reads it: its row, and the most of
     its loops that run at once on its lane, which the claim holds. That is
     its own cap where an operator set one (`own_cap`), and its lane's

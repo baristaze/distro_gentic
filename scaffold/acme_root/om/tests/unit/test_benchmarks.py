@@ -5,7 +5,6 @@ trials interleave on one executor; and a candidate that scores under its
 baseline is flagged."""
 
 import pytest
-from contracts.benchmark_storage import BASELINE, CANDIDATE, make_trials, operator
 
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.benchmarks.rules import interleaving_refusal, qualifications, schedule
@@ -13,6 +12,8 @@ from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
 from acme.om.benchmarks.types.benchmark import BenchmarkTrials, Contender
 from acme.om.context import OperatorRole
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
+
+from contracts.benchmark_storage import BASELINE, CANDIDATE, make_trials, operator
 
 WHOLE, NOTHING = 0, 7
 """Links a trial's chain lacks: none, or all seven."""
@@ -44,7 +45,7 @@ async def test_a_run_is_stored_with_its_fill_set_kind_version_score_and_cost(
     assert stored.candidate_result.cost_micros == stored.baseline_result.cost_micros == 500_000
     # Every trial is preserved, each with the whole verdict that judged it.
     assert stored.trials == run.trials
-    assert all(trial.verdict.session_id == trial.session_id for trial in stored.trials)
+    assert all(trial.verdict.agent_session_id == trial.agent_session_id for trial in stored.trials)
     assert stored.recorded_by == admin.identity_id
 
 
@@ -148,4 +149,4 @@ async def test_only_an_operator_with_write_records_one(benchmarks: BenchmarksMan
     with pytest.raises(NotAuthorized):
         await benchmarks.record(reader, run)
     with pytest.raises(NotFound):
-        await benchmarks.get(reader, run.trials[0].session_id)
+        await benchmarks.get(reader, run.trials[0].agent_session_id)

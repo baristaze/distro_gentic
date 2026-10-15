@@ -5,20 +5,20 @@ the forge holds for the reviewer to read."""
 
 from pathlib import Path
 
-from contracts.platform_agents import Platform, platform_over
-from contracts.tools import Tools, put_call, registry_of, tools_over
-
+from acme.infra.agent_workspaces import AgentWorkspace
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerTwinImpl
 from acme.infra.transports.local import TransportLocalImpl
-from acme.infra.workspaces import Workspace
-from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.events import ChangedFile, CheckRun, PullRequestRead
 from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
+from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.context import TenantContext
 from acme.om.intake.tools import FORGE
-from acme.om.steps.types.step import Step
 from acme.om.tools.tool import ToolInterface
+
+from contracts.platform_agents import Platform, platform_over
+from contracts.tools import Tools, put_call, registry_of, tools_over
 
 
 def unbound() -> object:
@@ -29,16 +29,16 @@ def on_the_host(tmp_path: Path) -> Tools:
     transport = TransportLocalImpl(
         tmp_path / "records", SecretsLocalImpl(None, {}), BrokerTwinImpl()
     )
-    return tools_over(transport, WorkspaceHostImpl(tmp_path / "workspaces"))
+    return tools_over(transport, AgentWorkspaceHostImpl(tmp_path / "workspaces"))
 
 
 async def called(
     tools: Tools,
     tool: ToolInterface,
     ctx: TenantContext,
-    workspace: Workspace,
+    workspace: AgentWorkspace,
     **call_input: object,
-) -> Step:
+) -> AgentStep:
     """The tool's call, run as the loop runs one the gate let through."""
     found = await put_call(
         tools.manager,

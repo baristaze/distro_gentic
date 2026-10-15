@@ -66,7 +66,7 @@ class CreateAgentProjectRequest(RequestBody):
     name: str = Field(min_length=1, max_length=MAX_AGENT_PROJECT_NAME)
     repository: RepositoryBody
     workspace_snapshots: bool = True
-    workspace_base: AgentWorkspaceBaseBody | None = None
+    agent_workspace_base: AgentWorkspaceBaseBody | None = None
 
 
 class RenameAgentProjectRequest(RequestBody):
@@ -78,7 +78,7 @@ class AgentProjectView(View):
     name: str
     repository: RepositoryView
     workspace_snapshots: bool
-    workspace_base: AgentWorkspaceBaseView | None
+    agent_workspace_base: AgentWorkspaceBaseView | None
     created_at: datetime
     created_by: UUID
     updated_at: datetime

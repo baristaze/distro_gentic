@@ -14,29 +14,20 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.spend_ledger_storage import funding
 from worker_support import request
 
 from acme.om.agent_billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
 from acme.om.agent_billing.rules import line_keys, tally_of
 from acme.om.agent_billing.sweep import ProviderBillsInterface
 from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind, LoopPayload
 from acme.om.agent_sessions.rules import resumed_step
-from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import Content, TextBlock
+from acme.om.agent_steps.types.header import InputHeader, ModelRequestHeader
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import derived_id, new_id, utcnow
-from acme.om.budgets.types.amount import Amount, Spend
-from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
-from acme.om.budgets.types.hold import (
-    Bill,
-    Billed,
-    BillUnknown,
-    Hold,
-    HoldLine,
-    NotBilled,
-    NotBilledProof,
-    Settlement,
-)
 from acme.om.context import (
     AppContext,
     AppType,
@@ -47,15 +38,26 @@ from acme.om.context import (
 )
 from acme.om.exceptions import StaleWriter
 from acme.om.placement.rules import own_lane
-from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import InputHeader, ModelRequestHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.spend_budgets.types.amount import Amount, Spend
+from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
+from acme.om.spend_budgets.types.spend_hold import (
+    Bill,
+    Billed,
+    BillUnknown,
+    NotBilled,
+    NotBilledProof,
+    SpendHold,
+    SpendHoldLine,
+    SpendSettlement,
+)
 from acme.om.tenancy.rules import operator_permissions_of
-from acme.om.work.types.work_item import LoopPayload, WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
+from acme.workers.maintenance.agent_sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
-from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
+
+from contracts.spend_ledger_storage import funding
 
 pytestmark = pytest.mark.integration
 
@@ -89,9 +91,9 @@ async def an_owner(container: WorkerContainer) -> TenantContext:
 
 
 def a_session() -> AgentSession:
-    now, by, session_id = utcnow(), new_id(), new_id()
+    now, by, agent_session_id = utcnow(), new_id(), new_id()
     return AgentSession(
-        id=session_id,
+        id=agent_session_id,
         created_at=now,
         updated_at=now,
         created_by=by,
@@ -99,18 +101,18 @@ def a_session() -> AgentSession:
         title="the pump's pressure log",
         kind="delivery",
         kind_version=1,
-        root_id=session_id,
+        root_id=agent_session_id,
     )
 
 
-def a_message(session_id: UUID) -> Step:
-    step_id = new_id()
-    return Step(
-        id=step_id,
+def a_message(agent_session_id: UUID) -> AgentStep:
+    agent_step_id = new_id()
+    return AgentStep(
+        id=agent_step_id,
         created_at=utcnow(),
-        session_id=session_id,
-        loop_id=step_id,
-        type=StepType.MESSAGE,
+        agent_session_id=agent_session_id,
+        loop_id=agent_step_id,
+        type=AgentStepType.MESSAGE,
         actor=Actor.PERSON,
         origin=Origin.PORTAL,
         header=InputHeader(principal=Principal(kind=PrincipalKind.PERSON, id=new_id())),
@@ -126,8 +128,10 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
 ) -> None:
     managers = container.managers
     owner = await an_owner(container)
-    session = await managers.agent_sessions.create_session(owner, a_session())
-    (message,) = await managers.steps.append_inputs(owner, session.id, [a_message(session.id)])
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
+    (message,) = await managers.agent_steps.append_inputs(
+        owner, session.id, [a_message(session.id)]
+    )
     # The loop's item on a lane of this test's own, claimed by a runner that
     # then dies: its lease runs out with nobody to renew it.
     lane, now = f"loop:agent_fleet-{new_id().hex[-8:]}", utcnow()
@@ -137,7 +141,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
         updated_at=now,
         created_by=owner.user_id,
         updated_by=owner.user_id,
-        kind=WorkKind.LOOP,
+        kind=AgentSessionWorkKind.LOOP,
         target_id=session.id,
         idempotency_key=new_id(),
         request_id=new_id(),
@@ -147,26 +151,26 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     )
     await container.storage.get_work_storage().create_item(owner.org_id, item)
     claimed = await managers.work.claim(
-        request(), lane, [WorkKind.LOOP], "runner-that-dies", timedelta(milliseconds=1)
+        request(), lane, [AgentSessionWorkKind.LOOP], "runner-that-dies", timedelta(milliseconds=1)
     )
     assert claimed is not None and claimed[1].id == item.id
     dead_ctx, _ = claimed
-    lost = await managers.steps.begin_run(dead_ctx, session.id)
+    lost = await managers.agent_steps.begin_run(dead_ctx, session.id)
     await asyncio.sleep(0.05)
 
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
 
     again = await managers.work.claim(
-        request(), lane, [WorkKind.LOOP], "runner-next", timedelta(minutes=1)
+        request(), lane, [AgentSessionWorkKind.LOOP], "runner-next", timedelta(minutes=1)
     )
     assert again is not None, "the sweep put the loop back in its lane"
     ctx, requeued = again
     assert (requeued.id, requeued.status) == (item.id, WorkStatus.CLAIMED)
-    epoch = await managers.steps.begin_run(ctx, session.id)
+    epoch = await managers.agent_steps.begin_run(ctx, session.id)
     assert epoch > lost
     # The run that died writes nothing more.
     with pytest.raises(StaleWriter):
-        await managers.steps.append_steps(
+        await managers.agent_steps.append_agent_steps(
             dead_ctx, session.id, lost, [resumed_step(new_id(), session.id, message.id, utcnow())]
         )
 
@@ -176,13 +180,13 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
 DAY = datetime(2026, 10, 2, tzinfo=UTC)
 
 
-def a_hold(org_line: HoldLine, opened: datetime, cost: int = 600) -> FundedHold:
+def a_hold(org_line: SpendHoldLine, opened: datetime, cost: int = 600) -> FundedHold:
     """A hold the money gate opened, drawing its one unit from the plan."""
-    hold = Hold(
+    hold = SpendHold(
         id=new_id(),
         created_at=opened,
         spender_id=new_id(),
-        session_id=new_id(),
+        agent_session_id=new_id(),
         purpose="main",
         exposure=Spend(cost_micros=cost, tokens=100),
         lines=(org_line,),
@@ -191,10 +195,10 @@ def a_hold(org_line: HoldLine, opened: datetime, cost: int = 600) -> FundedHold:
     return FundedHold(hold=hold, funding=funding(included=10), units=1, priced=priced)
 
 
-def a_line() -> HoldLine:
-    return HoldLine(
-        budget_id=new_id(),
-        scope=BudgetScope(kind=BudgetScopeKind.SESSION, key="s-1"),
+def a_line() -> SpendHoldLine:
+    return SpendHoldLine(
+        spend_budget_id=new_id(),
+        scope=SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key="s-1"),
         window_start=DAY,
         resets_at=DAY + timedelta(days=1),
         amount=Amount(cost_micros=1_000_000),
@@ -203,10 +207,10 @@ def a_line() -> HoldLine:
 
 async def settlement(
     container: WorkerContainer, org_id: UUID, hold: FundedHold
-) -> Settlement | None:
+) -> SpendSettlement | None:
     ledger = container.storage.get_spend_ledger_storage()
-    entries = await ledger.read_entries(org_id, hold_id=hold.id, limit=5)
-    return next((entry for entry in entries if isinstance(entry, Settlement)), None)
+    entries = await ledger.read_entries(org_id, spend_hold_id=hold.id, limit=5)
+    return next((entry for entry in entries if isinstance(entry, SpendSettlement)), None)
 
 
 async def test_a_hold_nobody_settled_settles_whole_once_its_call_is_past(
@@ -223,9 +227,9 @@ async def test_a_hold_nobody_settled_settles_whole_once_its_call_is_past(
     settled = a_hold(line, now - timedelta(hours=2))
     young = a_hold(line, now - timedelta(minutes=10))
     for hold in (stale, settled, young):
-        assert isinstance(await ledger.open_hold(owner.org_id, hold), FundedHold)
+        assert isinstance(await ledger.open_spend_hold(owner.org_id, hold), FundedHold)
     usage = Billed(usage=Spend(cost_micros=250, tokens=40))
-    first = await container.managers.budget_gate.settle(owner, settled.id, usage)
+    first = await container.managers.spend_budget_gate.settle(owner, settled.id, usage)
 
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
 
@@ -245,7 +249,7 @@ class Bills(ProviderBillsInterface):
     def __init__(self, answers: dict[UUID, Bill | Exception]) -> None:
         self._answers = answers
 
-    async def retrieve(self, org_id: UUID, hold: Hold) -> Bill | None:
+    async def retrieve(self, org_id: UUID, hold: SpendHold) -> Bill | None:
         answer = self._answers.get(hold.id)
         if isinstance(answer, Exception):
             raise answer
@@ -266,11 +270,11 @@ async def test_a_hold_settles_at_the_providers_bill_and_is_released_only_on_its_
     line = a_line()
     billed, over, released, unanswered = (a_hold(line, now - timedelta(hours=2)) for _ in range(4))
     for hold in (billed, over, released, unanswered):
-        assert isinstance(await ledger.open_hold(owner.org_id, hold), FundedHold)
+        assert isinstance(await ledger.open_spend_hold(owner.org_id, hold), FundedHold)
     proof = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
     sweep = HoldSweepImpl(
         ledger,
-        container.managers.budget_gate,
+        container.managers.spend_budget_gate,
         container.managers.tenancy,
         Bills(
             {
@@ -325,7 +329,7 @@ async def its_loop(
 ) -> tuple[TenantContext, WorkItem]:
     """The tenant's next loop, claimed by a runner that holds it for an hour."""
     claimed = await container.managers.work.claim(
-        request(), own_lane(owner.org_id), [WorkKind.LOOP], "runner", timedelta(hours=1)
+        request(), own_lane(owner.org_id), [AgentSessionWorkKind.LOOP], "runner", timedelta(hours=1)
     )
     assert claimed is not None
     return claimed
@@ -340,14 +344,14 @@ def a_sweep(container: WorkerContainer, clock: Callable[[], datetime]) -> Stalle
     )
 
 
-def a_model_request(message: Step, at: datetime) -> Step:
+def a_model_request(message: AgentStep, at: datetime) -> AgentStep:
     person = Principal(kind=PrincipalKind.PERSON, id=new_id())
-    return Step(
+    return AgentStep(
         id=new_id(),
         created_at=at,
-        session_id=message.session_id,
+        agent_session_id=message.agent_session_id,
         loop_id=message.loop_id,
-        type=StepType.MODEL_REQUEST,
+        type=AgentStepType.MODEL_REQUEST,
         actor=Actor.ENGINE,
         origin=Origin.ENGINE,
         refs=(message.id,),
@@ -372,10 +376,10 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     nothing more. A session pending for less, or idle, is left alone."""
     managers = container.managers
     owner = await an_owner_on_its_own_lane(container)
-    stuck = await managers.agent_sessions.create_session(owner, a_session())
-    idle = await managers.agent_sessions.create_session(owner, a_session())
+    stuck = await managers.agent_sessions.create_agent_session(owner, a_session())
+    idle = await managers.agent_sessions.create_agent_session(owner, a_session())
     _, stuck = await managers.agent_sessions.receive(owner, stuck.id, [a_message(stuck.id)])
-    assert stuck.status is SessionStatus.PENDING
+    assert stuck.status is AgentSessionStatus.PENDING
     ctx, loop = await its_loop(container, owner)
     assert loop.target_id == stuck.id
     await managers.work.fail_for_good(ctx, loop, "the runner refused it")
@@ -391,7 +395,7 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None
     assert (asked.kind, asked.target_id, asked.created_by) == (
-        WorkKind.LOOP,
+        AgentSessionWorkKind.LOOP,
         stuck.id,
         stuck.created_by,
     )
@@ -414,7 +418,7 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     passes."""
     managers = container.managers
     owner = await an_owner_on_its_own_lane(container)
-    session = await managers.agent_sessions.create_session(owner, a_session())
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
     (message,), session = await managers.agent_sessions.receive(
         owner, session.id, [a_message(session.id)]
     )
@@ -422,12 +426,14 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     # projection at its start, then a model request 21 minutes after the input.
     ctx, loop = await its_loop(container, owner)
     assert loop.target_id == session.id
-    epoch = await managers.steps.begin_run(ctx, session.id)
+    epoch = await managers.agent_steps.begin_run(ctx, session.id)
     await managers.agent_sessions.project_status(ctx, session.id)
     written = session.updated_at + timedelta(minutes=21)
-    await managers.steps.append_steps(ctx, session.id, epoch, [a_model_request(message, written)])
-    row = await managers.agent_sessions.get_session(owner, session.id)
-    assert (row.status, row.version) == (SessionStatus.PENDING, session.version)
+    await managers.agent_steps.append_agent_steps(
+        ctx, session.id, epoch, [a_model_request(message, written)]
+    )
+    row = await managers.agent_sessions.get_agent_session(owner, session.id)
+    assert (row.status, row.version) == (AgentSessionStatus.PENDING, session.version)
 
     work = container.storage.get_work_storage()
     key = derived_id(row.id, row.updated_at, f"stalled:{row.version}")
@@ -443,7 +449,7 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     await sweep(request())
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None, "its last step, a minute old, holds nothing"
-    assert (asked.kind, asked.target_id) == (WorkKind.LOOP, session.id)
+    assert (asked.kind, asked.target_id) == (AgentSessionWorkKind.LOOP, session.id)
     now = later + timedelta(minutes=1)
     await sweep(request())
     now = written + StalledOptions().stall_after * 2

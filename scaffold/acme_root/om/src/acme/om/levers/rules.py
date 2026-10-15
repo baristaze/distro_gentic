@@ -17,7 +17,19 @@ from uuid import UUID
 
 from acme.integrations.model_providers.types import StopReason
 from acme.om.agent_sessions.limits import DEADLINE_UNLOCK, STEP_GUARD_UNLOCK
+from acme.om.agent_steps.types.agent_step import Actor, AgentStepType, Origin
+from acme.om.agent_steps.types.header import (
+    LoopEndedHeader,
+    LoopOutcome,
+    ModelRequestHeader,
+    ModelResponseHeader,
+    ParkedHeader,
+    ParkReason,
+    ToolRequestHeader,
+    ToolResponseHeader,
+)
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog
+from acme.om.language_models.types.fill import MAIN
 from acme.om.levers.types.lever import (
     MAX_DETAIL,
     LeverCheck,
@@ -28,18 +40,6 @@ from acme.om.levers.types.lever import (
     SessionLevers,
     SpinTally,
 )
-from acme.om.models.types.fill import MAIN
-from acme.om.steps.types.header import (
-    LoopEndedHeader,
-    LoopOutcome,
-    ModelRequestHeader,
-    ModelResponseHeader,
-    ParkedHeader,
-    ParkReason,
-    ToolRequestHeader,
-    ToolResponseHeader,
-)
-from acme.om.steps.types.step import Actor, Origin, StepType
 from acme.om.trust.types.shape import StepShape
 
 MOST_PER_CHECK = 5
@@ -357,7 +357,7 @@ def spin_of(steps: Iterable[StepShape]) -> SpinTally:
             loop.turned = not (
                 header.truncated or header.abandoned or header.stop_reason is StopReason.PAUSE
             )
-        elif step.type is StepType.MESSAGE and step.actor is Actor.ENGINE:
+        elif step.type is AgentStepType.MESSAGE and step.actor is Actor.ENGINE:
             # The engine's word right after a whole turn is the nudge a turn
             # that called no tool earns.
             if turned and step.origin is Origin.ENGINE:
@@ -391,7 +391,7 @@ def standings(sessions: Sequence[SessionLevers], most: int) -> tuple[LeverStandi
             held.setdefault(lever, []).append(session)
     ranked: list[LeverStanding] = []
     for lever, reached in held.items():
-        spun = [session.session_id for session in reached if session.spin.spun]
+        spun = [session.agent_session_id for session in reached if session.spin.spun]
         without = total - len(reached)
         if without == 0 or not spun:
             continue

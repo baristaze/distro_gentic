@@ -7,10 +7,10 @@ the view carries what a reader judges a run by."""
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.intake.types.link import HandleKind
-from acme.om.steps.types.header import LoopOutcome
 from acme.services.api.types.common import View
 
 
@@ -29,7 +29,7 @@ class ExecutionView(View):
 
     id: UUID
     purpose: RunPurpose
-    step_id: UUID | None
+    agent_step_id: UUID | None
     validation_id: UUID | None
     agent_project: str
     version: str

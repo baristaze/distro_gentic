@@ -16,6 +16,33 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+)
+from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import CommandResult, CommandSpec
+from acme.infra.transports.broker import BrokerTwinImpl
+from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
+from acme.infra.transports.redaction import forms, marker
+from acme.infra.transports.twin import TwinHandler, TwinReply
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.content import UNPARSED
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase, new_id, utcnow
+from acme.om.context import Role, TenantContext
+from acme.om.exceptions import StaleWriter, ToolFailed
+from acme.om.tools.impl.manager import SECRET_USED, ToolsOptions
+from acme.om.tools.rules import ADVICE, call_deadline, command_text, recovered_text
+from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.tool import Effect, ToolInput
+
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.tools import (
@@ -36,32 +63,6 @@ from contracts.tools import (
     twin_transport,
 )
 
-from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.transports import CommandResult, CommandSpec
-from acme.infra.transports.broker import BrokerTwinImpl
-from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
-from acme.infra.transports.redaction import forms, marker
-from acme.infra.transports.twin import TwinHandler, TwinReply
-from acme.infra.workspaces import (
-    EgressMode,
-    EgressPolicy,
-    IsolationMode,
-    IsolationRefused,
-    IsolationSpec,
-    Workspace,
-)
-from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.om.base import Platform, new_id, utcnow
-from acme.om.context import Role, TenantContext
-from acme.om.exceptions import StaleWriter, ToolFailed
-from acme.om.steps.types.content import UNPARSED
-from acme.om.steps.types.header import ToolFailure
-from acme.om.steps.types.step import Step
-from acme.om.tools.impl.manager import SECRET_USED, ToolsOptions
-from acme.om.tools.rules import ADVICE, call_deadline, command_text, recovered_text
-from acme.om.tools.tool import ToolRuntime
-from acme.om.tools.types.tool import Effect, ToolInput
-
 SECRET = "ghs_9f8e7d6c5b4a3f2e1d0c-token"
 
 
@@ -73,7 +74,7 @@ def on_the_host(tmp_path: Path, ctx: TenantContext, options: ToolsOptions | None
     transport = TransportLocalImpl(
         tmp_path / "records", secrets, BrokerTwinImpl(), search_path=f"{python}:{DEFAULT_PATH}"
     )
-    return tools_over(transport, WorkspaceHostImpl(tmp_path / "workspaces"), options)
+    return tools_over(transport, AgentWorkspaceHostImpl(tmp_path / "workspaces"), options)
 
 
 async def test_a_secret_is_audited_by_name_and_never_reaches_a_step_or_an_event(
@@ -83,7 +84,7 @@ async def test_a_secret_is_audited_by_name_and_never_reaches_a_step_or_an_event(
     tools = on_the_host(tmp_path, ctx)
     tool = Command("call_api", effect=Effect.IDEMPOTENT, secrets=(INJECTED_TOKEN,))
     registry = registry_of(tool)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     script = (
         "import base64, os; t = os.environ['API_TOKEN']; "
         "print(t); print(base64.b64encode(t.encode()).decode()); print(repr(t))"
@@ -109,13 +110,13 @@ async def test_a_secret_is_audited_by_name_and_never_reaches_a_step_or_an_event(
     assert failure_of(response) is None
     text = result_text(response)
     assert text.count(marker("api_token")) == 3
-    events = await tools.events.get_events(ctx, 0, 100)
+    events = await tools.change_events.get_change_events(ctx, 0, 100)
     (audit,) = [event for event in events if event.kind == SECRET_USED]
     assert audit.target_id == found.request.id
     assert audit.payload["secret"] == "api_token" and audit.payload["tool"] == "call_api"
     stored = [
         step.model_dump_json()
-        for step in (await tools.steps.get_steps(ctx, found.session_id, 0, 100)).items
+        for step in (await tools.steps.get_agent_steps(ctx, found.agent_session_id, 0, 100)).items
     ]
     for held in (
         response.model_dump_json(),
@@ -133,7 +134,7 @@ async def test_the_whole_tree_ends_when_the_trees_deadline_comes_first(tmp_path:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path, ctx)
     registry = registry_of(Command("build", timeout=timedelta(hours=1)))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     script = "sleep 600 & echo $! > child.pid; sh -c 'sleep 600' & echo $! >> child.pid; wait"
     found = await put_call(
         tools.manager, tools.steps, ctx, "build", {"argv": ["sh", "-c", script]}, "execute"
@@ -166,7 +167,7 @@ async def test_the_tree_ends_at_its_deadline_on_a_host_with_no_ps(
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path, ctx)
     registry = registry_of(Command("build", timeout=timedelta(hours=1)))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     script = "sleep 600 & echo $! > child.pid; sleep 600"
     found = await put_call(
         tools.manager, tools.steps, ctx, "build", {"argv": ["sh", "-c", script]}, "execute"
@@ -191,7 +192,7 @@ async def test_a_failures_text_is_bounded_as_a_result_is(tmp_path: Path) -> None
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path, ctx, ToolsOptions(max_output_chars=300))
     registry = registry_of(Command("build", timeout=timedelta(hours=1)))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     script = "head -c 100000 /dev/zero | tr '\\0' x; sleep 600"
     found = await put_call(
         tools.manager, tools.steps, ctx, "build", {"argv": ["sh", "-c", script]}, "execute"
@@ -247,7 +248,7 @@ async def test_a_preflight_runs_by_the_trees_deadline(tmp_path: Path) -> None:
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     timed = Timed()
-    workspace = Workspace.absent(ctx.org_id, new_id())
+    workspace = AgentWorkspace.absent(ctx.org_id, new_id())
     found = await put_call(
         tools.manager, tools.steps, ctx, "push_branch", {"branch": "feature"}, "integration"
     )
@@ -268,7 +269,7 @@ async def test_a_non_zero_exit_is_a_result_and_not_a_failure(tmp_path: Path) -> 
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path, ctx)
     registry = registry_of(Command("run_tests"))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     found = await put_call(
         tools.manager,
         tools.steps,
@@ -305,7 +306,7 @@ async def test_a_call_the_tool_cannot_take_is_answered_with_its_class(
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(Command())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(tools.manager, tools.steps, ctx, tool, call_input, "execute")
     response = await tools.manager.execute(
         ctx,
@@ -326,9 +327,11 @@ async def test_a_session_with_no_workspace_is_refused_loudly(tmp_path: Path) -> 
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(Command())
-    no_workspace = IsolationSpec(mode=IsolationMode.NONE, egress=EgressPolicy(mode=EgressMode.NONE))
-    absent = await tools.manager.prepare_workspace(ctx, new_id(), no_workspace)
-    assert absent == Workspace.absent(ctx.org_id, absent.id)
+    no_agent_workspace = IsolationSpec(
+        mode=IsolationMode.NONE, egress=EgressPolicy(mode=EgressMode.NONE)
+    )
+    absent = await tools.manager.prepare_agent_workspace(ctx, new_id(), no_agent_workspace)
+    assert absent == AgentWorkspace.absent(ctx.org_id, absent.id)
     found = await put_call(
         tools.manager, tools.steps, ctx, "run_command", {"argv": ["ls"]}, "execute"
     )
@@ -352,7 +355,7 @@ async def test_a_workspace_the_provider_cannot_meet_is_refused_and_none_is_given
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     with pytest.raises(IsolationRefused):
-        await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+        await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
 
 
 async def test_an_unsafe_tool_runs_one_command_a_call(tmp_path: Path) -> None:
@@ -367,7 +370,7 @@ async def test_an_unsafe_tool_runs_one_command_a_call(tmp_path: Path) -> None:
             return await super().run(ctx, call_input, runtime)
 
     registry = registry_of(Twice("deploy", effect=Effect.UNSAFE))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(
         tools.manager, tools.steps, ctx, "deploy", {"argv": ["second"]}, "execute"
     )
@@ -394,7 +397,7 @@ async def test_a_secret_the_tool_does_not_declare_is_never_given(tmp_path: Path)
             return await runtime.run(("env",), secrets=("api_token",))
 
     registry = registry_of(Greedy("look"))
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(tools.manager, tools.steps, ctx, "look", {"argv": ["env"]}, "execute")
     response = await tools.manager.execute(
         ctx,
@@ -407,7 +410,9 @@ async def test_a_secret_the_tool_does_not_declare_is_never_given(tmp_path: Path)
     )
     assert failure_of(response) is ToolFailure.PERMANENT
     assert transport.commands == []
-    assert [e for e in await tools.events.get_events(ctx, 0, 10) if e.kind == SECRET_USED] == []
+    assert [
+        e for e in await tools.change_events.get_change_events(ctx, 0, 10) if e.kind == SECRET_USED
+    ] == []
 
 
 async def test_a_stale_run_is_refused_by_the_transport(tmp_path: Path) -> None:
@@ -415,11 +420,11 @@ async def test_a_stale_run_is_refused_by_the_transport(tmp_path: Path) -> None:
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(Command())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(
         tools.manager, tools.steps, ctx, "run_command", {"argv": ["ls"]}, "execute"
     )
-    later = await tools.steps.begin_run(ctx, found.session_id)
+    later = await tools.steps.begin_run(ctx, found.agent_session_id)
     await tools.manager.execute(
         ctx, registry, found.request, found.call_input, workspace, epoch=later, tree_deadline=None
     )
@@ -440,7 +445,7 @@ async def test_a_preflight_refuses_before_anyone_is_asked(tmp_path: Path) -> Non
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(PushBranch({"feature": False}))
-    workspace = Workspace.absent(ctx.org_id, new_id())
+    workspace = AgentWorkspace.absent(ctx.org_id, new_id())
     found = await put_call(
         tools.manager, tools.steps, ctx, "push_branch", {"branch": "gone"}, "integration"
     )
@@ -461,7 +466,7 @@ async def test_an_output_past_its_bound_keeps_its_head_and_its_tail_and_says_so(
     tools = tools_over(transport, options=ToolsOptions(max_output_chars=200))
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(Command())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     printed = "BEGIN" + "x" * 1000 + "THE END"
     found = await put_call(
         tools.manager, tools.steps, ctx, "run_command", {"argv": [printed]}, "execute"
@@ -502,7 +507,7 @@ async def test_each_stream_keeps_its_own_end_however_long_the_other(tmp_path: Pa
     transport.handler = a_failing_run(2000)
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(
         tools.manager, tools.steps, ctx, "run_command", {"argv": ["test"]}, "execute"
     )
@@ -548,20 +553,18 @@ class Flaky(Command):
         self.failures = failures
         self.runs = 0
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         self.runs += 1
         if self.runs <= self.failures:
             raise ToolFailed(ToolFailure.TRANSIENT, "the service did not answer")
         return CommandOutput(exit_code=0, stdout="answered", stderr="")
 
 
-async def flaky_call(tmp_path: Path, tool: Flaky) -> tuple[Tools, Step]:
+async def flaky_call(tmp_path: Path, tool: Flaky) -> tuple[Tools, AgentStep]:
     transport, _ = twin_transport(tmp_path)
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(tools.manager, tools.steps, ctx, "flaky", {"argv": ["ask"]}, "execute")
     response = await tools.manager.execute(
         ctx,
@@ -612,7 +615,7 @@ async def test_an_input_that_is_not_one_object_is_invalid_input_and_never_runs(
     tools = tools_over(transport)
     ctx = context(Role.SERVICE, make_org())
     registry = registry_of(Command())
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), TWIN_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), TWIN_SPEC)
     found = await put_call(
         tools.manager, tools.steps, ctx, "run_command", {UNPARSED: written}, "execute"
     )

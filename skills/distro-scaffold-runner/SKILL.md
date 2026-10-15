@@ -10,7 +10,7 @@ A path that starts with `../` is read from this skill's folder as
 `realpath` resolves it.
 Conventions: `../_shared/scaffold-conventions.md`.
 Sections of `../../distro_gentic_spec.md`: Sessions Are Work (Kinds of
-Work, Fair Share), Session Runners, Placement and Workspace Hosts
+Work, Fair Share), Agent Session Runners, Placement and Workspace Hosts
 (Placement, The Exec Relay Transport).
 Lenses: `../../lenses/placement.md`.
 
@@ -43,7 +43,7 @@ None.
 | `scripts/dev.sh` | a runner process for the lane, `serve --lane <lane>`, beside the default runner's |
 | `.env.example` | the lane, in the comment on `ACME_RUNNER_LANE` that says each lane in use has runners of its own |
 | `deployment/README.md` | the lane, in the row of the session runner |
-| `workers/session_runner/README.md` | the lane |
+| `workers/agent_session_runner/README.md` | the lane |
 
 ## Procedure
 
@@ -59,7 +59,7 @@ None.
    `RunnerContainer.build` among them. So a kind the API knows the
    runner runs, and this skill changes no entry point. A product's own
    entry point that sets ports of its own, as
-   `workers/session_runner/tests/e2e_runner.py` does, sets
+   `workers/agent_session_runner/tests/e2e_runner.py` does, sets
    `kinds=PRODUCT_KINDS` among them, since a session starts on a kind
    the API knows and runs on the runner, and a kind only one of them
    knows fails the session.
@@ -88,7 +88,7 @@ None.
      `om/tests/unit/test_placement.py`;
    - every knob the runner reads is still in `.env.example`,
      `test_every_knob_of_the_runner_is_in_the_example_env` in
-     `workers/session_runner/tests/test_runner.py`.
+     `workers/agent_session_runner/tests/test_runner.py`.
 
 Then the gate, `make check`, as After writing in the conventions
 runs it.

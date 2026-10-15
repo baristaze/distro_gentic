@@ -80,7 +80,7 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             item_id=detail.item_id,
             call_id=detail.key,
             org_id=detail.org_id,
-            session_id=detail.session_id,
+            agent_session_id=detail.agent_session_id,
             effect=detail.effect,
             deadline=detail.deadline,
             epoch=detail.epoch,

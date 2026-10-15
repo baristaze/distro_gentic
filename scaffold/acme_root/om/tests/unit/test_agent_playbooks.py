@@ -10,7 +10,34 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.budget_storage import make_budget
+from pydantic import ValidationError
+
+from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
+from acme.om.agent_playbooks.root import AgentPlaybooksLayer
+from acme.om.agent_playbooks.rules import GATES_KEY, narrowed, skill_md
+from acme.om.agent_playbooks.types.agent_playbook import (
+    AgentPlaybook,
+    AgentPlaybookDraft,
+    AgentPlaybookGate,
+)
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agent_steps.types.agent_step import AgentStepType
+from acme.om.agent_steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
+from acme.om.agents.types.kind import TreeLimits
+from acme.om.agents.types.request import Spawn
+from acme.om.agents.types.run import RunEnd
+from acme.om.base import derived_id, new_id, utcnow
+from acme.om.context import Role
+from acme.om.exceptions import NotAuthorized, NotFound
+from acme.om.platform_root import PlatformManagers, PlatformRootOptions
+from acme.om.spend_budgets.types.spend_budget import SpendBudgetScopeKind
+from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.tools.rules import decide
+from acme.om.tools.types.policy import Decision, ToolPolicyCall, ToolPolicyLayer, ToolPolicyRule
+from acme.om.tools.types.tool import Effect
+from acme.om.windows.gate import CallGateInterface
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
+
 from contracts.intake import Wired, wired
 from contracts.loops import (
     ASSISTANT,
@@ -23,33 +50,7 @@ from contracts.loops import (
     use,
 )
 from contracts.platform_loops import PlatformLoop, platform_loop_over
-from pydantic import ValidationError
-
-from acme.om.agent_playbooks.manager import AgentPlaybooksManagerInterface
-from acme.om.agent_playbooks.root import AgentPlaybooksLayer
-from acme.om.agent_playbooks.rules import GATES_KEY, narrowed, skill_md
-from acme.om.agent_playbooks.types.agent_playbook import (
-    AgentPlaybook,
-    AgentPlaybookDraft,
-    AgentPlaybookGate,
-)
-from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
-from acme.om.agents.types.kind import TreeLimits
-from acme.om.agents.types.request import Spawn
-from acme.om.agents.types.run import RunEnd
-from acme.om.base import derived_id, new_id, utcnow
-from acme.om.budgets.types.budget import BudgetScopeKind
-from acme.om.context import Role
-from acme.om.exceptions import NotAuthorized, NotFound
-from acme.om.platform_root import PlatformManagers, PlatformRootOptions
-from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
-from acme.om.steps.types.step import StepType
-from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.tools.rules import decide
-from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
-from acme.om.tools.types.tool import Effect
-from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from contracts.spend_budget_storage import make_spend_budget
 
 TOOLS = ("lookup", "call_api", "publish")
 CLASSES = ("read", "execute", "integration")
@@ -95,11 +96,13 @@ def test_gates_only_narrow_whatever_the_policy_beneath_decides() -> None:
     decisions = list(Decision)
     checked = 0
     for tool, cls in itertools.product(TOOLS, CLASSES):
-        call = PolicyCall(tool=tool, authorization_class=cls, effect=Effect.UNSAFE)
+        call = ToolPolicyCall(tool=tool, authorization_class=cls, effect=Effect.UNSAFE)
         for kind_d, tenant_d, ceiling_d in itertools.product(decisions, decisions, decisions):
-            defaults = PolicyLayer(rules=(PolicyRule(authorization_class=cls, decision=kind_d),))
-            tenant = PolicyLayer(rules=(PolicyRule(tool=tool, decision=tenant_d),))
-            ceilings = PolicyLayer(rules=(PolicyRule(decision=ceiling_d),))
+            defaults = ToolPolicyLayer(
+                rules=(ToolPolicyRule(authorization_class=cls, decision=kind_d),)
+            )
+            tenant = ToolPolicyLayer(rules=(ToolPolicyRule(tool=tool, decision=tenant_d),))
+            ceilings = ToolPolicyLayer(rules=(ToolPolicyRule(decision=ceiling_d),))
             decided = decide(call, defaults, tenant, ceilings)
             for chosen in itertools.combinations(gates, 2):
                 stands = narrowed(decided, chosen, tool, cls)
@@ -145,41 +148,49 @@ async def test_only_a_person_publishes_and_each_publish_is_the_next_version(
 
 
 async def test_a_deny_gate_refuses_a_call_the_policy_beneath_allows(platform: Wired) -> None:
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     await platform.agent_playbooks.publish(
         platform.owner, draft(gate(Decision.DENY, tool="lookup"))
     )
     with pytest.raises(NotAuthorized):
         await platform.agent_playbooks.invoke(
-            await platform.agents_call(platform.owner), session_id, "answer-a-question"
+            await platform.agents_call(platform.owner), agent_session_id, "answer-a-question"
         )
-    await platform.agent_playbooks.invoke(platform.owner, session_id, "answer-a-question")
+    await platform.agent_playbooks.invoke(platform.owner, agent_session_id, "answer-a-question")
     platform.anthropic.add(reply(use("lookup")), reply(said("I may not look it up.")))
-    assert (await platform.loops.run(platform.owner, session_id)).end is RunEnd.ENDED
+    assert (await platform.loops.run(platform.owner, agent_session_id)).end is RunEnd.ENDED
     assert platform.lookup.ran_as == []
-    (answer,) = [s for s in await platform.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+    (answer,) = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.TOOL_RESPONSE
+    ]
     assert isinstance(answer.header, ToolResponseHeader)
     assert answer.header.failure is ToolFailure.DENIED
     # The brief arrived as the invoker's message, in the standard's form.
-    (brief,) = [s for s in await platform.history(session_id) if s.type is StepType.MESSAGE]
+    (brief,) = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.MESSAGE
+    ]
     assert brief.as_text().startswith("---\nname: answer-a-question\n")
 
 
 async def test_an_approve_gate_holds_a_call_for_a_person(platform: Wired) -> None:
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     await platform.agent_playbooks.publish(
         platform.owner, draft(gate(Decision.APPROVE, cls="read"))
     )
-    await platform.agent_playbooks.invoke(platform.owner, session_id, "answer-a-question")
+    await platform.agent_playbooks.invoke(platform.owner, agent_session_id, "answer-a-question")
     platform.anthropic.add(reply(use("lookup")))
-    run = await platform.loops.run(platform.owner, session_id)
+    run = await platform.loops.run(platform.owner, agent_session_id)
     assert run.end is RunEnd.PARKED and run.park is not None
     assert run.park.reason is ParkReason.PERSON
     assert platform.lookup.ran_as == []
-    (request,) = [s for s in await platform.history(session_id) if s.type is StepType.TOOL_REQUEST]
-    await platform.managers.tools.decide_call(platform.owner, session_id, request.seq, approve=True)
+    (request,) = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.TOOL_REQUEST
+    ]
+    await platform.managers.tools.decide_call(
+        platform.owner, agent_session_id, request.seq, approve=True
+    )
     platform.anthropic.add(reply(said("The total is in.")))
-    assert (await platform.loops.run(platform.owner, session_id)).end is RunEnd.ENDED
+    assert (await platform.loops.run(platform.owner, agent_session_id)).end is RunEnd.ENDED
     assert platform.lookup.ran_as == [platform.owner.user_id]
 
 
@@ -218,11 +229,11 @@ async def test_a_sub_agent_meets_every_deny_gate_its_ancestors_invoked(tmp_path:
     root = await loop.start()
     await agent_playbooks.publish(loop.owner, draft(gate(Decision.DENY, tool="lookup")))
     await agent_playbooks.invoke(loop.owner, root, "answer-a-question")
-    for session_id in await sub_agents(loop, root):
+    for agent_session_id in await sub_agents(loop, root):
         loop.anthropic.add(reply(use("lookup")), reply(said("I may not look it up.")))
-        await loop.loops.run(loop.owner, session_id)
-        steps = await loop.history(session_id)
-        (answer,) = [s for s in steps if s.type is StepType.TOOL_RESPONSE]
+        await loop.loops.run(loop.owner, agent_session_id)
+        steps = await loop.history(agent_session_id)
+        (answer,) = [s for s in steps if s.type is AgentStepType.TOOL_RESPONSE]
         assert isinstance(answer.header, ToolResponseHeader)
         assert answer.header.failure is ToolFailure.DENIED
     assert loop.tools["lookup"].ran_as == []
@@ -236,14 +247,14 @@ async def test_a_sub_agent_waits_for_a_person_where_its_ancestors_gate_holds_a_c
     await agent_playbooks.publish(loop.owner, draft(gate(Decision.APPROVE, cls="read")))
     await agent_playbooks.invoke(loop.owner, root, "answer-a-question")
     child, grandchild = await sub_agents(loop, root)
-    for session_id in (child, grandchild):
+    for agent_session_id in (child, grandchild):
         loop.anthropic.add(reply(use("lookup")))
-        run = await loop.loops.run(loop.owner, session_id)
+        run = await loop.loops.run(loop.owner, agent_session_id)
         assert run.end is RunEnd.PARKED and run.park is not None
         assert run.park.reason is ParkReason.PERSON
     assert loop.tools["lookup"].ran_as == []
     steps = await loop.history(grandchild)
-    (request,) = [s for s in steps if s.type is StepType.TOOL_REQUEST]
+    (request,) = [s for s in steps if s.type is AgentStepType.TOOL_REQUEST]
     await loop.managers.tools.decide_call(loop.owner, grandchild, request.seq, approve=True)
     loop.anthropic.add(reply(said("The total is in.")))
     await loop.loops.run(loop.owner, grandchild)
@@ -269,13 +280,13 @@ async def test_a_sub_agent_meets_the_gates_invoked_above_a_session_a_person_dele
     # The grandchild's report woke the child: its own loop ends first.
     loop.anthropic.add(reply(said("My sub-agent waits.")))
     await loop.loops.run(loop.owner, child)
-    await loop.managers.agent_sessions.delete_session(loop.owner, child)
+    await loop.managers.agent_sessions.delete_agent_session(loop.owner, child)
     await loop.say(grandchild, "Look the total up.")
     loop.anthropic.add(reply(use("lookup")), reply(said("I may not look it up.")))
     run = await loop.loops.run(loop.owner, grandchild)
     assert run.end is RunEnd.ENDED and run.park is None
     steps = await loop.history(grandchild)
-    (answer,) = [s for s in steps if s.type is StepType.TOOL_RESPONSE]
+    (answer,) = [s for s in steps if s.type is AgentStepType.TOOL_RESPONSE]
     assert isinstance(answer.header, ToolResponseHeader)
     assert answer.header.failure is ToolFailure.DENIED
     assert loop.tools["lookup"].ran_as == []
@@ -296,33 +307,39 @@ async def test_a_call_whose_gates_are_not_found_waits_for_a_person(
     """Even a call the tenant's policy lets run unattended."""
     loop, agent_playbooks = deep(tmp_path)
     policy = await loop.managers.tools.get_policy(loop.owner)
-    rules = (PolicyRule(tool="lookup", decision=Decision.ALLOW),)
+    rules = (ToolPolicyRule(tool="lookup", decision=Decision.ALLOW),)
     await loop.managers.tools.write_policy(loop.owner, policy.model_copy(update={"rules": rules}))
 
     async def unread(*args: Any) -> None:
         raise NotFound("a session of the chain cannot be read")
 
     monkeypatch.setattr(agent_playbooks, "gates_of", unread)
-    session_id = await loop.start()
-    await loop.say(session_id, "What is the total?")
+    agent_session_id = await loop.start()
+    await loop.say(agent_session_id, "What is the total?")
     loop.anthropic.add(reply(use("lookup")))
-    run = await loop.loops.run(loop.owner, session_id)
+    run = await loop.loops.run(loop.owner, agent_session_id)
     assert run.end is RunEnd.PARKED and run.park is not None
     assert run.park.reason is ParkReason.PERSON and run.park.unlock == "approval"
     assert loop.tools["lookup"].ran_as == []
 
 
 async def test_an_invocation_is_once_a_version(platform: Wired) -> None:
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     await platform.agent_playbooks.publish(
         platform.owner, draft(gate(Decision.DENY, tool="lookup"))
     )
-    first = await platform.agent_playbooks.invoke(platform.owner, session_id, "answer-a-question")
-    again = await platform.agent_playbooks.invoke(platform.owner, session_id, "answer-a-question")
+    first = await platform.agent_playbooks.invoke(
+        platform.owner, agent_session_id, "answer-a-question"
+    )
+    again = await platform.agent_playbooks.invoke(
+        platform.owner, agent_session_id, "answer-a-question"
+    )
     assert again == first
-    messages = [s for s in await platform.history(session_id) if s.type is StepType.MESSAGE]
+    messages = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.MESSAGE
+    ]
     assert len(messages) == 1
-    assert await platform.agent_playbooks.gates_of(platform.owner, session_id) == (
+    assert await platform.agent_playbooks.gates_of(platform.owner, agent_session_id) == (
         gate(Decision.DENY, tool="lookup"),
     )
     other = await platform.start()
@@ -334,12 +351,14 @@ async def test_an_invocations_brief_keeps_the_id_the_release_before_derived(
 ) -> None:
     """The brief's id is derived from bytes no rename moves: an invocation
     run again across an upgrade sends no second brief."""
-    session_id = await platform.start()
+    agent_session_id = await platform.start()
     await platform.agent_playbooks.publish(platform.owner, draft())
     invocation = await platform.agent_playbooks.invoke(
-        platform.owner, session_id, "answer-a-question"
+        platform.owner, agent_session_id, "answer-a-question"
     )
-    (brief,) = [s for s in await platform.history(session_id) if s.type is StepType.MESSAGE]
+    (brief,) = [
+        s for s in await platform.history(agent_session_id) if s.type is AgentStepType.MESSAGE
+    ]
     assert brief.id == derived_id(invocation.id, invocation.created_at, "playbook")
 
 
@@ -351,16 +370,16 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
     runs: the job never starts, and its hold is released, never counted."""
     storage = StorageMemoryImpl()
     layer = AgentPlaybooksLayer(storage)
-    gates: list[CallGateBudgetImpl] = []
+    gates: list[CallGateSpendBudgetImpl] = []
 
     def call_gate(managers: PlatformManagers, clock: Clock) -> CallGateInterface:
         gates.append(
-            CallGateBudgetImpl(
-                managers.budget_gate,
+            CallGateSpendBudgetImpl(
+                managers.spend_budget_gate,
                 managers.pricing,
                 managers.agent_sessions,
-                managers.budgets,
-                SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
+                managers.spend_budgets,
+                agent_projects=SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 clock=clock,
             )
         )
@@ -374,28 +393,33 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
         platform=PlatformRootOptions(tools_layer=layer.tools),
     )
     agent_playbooks = layer.build(loop.platform)
-    session_id = await loop.start("builder")
-    line = await loop.managers.budgets.create_budget(
-        loop.owner, make_budget(BudgetScopeKind.SESSION, str(session_id), cost_micros=50_000_000)
+    agent_session_id = await loop.start("builder")
+    line = await loop.managers.spend_budgets.create_spend_budget(
+        loop.owner,
+        make_spend_budget(
+            SpendBudgetScopeKind.AGENT_SESSION, str(agent_session_id), cost_micros=50_000_000
+        ),
     )
     await agent_playbooks.publish(loop.owner, draft(gate(Decision.DENY, tool="compute")))
     hold = gates[0].authorize_job
 
     async def held_then_invoked(*args: Any) -> UUID:
         held = await hold(*args)
-        await agent_playbooks.invoke(loop.owner, session_id, "answer-a-question")
+        await agent_playbooks.invoke(loop.owner, agent_session_id, "answer-a-question")
         return held
 
     monkeypatch.setattr(gates[0], "authorize_job", held_then_invoked)
-    await loop.say(session_id, "Start it.")
+    await loop.say(agent_session_id, "Start it.")
     loop.anthropic.add(reply(call("compute", q="everything")), reply(said("I may not start it.")))
 
-    assert (await loop.loops.run(loop.owner, session_id)).end is RunEnd.ENDED
+    assert (await loop.loops.run(loop.owner, agent_session_id)).end is RunEnd.ENDED
 
     assert loop.jobs["compute"].started == {}, "no job started"
-    (answer,) = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+    (answer,) = [
+        s for s in await loop.history(agent_session_id) if s.type is AgentStepType.TOOL_RESPONSE
+    ]
     assert isinstance(answer.header, ToolResponseHeader)
     assert answer.header.failure is ToolFailure.DENIED
-    spend = await loop.managers.budgets.get_spend(loop.owner, line.id)
+    spend = await loop.managers.spend_budgets.get_spend(loop.owner, line.id)
     assert spend.held_cost_micros == 0, "the hold settled"
     assert spend.spent_cost_micros < 7_200_000, "released: the model's calls alone count"

@@ -4,10 +4,10 @@ stored; and the tenant's agent automation principal, the role a person grants it
 and the grant as it stands."""
 
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BeforeValidator, Field, JsonValue
+from pydantic import BeforeValidator, Field
 
 from acme.om.agent_automations.types.agent_automation import (
     ACTION_NAME,
@@ -16,11 +16,11 @@ from acme.om.agent_automations.types.agent_automation import (
     TriggerKind,
 )
 from acme.om.agent_playbooks.types.agent_playbook import MAX_SKILL_NAME, SKILL_NAME
+from acme.om.agent_steps.types.content import MAX_NAME
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import thaw_mapping
 from acme.om.context import Role
-from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
 
 MAX_FILTER = 50
@@ -49,11 +49,11 @@ class TriggerView(View):
 
 
 class ActionBody(RequestBody):
-    """`start_session`: start a session of `agent_kind` titled `title` in the
+    """`start_agent_session`: start a session of `agent_kind` titled `title` in the
     tenant's agent project `agent_project_id`, and invoke the tenant's `agent_playbook` of
     that name into it first, its latest version at each firing, when one is
     named; a name with no version is refused. `message_session`: send the brief to the
-    standing session `session_id`; an enabled one is refused, since nothing
+    standing session `agent_session_id`; an enabled one is refused, since nothing
     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
     other kind is one the product declares, which takes its `params` and no
     brief; a kind no product declares is refused."""
@@ -63,8 +63,8 @@ class ActionBody(RequestBody):
     agent_kind: str | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     agent_project_id: UUID | None = None
-    session_id: UUID | None = None
-    params: dict[str, JsonValue] = Field(default_factory=lambda: {})
+    agent_session_id: UUID | None = None
+    params: dict[str, Any] = Field(default_factory=lambda: {})
     agent_playbook: str | None = Field(
         default=None, min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME
     )
@@ -76,11 +76,11 @@ class ActionView(View):
     agent_kind: str | None
     title: str | None
     agent_project_id: UUID | None
-    session_id: UUID | None
+    agent_session_id: UUID | None
     agent_playbook: str | None
     # The stored params are frozen, a nested list a tuple and a nested
     # mapping a read-only view, so they are thawed back to JSON here.
-    params: Annotated[dict[str, JsonValue], BeforeValidator(thaw_mapping)]
+    params: Annotated[dict[str, Any], BeforeValidator(thaw_mapping)]
 
 
 class LimitsBody(RequestBody):

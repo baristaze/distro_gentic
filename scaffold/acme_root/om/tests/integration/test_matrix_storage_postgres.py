@@ -1,5 +1,4 @@
 import pytest
-from contracts.matrix_storage import MatrixStorageContract, MatrixTenantStorageContract
 
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.storage.impl.postgres import (
@@ -7,6 +6,9 @@ from acme.om.matrix.storage.impl.postgres import (
     MatrixTenantStoragePostgresImpl,
 )
 from acme.om.storage.impl.pg_base import LoginSessions
+
+from contracts.matrix_storage import MatrixStorageContract
+from contracts.matrix_tenant_storage import MatrixTenantStorageContract
 
 pytestmark = pytest.mark.integration
 

@@ -90,9 +90,49 @@ TABLE_SCOPES: dict[str, TableScope] = {
     # sign-in delay is keyed on an email before any identity is known.
     "identities": TableScope(ScopeKind.SYSTEM),
     "sign_in_delays": TableScope(ScopeKind.SYSTEM),
-    # The operator plane's own: the platform's size as the sweep last counted
+    # The operator plane's own: the system's size as the sweep last counted
     # it, one row that is no tenant's.
-    "platform_sizes": TableScope(ScopeKind.SYSTEM),
+    "system_sizes": TableScope(ScopeKind.SYSTEM),
+    # A tenant's own rows. An org's `org_id` is its own id.
+    "change_event_cursors": TableScope(ScopeKind.ORG),
+    "change_events": TableScope(ScopeKind.ORG),
+    "files": TableScope(ScopeKind.ORG),
+    "invitations": TableScope(ScopeKind.ORG),
+    "leasable_resources": TableScope(ScopeKind.ORG),
+    "lease_requests": TableScope(ScopeKind.ORG),
+    "leases": TableScope(ScopeKind.ORG),
+    "orchestrations": TableScope(ScopeKind.ORG),
+    "orgs": TableScope(ScopeKind.ORG),
+    "outbox_rows": TableScope(ScopeKind.ORG),
+    "tenant_caps": TableScope(ScopeKind.ORG),
+    # The claim reads every tenant's ready items in the system scope, and the
+    # planner must see how many there are to walk its index in order.
+    "work_items": TableScope(ScopeKind.ORG, by_login=True),
+    # A tenant's rows that also belong to one person in it. A user's person
+    # is the identity behind it, so it narrows on `app.identity_id`; every
+    # other row here names the user and narrows on `app.user_id`.
+    "api_keys": TableScope(ScopeKind.BOTH, person_column="user_id"),
+    "auth_sessions": TableScope(ScopeKind.BOTH, person_column="user_id"),
+    "idempotency_records": TableScope(ScopeKind.BOTH, person_column="user_id"),
+    "memberships": TableScope(ScopeKind.BOTH, person_column="user_id"),
+    "socket_tickets": TableScope(ScopeKind.BOTH, person_column="user_id"),
+    "users": TableScope(ScopeKind.BOTH, identity_column="identity_id"),
+    # A copy adds its entries below this line.
+    "agent_session_authorities": TableScope(ScopeKind.ORG),
+    "agent_session_keys": TableScope(ScopeKind.ORG),
+    "agent_session_privacy": TableScope(ScopeKind.ORG),
+    "agent_sessions": TableScope(ScopeKind.ORG),
+    "agent_step_cursors": TableScope(ScopeKind.ORG),
+    "agent_steps": TableScope(ScopeKind.ORG),
+    "agent_trees": TableScope(ScopeKind.ORG),
+    "fill_sets": TableScope(ScopeKind.ORG),
+    "spend_budget_holds": TableScope(ScopeKind.ORG),
+    "spend_budget_settlements": TableScope(ScopeKind.ORG),
+    "spend_budget_tallies": TableScope(ScopeKind.ORG),
+    "spend_budgets": TableScope(ScopeKind.ORG),
+    "tool_outputs": TableScope(ScopeKind.ORG),
+    "tool_policies": TableScope(ScopeKind.ORG),
+    "usage_records": TableScope(ScopeKind.ORG),
     # The platform's model matrix and what its operators record of a model:
     # a benchmark's result, a provider's retirement. No tenant's.
     "matrix_versions": TableScope(ScopeKind.SYSTEM),
@@ -101,43 +141,14 @@ TABLE_SCOPES: dict[str, TableScope] = {
     # What the benchmark job showed of a candidate against its baseline: the
     # platform's own record, no tenant's.
     "benchmarks": TableScope(ScopeKind.SYSTEM),
-    # The machines the cloud pool started: the platform's own record, since a
-    # warm machine serves no tenant until a session claims it. Beside them,
+    # The VMs the cloud pool started: the platform's own record, since a
+    # warm VM serves no tenant until a session claims it. Beside them,
     # the erasures it owes, which its sweep reads across tenants.
     "pool_vms": TableScope(ScopeKind.SYSTEM),
     "pool_erasures": TableScope(ScopeKind.SYSTEM),
-    # A tenant's own rows. An org's `org_id` is its own id.
-    "orgs": TableScope(ScopeKind.ORG),
-    "invitations": TableScope(ScopeKind.ORG),
-    "files": TableScope(ScopeKind.ORG),
-    "outbox_rows": TableScope(ScopeKind.ORG),
-    # The claim reads every tenant's ready items in the system scope, and the
-    # planner must see how many there are to walk its index in order.
-    "work_items": TableScope(ScopeKind.ORG, by_login=True),
-    "tenant_caps": TableScope(ScopeKind.ORG),
-    "events": TableScope(ScopeKind.ORG),
-    "event_cursors": TableScope(ScopeKind.ORG),
-    "orchestrations": TableScope(ScopeKind.ORG),
-    "resources": TableScope(ScopeKind.ORG),
-    "leases": TableScope(ScopeKind.ORG),
-    "lease_requests": TableScope(ScopeKind.ORG),
-    "agent_sessions": TableScope(ScopeKind.ORG),
-    "agent_trees": TableScope(ScopeKind.ORG),
-    "session_authorities": TableScope(ScopeKind.ORG),
-    "steps": TableScope(ScopeKind.ORG),
-    "step_cursors": TableScope(ScopeKind.ORG),
-    "session_privacy": TableScope(ScopeKind.ORG),
-    "session_keys": TableScope(ScopeKind.ORG),
+    # The platform's tenant rows.
     "retention_policies": TableScope(ScopeKind.ORG),
     "agent_session_retention": TableScope(ScopeKind.ORG),
-    "budgets": TableScope(ScopeKind.ORG),
-    "budget_tallies": TableScope(ScopeKind.ORG),
-    "budget_holds": TableScope(ScopeKind.ORG),
-    "budget_settlements": TableScope(ScopeKind.ORG),
-    "usage_records": TableScope(ScopeKind.ORG),
-    "fill_sets": TableScope(ScopeKind.ORG),
-    "artifacts": TableScope(ScopeKind.ORG),
-    "tool_policies": TableScope(ScopeKind.ORG),
     "validation_policies": TableScope(ScopeKind.ORG),
     "execution_records": TableScope(ScopeKind.ORG),
     "validations": TableScope(ScopeKind.ORG),
@@ -182,15 +193,6 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "repository_credentials": TableScope(ScopeKind.ORG),
     "matrix_pins": TableScope(ScopeKind.ORG),
     "fill_overrides": TableScope(ScopeKind.ORG),
-    # A tenant's rows that also belong to one person in it. A user's person
-    # is the identity behind it, so it narrows on `app.identity_id`; every
-    # other row here names the user and narrows on `app.user_id`.
-    "users": TableScope(ScopeKind.BOTH, identity_column="identity_id"),
-    "memberships": TableScope(ScopeKind.BOTH, person_column="user_id"),
-    "sessions": TableScope(ScopeKind.BOTH, person_column="user_id"),
-    "api_keys": TableScope(ScopeKind.BOTH, person_column="user_id"),
-    "socket_tickets": TableScope(ScopeKind.BOTH, person_column="user_id"),
-    "idempotency_records": TableScope(ScopeKind.BOTH, person_column="user_id"),
 }
 
 

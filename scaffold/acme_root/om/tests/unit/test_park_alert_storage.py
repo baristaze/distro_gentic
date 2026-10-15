@@ -1,8 +1,9 @@
 import pytest
-from contracts.park_alert_storage import ParkAlertStorageContract
 
 from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.park_alerts.storage.impl.memory import ParkAlertStorageMemoryImpl
+
+from contracts.park_alert_storage import ParkAlertStorageContract
 
 
 class TestParkAlertStorageMemory(ParkAlertStorageContract):

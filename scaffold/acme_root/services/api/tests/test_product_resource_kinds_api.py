@@ -13,30 +13,31 @@ import httpx
 from api_support import add_member, build_container, client_over, seed_request, sign_in, sign_in_as
 from pydantic import Field
 
-from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
+from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
-from acme.om.leases.hooks import AskCheckInterface, ResourceKindInterface
-from acme.om.leases.kinds import ResourceKindSpec
+from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
+from acme.om.leases.types.leasable_resource import LeasableResource
 from acme.om.leases.types.lease import Lease
 from acme.om.leases.types.request import LeaseRequest
-from acme.om.leases.types.resource import Resource
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds
+from acme.om.platform_root import PlatformManagers, PlatformPorts, ProductKinds, ProductResourceKind
 from acme.services.api.container import AppContainer
 
 DOCK = "dock"
 
 
-class DockAsk(Platform):
+class DockAsk(OmBase):
     """What an ask for a dock carries: the bay it backs into."""
 
     bay: int = Field(ge=1)
 
 
-class DockHooks(ResourceKindInterface):
+class DockHooks(LeasableResourceKindInterface):
     """The product's hooks, built over the managers as its tools are. They
     keep what each grant asked of them."""
+
+    ASK = DockAsk
 
     def __init__(self, managers: Callable[[], PlatformManagers]) -> None:
         self.managers = managers
@@ -44,13 +45,13 @@ class DockHooks(ResourceKindInterface):
         self.started: list[tuple[UUID, int]] = []
 
     async def may_grant(
-        self, ctx: TenantContext, resource: Resource, request: LeaseRequest
+        self, ctx: TenantContext, resource: LeasableResource, request: LeaseRequest
     ) -> bool:
         self.asked.append(request.id)
         return True
 
     def grant_rows(
-        self, ctx: TenantContext, resource: Resource, request: LeaseRequest, lease: Lease
+        self, ctx: TenantContext, resource: LeasableResource, request: LeaseRequest, lease: Lease
     ) -> tuple[OutboxRow, ...]:
         self.started.append((request.id, lease.token))
         return ()
@@ -60,7 +61,7 @@ class OwnersAlone(AskCheckInterface):
     """The product's check: only the owner asks for a dock."""
 
     async def check_ask(
-        self, ctx: TenantContext, request: LeaseRequest, resource: Resource | None
+        self, ctx: TenantContext, request: LeaseRequest, resource: LeasableResource | None
     ) -> None:
         if ctx.role is not Role.OWNER:
             raise NotAuthorized(f"a {ctx.role.value} asks for no {request.kind}")
@@ -74,9 +75,11 @@ class Product:
         self.check = check
         self.hooks: DockHooks | None = None
 
-    def resources(self, managers: Callable[[], PlatformManagers]) -> tuple[ResourceKindSpec, ...]:
+    def resources(
+        self, managers: Callable[[], PlatformManagers]
+    ) -> tuple[ProductResourceKind, ...]:
         self.hooks = DockHooks(managers)
-        return (ResourceKindSpec(DOCK, DockAsk, self.hooks, self.check),)
+        return (ProductResourceKind(DOCK, self.hooks, self.check),)
 
     def container(self, tmp_path: Path) -> AppContainer:
         return build_container(
@@ -88,13 +91,13 @@ async def org_of(client: httpx.AsyncClient, headers: dict[str, str]) -> UUID:
     return UUID((await client.get("/v1/me", headers=headers)).json()["org"]["id"])
 
 
-async def a_dock(container: AppContainer, org_id: UUID) -> Resource:
+async def a_dock(container: AppContainer, org_id: UUID) -> LeasableResource:
     """A dock its owner namespace registers, as no route does."""
     ctx = await container.managers.tenancy.service_context(seed_request(), org_id, EMPTY_UUID)
     now = utcnow()
     return await container.managers.leases.register(
         ctx,
-        Resource(
+        LeasableResource(
             id=new_id(), created_at=now, updated_at=now, created_by=EMPTY_UUID,
             updated_by=EMPTY_UUID, kind=DOCK, ref_id=new_id(),
         ),
@@ -128,18 +131,22 @@ async def test_a_products_kind_is_asked_for_granted_and_revoked_through_the_rout
         kai = await a_member(client, container, org_id, "kai")
         mia = await a_member(client, container, org_id, "mia")
 
-        first = await ask(client, kai, kind=DOCK, resource_id=str(dock.id), payload={"bay": 3})
+        first = await ask(
+            client, kai, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 3}
+        )
         assert first.status_code == 201, first.text
         held = first.json()
         assert held["request"]["kind"] == DOCK and held["lease"]["fencing_token"] == 1
         assert hooks.asked == [UUID(held["request"]["id"])]
         assert hooks.started == [(UUID(held["request"]["id"]), 1)]
 
-        second = await ask(client, mia, kind=DOCK, resource_id=str(dock.id), payload={"bay": 4})
+        second = await ask(
+            client, mia, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 4}
+        )
         waits = second.json()
         assert second.status_code == 201 and waits["lease"] is None and waits["place"] == 1
-        line = await client.get(f"/v1/leases/resources/{dock.id}/line", headers=kai)
-        assert line.json()["resource"]["kind"] == DOCK
+        line = await client.get(f"/v1/leases/leasable-resources/{dock.id}/wait-line", headers=kai)
+        assert line.json()["leasable_resource"]["kind"] == DOCK
 
         revoked = await client.post(f"/v1/leases/{held['lease']['id']}/revoke", headers=owner)
         assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
@@ -149,7 +156,9 @@ async def test_a_products_kind_is_asked_for_granted_and_revoked_through_the_rout
         assert now["request"]["status"] == "granted" and now["lease"]["fencing_token"] == 2
         assert hooks.started[-1] == (UUID(waits["request"]["id"]), 2)
 
-        off_shape = await ask(client, kai, kind=DOCK, resource_id=str(dock.id), payload={"bay": 0})
+        off_shape = await ask(
+            client, kai, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 0}
+        )
         assert off_shape.status_code == 422, off_shape.text
         unknown = await ask(client, kai, kind="crane", labels=[])
         assert unknown.status_code == 422, unknown.text
@@ -168,14 +177,20 @@ async def test_a_products_check_refuses_an_ask_before_it_waits(tmp_path: Path) -
         dock = await a_dock(container, org_id)
         mia = await a_member(client, container, org_id, "mia")
 
-        refused = await ask(client, mia, kind=DOCK, resource_id=str(dock.id), payload={"bay": 2})
+        refused = await ask(
+            client, mia, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 2}
+        )
         assert refused.status_code == 403, refused.text
         assert refused.json()["error"]["code"] == "not_authorized"
-        line = await client.get(f"/v1/leases/resources/{dock.id}/line", headers=owner)
-        assert line.json()["requests"] == [] and line.json()["resource"]["lease_id"] is None
+        line = await client.get(f"/v1/leases/leasable-resources/{dock.id}/wait-line", headers=owner)
+        assert (
+            line.json()["requests"] == [] and line.json()["leasable_resource"]["lease_id"] is None
+        )
         assert hooks.asked == [], "the refused ask never reached a grant"
 
-        held = await ask(client, owner, kind=DOCK, resource_id=str(dock.id), payload={"bay": 2})
+        held = await ask(
+            client, owner, kind=DOCK, leasable_resource_id=str(dock.id), payload={"bay": 2}
+        )
         assert held.status_code == 201 and held.json()["lease"]["fencing_token"] == 1
         noop = await ask(client, mia, kind="noop", labels=[])
         assert noop.status_code == 201, "the check is the dock's alone"

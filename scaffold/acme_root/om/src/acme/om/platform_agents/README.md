@@ -19,7 +19,7 @@ calls, and holds its workspace warm for a while after a loop.
   team knows; `work_product` validates, opens the pull request, and
   submits the result; `sub_agents` starts sub-agents and waits for them;
   `records` is the assistant's readers; `handoff` hands work to an
-  software engineer; `artifacts` reads back a result kept outside the
+  software engineer; `tool_outputs` reads back a result kept outside the
   window; `review` reads a pull request and its files at its head, notes
   findings, and submits a review; and `operations` reads the tenant's
   hosts and its budgets' spend. Every shipped
@@ -105,8 +105,8 @@ calls, and holds its workspace warm for a while after a loop.
   tool of the kinds it starts, since a child's tools are cut to its
   parent's. It is no kind of its own here.
 - **The assistant's readers**, each a tool that reads through the asking
-  person's own context: `list_sessions`, by status, park reason, and
-  agent project, newest first; `read_session`, where one stands, each
+  person's own context: `list_agent_sessions`, by status, park reason, and
+  agent project, newest first; `read_agent_session`, where one stands, each
   call it holds for approval with the roles that may decide it, and the
   sub-agents it waits for; `read_wait`, its loop's item on the work queue
   and the hosts it may run on; `list_agent_projects` and

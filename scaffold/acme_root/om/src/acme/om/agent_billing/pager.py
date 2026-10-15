@@ -6,15 +6,15 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class AnomalyPage(Platform):
+class AnomalyPage(OmBase):
     """A call far above its session's norm, parked for a person. It names
     the session and the figures, never the session's content."""
 
     org_id: UUID
-    session_id: UUID | None
+    agent_session_id: UUID | None
     expected_micros: int = Field(ge=0)
     norm_micros: int = Field(ge=0)
 

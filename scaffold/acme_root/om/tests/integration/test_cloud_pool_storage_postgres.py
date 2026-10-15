@@ -1,7 +1,6 @@
 from collections.abc import AsyncIterator
 
 import pytest
-from contracts.cloud_pool_storage import CloudPoolStorageContract
 from sqlalchemy import delete
 
 from acme.om.base import EMPTY_UUID
@@ -10,6 +9,8 @@ from acme.om.cloud_pool.storage.impl.postgres import CloudPoolStoragePostgresImp
 from acme.om.cloud_pool.storage.tables.pool_erasures import PoolErasures
 from acme.om.cloud_pool.storage.tables.pool_vms import PoolVms
 from acme.om.storage.impl.pg_base import LoginSessions
+
+from contracts.cloud_pool_storage import CloudPoolStorageContract
 
 pytestmark = pytest.mark.integration
 

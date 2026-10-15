@@ -10,7 +10,7 @@ from uuid import UUID
 
 import pytest
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
@@ -25,6 +25,9 @@ from acme.om.exec_relay.types.exec import (
 )
 from acme.om.placement.types.work import ExecOperation
 
+INTERFACE = ExecRelayStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_item",
@@ -38,7 +41,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_controls",
         "write_binding",
         "read_binding",
-        "purge_session",
+        "purge_agent_session",
         "purge_tenant",
     }
 )
@@ -50,7 +53,7 @@ SEALED = bytes(range(256))
 """Sealed content is any bytes, none of them text."""
 
 
-def make_item(session_id: UUID | None = None, key: UUID | None = None) -> ExecItem:
+def make_item(agent_session_id: UUID | None = None, key: UUID | None = None) -> ExecItem:
     now = utcnow()
     actor = new_id()
     item_id = new_id()
@@ -60,7 +63,7 @@ def make_item(session_id: UUID | None = None, key: UUID | None = None) -> ExecIt
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        session_id=session_id or new_id(),
+        agent_session_id=agent_session_id or new_id(),
         key=key or new_id(),
         operation=ExecOperation.RUN,
         effect="unsafe",
@@ -89,7 +92,7 @@ def make_part(item: ExecItem, seq: int) -> ExecPart:
     return ExecPart(
         id=new_id(),
         created_at=utcnow(),
-        session_id=item.session_id,
+        agent_session_id=item.agent_session_id,
         row_id=item.row_id,
         seq=seq,
         stream="stdout",
@@ -107,14 +110,14 @@ def make_control(item: ExecItem, kind: StopKind = StopKind.CANCEL) -> ExecContro
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        session_id=item.session_id,
+        agent_session_id=item.agent_session_id,
         item_id=item.id,
         host_id=item.host_id,
         kind=kind,
     )
 
 
-def make_binding(session_id: UUID) -> AgentWorkspaceBinding:
+def make_binding(agent_session_id: UUID) -> AgentWorkspaceBinding:
     now = utcnow()
     actor = new_id()
     return AgentWorkspaceBinding(
@@ -123,7 +126,7 @@ def make_binding(session_id: UUID) -> AgentWorkspaceBinding:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         host_id=new_id(),
         host_name="host-7",
         location="/srv/work/one",
@@ -219,7 +222,7 @@ class ExecRelayStorageContract:
         assert await storage.create_item(org, item)
         assert not await storage.create_item(other, item)
         assert await storage.read_item(other, item.id) is None
-        assert await storage.read_items_by_key(other, item.session_id, item.key, 10) == []
+        assert await storage.read_items_by_key(other, item.agent_session_id, item.key, 10) == []
         moved = item.model_copy(update={"state": ExecState.DONE, "version": 2})
         assert await storage.write_item(other, moved, 1) is None
         assert await storage.read_item(org, item.id) == item
@@ -341,14 +344,14 @@ class ExecRelayStorageContract:
             await storage.create_item(org, item)
             await storage.add_part(org, make_part(item, 0))
             await storage.add_control(org, make_control(item), ())
-            await storage.write_binding(org, make_binding(item.session_id), 0, ())
-        assert await storage.purge_session(other, gone.session_id, 100) == 0
-        assert await storage.purge_session(org, gone.session_id, 100) == 4
+            await storage.write_binding(org, make_binding(item.agent_session_id), 0, ())
+        assert await storage.purge_agent_session(other, gone.agent_session_id, 100) == 0
+        assert await storage.purge_agent_session(org, gone.agent_session_id, 100) == 4
         assert await storage.read_item(org, gone.id) is None
         assert await storage.read_parts(org, gone.row_id, -1, 10) == []
-        assert await storage.read_binding(org, gone.session_id) is None
+        assert await storage.read_binding(org, gone.agent_session_id) is None
         assert await storage.read_item(org, kept.id) is not None
-        assert await storage.read_binding(org, kept.session_id) is not None
+        assert await storage.read_binding(org, kept.agent_session_id) is not None
 
     async def test_purge_tenant_takes_that_tenant_alone(
         self, storage: ExecRelayStorageInterface

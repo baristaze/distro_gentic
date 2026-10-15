@@ -65,7 +65,7 @@ class AgentKnowledgeStorageInterface(ABC):
 
     @abstractmethod
     async def read_recalls(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentKnowledgeRecall]:
         """The entries a session recalled, oldest first, at most `limit`."""
         ...

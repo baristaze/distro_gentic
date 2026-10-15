@@ -53,20 +53,24 @@ a person chooses by choosing the session they type in."""
 
 from collections.abc import Mapping
 from datetime import timedelta
+from enum import StrEnum
 from typing import Any
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.budgets.types.amount import Amount
-from acme.om.models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
+from acme.om.base import OmBase
+from acme.om.context import Permission
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
-from acme.om.windows.rules import READ_ARTIFACT
+from acme.om.windows.rules import READ_TOOL_OUTPUT
+from acme.om.work.kinds import WorkKindSpec
 
 SOFTWARE_ENGINEER = "software_engineer"
 ANALYSIS = "analysis"
@@ -86,13 +90,13 @@ SUBMIT_RESULT = "submit_result"
 VALIDATE = "validate"
 OPEN_PULL_REQUEST = "open_pull_request"
 SEARCH_CORPUS = "search_corpus"
-READ_SESSION = "read_session"
+READ_AGENT_SESSION = "read_agent_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
 HAND_OFF = "hand_off_to_software_engineer"
 SEARCH_AGENT_KNOWLEDGE = "search_agent_knowledge"
 READ_AGENT_KNOWLEDGE = "read_agent_knowledge"
 SUGGEST_AGENT_KNOWLEDGE = "suggest_agent_knowledge"
-LIST_SESSIONS = "list_sessions"
+LIST_AGENT_SESSIONS = "list_agent_sessions"
 READ_WAIT = "read_wait"
 LIST_AGENT_PROJECTS = "list_agent_projects"
 READ_AGENT_PROJECT = "read_agent_project"
@@ -107,8 +111,8 @@ LIST_HOSTS = "list_hosts"
 READ_SPEND = "read_spend"
 
 ASSISTANT_READERS = (
-    READ_SESSION,
-    LIST_SESSIONS,
+    READ_AGENT_SESSION,
+    LIST_AGENT_SESSIONS,
     READ_WAIT,
     LIST_AGENT_PROJECTS,
     READ_AGENT_PROJECT,
@@ -164,11 +168,11 @@ HANDOFF_TOOLSET = Toolset(
     summary="Hand engineering work to a software engineer, in a session of its own.",
     tools=(HAND_OFF,),
 )
-ARTIFACTS_TOOLSET = Toolset(
-    name="artifacts",
+TOOL_OUTPUTS_TOOLSET = Toolset(
+    name="tool_outputs",
     version=1,
     summary="Read back a result kept outside your window, by the handle its notice names.",
-    tools=(READ_ARTIFACT,),
+    tools=(READ_TOOL_OUTPUT,),
 )
 
 REVIEW_TOOLSET = Toolset(
@@ -195,7 +199,7 @@ TOOLSETS: tuple[Toolset, ...] = (
     SUB_AGENTS_TOOLSET,
     RECORDS_TOOLSET,
     HANDOFF_TOOLSET,
-    ARTIFACTS_TOOLSET,
+    TOOL_OUTPUTS_TOOLSET,
     REVIEW_TOOLSET,
     OPERATIONS_TOOLSET,
 )
@@ -245,11 +249,11 @@ WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode
 kinds that change or read files and run code."""
 
 
-def allowing(*classes: ToolClass) -> PolicyLayer:
+def allowing(*classes: ToolClass) -> ToolPolicyLayer:
     """A kind's layer of policy: these classes run unattended. A tenant
     narrows or loosens it, and the platform's ceilings hold above both."""
-    return PolicyLayer(
-        rules=tuple(PolicyRule(authorization_class=c, decision=Decision.ALLOW) for c in classes)
+    return ToolPolicyLayer(
+        rules=tuple(ToolPolicyRule(authorization_class=c, decision=Decision.ALLOW) for c in classes)
     )
 
 
@@ -406,12 +410,12 @@ SOFTWARE_ENGINEER_V6 = SOFTWARE_ENGINEER_V5.model_copy(
 kept while a session may still run it."""
 
 SOFTWARE_ENGINEER_V7 = revised(
-    SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET)
+    SOFTWARE_ENGINEER_V6, version=7, toolsets=(*SOFTWARE_ENGINEER_V6.toolsets, TOOL_OUTPUTS_TOOLSET)
 )
 """The software engineer before its workspace started from its agent project's
 workspace base: kept while a session may still run it."""
 
-WORKSPACE_BASE = (
+AGENT_WORKSPACE_BASE = (
     "Your workspace has no network. What your work needs installed comes from your agent project's "
     "environment, set up before you start. When the work needs a package your workspace "
     "lacks, do not try to install it: say which one in your result."
@@ -420,12 +424,12 @@ WORKSPACE_BASE = (
 is named rather than fetched through a network it does not have."""
 
 SOFTWARE_ENGINEER_KIND = SOFTWARE_ENGINEER_V7.model_copy(
-    update={"version": 8, "prompts": (*SOFTWARE_ENGINEER_V7.prompts, WORKSPACE_BASE)}
+    update={"version": 8, "prompts": (*SOFTWARE_ENGINEER_V7.prompts, AGENT_WORKSPACE_BASE)}
 )
 """The software engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
-reads back with `read_artifact`, by the handle the notice names. Its
+reads back with `read_tool_output`, by the handle the notice names. Its
 workspace starts from its agent project's workspace base, when the agent project names
 one, and keeps no egress (`WORKSPACE_BASE_KINDS`)."""
 
@@ -434,7 +438,7 @@ WORKSPACE_BASE_KINDS: frozenset[tuple[str, int]] = frozenset({(SOFTWARE_ENGINEER
 the workspace base its session's agent project names: the software engineer from version 8.
 A later version that takes it joins here; the versions before it keep
 their own base. A product names its own beside these, in its slot
-(`root.ProductKinds.workspace_bases`)."""
+(`platform_root.ProductKinds.workspace_bases`)."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -505,17 +509,19 @@ ANALYSIS_V3 = revised(
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, ARTIFACTS_TOOLSET))
+ANALYSIS_KIND = revised(
+    ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET)
+)
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way a software engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with
-`read_artifact`, by the handle the notice names."""
+`read_tool_output`, by the handle the notice names."""
 
 PLANNER_KIND = AgentKind(
     name=PLANNER,
     version=1,
     # It reads one session, never the tenant's other records.
-    tools=(READ_SESSION,),
+    tools=(READ_AGENT_SESSION,),
     toolsets=(HANDOFF_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
@@ -523,7 +529,7 @@ PLANNER_KIND = AgentKind(
     prompts=(
         "You turn findings into tasks. For each task, decide whether an existing session "
         "should continue it or a new one should start: read where a session stands with "
-        "read_session, and hand new engineering work to a software engineer with "
+        "read_agent_session, and hand new engineering work to a software engineer with "
         "hand_off_to_software_engineer, with an objective that stands on its own. Answer with the "
         "plan: each task and the session it goes to.",
     ),
@@ -533,7 +539,7 @@ PLANNER_KIND = AgentKind(
 PLATFORM_ASSISTANT_V1 = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=1,
-    tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY),
+    tools=(SEARCH_CORPUS, READ_AGENT_SESSION, DRAFT_TOOL_POLICY),
     toolsets=(HANDOFF_TOOLSET,),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
@@ -541,14 +547,14 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
         "product only from what search_corpus finds, and cite the document of every "
-        "passage you use. Diagnose live state with read_session, never by guessing. Draft "
+        "passage you use. Diagnose live state with read_agent_session, never by guessing. Draft "
         "a change to the tool policy with draft_tool_policy and show the difference from "
         "what is live: a person applies it, never you. When the work is engineering, hand "
         "it to a software engineer with hand_off_to_software_engineer and an objective that stands on its "
         "own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The platform assistant before it read the tenant's sessions, agent projects,
 and agent automations, and its agent knowledge: kept while a session may still run
@@ -569,8 +575,8 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "what owns it, and what moves it between its states. docs/portal-routes.md lists "
         "the portal's pages: when you name a page, link it by its address as that "
         "document says, so the person can open it. Diagnose by reading first, "
-        "never by guessing. Find sessions with list_sessions and read one with "
-        "read_session; read what a waiting session waits on, its place in the work queue "
+        "never by guessing. Find sessions with list_agent_sessions and read one with "
+        "read_agent_session; read what a waiting session waits on, its place in the work queue "
         "and the hosts that run it, with read_wait; read agent projects and agent_automations, and an "
         "agent_automation's recent runs, the same way, and any other reader you hold. When "
         "something waits or is slow, say what it waits on as you read it, what clears it, "
@@ -580,7 +586,7 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
         "hand_off_to_software_engineer and an objective that stands on its own, then step back.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The platform assistant. A product adds its own readers to it through its
 slot (`ProductKinds.assistant_tools`), which the root joins to this version
@@ -631,14 +637,14 @@ REVIEWER_KIND = AgentKind(
     # person approves each comment: the platform's ceiling holds every
     # outward call, and its own layer runs no integration unattended.
     tools=(COMMENT,),
-    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(REVIEW_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, TOOL_OUTPUTS_TOOLSET),
     asks=REVIEWER_ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_REVIEW,
     authority=AuthorityMode.STEADY,
     prompts=(REVIEWER_PROMPT,),
     policy=allowing(ToolClass.READ),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
     share=REVIEWER_SHARE,
 )
 """The reviewer. It reads one pull request through the forge, at its head,
@@ -649,7 +655,7 @@ a sub-agent on the pull request another kind opened."""
 
 OPS_ANALYST_PROMPT = (
     "You read how the tenant's part of the platform runs, and you change nothing: every "
-    "tool you hold reads. Find sessions with list_sessions and read one with read_session. "
+    "tool you hold reads. Find sessions with list_agent_sessions and read one with read_agent_session. "
     "Read what a waiting session waits on with read_wait: its loop's place on the work "
     "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
     "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
@@ -665,13 +671,13 @@ OPS_ANALYST_PROMPT = (
 OPS_ANALYST_KIND = AgentKind(
     name=OPS_ANALYST,
     version=1,
-    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, AGENT_KNOWLEDGE_TOOLSET, TOOL_OUTPUTS_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     prompts=(OPS_ANALYST_PROMPT,),
     policy=allowing(ToolClass.READ),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """The ops analyst. It reads the tenant's operations on its person's own
 permissions: its sessions and what they wait on, its hosts and what they
@@ -699,3 +705,25 @@ SHIPPED: tuple[AgentKind, ...] = (
     OPS_ANALYST_KIND,
 )
 """Every kind the platform ships, at every version it still runs."""
+
+
+class ValidationWorkKind(StrEnum):
+    """The names of the validation session's kinds of work."""
+
+    VALIDATION = "VALIDATION"  # a validation session's check, on a fresh executor
+
+
+class ValidationPayload(OmBase):
+    """The VALIDATION kind carries nothing: its target is the validation
+    session, which holds what it runs."""
+
+
+VALIDATION_WORK_KINDS: tuple[WorkKindSpec, ...] = (
+    # A validation session's start asks for it, relayed from its own commit;
+    # the run writes the session's validation and finishes the session,
+    # which WRITE covers. It runs on the platform's own worker, with no
+    # agent and no model call.
+    WorkKindSpec(ValidationWorkKind.VALIDATION, ValidationPayload, Permission.WRITE),
+)
+"""The validation session's kind, registered below the marker of
+`root.KINDS`."""

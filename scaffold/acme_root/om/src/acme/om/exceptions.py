@@ -1,19 +1,19 @@
-"""Every exception raised inside the platform is rooted here. The root
+"""Every exception raised inside the system is rooted here. The root
 carries the status and the stable code a boundary needs to present it."""
 
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from acme.om.budgets.types.breach import Refusal
-    from acme.om.steps.types.header import Park, ToolFailure
+    from acme.om.agent_steps.types.header import Park, ToolFailure
+    from acme.om.spend_budgets.types.spend_breach import Refusal
 
 
-class PlatformException(Exception):
-    """Root of every exception raised inside the platform."""
+class OmException(Exception):
+    """Root of every exception raised inside the system."""
 
     http_status: int = 500
-    code: str = "platform_error"
+    code: str = "om_error"
 
     def __init__(self, message: str | None = None) -> None:
         super().__init__(message or self.code)
@@ -23,12 +23,12 @@ class PlatformException(Exception):
         return str(self.args[0]) if self.args else self.code
 
 
-class NotFound(PlatformException):
+class NotFound(OmException):
     http_status = 404
     code = "not_found"
 
 
-class Conflict(PlatformException):
+class Conflict(OmException):
     http_status = 409
     code = "conflict"
 
@@ -48,7 +48,7 @@ class MembershipLimitReached(Conflict):
     code = "membership_limit_reached"
 
 
-class PreconditionFailed(PlatformException):
+class PreconditionFailed(OmException):
     """The caller's expected version no longer matches: a compare-and-set
     found the row at another version, or gone. Another writer landed between
     the caller's read and this write, so the caller's snapshot is stale and
@@ -58,12 +58,12 @@ class PreconditionFailed(PlatformException):
     code = "precondition_failed"
 
 
-class ValidationFailed(PlatformException):
+class ValidationFailed(OmException):
     http_status = 422
     code = "validation_failed"
 
 
-class NotAuthorized(PlatformException):
+class NotAuthorized(OmException):
     http_status = 403
     code = "not_authorized"
 
@@ -75,12 +75,12 @@ class FeatureOff(NotAuthorized):
     code = "feature_off"
 
 
-class NotAuthenticated(PlatformException):
+class NotAuthenticated(OmException):
     http_status = 401
     code = "not_authenticated"
 
 
-class Unavailable(PlatformException):
+class Unavailable(OmException):
     """Not right now: a backend that is down, a breaker that is open, a
     request refused past this process's admission bound. The caller reads the
     code and comes back rather than reading a failure of its own request."""
@@ -89,7 +89,7 @@ class Unavailable(PlatformException):
     code = "unavailable"
 
 
-class UnsafeConfiguration(PlatformException):
+class UnsafeConfiguration(OmException):
     """A root refused what it was handed at boot: a combination that is only
     safe on a developer's machine, such as a quiet null budget gate outside
     `local`."""
@@ -97,7 +97,7 @@ class UnsafeConfiguration(PlatformException):
     code = "unsafe_configuration"
 
 
-class StorageException(PlatformException): ...
+class StorageException(OmException): ...
 
 
 class TenantMismatch(StorageException, Conflict):
@@ -119,7 +119,7 @@ class RowDeleted(StorageException, Conflict):
     code = "row_deleted"
 
 
-class TenancyException(PlatformException): ...
+class TenancyException(OmException): ...
 
 
 class InvalidCredential(TenancyException, NotAuthenticated):
@@ -169,7 +169,7 @@ class LastOwner(TenancyException, Conflict):
 
 class OperatorRoleHeld(TenancyException, NotAuthorized):
     """An account on the operator allowlist is not deleted: the operator role
-    is taken off first, by the grant job, so the platform never loses an
+    is taken off first, by the grant job, so the system never loses an
     operator by a click."""
 
     code = "operator_role_held"
@@ -197,7 +197,7 @@ class OperatorTokenRequired(TenancyException, NotAuthorized):
     code = "operator_token_required"
 
 
-class WorkException(PlatformException): ...
+class WorkException(OmException): ...
 
 
 class LeaseLost(WorkException, Conflict):
@@ -211,7 +211,7 @@ class WorkNotFailed(WorkException, Conflict):
     code = "work_not_failed"
 
 
-class LeasesException(PlatformException): ...
+class LeasesException(OmException): ...
 
 
 class LeaseEnded(LeasesException, Conflict):
@@ -221,10 +221,10 @@ class LeaseEnded(LeasesException, Conflict):
     code = "lease_ended"
 
 
-class EventsException(PlatformException): ...
+class ChangeEventsException(OmException): ...
 
 
-class StreamTruncated(EventsException):
+class StreamTruncated(ChangeEventsException):
     """A read of the stream after a seq below the tenant's floor: the events
     between that seq and the floor are trimmed, so no page can close the gap.
     The caller stops replaying, reads afresh what it shows, and goes on from
@@ -239,7 +239,7 @@ class StreamTruncated(EventsException):
         self.head = head
 
 
-class IdempotencyException(PlatformException): ...
+class IdempotencyException(OmException): ...
 
 
 class DuplicateIdempotencyKey(IdempotencyException, Conflict):
@@ -299,10 +299,10 @@ class InvitationClosed(TenancyException, Conflict):
     code = "invitation_closed"
 
 
-class StepsException(PlatformException): ...
+class AgentStepsException(OmException): ...
 
 
-class StaleWriter(StepsException, PreconditionFailed):
+class StaleWriter(AgentStepsException, PreconditionFailed):
     """An append under a writer epoch the session's cursor row no longer
     holds: a run that lost its claim to another run, or one that never took
     it. Refused with nothing written, never trusted to stop on its own; the
@@ -311,7 +311,7 @@ class StaleWriter(StepsException, PreconditionFailed):
     code = "stale_writer"
 
 
-class AttributionException(PlatformException): ...
+class AttributionException(OmException): ...
 
 
 class NoSpender(AttributionException, PreconditionFailed):
@@ -337,7 +337,7 @@ class PrincipalLapsed(AttributionException, PreconditionFailed):
     code = "principal_lapsed"
 
 
-class AgentsException(PlatformException): ...
+class AgentsException(OmException): ...
 
 
 class UnknownAgentKind(AgentsException, NotFound):
@@ -354,7 +354,7 @@ class TreeBoundReached(AgentsException, Conflict):
     code = "tree_bound_reached"
 
 
-class PrivacyException(PlatformException): ...
+class PrivacyException(OmException): ...
 
 
 class KeyRevoked(PrivacyException):
@@ -372,13 +372,13 @@ class PolicyFixed(PrivacyException, Conflict):
     code = "policy_fixed"
 
 
-class BudgetsException(PlatformException): ...
+class SpendBudgetsException(OmException): ...
 
 
-class BudgetRefused(BudgetsException):
+class SpendBudgetRefused(SpendBudgetsException):
     """The gate refused a model call: nothing is held, nothing is spent, and
     the call is never made. `refusal` lists every breach, each with what
-    clears it, and the loop parks on it (`budgets.rules.budget_park`)."""
+    clears it, and the loop parks on it (`spend_budgets.rules.spend_budget_park`)."""
 
     code = "budget_refused"
 
@@ -387,14 +387,14 @@ class BudgetRefused(BudgetsException):
         self.refusal = refusal
 
 
-class SpenderUnknown(BudgetsException, NotAuthorized):
+class SpenderUnknown(SpendBudgetsException, NotAuthorized):
     """A call or a job whose payer the engine cannot tell. The gate fails
     closed for spend: nothing is held and nothing is spent."""
 
     code = "spender_unknown"
 
 
-class GateParked(BudgetsException):
+class GateParked(SpendBudgetsException):
     """A gate that parks the call itself, on a reason and an unlock of its
     own: a platform's gate, for what no breach of a budget says, such as a
     call far above its session's norm. Nothing is held, nothing is spent,
@@ -407,10 +407,10 @@ class GateParked(BudgetsException):
         self.park = park
 
 
-class ModelsException(PlatformException): ...
+class LanguageModelsException(OmException): ...
 
 
-class UnpricedModel(ModelsException, ValidationFailed):
+class UnpricedModel(LanguageModelsException, ValidationFailed):
     """A model with no row in the one source of prices. A resolver never
     picks one, and a switch never lands on one: every figure built on a
     default row would be a guess, the budgets that bind on it included."""
@@ -418,14 +418,14 @@ class UnpricedModel(ModelsException, ValidationFailed):
     code = "unpriced_model"
 
 
-class UnresolvedRole(ModelsException, ValidationFailed):
+class UnresolvedRole(LanguageModelsException, ValidationFailed):
     """A model role the resolver does not know, or one with no fill the
     session's eligibility admits."""
 
     code = "unresolved_model_role"
 
 
-class NoCredential(ModelsException, PreconditionFailed):
+class NoCredential(LanguageModelsException, PreconditionFailed):
     """A call that needs a key the tenant does not hold, or holds no longer:
     nothing is spent, nothing falls back to the platform's key, and the
     session parks on the provider until a key is saved (`unlock`)."""
@@ -437,7 +437,7 @@ class NoCredential(ModelsException, PreconditionFailed):
         self.unlock = f"{provider}:key"
 
 
-class WindowsException(PlatformException): ...
+class WindowsException(OmException): ...
 
 
 class ContextOverflow(WindowsException):
@@ -455,7 +455,7 @@ class CompactionFailed(WindowsException):
     code = "compaction_failed"
 
 
-class ToolsException(PlatformException): ...
+class ToolsException(OmException): ...
 
 
 class ToolFailed(ToolsException, ValidationFailed):

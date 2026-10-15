@@ -8,14 +8,13 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.second_factor import TOTP_KEY
 
 from acme.infra.cache import CacheScope
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.identity.twin import TWIN_LOGOUT, IdentityProviderTwinImpl
 from acme.om.base import EMPTY_UUID, new_id, utcnow
+from acme.om.change_events.storage.impl.memory import ChangeEventStorageMemoryImpl
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role, TenantContext
-from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.exceptions import (
     LastOwner,
     NotAuthorized,
@@ -25,6 +24,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.relay import OutboxRelayInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
@@ -38,6 +38,8 @@ from acme.om.tenancy.impl.org import DELETED_PERSONAL_ORG_NAME
 from acme.om.tenancy.rules import email_digest
 from acme.om.tenancy.storage.impl.memory import TenancyStorageMemoryImpl
 from acme.om.work.types.work_item import WorkKind, asks_for_work, work_row_kind
+
+from contracts.second_factor import TOTP_KEY
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 SIGNED_OUT = "http://localhost:5173/signed-out"
@@ -101,7 +103,9 @@ def twin() -> IdentityProviderTwinImpl:
 def relay(storage: TenancyStorageMemoryImpl, tmp_path: Path) -> SpyRelay:
     infra = InfraLocalImpl(tmp_path)
     return SpyRelay(
-        OutboxRelayImpl(OutboxStorageMemoryImpl(), EventStorageMemoryImpl(), infra.get_topics())
+        OutboxRelayImpl(
+            OutboxStorageMemoryImpl(), ChangeEventStorageMemoryImpl(), infra.get_topics()
+        )
     )
 
 
@@ -147,10 +151,10 @@ async def test_the_typed_email_must_be_the_accounts(
     ann = await dev(manager, "ann@example.test")
     with pytest.raises(ValidationFailed):
         await manager.org.delete_account(ann, "someone@example.test")
-    assert await storage.read_session(ann.org_id, ann.security.credential_id) is not None
+    assert await storage.read_auth_session(ann.org_id, ann.security.credential_id) is not None
     # Space and letter case are forgiven, as an address is read everywhere.
     await manager.org.delete_account(ann, "  Ann@Example.TEST ")
-    assert await storage.read_session(ann.org_id, ann.security.credential_id) is None
+    assert await storage.read_auth_session(ann.org_id, ann.security.credential_id) is None
     with pytest.raises(NotFound):
         await manager.org.get_identity(ann)
 
@@ -177,7 +181,7 @@ async def test_the_last_owner_of_a_team_org_is_refused_and_told_which(
     )
     assert "Ajax" in refused.value.message and "Globex" in refused.value.message
     assert refused.value.http_status == 409
-    assert await storage.read_session(ajax.id, ann.security.credential_id) is not None
+    assert await storage.read_auth_session(ajax.id, ann.security.credential_id) is not None
 
     # Another owner in each, and the refusal is gone.
     for org in (ajax, globex):
@@ -229,14 +233,14 @@ async def test_the_account_goes_in_one_commit_and_asks_for_the_rest(
     assert await storage.read_user(ajax.id, bob_in_ajax.id) is None
     assert await storage.read_membership_for_user(ajax.id, bob_in_ajax.id) is None
     for ctx in (bob, at_home):
-        assert await storage.read_session(ctx.org_id, ctx.security.credential_id) is None
+        assert await storage.read_auth_session(ctx.org_id, ctx.security.credential_id) is None
     assert await storage.read_api_key(personal.id, key.api_key.id) is None
     # Nothing a row says names who they were.
     for row in relay.rows:
         assert "bob" not in str(row.payload).lower()
     kinds = {(row.org_id, row.kind, row.target_id) for row in relay.rows}
     assert (ajax.id, "tenancy.user.deleted", bob_in_ajax.id) in kinds
-    assert (ajax.id, "tenancy.session.revoked", bob.security.credential_id) in kinds
+    assert (ajax.id, "tenancy.auth_session.revoked", bob.security.credential_id) in kinds
     assert (personal.id, "tenancy.api_key.deleted", key.api_key.id) in kinds
     # The rest runs in his personal org; in Ajax, what it keeps of him
     # beyond his place goes by the queue too. Those are the work the commit
@@ -244,9 +248,9 @@ async def test_the_account_goes_in_one_commit_and_asks_for_the_rest(
     work = {r.kind: r for r in relay.rows if asks_for_work(r.kind)}
     assert sorted(work) == [
         work_row_kind(WorkKind.DELETE_ACCOUNT),
-        work_row_kind(WorkKind.MEMBER_LEFT),
+        work_row_kind(IntakeWorkKind.MEMBER_LEFT),
     ]
-    left = work[work_row_kind(WorkKind.MEMBER_LEFT)]
+    left = work[work_row_kind(IntakeWorkKind.MEMBER_LEFT)]
     assert (left.org_id, left.target_id) == (ajax.id, bob_in_ajax.id)
     rest = work[work_row_kind(WorkKind.DELETE_ACCOUNT)]
     assert (rest.org_id, rest.target_id) == (personal.id, personal.id)

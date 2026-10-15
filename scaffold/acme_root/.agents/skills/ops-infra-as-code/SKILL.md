@@ -1,6 +1,6 @@
 ---
 name: ops-infra-as-code
-description: "Write or change the platform's Terraform in the shape the guideline prescribes: one module graph shared by every environment, a variable for everything that differs, the autoscaling switch, the destroyable switch, the budget, the alarms, and the tags; then plan it under the read-only investigate profile and open a pull request. Never applies. Use for a new resource, a new environment, a size change, or a lever flip."
+description: "Write or change the system's Terraform in the shape the guideline prescribes: one module graph shared by every environment, a variable for everything that differs, the autoscaling switch, the destroyable switch, the budget, the alarms, and the tags; then plan it under the read-only investigate profile and open a pull request. Never applies. Use for a new resource, a new environment, a size change, or a lever flip."
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(aws:*), Bash(terraform:*), Bash(gh:*), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git status:*)
 ---
 
@@ -87,7 +87,7 @@ is read; this skill touches no application credential.
      -backend-config="use_lockfile=true"
    AWS_PROFILE=acme-<env>-investigate terraform plan -lock=false -out=/dev/null \
      -var "api_image=<in state>" -var "maintenance_image=<in state>" \
-     -var "session_runner_image=<in state>" \
+     -var "agent_session_runner_image=<in state>" \
      -var "alarm_email=$ALARM_EMAIL" \
      -var "api_domain_name=<api host>" -var "app_domain_name=<app host>" \
      -var "site_domain_name=<site host>"

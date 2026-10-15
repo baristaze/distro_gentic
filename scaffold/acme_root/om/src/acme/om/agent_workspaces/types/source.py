@@ -7,10 +7,10 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class RepositoryBinding(Platform):
+class RepositoryBinding(OmBase):
     """The one repository an agent project binds: where its sessions' branches and
     pull requests live, and the branch a new one is cut from."""
 
@@ -33,7 +33,7 @@ class PullRequestFate(StrEnum):
     CLOSED = "closed"
 
 
-class BranchState(Platform):
+class BranchState(OmBase):
     """Where the session's branch is, as a workspace's checkout finds it."""
 
     remote: bool  # the bound repository holds it
@@ -54,7 +54,7 @@ class BranchPlan(StrEnum):
     LOST = "lost"  # gone, and nothing says why: the loop parks for a person
 
 
-class Incoming(Platform):
+class Incoming(OmBase):
     """What the platform brings into a workspace from the bound repository,
     read on its own host: a git bundle of the default branch, and of the
     session's branch where the repository holds it, with no credential in
@@ -64,7 +64,7 @@ class Incoming(Platform):
     default_branch: str = Field(min_length=1, max_length=200)
 
 
-class Snapshot(Platform):
+class Snapshot(OmBase):
     """What a release kept: the commit pushed to the snapshot ref, None when
     the checkout held nothing the remote lacked, and whether the remote
     held the session's branch when the platform last brought it in."""
@@ -74,7 +74,7 @@ class Snapshot(Platform):
     remote_branch: bool = False
 
 
-class Checkout(Platform):
+class Checkout(OmBase):
     """What the checkout holds now, as it says itself: its HEAD, None before
     its first commit, whether it holds uncommitted work, and where its HEAD
     meets the default branch as last brought in, None where they do not
@@ -86,7 +86,7 @@ class Checkout(Platform):
     base: str | None = None
 
 
-class Delivered(Platform):
+class Delivered(OmBase):
     """What the bound repository holds of a session's branch, read by the
     platform outside the session's workspace: the commit the branch started
     from on the default branch, its head there, and every path changed from
@@ -105,7 +105,7 @@ class WriteKind(StrEnum):
     OTHER = "other"  # anything else: an issue, a release, a setting
 
 
-class RepositoryWrite(Platform):
+class RepositoryWrite(OmBase):
     """A write a call makes to source control: the repository, what kind of
     write, and the ref it touches, a pushed ref or a pull request's head."""
 
@@ -114,7 +114,7 @@ class RepositoryWrite(Platform):
     ref: str = Field(default="", max_length=255)
 
 
-class OpenedPullRequest(Platform):
+class OpenedPullRequest(OmBase):
     """A session's pull request, as source control answers it: its id and
     where a person reads it."""
 

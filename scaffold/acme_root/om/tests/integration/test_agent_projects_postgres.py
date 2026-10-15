@@ -17,27 +17,29 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import make_agent_project
-from contracts.tools import stand_ins
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_projects.exceptions import AgentProjectFixed
 from acme.om.agent_projects.types.agent_project import AgentProject
+from acme.om.agent_root import AgentRootOptions
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
-from acme.om.budgets.types.amount import Amount
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy
+from acme.om.spend_budgets.types.amount import Amount
 from acme.om.storage.impl.pg_base import LoginSessions, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.agent_project_storage import make_agent_project
+from contracts.tools import stand_ins
 
 pytestmark = pytest.mark.integration
 
@@ -72,8 +74,9 @@ def managers(storage: StoragePostgresImpl, tmp_path: Path) -> PlatformManagers:
     return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        agent_kinds=(DELIVERY,),
-        tool_catalog=stand_ins(*DELIVERY.tools),
+        agent_root_options=AgentRootOptions(
+            agent_kinds=(DELIVERY,), tool_catalog=stand_ins(*DELIVERY.tools)
+        ),
     )
 
 
@@ -105,12 +108,14 @@ async def rows(
         return [dict(row) for row in result.mappings()]
 
 
-async def session_rows(pg_sessions: LoginSessions, org_id: UUID, session_id: UUID) -> list[dict]:
+async def session_rows(
+    pg_sessions: LoginSessions, org_id: UUID, agent_session_id: UUID
+) -> list[dict]:
     return await rows(
         pg_sessions,
         "SELECT org_id, agent_project_id FROM core.agent_session_projects WHERE id = :session",
         org_id,
-        session=session_id,
+        session=agent_session_id,
     )
 
 
@@ -121,13 +126,13 @@ async def test_a_session_is_created_only_under_an_agent_project_of_its_own_tenan
     agent_project = await an_agent_project(managers, ours)
     stolen = a_start()
     with pytest.raises(NotFound):
-        await managers.agent_projects.start_session(theirs, agent_project.id, stolen)
+        await managers.agent_projects.start_agent_session(theirs, agent_project.id, stolen)
     with pytest.raises(NotFound):
-        await managers.agent_sessions.get_session(theirs, stolen.id)
+        await managers.agent_sessions.get_agent_session(theirs, stolen.id)
     for tenant in (ours, theirs):
         assert await session_rows(pg_sessions, tenant.org_id, stolen.id) == []
 
-    session = await managers.agent_projects.start_session(ours, agent_project.id, a_start())
+    session = await managers.agent_projects.start_agent_session(ours, agent_project.id, a_start())
     assert await session_rows(pg_sessions, ours.org_id, session.id) == [
         {"org_id": ours.org_id, "agent_project_id": agent_project.id}
     ]
@@ -146,9 +151,9 @@ async def test_a_sessions_agent_project_never_changes(
         await an_agent_project(managers, ctx, "octo/ledger"),
     )
     start = a_start()
-    session = await managers.agent_projects.start_session(ctx, first.id, start)
+    session = await managers.agent_projects.start_agent_session(ctx, first.id, start)
     with pytest.raises(AgentProjectFixed):
-        await managers.agent_projects.start_session(ctx, second.id, start)
+        await managers.agent_projects.start_agent_session(ctx, second.id, start)
     spawn = Spawn(id=new_id(), kind="delivery", title="reproduce it", objective="run it")
     child = await managers.agents.spawn(ctx, session.id, spawn)
     for each in (session.id, child.id):
@@ -172,9 +177,9 @@ async def test_only_the_bound_repository_is_work_product(managers: PlatformManag
         await an_agent_project(managers, ctx),
         await an_agent_project(managers, ctx, "octo/ledger"),
     )
-    on_reports = await managers.agent_projects.start_session(ctx, reports.id, a_start())
-    on_ledger = await managers.agent_projects.start_session(ctx, ledger.id, a_start())
-    loose = await managers.agents.start_session(ctx, a_start())
+    on_reports = await managers.agent_projects.start_agent_session(ctx, reports.id, a_start())
+    on_ledger = await managers.agent_projects.start_agent_session(ctx, ledger.id, a_start())
+    loose = await managers.agents.start_agent_session(ctx, a_start())
     work = managers.agent_projects.work_repository
     assert await work(ctx, on_reports.id) == reports.repository != ledger.repository
     assert await work(ctx, on_ledger.id) == ledger.repository
@@ -198,15 +203,15 @@ async def test_an_agent_projects_retention_narrowing_reaches_its_sessions(
     await managers.retention.write_policy(
         ctx, current.model_copy(update={"agent_projects": (narrowing,)})
     )
-    on_narrow = await managers.agent_projects.start_session(ctx, narrow.id, a_start())
-    on_other = await managers.agent_projects.start_session(ctx, other.id, a_start())
+    on_narrow = await managers.agent_projects.start_agent_session(ctx, narrow.id, a_start())
+    on_other = await managers.agent_projects.start_agent_session(ctx, other.id, a_start())
     snapshots = await rows(
         pg_sessions,
-        "SELECT session_id, agent_project_id, policy->>'content_lifetime' AS content"
-        " FROM core.agent_session_retention ORDER BY session_id",
+        "SELECT agent_session_id, agent_project_id, policy->>'content_lifetime' AS content"
+        " FROM core.agent_session_retention ORDER BY agent_session_id",
         ctx.org_id,
     )
     assert snapshots == [
-        {"session_id": on_narrow.id, "agent_project_id": narrow.id, "content": "P7D"},
-        {"session_id": on_other.id, "agent_project_id": other.id, "content": None},
+        {"agent_session_id": on_narrow.id, "agent_project_id": narrow.id, "content": "P7D"},
+        {"agent_session_id": on_other.id, "agent_project_id": other.id, "content": None},
     ]

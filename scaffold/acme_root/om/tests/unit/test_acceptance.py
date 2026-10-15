@@ -6,6 +6,14 @@ test untouched, and no mention of the hidden suite where the agent
 reads."""
 
 import pytest
+
+from acme.om.agents.types.result import Claim, Result
+from acme.om.context import Role
+from acme.om.evidence.rules import scan
+from acme.om.evidence.types.acceptance import Link, Surface
+from acme.om.evidence.types.record import RunPurpose
+from acme.om.exceptions import PreconditionFailed, ValidationFailed
+
 from contracts.acceptance import (
     BASE,
     COMPLETE,
@@ -23,13 +31,6 @@ from contracts.acceptance import (
 from contracts.doubles import context
 from contracts.evidence import checkout_policy, evidence_over
 from contracts.factories import make_org
-
-from acme.om.agents.types.result import Claim, Result
-from acme.om.context import Role
-from acme.om.evidence.rules import scan
-from acme.om.evidence.types.acceptance import Link, Surface
-from acme.om.evidence.types.record import RunPurpose
-from acme.om.exceptions import PreconditionFailed, ValidationFailed
 
 REPORT_FILES = ("REPORT.md", "reports/baseline.log", "reports/validation.log")
 """What a session that writes about its evidence instead of making it

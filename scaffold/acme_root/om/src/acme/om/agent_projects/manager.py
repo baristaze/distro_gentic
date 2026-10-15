@@ -12,10 +12,14 @@ product on."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase, Repository
+from acme.om.agent_projects.types.agent_project import (
+    AgentProject,
+    AgentProjectWorkspaceBase,
+    Repository,
+)
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 
 
 class AgentProjectsManagerInterface(ABC):
@@ -54,7 +58,10 @@ class AgentProjectsManagerInterface(ABC):
 
     @abstractmethod
     async def set_workspace_base(
-        self, ctx: TenantContext, agent_project_id: UUID, workspace_base: AgentWorkspaceBase | None
+        self,
+        ctx: TenantContext,
+        agent_project_id: UUID,
+        agent_workspace_base: AgentProjectWorkspaceBase | None,
     ) -> AgentProject:
         """The agent project with the workspace base its sessions' workspaces start
         from, or with none, as one who writes the tenant's configuration may
@@ -74,7 +81,7 @@ class AgentProjectsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def start_session(
+    async def start_agent_session(
         self, ctx: TenantContext, agent_project_id: UUID, start: Start
     ) -> AgentSession:
         """Starts a root session under an agent project of the caller's tenant, as
@@ -86,21 +93,26 @@ class AgentProjectsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> AgentProject | None:
+    async def agent_project_of(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentProject | None:
         """The agent project the session belongs to; None for a session with no
         agent project row, never another agent project."""
         ...
 
     @abstractmethod
-    async def work_repository(self, ctx: TenantContext, session_id: UUID) -> Repository | None:
+    async def work_repository(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> Repository | None:
         """The one repository the session's own branch and pull request
         count as work product on: its agent project's. None for a session with no
         agent project row, so no write of it is work product."""
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
-        """Platform-internal: the agent project row of a session the sweep has
+    @stageless
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        """System-internal: the agent project row of a session the sweep has
         claimed for its purge goes before the session's row, under the purge
         login, in the tenant named; for no principal. False when none was
         left."""

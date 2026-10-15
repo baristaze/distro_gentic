@@ -10,20 +10,15 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import (
     AgentSession,
     AgentSessionPage,
+    AgentSessionStatus,
     Among,
-    SessionStatus,
 )
-from acme.om.agents import AgentsManagerInterface
-from acme.om.agents.loop import LoopManagerInterface
-from acme.om.agents.types.request import Start
-from acme.om.attribution import AttributionManagerInterface
-from acme.om.base import utcnow
-from acme.om.context import TenantContext
-from acme.om.exceptions import NotFound, ValidationFailed
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.rules import control_step, message_step
-from acme.om.steps.types.content import TextBlock
-from acme.om.steps.types.header import (
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.rules import control_step, message_step
+from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
+from acme.om.agent_steps.types.content import TextBlock
+from acme.om.agent_steps.types.header import (
+    AgentWorkspaceSnapshot,
     ControlCommand,
     ControlHeader,
     InputHeader,
@@ -34,9 +29,17 @@ from acme.om.steps.types.header import (
     SwitchedHeader,
     ToolRequestHeader,
     ToolResponseHeader,
-    WorkspaceSnapshot,
 )
-from acme.om.steps.types.step import Step, StepType
+from acme.om.agents import AgentsManagerInterface
+from acme.om.agents.loop import LoopManagerInterface
+from acme.om.agents.types.kind import AgentKindCatalog
+from acme.om.agents.types.request import Start
+from acme.om.attribution import AttributionManagerInterface
+from acme.om.base import utcnow
+from acme.om.context import OperatorContext, TenantContext
+from acme.om.exceptions import NotFound, ValidationFailed
+from acme.om.spend_budgets import SpendBudgetsOperatorManagerInterface
+from acme.om.spend_budgets.types.usage import AgentSessionUsage
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.rules import named_snapshot
 from acme.om.tools.types.call import JobCompletion
@@ -54,11 +57,15 @@ from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
     MAX_SHOWN,
     AgentRefView,
+    AgentSessionModelUsageView,
     AgentSessionPageView,
+    AgentSessionUsageView,
     AgentSessionView,
+    AgentStepPageView,
+    AgentStepUsageView,
+    AgentStepView,
     ApprovalPageView,
     ApprovalView,
-    ArtifactPageView,
     BoundsView,
     ControlRequest,
     DeadlineRequest,
@@ -69,13 +76,11 @@ from acme.services.api.types.agent_sessions import (
     ParkView,
     PrincipalRequest,
     QuestionView,
-    SessionModelUsageView,
     SnapshotView,
-    StartSessionRequest,
-    StepPageView,
-    StepUsageView,
-    StepView,
+    StartAgentSessionRequest,
+    StopReason,
     ToolCallPageView,
+    ToolOutputPageView,
     ToolUseView,
     VisibilityRequest,
 )
@@ -86,7 +91,7 @@ def park_view(park: Park | None) -> ParkView | None:
     return None if park is None else ParkView.model_validate(park)
 
 
-def session_view(session: AgentSession) -> AgentSessionView:
+def agent_session_view(session: AgentSession) -> AgentSessionView:
     child = session.parent_id is not None
     return AgentSessionView(
         id=session.id,
@@ -119,24 +124,24 @@ HISTORY_PAGE = LIMIT_MAX
 def session_page(page: AgentSessionPage, listed: str) -> AgentSessionPageView:
     last = page.items[-1].id if page.items and page.has_more else None
     return AgentSessionPageView(
-        items=[session_view(session) for session in page.items],
+        items=[agent_session_view(session) for session in page.items],
         next_cursor=None if last is None else encode_cursor(listed, last),
     )
 
 
-def text_of(step: Step) -> str:
+def text_of(step: AgentStep) -> str:
     """What a step says: a tool response's text parts, any other step's
     text blocks. A step whose content is gone, its session's key revoked,
     says nothing: a hole in a known place, whose shape alone stays."""
     if not step.content.is_plain():
         return ""
-    if step.type is StepType.TOOL_RESPONSE:
+    if step.type is AgentStepType.TOOL_RESPONSE:
         parts = step.as_tool_response().parts
         return "\n".join(part.text for part in parts if isinstance(part, TextBlock))
     return step.as_text()
 
 
-def thinking_of(step: Step) -> str:
+def thinking_of(step: AgentStep) -> str:
     """What a model response thought, one block a line; a redacted block
     says nothing, and neither does a step whose content is gone."""
     if not step.content.is_plain():
@@ -156,10 +161,10 @@ def shown(value: Any) -> JsonValue:
     return value
 
 
-def tool_uses_of(step: Step) -> list[ToolUseView]:
+def tool_uses_of(step: AgentStep) -> list[ToolUseView]:
     """The calls a model response made, with what each asked; none when its
     content is gone."""
-    if step.type is not StepType.MODEL_RESPONSE or not step.content.is_plain():
+    if step.type is not AgentStepType.MODEL_RESPONSE or not step.content.is_plain():
         return []
     return [
         ToolUseView(
@@ -171,37 +176,37 @@ def tool_uses_of(step: Step) -> list[ToolUseView]:
     ]
 
 
-def tool_use_id_of(step: Step) -> str | None:
+def tool_use_id_of(step: AgentStep) -> str | None:
     """The call a tool step belongs to: a request's from its header, which
     stays, as its tool does; a response's from its result, gone with its
     content."""
     if isinstance(step.header, ToolRequestHeader):
         return step.header.tool_use_id
-    if step.type is StepType.TOOL_RESPONSE and step.content.is_plain():
+    if step.type is AgentStepType.TOOL_RESPONSE and step.content.is_plain():
         return step.as_tool_response().tool_use_id
     return None
 
 
-def agent_of(step: Step) -> AgentRefView | None:
+def agent_of(step: AgentStep) -> AgentRefView | None:
     """The agent that wrote a message, from its header: a child's report
     names the child, a child's objective its parent. Any other step names
     none, and neither does a message a person or a program wrote."""
     header = step.header
-    if step.type is not StepType.MESSAGE or not isinstance(header, InputHeader):
+    if step.type is not AgentStepType.MESSAGE or not isinstance(header, InputHeader):
         return None
     if header.agent is None:
         return None
-    return AgentRefView(kind=header.agent.kind, session_id=header.agent.session_id)
+    return AgentRefView(kind=header.agent.kind, agent_session_id=header.agent.agent_session_id)
 
 
-def usage_view(usage: Usage | None) -> StepUsageView | None:
-    return None if usage is None else StepUsageView.model_validate(usage.model_dump())
+def usage_view(usage: Usage | None) -> AgentStepUsageView | None:
+    return None if usage is None else AgentStepUsageView.model_validate(usage.model_dump())
 
 
-def step_view(step: Step) -> StepView:
+def step_view(step: AgentStep) -> AgentStepView:
     header = step.header
     responded = header if isinstance(header, ModelResponseHeader) else None
-    return StepView(
+    return AgentStepView(
         id=step.id,
         seq=step.seq,
         loop_id=step.loop_id,
@@ -217,7 +222,11 @@ def step_view(step: Step) -> StepView:
         tool_use_id=tool_use_id_of(step),
         agent=agent_of(step),
         tools=[use.name for use in step.as_tool_uses()] if responded is not None else [],
-        stop_reason=None if responded is None else responded.stop_reason,
+        stop_reason=(
+            None
+            if responded is None or responded.stop_reason is None
+            else StopReason(responded.stop_reason)
+        ),
         usage=usage_view(responded.usage) if responded is not None else None,
         tool=header.tool if isinstance(header, ToolRequestHeader) else None,
         failure=header.failure if isinstance(header, ToolResponseHeader) else None,
@@ -237,7 +246,21 @@ def step_view(step: Step) -> StepView:
     )
 
 
-def snapshot_view(snapshot: WorkspaceSnapshot | None) -> SnapshotView | None:
+def agent_session_usage_view(usage: AgentSessionUsage) -> AgentSessionUsageView:
+    last = usage.records[-1].id if usage.records else None
+    return AgentSessionUsageView.model_validate(
+        {
+            "agent_session_id": usage.agent_session_id,
+            "items": [record.model_dump() for record in usage.records],
+            "next_cursor": encode_cursor("usage", last) if usage.has_more and last else None,
+            "loops": [loop.model_dump() for loop in usage.loops],
+            "has_more_loops": usage.has_more_loops,
+            "total": usage.total.model_dump(),
+        }
+    )
+
+
+def snapshot_view(snapshot: AgentWorkspaceSnapshot | None) -> SnapshotView | None:
     return None if snapshot is None else SnapshotView.model_validate(snapshot.model_dump())
 
 
@@ -246,14 +269,16 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self,
         sessions: AgentSessionsManagerInterface,
         agents: AgentsManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         tools: ToolsManagerInterface,
         attribution: AttributionManagerInterface,
         loop: LoopManagerInterface,
         windows: WindowsManagerInterface,
+        spend_budgets_operator: SpendBudgetsOperatorManagerInterface,
         agent_projects: AgentProjectsManagerInterface,
         *,
         agent_project_required: bool,
+        kinds: AgentKindCatalog,
     ) -> None:
         """`agent_project_required` refuses a session started in no agent project: what
         every stack but a local one sets, so no per-agent-project policy is
@@ -265,44 +290,50 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self._tools = tools
         self._attribution = attribution
         self._loop = loop
+        self._spend_budgets_operator = spend_budgets_operator
         self._agent_projects = agent_projects
         self._project_required = agent_project_required
+        self._kinds = kinds
 
-    async def start_session(
-        self, ctx: TenantContext, body: StartSessionRequest, session_id: UUID
+    async def start_agent_session(
+        self, ctx: TenantContext, body: StartAgentSessionRequest, agent_session_id: UUID
     ) -> AgentSessionView:
-        start = Start(id=session_id, kind=body.kind, title=body.title)
+        start = Start(id=agent_session_id, kind=body.kind, title=body.title)
         if body.agent_project_id is not None:
-            return session_view(
-                await self._agent_projects.start_session(ctx, body.agent_project_id, start)
+            return agent_session_view(
+                await self._agent_projects.start_agent_session(ctx, body.agent_project_id, start)
             )
         if self._project_required:
             raise ValidationFailed(
                 "a session starts in an agent project: name its agent_project_id"
             )
-        return session_view(await self._agents.start_session(ctx, start))
+        return agent_session_view(await self._agents.start_agent_session(ctx, start))
 
-    async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._sessions.get_session(ctx, session_id))
+    async def get_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
+        return agent_session_view(await self._sessions.get_agent_session(ctx, agent_session_id))
 
-    async def get_sessions(
+    async def list_agent_sessions(
         self,
         ctx: TenantContext,
         among: Among,
-        status: SessionStatus | None,
+        status: AgentSessionStatus | None,
         cursor: str | None,
         limit: int,
     ) -> AgentSessionPageView:
         after = decode_cursor(SESSIONS, cursor) if cursor else None
-        page = await self._sessions.get_sessions(ctx, status, after, clamp_limit(limit), among)
+        page = await self._sessions.get_agent_sessions(
+            ctx, status, after, clamp_limit(limit), among
+        )
         return session_page(page, SESSIONS)
 
     async def get_children(
-        self, ctx: TenantContext, session_id: UUID, cursor: str | None, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, cursor: str | None, limit: int
     ) -> AgentSessionPageView:
         after = decode_cursor(CHILDREN, cursor) if cursor else None
-        await self._sessions.get_session(ctx, session_id)
-        page = await self._sessions.get_children(ctx, session_id, after, clamp_limit(limit))
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        page = await self._sessions.get_children(ctx, agent_session_id, after, clamp_limit(limit))
         # A deleted child is on no read until it is restored. The manager
         # answers it, since a tree's walk passes through it, so it is left
         # out here; the cursor still follows the page as read.
@@ -312,141 +343,166 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
             next_cursor=listed.next_cursor,
         )
 
-    async def archive_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._sessions.archive_session(ctx, session_id))
+    async def archive_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
+        return agent_session_view(await self._sessions.archive_agent_session(ctx, agent_session_id))
 
-    async def delete_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._sessions.delete_session(ctx, session_id))
+    async def delete_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
+        return agent_session_view(await self._sessions.delete_agent_session(ctx, agent_session_id))
 
-    async def restore_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._sessions.restore_session(ctx, session_id))
+    async def restore_agent_session(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView:
+        return agent_session_view(await self._sessions.restore_agent_session(ctx, agent_session_id))
 
     async def add_participant(
-        self, ctx: TenantContext, session_id: UUID, user_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, user_id: UUID
     ) -> AgentSessionView:
-        return session_view(await self._sessions.add_participant(ctx, session_id, user_id))
+        return agent_session_view(
+            await self._sessions.add_participant(ctx, agent_session_id, user_id)
+        )
 
     async def remove_participant(
-        self, ctx: TenantContext, session_id: UUID, user_id: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, user_id: UUID
     ) -> AgentSessionView:
-        return session_view(await self._sessions.remove_participant(ctx, session_id, user_id))
+        return agent_session_view(
+            await self._sessions.remove_participant(ctx, agent_session_id, user_id)
+        )
 
     async def switch_visibility(
-        self, ctx: TenantContext, session_id: UUID, body: VisibilityRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: VisibilityRequest
     ) -> AgentSessionView:
-        switched = await self._sessions.switch_visibility(ctx, session_id, body.visibility)
-        return session_view(switched)
+        switched = await self._sessions.switch_visibility(ctx, agent_session_id, body.visibility)
+        return agent_session_view(switched)
 
     async def send_message(
-        self, ctx: TenantContext, session_id: UUID, body: MessageRequest, step_id: UUID
-    ) -> StepView:
-        message = message_step(step_id, utcnow(), session_id, ctx, body.text)
-        (stored,), _ = await self._sessions.receive(ctx, session_id, [message])
+        self, ctx: TenantContext, agent_session_id: UUID, body: MessageRequest, agent_step_id: UUID
+    ) -> AgentStepView:
+        message = message_step(agent_step_id, utcnow(), agent_session_id, ctx, body.text)
+        (stored,), _ = await self._sessions.receive(ctx, agent_session_id, [message])
         return step_view(stored)
 
     async def send_control(
-        self, ctx: TenantContext, session_id: UUID, body: ControlRequest, step_id: UUID
-    ) -> StepView:
+        self, ctx: TenantContext, agent_session_id: UUID, body: ControlRequest, agent_step_id: UUID
+    ) -> AgentStepView:
         command = ControlCommand(body.command.value)
         call = None
         if body.request_seq is not None:
-            call = (await self._tool_request(ctx, session_id, body.request_seq)).id
+            call = (await self._tool_request(ctx, agent_session_id, body.request_seq)).id
         snapshot = None
         if body.snapshot_id is not None:
             # Read after the session itself, so another tenant's names
             # nothing, and found in this session's history alone, so no
             # session starts from another's snapshot.
-            await self._sessions.get_session(ctx, session_id)
-            snapshot = await self._tools.find_snapshot(ctx, session_id, body.snapshot_id)
-        control = control_step(step_id, utcnow(), session_id, ctx, command, call, snapshot)
-        (stored,), _ = await self._sessions.receive(ctx, session_id, [control])
+            await self._sessions.get_agent_session(ctx, agent_session_id)
+            snapshot = await self._tools.find_snapshot(ctx, agent_session_id, body.snapshot_id)
+        control = control_step(
+            agent_step_id, utcnow(), agent_session_id, ctx, command, call, snapshot
+        )
+        (stored,), _ = await self._sessions.receive(ctx, agent_session_id, [control])
         return step_view(stored)
 
-    async def _tool_request(self, ctx: TenantContext, session_id: UUID, seq: int) -> Step:
+    async def _tool_request(
+        self, ctx: TenantContext, agent_session_id: UUID, seq: int
+    ) -> AgentStep:
         """The tool request at `seq` in the session's history, read after the
         session itself, so another tenant's names nothing; `NotFound` when no
         tool request is there."""
-        await self._sessions.get_session(ctx, session_id)
-        page = await self._steps.get_steps(ctx, session_id, seq - 1, 1)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        page = await self._steps.get_agent_steps(ctx, agent_session_id, seq - 1, 1)
         found = next((step for step in page.items if step.seq == seq), None)
-        if found is None or found.type is not StepType.TOOL_REQUEST:
-            raise NotFound(f"no tool request at {seq} in agent session {session_id}")
+        if found is None or found.type is not AgentStepType.TOOL_REQUEST:
+            raise NotFound(f"no tool request at {seq} in agent session {agent_session_id}")
         return found
 
     async def decide_call(
-        self, ctx: TenantContext, session_id: UUID, request_seq: int, body: DecisionRequest
-    ) -> StepView:
+        self, ctx: TenantContext, agent_session_id: UUID, request_seq: int, body: DecisionRequest
+    ) -> AgentStepView:
         # The session first: one another tenant holds, or one marked
         # deleted, takes no decision.
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         decided = await self._tools.decide_call(
-            ctx, session_id, request_seq, approve=body.approve, note=body.note
+            ctx, agent_session_id, request_seq, approve=body.approve, note=body.note
         )
-        await self._sessions.project_status(ctx, session_id)
+        await self._sessions.project_status(ctx, agent_session_id)
         return step_view(decided)
 
     async def set_deadline(
-        self, ctx: TenantContext, session_id: UUID, body: DeadlineRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: DeadlineRequest
     ) -> AgentSessionView:
-        await self._agents.set_deadline(ctx, session_id, body.deadline)
-        return session_view(await self._sessions.get_session(ctx, session_id))
+        await self._agents.set_deadline(ctx, agent_session_id, body.deadline)
+        return agent_session_view(await self._sessions.get_agent_session(ctx, agent_session_id))
 
     async def assign_principal(
-        self, ctx: TenantContext, session_id: UUID, body: PrincipalRequest | None
+        self, ctx: TenantContext, agent_session_id: UUID, body: PrincipalRequest | None
     ) -> AgentSessionView:
         steerer = None if body is None else body.steerer
-        await self._attribution.assign_principal(ctx, session_id, steerer)
-        return session_view(await self._sessions.get_session(ctx, session_id))
+        await self._attribution.assign_principal(ctx, agent_session_id, steerer)
+        return agent_session_view(await self._sessions.get_agent_session(ctx, agent_session_id))
 
-    async def take_over(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
-        return session_view(await self._loop.take_over(ctx, session_id))
+    async def take_over(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
+        return agent_session_view(await self._loop.take_over(ctx, agent_session_id))
 
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, body: GiveBackRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: GiveBackRequest
     ) -> AgentSessionView:
-        return session_view(await self._loop.give_back(ctx, session_id, body.summary))
+        return agent_session_view(await self._loop.give_back(ctx, agent_session_id, body.summary))
 
     async def complete_job(
-        self, ctx: TenantContext, session_id: UUID, key: UUID, body: JobCompletionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, key: UUID, body: JobCompletionRequest
     ) -> AgentSessionView:
         completion = JobCompletion(
             key=key, handle=body.handle, text=body.text, failure=body.failure
         )
-        return session_view(await self._loop.complete_job(ctx, session_id, completion))
+        return agent_session_view(await self._loop.complete_job(ctx, agent_session_id, completion))
 
-    async def get_steps(
-        self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPageView:
-        await self._sessions.get_session(ctx, session_id)
-        page = await self._steps.get_steps(ctx, session_id, after_seq, clamp_limit(limit))
-        return StepPageView(items=[step_view(step) for step in page.items], has_more=page.has_more)
+    async def get_agent_steps(
+        self, ctx: TenantContext, agent_session_id: UUID, after_seq: int, limit: int
+    ) -> AgentStepPageView:
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        page = await self._steps.get_agent_steps(
+            ctx, agent_session_id, after_seq, clamp_limit(limit)
+        )
+        return AgentStepPageView(
+            items=[step_view(step) for step in page.items], has_more=page.has_more
+        )
 
-    async def get_artifact(
-        self, ctx: TenantContext, session_id: UUID, artifact_id: UUID, start: int, limit: int
-    ) -> ArtifactPageView:
-        # The session first, so one marked deleted keeps its artifacts closed
+    async def get_tool_output(
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        tool_output_id: UUID,
+        start: int,
+        limit: int,
+    ) -> ToolOutputPageView:
+        # The session first, so one marked deleted keeps its tool outputs closed
         # as it keeps its history.
-        await self._sessions.get_session(ctx, session_id)
-        page = await self._windows.get_artifact(ctx, session_id, artifact_id, start, limit)
-        return ArtifactPageView(
-            artifact_id=page.artifact_id,
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        page = await self._windows.get_tool_output(
+            ctx, agent_session_id, tool_output_id, start, limit
+        )
+        return ToolOutputPageView(
+            tool_output_id=page.tool_output_id,
             start=page.offset,
             text=page.text,
             characters=page.characters,
             has_more=page.has_more,
         )
 
-    async def get_questions(self, ctx: TenantContext, session_id: UUID) -> list[QuestionView]:
-        session = await self._sessions.get_session(ctx, session_id)
+    async def get_questions(self, ctx: TenantContext, agent_session_id: UUID) -> list[QuestionView]:
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if session.park is None:
             return []
-        return questions_of(session, await self._history(ctx, session_id))
+        return questions_of(session, await self._history(ctx, agent_session_id))
 
-    async def get_approvals(self, ctx: TenantContext, session_id: UUID) -> list[ApprovalView]:
-        session = await self._sessions.get_session(ctx, session_id)
+    async def get_approvals(self, ctx: TenantContext, agent_session_id: UUID) -> list[ApprovalView]:
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if not waits_on_approval(session.park):
             return []
-        return approvals_of(session, await self._history(ctx, session_id))
+        return approvals_of(session, await self._history(ctx, agent_session_id))
 
     async def get_org_approvals(
         self, ctx: TenantContext, cursor: str | None, limit: int
@@ -454,7 +510,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         after = decode_cursor(APPROVALS, cursor) if cursor else None
         # A sub-agent holds its calls under a root in any status, an idle one
         # included: each root the person sees is read with its whole tree.
-        page = await self._sessions.get_sessions(ctx, None, after, clamp_limit(limit))
+        page = await self._sessions.get_agent_sessions(ctx, None, after, clamp_limit(limit))
         held: list[ApprovalView] = []
         for root in page.items:
             for session in await self._tree(ctx, root):
@@ -484,33 +540,50 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
                 after = page.items[-1].id
         return tree
 
-    async def get_bounds(self, ctx: TenantContext, session_id: UUID) -> BoundsView:
-        kind = await self._agents.kind_of(ctx, session_id)
-        return bounds_of(kind, await self._agents.tree_of(ctx, session_id))
+    async def get_bounds(self, ctx: TenantContext, agent_session_id: UUID) -> BoundsView:
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        kind = self._kinds.get(session.kind, session.kind_version)
+        return bounds_of(kind, await self._agents.tree_of(ctx, agent_session_id))
 
     async def get_tool_calls(
-        self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
+        self, ctx: TenantContext, agent_session_id: UUID, after_seq: int, limit: int
     ) -> ToolCallPageView:
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         calls = [
             call
-            for call in tool_calls_of(await self._history(ctx, session_id), utcnow())
+            for call in tool_calls_of(await self._history(ctx, agent_session_id), utcnow())
             if call.seq > after_seq
         ]
         bounded = clamp_limit(limit)
         return ToolCallPageView(items=calls[:bounded], has_more=len(calls) > bounded)
 
-    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionModelUsageView:
-        await self._sessions.get_session(ctx, session_id)
-        return usage_of(await self._history(ctx, session_id))
+    async def get_usage(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionModelUsageView:
+        await self._sessions.get_agent_session(ctx, agent_session_id)
+        return usage_of(await self._history(ctx, agent_session_id))
 
-    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
+    async def _history(self, ctx: TenantContext, agent_session_id: UUID) -> list[AgentStep]:
         """The session's whole history, in order, a page at a time. Read
         after the session itself, so another tenant's is never reached."""
-        steps: list[Step] = []
+        steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self._steps.get_steps(ctx, session_id, after, HISTORY_PAGE)
+            page = await self._steps.get_agent_steps(ctx, agent_session_id, after, HISTORY_PAGE)
             steps.extend(page.items)
             if not page.has_more or not page.items:
                 return steps
+
+    async def get_agent_session_usage(
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        cursor: str | None,
+        limit: int,
+    ) -> AgentSessionUsageView:
+        after = decode_cursor("usage", cursor) if cursor else None
+        usage = await self._spend_budgets_operator.get_agent_session_usage(
+            admin, org_id, agent_session_id, after, clamp_limit(limit)
+        )
+        return agent_session_usage_view(usage)

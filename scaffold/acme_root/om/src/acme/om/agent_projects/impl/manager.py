@@ -6,12 +6,16 @@ from acme.om.agent_projects.exceptions import AgentProjectFixed, AgentProjectInU
 from acme.om.agent_projects.impl.sessions import bind
 from acme.om.agent_projects.manager import AgentProjectsManagerInterface
 from acme.om.agent_projects.storage import AgentProjectStorageInterface
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase, Repository
+from acme.om.agent_projects.types.agent_project import (
+    AgentProject,
+    AgentProjectWorkspaceBase,
+    Repository,
+)
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import Start
-from acme.om.base import Platform, utcnow
+from acme.om.base import OmBase, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import NotFound, TenantMismatch
 from acme.om.outbox import OutboxRelayInterface
@@ -23,7 +27,7 @@ UPDATED = "agent_projects.agent_project.updated"
 DELETED = "agent_projects.agent_project.deleted"
 
 
-class AgentProjectsOptions(Platform):
+class AgentProjectsOptions(OmBase):
     purge_batch: int = 1000  # rows one purge statement deletes at most
     page: int = 200  # the most agent projects one list answers
 
@@ -87,10 +91,15 @@ class AgentProjectsManagerImpl(AgentProjectsManagerInterface):
         return await self._update(ctx, agent_project_id, {"name": name})
 
     async def set_workspace_base(
-        self, ctx: TenantContext, agent_project_id: UUID, workspace_base: AgentWorkspaceBase | None
+        self,
+        ctx: TenantContext,
+        agent_project_id: UUID,
+        agent_workspace_base: AgentProjectWorkspaceBase | None,
     ) -> AgentProject:
         ctx.require(Permission.MANAGE_MEMBERS)
-        return await self._update(ctx, agent_project_id, {"workspace_base": workspace_base})
+        return await self._update(
+            ctx, agent_project_id, {"agent_workspace_base": agent_workspace_base}
+        )
 
     async def remove_agent_project(
         self, ctx: TenantContext, agent_project_id: UUID
@@ -105,7 +114,7 @@ class AgentProjectsManagerImpl(AgentProjectsManagerInterface):
         await self._relay_all(ctx, rows)
         return stored
 
-    async def start_session(
+    async def start_agent_session(
         self, ctx: TenantContext, agent_project_id: UUID, start: Start
     ) -> AgentSession:
         ctx.require(Permission.WRITE)
@@ -118,21 +127,25 @@ class AgentProjectsManagerImpl(AgentProjectsManagerInterface):
                     f"agent session {start.id} was created under no agent project"
                 )
         await bind(self._storage, ctx.org_id, start.id, agent_project.id, self._clock())
-        return await self._agents.start_session(ctx, start)
+        return await self._agents.start_agent_session(ctx, start)
 
-    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> AgentProject | None:
+    async def agent_project_of(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentProject | None:
         ctx.require(Permission.READ)
-        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        binding = await self._storage.read_binding(ctx.org_id, agent_session_id)
         if binding is None:
             return None
         return await self._agent_project(ctx, binding.agent_project_id)
 
-    async def work_repository(self, ctx: TenantContext, session_id: UUID) -> Repository | None:
-        agent_project = await self.agent_project_of(ctx, session_id)
+    async def work_repository(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> Repository | None:
+        agent_project = await self.agent_project_of(ctx, agent_session_id)
         return None if agent_project is None else agent_project.repository
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
-        return await self._storage.purge_session(org_id, session_id)
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
+        return await self._storage.purge_agent_session(org_id, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
@@ -165,9 +178,9 @@ class AgentProjectsManagerImpl(AgentProjectsManagerInterface):
             raise NotFound(f"agent project {agent_project_id} not found")
         return stored
 
-    async def _exists(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def _exists(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         try:
-            await self._sessions.get_session(ctx, session_id)
+            await self._sessions.get_agent_session(ctx, agent_session_id)
         except NotFound:
             return False
         return True

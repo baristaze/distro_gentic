@@ -15,13 +15,11 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.agent_session_storage import make_session
-from contracts.step_storage import make_message
-from contracts.tools import stand_ins
 from sqlalchemy import text
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
+from acme.om.agent_root import AgentRootOptions
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
@@ -34,7 +32,11 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 
-# What `make_session` names, so the agents manager classes every tool it
+from contracts.agent_session_storage import make_agent_session
+from contracts.agent_step_storage import make_message
+from contracts.tools import stand_ins
+
+# What `make_agent_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
 
@@ -72,10 +74,10 @@ def managers(
     return build_platform_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        tool_catalog=TOOLS,
         platform_root_options=PlatformRootOptions(
             tenant_keys=TenantKeysImpl(keys),
         ),
+        agent_root_options=AgentRootOptions(tool_catalog=TOOLS),
     )
 
 
@@ -96,7 +98,7 @@ def sweeper(
         managers.privacy,
         managers.agent_sessions,
         managers.tenancy,
-        managers.events,
+        managers.change_events,
         managers.outbox,
         SessionAgentProjectNullImpl(),
         RetentionOptions(),
@@ -129,8 +131,8 @@ async def declare(managers: PlatformManagers, ctx: TenantContext, policy: Retent
 
 
 async def a_session_saying(managers: PlatformManagers, ctx: TenantContext) -> UUID:
-    session = await managers.agent_sessions.create_session(ctx, make_session())
-    await managers.steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
+    session = await managers.agent_sessions.create_agent_session(ctx, make_agent_session())
+    await managers.agent_steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
     return session.id
 
 
@@ -154,8 +156,8 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     session = await a_session_saying(managers, owner)
     org = owner.org_id
     key_sql = (
-        "SELECT wrapped, destroyed_at FROM core.session_keys"
-        " WHERE org_id = :org AND session_id = :session"
+        "SELECT wrapped, destroyed_at FROM core.agent_session_keys"
+        " WHERE org_id = :org AND agent_session_id = :session"
     )
     (live,) = await rows(pg_sessions, DatabaseRole.CORE, key_sql, org, session=session)
     assert live["wrapped"] is not None and live["destroyed_at"] is None
@@ -167,20 +169,20 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
     history = await rows(
         pg_sessions,
         DatabaseRole.ACTIVITY,
-        "SELECT content::text AS content FROM activity.steps"
-        " WHERE org_id = :org AND session_id = :session",
+        "SELECT content::text AS content FROM activity.agent_steps"
+        " WHERE org_id = :org AND agent_session_id = :session",
         org,
         session=session,
     )
     assert len(history) == 1 and SAID not in history[0]["content"]
-    steps = (await managers.steps.get_steps(owner, session, 0, 10)).items
+    steps = (await managers.agent_steps.get_agent_steps(owner, session, 0, 10)).items
     assert [step.content.state.value for step in steps] == ["absent"]
 
     (report,) = keys.log(org)
     (audit,) = await rows(
         pg_sessions,
         DatabaseRole.ACTIVITY,
-        "SELECT target_id, payload::text AS payload FROM activity.events"
+        "SELECT target_id, payload::text AS payload FROM activity.change_events"
         " WHERE org_id = :org AND kind = :kind",
         org,
         kind=KEY_DESTROYED,
@@ -197,7 +199,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
         pg_sessions,
         DatabaseRole.CORE,
         "SELECT content_expired_at, destruction::text AS destruction FROM core.agent_session_retention"
-        " WHERE org_id = :org AND session_id = :session",
+        " WHERE org_id = :org AND agent_session_id = :session",
         org,
         session=session,
     )
@@ -238,19 +240,19 @@ async def test_a_session_deleted_before_its_content_expires_has_its_key_rows_emp
 ) -> None:
     owner = await an_org(managers, RetentionPolicy(content_lifetime=WEEK, shape_lifetime=MONTH))
     session = await a_session_saying(managers, owner)
-    await managers.agent_sessions.delete_session(owner, session)
+    await managers.agent_sessions.delete_agent_session(owner, session)
 
     assert await sweep(storage, managers, keys, WEEK + DAY) == 1
 
     (gone,) = await rows(
         pg_sessions,
         DatabaseRole.CORE,
-        "SELECT wrapped, destroyed_at FROM core.session_keys"
-        " WHERE org_id = :org AND session_id = :session",
+        "SELECT wrapped, destroyed_at FROM core.agent_session_keys"
+        " WHERE org_id = :org AND agent_session_id = :session",
         owner.org_id,
         session=session,
     )
     assert gone["wrapped"] is None and gone["destroyed_at"] is not None
-    await managers.agent_sessions.restore_session(owner, session)
-    steps = (await managers.steps.get_steps(owner, session, 0, 10)).items
+    await managers.agent_sessions.restore_agent_session(owner, session)
+    steps = (await managers.agent_steps.get_agent_steps(owner, session, 0, 10)).items
     assert [step.content.state.value for step in steps] == ["absent"]

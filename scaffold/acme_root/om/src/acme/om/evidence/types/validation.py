@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Created, Identifiable, Platform
+from acme.om.base import Created, Identifiable, OmBase
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import PATTERN
 from acme.om.evidence.types.provenance import SHA256
@@ -16,7 +16,7 @@ from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.record import AGENT_PROJECT, VERSION, RunPurpose
 
 
-class WorkProduct(Platform):
+class WorkProduct(OmBase):
     """What a session's work product holds now, as the system that keeps it
     reports it, never as the agent describes it: the name its agent project goes
     by there, the version the work started from, the committed head,
@@ -35,7 +35,7 @@ class WorkProduct(Platform):
         return self.head != self.base or self.dirty or bool(self.changed)
 
 
-class ExecutionRequest(Platform):
+class ExecutionRequest(OmBase):
     """What a fresh executor is asked to run: the checks, at `version`, with
     their checks, fixtures, and runner taken from `source`, the protected
     source, and under an environment the executor sets. `protected` holds
@@ -54,7 +54,7 @@ class ExecutionRequest(Platform):
     runs at most its count of trials; one with a rate stops where `rates.stops_at` says its
     rule stops, at the confidence given here, and nowhere else."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
     version: str = Field(pattern=VERSION)
@@ -80,7 +80,7 @@ class ExecutionRequest(Platform):
         return self
 
 
-class Prepared(Platform):
+class Prepared(OmBase):
     """What a fresh executor made a run's instance as: the host that made
     it, its isolation, and the image it runs. A record of the executor's
     names these, never what the runner's start line says, since the
@@ -91,7 +91,7 @@ class Prepared(Platform):
     image: str = Field(pattern=VERSION)
 
 
-class ExecutorReport(Platform):
+class ExecutorReport(OmBase):
     """What a fresh executor answers: who it is, what it made the run's
     instance as, the results stream it wrote, and its hash of that stream,
     taken where it was written."""
@@ -108,7 +108,7 @@ class Validation(Identifiable, Created):
     of the results it wrote. The gate accepts its runs only when each names
     this executor and the hash still holds."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_project: str = Field(pattern=AGENT_PROJECT)
     purpose: RunPurpose
     version: str = Field(pattern=VERSION)

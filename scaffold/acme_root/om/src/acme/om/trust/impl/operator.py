@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_steps.storage import AgentStepStorageInterface
+from acme.om.agent_steps.types.page import AgentStepPage
 from acme.om.base import EMPTY_UUID, new_id, utcnow
+from acme.om.change_events.storage import ChangeEventStorageInterface
+from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import OperatorContext, OperatorPermission, RequestContext
-from acme.om.events.storage import EventStorageInterface
-from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound, ValidationFailed
-from acme.om.steps.storage import StepStorageInterface
-from acme.om.steps.types.page import StepPage
 from acme.om.trust.exceptions import ContentNotGranted
 from acme.om.trust.impl.manager import TrustOptions
 from acme.om.trust.operator import TrustOperatorManagerInterface
@@ -35,9 +35,9 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
         self,
         storage: TrustStorageInterface,
         sessions: AgentSessionStorageInterface,
-        shapes: StepStorageInterface,
-        history: StepStorageInterface,
-        events: EventStorageInterface,
+        shapes: AgentStepStorageInterface,
+        history: AgentStepStorageInterface,
+        events: ChangeEventStorageInterface,
         options: TrustOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -45,33 +45,45 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
         self._sessions = sessions
         self._shapes = shapes
         self._history = history
-        self._events = events
+        self._change_events = events
         self._options = options
         self._clock = clock
 
     async def get_session_shape(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
     ) -> ShapePage:
         admin.require(OperatorPermission.READ)
-        await self._held(org_id, session_id)
+        await self._held(org_id, agent_session_id)
         log.info(
             "operator read of a session's shape",
             extra={"org_id": str(org_id), "operator": str(admin.identity_id)},
         )
         bounded = self._bounded(limit)
-        rows = await self._shapes.read_steps(org_id, session_id, max(0, after_seq), bounded + 1)
+        rows = await self._shapes.read_agent_steps(
+            org_id, agent_session_id, max(0, after_seq), bounded + 1
+        )
         return ShapePage(
             items=tuple(shape_of(step) for step in rows[:bounded]), has_more=len(rows) > bounded
         )
 
     async def get_session_content(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPage:
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
+    ) -> AgentStepPage:
         admin.require(OperatorPermission.READ)
         grant = await self._storage.read_grant(org_id, admin.identity_id)
         if not grant_holds(grant, self._clock()):
             raise ContentNotGranted("opening a session's content takes a grant in its tenant")
-        await self._held(org_id, session_id)
+        await self._held(org_id, agent_session_id)
         log.info(
             "operator read of a session's content",
             extra={"org_id": str(org_id), "operator": str(admin.identity_id)},
@@ -82,13 +94,15 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
             admin,
             org_id,
             CONTENT_OPENED,
-            session_id,
-            {"session_id": str(session_id), "operator": str(admin.identity_id)},
+            agent_session_id,
+            {"agent_session_id": str(agent_session_id), "operator": str(admin.identity_id)},
             actor_id=admin.identity_id,
         )
         bounded = self._bounded(limit)
-        rows = await self._history.read_steps(org_id, session_id, max(0, after_seq), bounded + 1)
-        return StepPage(items=tuple(rows[:bounded]), has_more=len(rows) > bounded)
+        rows = await self._history.read_agent_steps(
+            org_id, agent_session_id, max(0, after_seq), bounded + 1
+        )
+        return AgentStepPage(items=tuple(rows[:bounded]), has_more=len(rows) > bounded)
 
     async def grant_content(
         self,
@@ -133,11 +147,11 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
             )
         return revoked
 
-    async def _held(self, org_id: UUID, session_id: UUID) -> None:
+    async def _held(self, org_id: UUID, agent_session_id: UUID) -> None:
         """A session the tenant holds, deleted or not: an operator reads what
         the tenant still keeps."""
-        if await self._sessions.read_session(org_id, session_id) is None:
-            raise NotFound(f"agent session {session_id} is not in {org_id}")
+        if await self._sessions.read_agent_session(org_id, agent_session_id) is None:
+            raise NotFound(f"agent session {agent_session_id} is not in {org_id}")
 
     async def _audit(
         self,
@@ -151,10 +165,10 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
     ) -> None:
         """An entry in the tenant's stream, naming who acted: the operator, or
         the platform for the grant job, which acts for no person."""
-        await self._events.append_events(
+        await self._change_events.append_change_events(
             org_id,
             [
-                Event(
+                ChangeEvent(
                     id=new_id(),
                     org_id=org_id,
                     kind=kind,

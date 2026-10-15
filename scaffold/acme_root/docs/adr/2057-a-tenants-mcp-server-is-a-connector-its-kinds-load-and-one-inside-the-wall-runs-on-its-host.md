@@ -62,13 +62,14 @@ definitions never move under it. A sub-agent pins only what its parent
 pinned, at the same review, so it never holds a tool its parent does
 not.
 
-**The loop takes a session's own toolsets.** The engine's loop asks an
-`AttachedToolsetsInterface` once a run for what a session holds beyond
-its kind. It folds that into the session's kind, so a deferred
-connector joins the `load_toolset` line and loads as the kind's own do.
-Its tools join the registry beside the catalog's. The session's row
-keeps its kind's tools. This is a change to the engine's scaffold: the
-next move of the base merges over it.
+**The loop takes a session's own toolsets.** The engine's loop asks its
+hooks (`LoopHooksInterface`) once a run for what a session holds beyond
+its kind, and the connectors answer through the platform's hooks. The
+loop folds that into the session's kind, so a deferred connector joins
+the `load_toolset` line and loads as the kind's own do. Its tools join
+the registry beside the catalog's, and every guard that reads a
+session's tools reads them too. The session's row keeps its kind's
+tools.
 
 **Each call checks the review, then the pin.** A call first reads the
 connector. A tool no review serves now, at the definition, the class,
@@ -128,7 +129,7 @@ connector's toolset is loaded in a tenth of the sessions that stall.
 - A cloud server serves no session inside the wall, and a host server
   none in the cloud.
 - A host runs only the servers its owner names. One that names none
-  refuses every `mcp_call`, and a host from before this release refuses
-  the operation.
+  refuses every `mcp_call`, and a host whose release predates the
+  operation refuses it.
 - A cloud server's credential is rotated in place: a session's next call
   carries the value written last.

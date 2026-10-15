@@ -25,6 +25,7 @@ from acme.om.agent_knowledge.root import build_agent_knowledge
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksOptions
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_projects.impl.manager import AgentProjectsOptions
+from acme.om.agent_root import LOCAL
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
 from acme.om.agent_workspaces.impl.manager import AgentWorkspacesOptions
 from acme.om.base import new_id
@@ -35,15 +36,16 @@ from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.intake.impl.manager import IntakeOptions
+from acme.om.intake.kinds import IntakeWorkKind
 from acme.om.intake.root import build_intake
 from acme.om.park_alerts.impl.manager import ParkAlertsOptions
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
+from acme.om.platform_agents.kinds import ValidationWorkKind
 from acme.om.platform_root import PlatformManagers, PlatformPorts, PlatformRootOptions, ProductKinds
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import LOCAL
 from acme.om.storage.root import StorageInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.impl.manager import TrustOptions
@@ -51,7 +53,7 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.handler import WorkHandlerInterface
-from acme.om.work.types.work_item import WorkKind
+from acme.workers.maintenance.agent_sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.deliveries import DeliveryProviderInterface
 from acme.workers.maintenance.feedback import FeedbackDeliveriesImpl
 from acme.workers.maintenance.loop import (
@@ -62,7 +64,6 @@ from acme.workers.maintenance.loop import (
     WorkerLoop,
 )
 from acme.workers.maintenance.members import MemberLeftHandlerImpl
-from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
 from acme.workers.maintenance.validations import ValidationHandlerImpl
 
@@ -85,15 +86,15 @@ of it where there is none, and the share's mark."""
 
 
 def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
-    """The cloud pool as the settings name it, on the machines infra chose:
-    the runner starts its machines, and the sweep lets them go."""
+    """The cloud pool as the settings name it, on the VMs infra chose:
+    the runner starts its VMs, and the sweep lets them go."""
     return CloudPoolOptions(
-        prefix=settings.machine_prefix,
+        prefix=settings.vm_prefix,
         image=settings.cloud_pool_image,
-        machine_image=settings.machine_image,
+        vm_image=settings.vm_image,
         warm=settings.cloud_pool_warm,
         api_url=settings.cloud_pool_api_url,
-        boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
+        boot=timedelta(seconds=settings.vm_boot_timeout_seconds),
     )
 
 
@@ -104,7 +105,7 @@ def worker_platform_options(
     platform_agents: PlatformAgents | None,
 ) -> PlatformRootOptions:
     """What the worker sets on the platform's managers: each one's batch, the
-    retention sweep's, the cloud pool's machines with the request stage a
+    retention sweep's, the cloud pool's VMs with the request stage a
     purge of them runs under, minted here at the worker's edge, and the
     product's ports."""
     batch = settings.worker_purge_batch
@@ -125,7 +126,7 @@ def worker_platform_options(
         cloud_pool_options=cloud_pool_options(settings),
         cloud_pool_stage=stage,
         executor=ports.executor,
-        executor_options=ExecutorOptions(image=settings.workspace_image),
+        executor_options=ExecutorOptions(image=settings.agent_workspace_image),
         work_product=ports.work_product,
         agent_session_projects=ports.agent_session_projects,
         workspace_agent_projects=ports.workspace_agent_projects,
@@ -220,7 +221,7 @@ class WorkerPlatform:
         # no loop has its run asked for again.
         self.holds = HoldSweepImpl(
             storage.get_spend_ledger_storage(),
-            managers.budget_gate,
+            managers.spend_budget_gate,
             managers.tenancy,
             ProviderBillsUnknownImpl(),
             HoldSweepOptions(batch=HOLD_SWEEP_BATCH),
@@ -257,18 +258,18 @@ class WorkerPlatform:
         platform: list[tuple[str, PurgeStep, str | None]] = [
             # Its validation policies, then its runs, validations, and
             # hypotheses and findings under the purge login.
-            ("evidence", managers.evidence.purge_tenant, "artifacts"),
-            ("placement", managers.placement.purge_tenant, "artifacts"),
-            ("hosts", managers.hosts.purge_tenant, "artifacts"),
-            ("validation_sessions", managers.platform_agents.purge_tenant, "artifacts"),
+            ("evidence", managers.evidence.purge_tenant, "tool_outputs"),
+            ("placement", managers.placement.purge_tenant, "tool_outputs"),
+            ("hosts", managers.hosts.purge_tenant, "tool_outputs"),
+            ("validation_sessions", managers.platform_agents.purge_tenant, "tool_outputs"),
             # Its exec items with their output, its controls, its bindings.
-            ("exec_relay", managers.exec_relay.purge_tenant, "artifacts"),
-            ("agent_workspaces", managers.agent_workspaces.purge_tenant, "artifacts"),
+            ("exec_relay", managers.exec_relay.purge_tenant, "tool_outputs"),
+            ("agent_workspaces", managers.agent_workspaces.purge_tenant, "tool_outputs"),
             # Each session's agent project row, then the tenant's agent
             # projects; each session's retention snapshot, then the tenant's
             # policy, once its sessions' key versions are gone.
-            ("agent_projects", managers.agent_projects.purge_tenant, "budgets"),
-            ("retention", managers.retention.purge_tenant, "budgets"),
+            ("agent_projects", managers.agent_projects.purge_tenant, "spend_budgets"),
+            ("retention", managers.retention.purge_tenant, "spend_budgets"),
             ("agent_billing", self.agent_billing.purge_tenant, None),
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
@@ -347,8 +348,8 @@ class WorkerPlatform:
         member who left a team org, and a validation."""
         return {
             **engine,
-            WorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(self.intake),
-            WorkKind.VALIDATION: ValidationHandlerImpl(self._managers.platform_agents),
+            IntakeWorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(self.intake),
+            ValidationWorkKind.VALIDATION: ValidationHandlerImpl(self._managers.platform_agents),
         }
 
     def providers(

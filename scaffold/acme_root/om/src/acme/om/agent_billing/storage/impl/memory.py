@@ -34,10 +34,10 @@ from acme.om.agent_billing.types.spend_ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendSettlement
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
@@ -89,15 +89,15 @@ class _Row:
         kind: EntryKind,
         entry: Entry,
         *,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         reference: str | None = None,
     ) -> None:
         self.org_id = org_id
         self.kind = kind
         self.entry = entry
-        self.hold_id = hold_id
-        self.session_id = session_id
+        self.spend_hold_id = spend_hold_id
+        self.agent_session_id = agent_session_id
         self.reference = reference
 
 
@@ -107,7 +107,7 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
         self._entries: list[_Row] = []  # in the order they were written
         self._counts: dict[tuple[UUID, str, datetime], Count] = {}
 
-    async def open_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
+    async def open_spend_hold(self, org_id: UUID, hold: FundedHold) -> FundedHold | Turned:
         async with self._lock:
             found = self._row_by_id(hold.id)
             if found is not None:
@@ -123,34 +123,40 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
                 self._move(org_id, key, held, spent)
             self._entries.append(
                 _Row(
-                    org_id, EntryKind.HOLD, stored, hold_id=stored.id, session_id=stored.session_id
+                    org_id,
+                    EntryKind.HOLD,
+                    stored,
+                    spend_hold_id=stored.id,
+                    agent_session_id=stored.agent_session_id,
                 )
             )
             return stored
 
-    async def read_hold(self, org_id: UUID, hold_id: UUID) -> FundedHold | None:
-        found = self._row_by_id(hold_id)
+    async def read_hold(self, org_id: UUID, spend_hold_id: UUID) -> FundedHold | None:
+        found = self._row_by_id(spend_hold_id)
         if found is None or found.org_id != org_id or not isinstance(found.entry, FundedHold):
             return None
         return found.entry
 
-    async def close_hold(
-        self, org_id: UUID, settlement: Settlement, charge: Charge
-    ) -> tuple[Settlement, Charge]:
+    async def close_spend_hold(
+        self, org_id: UUID, settlement: SpendSettlement, charge: Charge
+    ) -> tuple[SpendSettlement, Charge]:
         async with self._lock:
-            hold = await self.read_hold(org_id, settlement.hold_id)
+            hold = await self.read_hold(org_id, settlement.spend_hold_id)
             if hold is None:
-                raise NotFound(f"hold {settlement.hold_id} not found")
+                raise NotFound(f"hold {settlement.spend_hold_id} not found")
             first = self._of_hold(org_id, EntryKind.SETTLEMENT, hold.id)
             if first is not None:
                 stored_charge = self._of_hold(org_id, EntryKind.CHARGE, hold.id)
-                assert isinstance(first.entry, Settlement)
+                assert isinstance(first.entry, SpendSettlement)
                 assert stored_charge is not None and isinstance(stored_charge.entry, Charge)
                 return first.entry, stored_charge.entry
             for key, (held, spent) in closed(hold, settlement, charge).items():
                 self._move(org_id, key, held, spent)
-            self._entries.append(_Row(org_id, EntryKind.SETTLEMENT, settlement, hold_id=hold.id))
-            self._entries.append(_Row(org_id, EntryKind.CHARGE, charge, hold_id=hold.id))
+            self._entries.append(
+                _Row(org_id, EntryKind.SETTLEMENT, settlement, spend_hold_id=hold.id)
+            )
+            self._entries.append(_Row(org_id, EntryKind.CHARGE, charge, spend_hold_id=hold.id))
             return settlement, charge
 
     async def post_credit(self, org_id: UUID, credit: Credit) -> Credit:
@@ -187,7 +193,7 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
                     raise TenantMismatch(f"raise {raised.id} is not in {org_id}")
                 assert isinstance(found.entry, WindowRaise)
                 return found.entry
-            cost_key, tokens_key = raise_keys(raised.budget_id, raised.window_start)
+            cost_key, tokens_key = raise_keys(raised.spend_budget_id, raised.window_start)
             self._add(org_id, cost_key, raised.cost_micros)
             self._add(org_id, tokens_key, raised.tokens)
             self._entries.append(_Row(org_id, EntryKind.RAISE, raised))
@@ -202,15 +208,19 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
                 assert isinstance(found.entry, Approval)
                 return found.entry
             self._entries.append(
-                _Row(org_id, EntryKind.APPROVAL, approval, session_id=approval.session_id)
+                _Row(
+                    org_id, EntryKind.APPROVAL, approval, agent_session_id=approval.agent_session_id
+                )
             )
             return approval
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold, datetime]]:
+    ) -> list[tuple[UUID, SpendHold, datetime]]:
         closed = {
-            (row.org_id, row.hold_id) for row in self._entries if row.kind is EntryKind.SETTLEMENT
+            (row.org_id, row.spend_hold_id)
+            for row in self._entries
+            if row.kind is EntryKind.SETTLEMENT
         }
         found = sorted(
             (
@@ -219,7 +229,7 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
                 if row.kind is EntryKind.HOLD
                 and isinstance(row.entry, FundedHold)
                 and after <= row.entry.due_at < before
-                and (row.org_id, row.hold_id) not in closed
+                and (row.org_id, row.spend_hold_id) not in closed
             ),
             key=lambda found: (found[2], found[1].id),
         )
@@ -230,8 +240,8 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
         org_id: UUID,
         *,
         kind: EntryKind | None = None,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         limit: int,
     ) -> list[Entry]:
         rows = [
@@ -239,8 +249,8 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
             for row in reversed(self._entries)
             if row.org_id == org_id
             and (kind is None or row.kind is kind)
-            and (hold_id is None or row.hold_id == hold_id)
-            and (session_id is None or row.session_id == session_id)
+            and (spend_hold_id is None or row.spend_hold_id == spend_hold_id)
+            and (agent_session_id is None or row.agent_session_id == agent_session_id)
         ]
         return [row.entry for row in rows[:limit]]
 
@@ -261,9 +271,9 @@ class SpendLedgerStorageMemoryImpl(MemoryStorageBase, SpendLedgerStorageInterfac
                 return row
         return None
 
-    def _of_hold(self, org_id: UUID, kind: EntryKind, hold_id: UUID) -> _Row | None:
+    def _of_hold(self, org_id: UUID, kind: EntryKind, spend_hold_id: UUID) -> _Row | None:
         for row in self._entries:
-            if (row.org_id, row.kind, row.hold_id) == (org_id, kind, hold_id):
+            if (row.org_id, row.kind, row.spend_hold_id) == (org_id, kind, spend_hold_id):
                 return row
         return None
 

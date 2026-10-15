@@ -3,7 +3,7 @@ the owners of that kind (an agent project, or a product's own), whether one is t
 tenant's, and which one a session is placed on: the one placement whose
 sessions reach a secret declared on it. The platform's agent project registers
 here as a product's owner kind does at its roots
-(`root.PlatformPorts.kinds`), and a secret is resolved through every kind
+(`platform_root.PlatformPorts.kinds`), and a secret is resolved through every kind
 alike."""
 
 import re
@@ -30,7 +30,7 @@ class SecretOwnerInterface(ABC):
         ...
 
     @abstractmethod
-    async def owner_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+    async def owner_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
         """The owner of this kind the session is placed on, whose secrets it
         reaches; None for a session placed on none."""
         ...
@@ -48,8 +48,8 @@ class AgentProjectOwnerImpl(SecretOwnerInterface):
     async def holds(self, ctx: TenantContext, owner_id: UUID) -> bool:
         return await self._agent_projects.holds(ctx, owner_id)
 
-    async def owner_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
-        return await self._agent_projects.agent_project_of(ctx, session_id)
+    async def owner_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
+        return await self._agent_projects.agent_project_of(ctx, agent_session_id)
 
 
 class SecretOwners:
@@ -76,12 +76,12 @@ class SecretOwners:
     def get(self, kind: str) -> SecretOwnerInterface | None:
         return self._owners.get(kind)
 
-    async def placed(self, ctx: TenantContext, session_id: UUID) -> dict[str, UUID]:
+    async def placed(self, ctx: TenantContext, agent_session_id: UUID) -> dict[str, UUID]:
         """The owner of each kind the session is placed on, by kind, in the
         registry's order; a kind it is placed on none of is left out."""
         found: dict[str, UUID] = {}
         for owner in self:
-            owner_id = await owner.owner_of(ctx, session_id)
+            owner_id = await owner.owner_of(ctx, agent_session_id)
             if owner_id is not None:
                 found[owner.kind] = owner_id
         return found

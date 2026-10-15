@@ -21,7 +21,11 @@ class SpendLedgerEntries(IdentifiableMixin, CreatedMixin, Base):
         # index the second time. An entry of no hold names none, and a null
         # never meets another.
         Index(
-            "uq_spend_ledger_entries_org_id_kind_hold_id", "org_id", "kind", "hold_id", unique=True
+            "uq_spend_ledger_entries_org_id_kind_spend_hold_id",
+            "org_id",
+            "kind",
+            "spend_hold_id",
+            unique=True,
         ),
         # A payment credits once.
         Index(
@@ -33,11 +37,11 @@ class SpendLedgerEntries(IdentifiableMixin, CreatedMixin, Base):
         ),
         # A call's entries, and a session's recent holds and approvals, which
         # the anomaly guard reads before every call.
-        Index("ix_spend_ledger_entries_org_id_hold_id", "org_id", "hold_id"),
+        Index("ix_spend_ledger_entries_org_id_spend_hold_id", "org_id", "spend_hold_id"),
         Index(
-            "ix_spend_ledger_entries_org_id_session_id_created_at",
+            "ix_spend_ledger_entries_org_id_agent_session_id_created_at",
             "org_id",
-            "session_id",
+            "agent_session_id",
             "created_at",
         ),
         Index("ix_spend_ledger_entries_org_id_kind_created_at", "org_id", "kind", "created_at"),
@@ -53,8 +57,8 @@ class SpendLedgerEntries(IdentifiableMixin, CreatedMixin, Base):
         ),
     )
     kind: Mapped[str]
-    hold_id: Mapped[UUID | None]
-    session_id: Mapped[UUID | None]
+    spend_hold_id: Mapped[UUID | None]
+    agent_session_id: Mapped[UUID | None]
     reference: Mapped[str | None]
     body: Mapped[dict[str, Any]]
     deadline: Mapped[datetime | None]  # a job's hold's, which it lives to

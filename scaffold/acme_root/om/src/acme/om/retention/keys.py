@@ -16,10 +16,10 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.keys import KeyServiceInterface
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 
-class KeyDestruction(Platform):
+class KeyDestruction(OmBase):
     """A session's key destroyed, as the key service reported it: the
     service, as it names itself; the key, as it names it; when, by its own
     clock; and its own id of the event, which its log holds too. The

@@ -12,13 +12,13 @@ import pytest
 from worker_support import request
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
+from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.retention.impl.manager import KEY_DESTROYED
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.steps.types.content import Content, ContentState, TextBlock
-from acme.om.steps.types.header import InputHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 from acme.workers.maintenance.settings import MaintenanceSettings
@@ -47,9 +47,9 @@ async def container(tmp_path: Path) -> AsyncIterator[WorkerContainer]:
 
 
 def a_session() -> AgentSession:
-    now, by, session_id = utcnow(), new_id(), new_id()
+    now, by, agent_session_id = utcnow(), new_id(), new_id()
     return AgentSession(
-        id=session_id,
+        id=agent_session_id,
         created_at=now,
         updated_at=now,
         created_by=by,
@@ -57,18 +57,18 @@ def a_session() -> AgentSession:
         title="a session past its content's life",
         kind="delivery",
         kind_version=1,
-        root_id=session_id,
+        root_id=agent_session_id,
     )
 
 
-def a_message(session_id: UUID, text: str) -> Step:
-    step_id = new_id()
-    return Step(
-        id=step_id,
+def a_message(agent_session_id: UUID, text: str) -> AgentStep:
+    agent_step_id = new_id()
+    return AgentStep(
+        id=agent_step_id,
         created_at=utcnow(),
-        session_id=session_id,
-        loop_id=step_id,
-        type=StepType.MESSAGE,
+        agent_session_id=agent_session_id,
+        loop_id=agent_step_id,
+        type=AgentStepType.MESSAGE,
         actor=Actor.PERSON,
         origin=Origin.PORTAL,
         header=InputHeader(principal=Principal(kind=PrincipalKind.PERSON, id=new_id())),
@@ -91,16 +91,18 @@ async def test_one_pass_destroys_an_expired_sessions_key_and_audits_the_report(
             update={"policy": RetentionPolicy(content_lifetime=timedelta(milliseconds=1))}
         ),
     )
-    session = await managers.agent_sessions.create_session(owner, a_session())
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
     said = "the pump log shows a pressure spike at 14:02"
-    await managers.steps.append_inputs(owner, session.id, [a_message(session.id, said)])
+    await managers.agent_steps.append_inputs(owner, session.id, [a_message(session.id, said)])
 
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
 
-    steps = (await managers.steps.get_steps(owner, session.id, 0, 10)).items
+    steps = (await managers.agent_steps.get_agent_steps(owner, session.id, 0, 10)).items
     assert [step.content.state for step in steps] == [ContentState.ABSENT]
     (entry,) = [
-        e for e in await managers.events.get_events(owner, 0, 100) if e.kind == KEY_DESTROYED
+        e
+        for e in await managers.change_events.get_change_events(owner, 0, 100)
+        if e.kind == KEY_DESTROYED
     ]
     assert entry.payload["reported"] is True
     assert entry.payload["service"] == "keys=local"

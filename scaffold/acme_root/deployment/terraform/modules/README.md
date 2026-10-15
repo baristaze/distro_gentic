@@ -37,7 +37,7 @@ folder:
 | `service` | One process: task definition with a collector sidecar, service, autoscaling, and the migration before a rollout (`pre_rollout.sh`) |
 | `task` | One one-off task (migrate, grant), run by `aws ecs run-task` |
 | `alarms` | The default alarm set, to one SNS topic |
-| `cloud_pool` | The cloud pool's machines: their launch template with no instance role, the closed and the open security groups, the key their disks and snapshots are encrypted under, and the policy the runner and the sweep hold them by. No environment calls it until the platform's cloud account exists (ADR 2052) |
+| `cloud_pool` | The cloud pool's VMs: their launch template with no instance role, the closed and the open security groups, the key their disks and snapshots are encrypted under, and the policy the runner and the sweep hold them by. No environment calls it until the platform's cloud account exists (ADR 2052) |
 | `dashboard` | The CloudWatch dashboard, the twin of the local Grafana one by panel title |
 
 ## How a change reaches an environment

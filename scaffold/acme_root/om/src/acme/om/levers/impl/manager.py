@@ -8,19 +8,19 @@ from acme.om.agent_knowledge.storage import AgentKnowledgeStorageInterface
 from acme.om.agent_playbooks.storage import AgentPlaybookStorageInterface
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.base import Platform
+from acme.om.agent_steps.storage import AgentStepStorageInterface
+from acme.om.base import OmBase
 from acme.om.context import OperatorContext, OperatorPermission
 from acme.om.exceptions import ValidationFailed
 from acme.om.levers.manager import LeversManagerInterface
 from acme.om.levers.rules import id_floor, spin_of, standings
 from acme.om.levers.types.lever import LeverKind, LeverReading, LeverRef, SessionLevers
-from acme.om.steps.storage import StepStorageInterface
 from acme.om.trust.types.shape import StepShape, shape_of
 
 log = logging.getLogger(__name__)
 
 
-class LeversOptions(Platform):
+class LeversOptions(OmBase):
     # The most sessions one reading reads, newest first; past it, the
     # reading says it is not complete.
     sessions: int = Field(default=200, gt=0)
@@ -40,7 +40,7 @@ class LeversManagerImpl(LeversManagerInterface):
     def __init__(
         self,
         sessions: AgentSessionStorageInterface,
-        shapes: StepStorageInterface,
+        shapes: AgentStepStorageInterface,
         agent_playbooks: AgentPlaybookStorageInterface,
         agent_knowledge: AgentKnowledgeStorageInterface,
         options: LeversOptions,
@@ -66,7 +66,7 @@ class LeversManagerImpl(LeversManagerInterface):
         # Newest first, from the window's end: ids are minted in time order.
         after: UUID | None = id_floor(until)
         while after is not None:
-            page = await self._sessions.read_sessions(org_id, None, after, self._options.page)
+            page = await self._sessions.read_agent_sessions(org_id, None, after, self._options.page)
             after = page[-1].id if len(page) == self._options.page else None
             for session in page:
                 if session.created_at < since:
@@ -99,7 +99,7 @@ class LeversManagerImpl(LeversManagerInterface):
             if room <= 0:
                 whole = False
                 break
-            rows = await self._shapes.read_steps(
+            rows = await self._shapes.read_agent_steps(
                 org_id, session.id, after_seq, min(self._options.page, room)
             )
             shapes.extend(shape_of(step) for step in rows)
@@ -124,5 +124,5 @@ class LeversManagerImpl(LeversManagerInterface):
             )
         ]
         return SessionLevers(
-            session_id=session.id, spin=spin_of(shapes), levers=tuple(levers)
+            agent_session_id=session.id, spin=spin_of(shapes), levers=tuple(levers)
         ), whole

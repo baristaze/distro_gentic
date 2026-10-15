@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_projects import AgentProjectsManagerInterface
-from acme.om.agent_projects.types.agent_project import AgentProject, AgentWorkspaceBase
+from acme.om.agent_projects.types.agent_project import AgentProject, AgentProjectWorkspaceBase
 from acme.om.agent_workspaces import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.base import utcnow
@@ -46,9 +46,9 @@ class AgentProjectsServiceImpl(AgentProjectsServiceInterface):
                 "name": body.name,
                 "repository": body.repository.model_dump(),
                 "workspace_snapshots": body.workspace_snapshots,
-                "workspace_base": None
-                if body.workspace_base is None
-                else body.workspace_base.model_dump(),
+                "agent_workspace_base": None
+                if body.agent_workspace_base is None
+                else body.agent_workspace_base.model_dump(),
             },
         )
         return AgentProjectView.model_validate(
@@ -77,9 +77,11 @@ class AgentProjectsServiceImpl(AgentProjectsServiceInterface):
     async def set_workspace_base(
         self, ctx: TenantContext, agent_project_id: UUID, body: AgentWorkspaceBaseBody | None
     ) -> AgentProjectView:
-        workspace_base = None if body is None else built(AgentWorkspaceBase, body.model_dump())
+        agent_workspace_base = (
+            None if body is None else built(AgentProjectWorkspaceBase, body.model_dump())
+        )
         updated = await self._agent_projects.set_workspace_base(
-            ctx, agent_project_id, workspace_base
+            ctx, agent_project_id, agent_workspace_base
         )
         return AgentProjectView.model_validate(updated)
 

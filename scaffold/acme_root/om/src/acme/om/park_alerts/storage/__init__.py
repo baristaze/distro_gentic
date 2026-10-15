@@ -33,7 +33,7 @@ class ParkAlertStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         """At most `limit` of the park alerts of a session the sweep
         purges; returns how many went."""
         ...

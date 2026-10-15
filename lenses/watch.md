@@ -56,9 +56,9 @@ the parts after the one the viewer last saw.
 ## WAT-03 A live part is a cache, and the live view is a window
 
 **Principle.** A live part is a cache whose loss costs nothing, because
-the step or artifact it adds up to is the record. The stream service
+the step or tool output it adds up to is the record. The stream service
 holds a bounded buffer per open stream, and that is all its state. A
-late viewer of an artifact reads its bytes so far; a late viewer of a
+late viewer of a tool output reads its bytes so far; a late viewer of a
 model stream sees the buffered tail. A video stream is an index of
 encoded segments, and a slow viewer drops the oldest, never the newest.
 The live view is a window onto the evidence, never a second world beside
@@ -68,11 +68,11 @@ it.
 
 **Look for.** What the stream service stores, and for how long; what a
 late or a slow viewer gets; whether the live view shows anything the
-steps and artifacts do not hold.
+steps and tool outputs do not hold.
 
 **Violation.** An unbounded buffer, or a live part that is the only copy
 of what it shows; a slow viewer that drops the newest segments; a fact
-shown live that no step or artifact records.
+shown live that no step or tool output records.
 
 **Severity.** medium
 

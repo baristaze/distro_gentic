@@ -173,7 +173,7 @@ rebuilt from.
   pushed before its instance goes, and a vanished branch is rebuilt only
   when its fate is known. An instance a dead run left is released the
   same way by its host's
-  [runner sweep](../../../../../workers/session_runner/README.md), past a
+  [runner sweep](../../../../../workers/agent_session_runner/README.md), past a
   grace.
 - **The agent never holds a repository's credential**
   ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError, type AgentSessionView } from "@acme/client";
+import { ApiError, type agent_sessions } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import { personName } from "../../app/recordModel";
 import type { SlotSession } from "../../app/product";
@@ -18,10 +18,10 @@ import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resize
 import { allowed, composerOf, workProductLines, heldBy, parkLine, pullRequestBadge, sharingOf, splitCommand, statusLine, type Member } from "./sessionModel";
 import { answers, callsOf, handedTo, outline, timeline, type Call, type ChildState } from "./timelineModel";
 
-const NONE: readonly AgentSessionView[] = [];
+const NONE: readonly agent_sessions.AgentSessionView[] = [];
 
 /** A session it started as its page reads it, before what it does now is read. */
-const stateOf = (other: AgentSessionView): ChildState => ({
+const stateOf = (other: agent_sessions.AgentSessionView): ChildState => ({
   id: other.id,
   title: other.title,
   kind: other.kind,
@@ -95,7 +95,7 @@ export function useSessionVm(id: string) {
     [handedRead, handedIds],
   );
   // The clock ticks while it runs, or while a session it started does: their rows time them.
-  const works = (other: AgentSessionView) => other.archived_at === null && other.status !== "idle";
+  const works = (other: agent_sessions.AgentSessionView) => other.archived_at === null && other.status !== "idle";
   const now = useNow(runs || childRecords.some(works) || handedRecords.some(works));
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);

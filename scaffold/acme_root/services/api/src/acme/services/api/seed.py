@@ -22,10 +22,10 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import OperatorContext, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import Conflict
 from acme.om.intake.types.link import Installation
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.root import MatrixLayer, engine_rows
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.matrix.types.record import BenchmarkRun
-from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.platform_root import PlatformManagers
 from acme.om.retention.types.policy import RetentionPolicy

@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import Field, StringConstraints
 
-from acme.om.base import Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, OmBase, Trackable
 
 HostName = Annotated[str, StringConstraints(min_length=1, max_length=64)]
 
@@ -27,7 +27,7 @@ class IsolationMode(StrEnum):
     DIRECTORY = "directory"  # a directory on the host, as a dedicated user
 
 
-class Advertisement(Platform):
+class Advertisement(OmBase):
     """What a host says of itself, each value from a probe that passed at its
     startup: its operating system and shell, its capabilities, and the
     isolation modes it can provide. The platform stores what it is told and
@@ -39,7 +39,7 @@ class Advertisement(Platform):
     isolation_modes: tuple[IsolationMode, ...] = ()
 
 
-class HostReport(Platform):
+class HostReport(OmBase):
     """What a host states at every call that renews it: what it probed, and
     the version of `exec` work it reads."""
 
@@ -47,7 +47,7 @@ class HostReport(Platform):
     exec_version: int = Field(ge=1)
 
 
-class ClaimantEnrollment(Platform):
+class ClaimantEnrollment(OmBase):
     """What a claimant of a product's kind presents beside its enrollment
     token, once: its name. Its kind and its pool are the token's, never the
     claimant's to name."""
@@ -75,7 +75,7 @@ class EnrolledClaimant(Identifiable, Trackable):
     last_seen_at: datetime
     revoked_at: datetime | None = None
     revoked_by: UUID | None = None
-    session_id: UUID | None = None  # the one session a cloud pool's machine serves
+    agent_session_id: UUID | None = None  # the one session a cloud pool's VM serves
 
 
 class Host(Identifiable, Trackable):
@@ -92,13 +92,13 @@ class Host(Identifiable, Trackable):
     last_seen_at: datetime
     revoked_at: datetime | None = None
     revoked_by: UUID | None = None
-    session_id: UUID | None = None  # the one session a cloud pool's machine serves
+    agent_session_id: UUID | None = None  # the one session a cloud pool's VM serves
 
 
-class ClaimantIdentity(Platform):
+class ClaimantIdentity(OmBase):
     """Who a claimant is, read off its credential at the gateway and nowhere
     else: its kind, its id, the tenant whose wall it sits in, its pool, the
-    one session it serves when it is a machine of the cloud pool, and the
+    one session it serves when it is a VM of the cloud pool, and the
     credential it called with. Nothing in a claimant's call adds to it."""
 
     kind: str
@@ -107,7 +107,7 @@ class ClaimantIdentity(Platform):
     pool_id: UUID
     credential_id: UUID
     expires_at: datetime
-    session_id: UUID | None = None
+    agent_session_id: UUID | None = None
 
 
 class HostIdentity(ClaimantIdentity):
@@ -119,7 +119,7 @@ class HostIdentity(ClaimantIdentity):
         return self.id
 
 
-class HostStatus(Platform):
+class HostStatus(OmBase):
     """A host as its owner reads it: online while it called within the window
     and reads a version of `exec` work at or above the floor."""
 

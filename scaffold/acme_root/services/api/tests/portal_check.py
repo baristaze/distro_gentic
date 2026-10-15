@@ -2,10 +2,10 @@
 itself and by no gate:
 
     python services/api/tests/portal_check.py script <path> [--scene software_engineer|support|sharing]
-    python services/api/tests/portal_check.py evidence <slug> <session_id>
+    python services/api/tests/portal_check.py evidence <slug> <agent_session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
     python services/api/tests/portal_check.py tree <slug> [<root_id>]
-    python services/api/tests/portal_check.py host <root> <slug> <session_id> <api>
+    python services/api/tests/portal_check.py host <root> <slug> <agent_session_id> <api>
 
 `script` writes the scripted provider's script: one turn that answers in
 Markdown and calls nothing, so a session runs its loop offline and the
@@ -208,7 +208,7 @@ def software_engineer_scene() -> list[Any]:
             ThinkingBlock(text=THOUGHT),
             TextBlock(text=OPENING),
             use("validate", baseline=True),
-            use("write_plan", plan=PLAN),
+            use("write_agent_plan", plan=PLAN),
         ),
         turn(
             TextBlock(text=SPLIT),
@@ -341,13 +341,13 @@ def bare_repository(at: Path) -> None:
 
 async def prepare_scene(root: Path, slug: str) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
-    from contracts.evidence_storage import make_policy
-
     from acme.om.evidence.rules import policy_key
     from acme.services.api.container import AppContainer, boot
     from acme.services.api.main import command_request
     from acme.services.api.seed import first_repository
     from acme.services.api.settings import ApiSettings
+
+    from contracts.evidence_storage import make_policy
 
     repository = first_repository(slug)
     bare_repository(root / repository.host / f"{repository.path}.git")
@@ -374,15 +374,15 @@ async def prepare_scene(root: Path, slug: str) -> None:
         await container.close()
 
 
-async def record_evidence(slug: str, session_id: UUID) -> None:
+async def record_evidence(slug: str, agent_session_id: UUID) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
-    from contracts.evidence_storage import make_record, make_validation
-
     from acme.om.evidence.types.provenance import Provenance
     from acme.om.evidence.types.record import RunOutcome
     from acme.services.api.container import AppContainer, boot
     from acme.services.api.main import command_request
     from acme.services.api.settings import ApiSettings
+
+    from contracts.evidence_storage import make_record, make_validation
 
     settings = ApiSettings()
     boot(settings)
@@ -396,16 +396,19 @@ async def record_evidence(slug: str, session_id: UUID) -> None:
         owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
-        await container.managers.agent_sessions.get_session(owner, session_id)
+        await container.managers.agent_sessions.get_agent_session(owner, agent_session_id)
         evidence = container.managers.evidence
-        await evidence.record_run(owner, make_record(session_id, check="unit"))
+        await evidence.record_run(owner, make_record(agent_session_id, check="unit"))
         await evidence.record_run(
             owner,
             make_record(
-                session_id, check="browser", outcome=RunOutcome.FAILED, provenance=Provenance.TWIN
+                agent_session_id,
+                check="browser",
+                outcome=RunOutcome.FAILED,
+                provenance=Provenance.TWIN,
             ),
         )
-        validation, validated = make_validation(session_id, 1)
+        validation, validated = make_validation(agent_session_id, 1)
         await container.storage.get_evidence_storage().create_validation(
             owner.org_id, validation, validated
         )
@@ -416,10 +419,10 @@ async def record_evidence(slug: str, session_id: UUID) -> None:
 def story(session: Any, person: Any, at: datetime) -> Any:
     """A history of `session` as its runs write it, a few seconds apart: the
     test suites' `History`, each step a real `Step` that storage numbers."""
-    from contracts.histories import History
-
+    from acme.om.agent_steps.types.agent_step import AgentStep
     from acme.om.attribution.types.principal import AgentRef
-    from acme.om.steps.types.step import Step
+
+    from contracts.histories import History
 
     class Story(History):
         def __init__(self) -> None:
@@ -429,18 +432,20 @@ def story(session: Any, person: Any, at: datetime) -> Any:
 
         @property
         def agent(self) -> AgentRef:
-            return AgentRef(kind=session.kind, version=session.kind_version, session_id=session.id)
+            return AgentRef(
+                kind=session.kind, version=session.kind_version, agent_session_id=session.id
+            )
 
         def then(self) -> datetime:
             self.at += timedelta(seconds=3)
             return self.at
 
-        def add(self, **fields: Any) -> Step:
+        def add(self, **fields: Any) -> AgentStep:
             step = super().add(**fields).model_copy(update={"created_at": self.then(), "seq": 0})
             self.steps[-1] = step
             return step
 
-        def asks(self, use_id: str, tool: str, given: dict[str, Any], text: str = "") -> Step:
+        def asks(self, use_id: str, tool: str, given: dict[str, Any], text: str = "") -> AgentStep:
             """A model call on what came last, answering `text` and calling
             `tool` once: its call."""
             request = self.request(self.steps[-1:])
@@ -472,19 +477,22 @@ async def scene_owner(slug: str) -> tuple[Any, Any]:
     return container, owner
 
 
-async def written(container: Any, owner: Any, session_id: UUID, steps: list[Any]) -> None:
+async def written(container: Any, owner: Any, agent_session_id: UUID, steps: list[Any]) -> None:
     """Steps appended as one run writes them, then the session's status
     brought up to them once: a park or a run's end asks for no run."""
     managers = container.managers
-    epoch = await managers.steps.begin_run(owner, session_id)
-    await managers.steps.append_steps(owner, session_id, epoch, steps)
-    await managers.agent_sessions.project_status(owner, session_id)
+    epoch = await managers.steps.begin_run(owner, agent_session_id)
+    await managers.steps.append_agent_steps(owner, agent_session_id, epoch, steps)
+    await managers.agent_sessions.project_status(owner, agent_session_id)
 
 
 async def write_tree(slug: str) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from acme.om.agent_sessions.rules import parked_step
-    from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+    from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+    from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+    from acme.om.agent_steps.types.content import Content, TextBlock
+    from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
     from acme.om.agents.loop_rules import ended_step
     from acme.om.agents.types.report import Report
     from acme.om.agents.types.request import Start
@@ -492,9 +500,6 @@ async def write_tree(slug: str) -> None:
     from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
     from acme.om.base import new_id, utcnow
     from acme.om.platform_agents.kinds import ANALYSIS, SOFTWARE_ENGINEER
-    from acme.om.steps.types.content import Content, TextBlock
-    from acme.om.steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
-    from acme.om.steps.types.step import Actor, Origin, Step, StepType
 
     container, owner = await scene_owner(slug)
     try:
@@ -505,7 +510,7 @@ async def write_tree(slug: str) -> None:
         began = utcnow() - timedelta(minutes=1)
 
         # The root: the scene's software engineer, whose tree holds ten sub-agents.
-        root = await managers.agents.start_session(
+        root = await managers.agents.start_agent_session(
             owner, Start(id=new_id(), kind=SOFTWARE_ENGINEER, title=TREE_ASK)
         )
         told = story(root, person, began)
@@ -516,7 +521,7 @@ async def write_tree(slug: str) -> None:
         ]
         response = told.response(told.request([told.message(TREE_ASK)]), SPLIT, uses)
         for (use_id, tool, _), child_id in zip(uses, ids, strict=True):
-            told.result(told.call(response, use_id, tool), f'{{"session_id": "{child_id}"}}')
+            told.result(told.call(response, use_id, tool), f'{{"agent_session_id": "{child_id}"}}')
         # Its own unlock, never the engine's: a report then leaves the root
         # parked, so no step asks for a run that would take the scene's turns.
         waits = Park(reason=ParkReason.CHILDREN, unlock="children")
@@ -542,19 +547,19 @@ async def write_tree(slug: str) -> None:
                 parent_id=root.id,
                 root_id=root.root_id,
                 depth=root.depth + 1,
-                status=SessionStatus.RUNNING,
+                status=AgentSessionStatus.RUNNING,
             )
             sessions = container.storage.get_agent_session_storage()
-            await sessions.create_session(owner.org_id, child, ())
+            await sessions.create_agent_session(owner.org_id, child, ())
             await managers.attribution.open_authority(owner, child_id, AuthorityMode.STEADY)
             work = story(child, person, began)
-            parent = AgentRef(kind=root.kind, version=root.kind_version, session_id=root.id)
-            aim = Step(
+            parent = AgentRef(kind=root.kind, version=root.kind_version, agent_session_id=root.id)
+            aim = AgentStep(
                 id=new_id(),
                 created_at=work.then(),
-                session_id=child_id,
+                agent_session_id=child_id,
                 loop_id=child_id,
-                type=StepType.MESSAGE,
+                type=AgentStepType.MESSAGE,
                 actor=Actor.AGENT,
                 origin=Origin.PARENT,
                 header=InputHeader(waking=True, principal=person, agent=parent),
@@ -589,30 +594,30 @@ async def write_tree(slug: str) -> None:
 async def next_beat(slug: str, root_id: UUID) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from acme.om.agent_sessions.rules import QUESTION, parked_step
-    from acme.om.agent_sessions.types.agent_session import SessionStatus
+    from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+    from acme.om.agent_steps.types.agent_step import AgentStepType
+    from acme.om.agent_steps.types.header import LoopOutcome
     from acme.om.agents.loop_rules import ended_step
     from acme.om.agents.types.report import Report
     from acme.om.attribution.types.principal import Principal, PrincipalKind
     from acme.om.base import new_id, utcnow
-    from acme.om.steps.types.header import LoopOutcome
-    from acme.om.steps.types.step import StepType
 
     container, owner = await scene_owner(slug)
     try:
         managers = container.managers
         page = await managers.agent_sessions.get_children(owner, root_id, None, 10)
-        working = [one for one in page.items if one.status is SessionStatus.RUNNING]
+        working = [one for one in page.items if one.status is AgentSessionStatus.RUNNING]
         asking = [one for one in page.items if one.park == QUESTION]
         child = (working or asking or [None])[0]
         if child is None:
             raise SystemExit(f"no sub-agent of {root_id} is at work or asks")
-        held = (await managers.steps.get_steps(owner, child.id, 0, 100)).items
+        held = (await managers.steps.get_agent_steps(owner, child.id, 0, 100)).items
         person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
         work = story(child, person, max(utcnow(), held[-1].created_at))
         work.loop_id = held[-1].loop_id
         if working:
             # Its search answers, and it asks its person.
-            call = next(step for step in reversed(held) if step.type is StepType.TOOL_REQUEST)
+            call = next(step for step in reversed(held) if step.type is AgentStepType.TOOL_REQUEST)
             work.result(call, CALLERS)
             asked = work.asks("toolu_ask", "ask_person", {"question": ASKED})
             work.result(asked, json.dumps({"question": ASKED}))
@@ -656,14 +661,15 @@ def checkout(root: Path, slug: str, at: Path) -> Path:
     return at
 
 
-async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> None:
+async def stand_in_host(root: Path, slug: str, agent_session_id: UUID, api: str) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     import httpx
-    from contracts.hosts_storage import make_pool
 
     from acme.services.api.container import AppContainer, boot
     from acme.services.api.main import command_request
     from acme.services.api.settings import ApiSettings
+
+    from contracts.hosts_storage import make_pool
 
     settings = ApiSettings()
     boot(settings)
@@ -684,20 +690,20 @@ async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> No
             enrolled = await client.post(
                 "/v1/hosts/enrollments",
                 headers=host_headers(issued.token),
-                json={"name": "this-machine", "advertisement": ADVERTISED, "exec_version": 1},
+                json={"name": "this-vm", "advertisement": ADVERTISED, "exec_version": 1},
             )
             enrolled.raise_for_status()
             host = enrolled.json()
-            await hosts.place_session(owner, session_id, pool.id)
-            work = checkout(root, slug, root / "hands" / str(session_id))
+            await hosts.place_session(owner, agent_session_id, pool.id)
+            work = checkout(root, slug, root / "hands" / str(agent_session_id))
             await container.managers.exec_relay.bind_workspace(
-                owner, session_id, UUID(host["host_id"]), str(work)
+                owner, agent_session_id, UUID(host["host_id"]), str(work)
             )
             print("ready", flush=True)
             try:
                 await run_one(client, host_headers(host["token"]), work)
             finally:
-                await hosts.place_session(owner, session_id, None)
+                await hosts.place_session(owner, agent_session_id, None)
     finally:
         await container.close()
 

@@ -6,12 +6,13 @@ from datetime import timedelta
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
+from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.intake import IntakeManagerInterface
 from acme.om.root import Managers
 from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
-    EventsServiceInterface,
+    ChangeEventsServiceInterface,
     FlagsServiceInterface,
     LeasesServiceInterface,
     MediaServiceInterface,
@@ -22,7 +23,7 @@ from acme.services.api.services import (
 )
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
-from acme.services.api.services.impl.events import EventsServiceImpl
+from acme.services.api.services.impl.change_events import ChangeEventsServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
@@ -34,49 +35,53 @@ from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 class ServicesImpl(ServicesInterface):
     def __init__(
         self,
-        tenancy: TenancyServiceInterface,
         admin: AdminServiceInterface,
-        events: EventsServiceInterface,
-        media: MediaServiceInterface,
+        change_events: ChangeEventsServiceInterface,
         flags: FlagsServiceInterface,
-        realtime: RealtimeServiceInterface,
-        webhooks: WebhooksServiceInterface,
         leases: LeasesServiceInterface,
+        media: MediaServiceInterface,
+        realtime: RealtimeServiceInterface,
+        tenancy: TenancyServiceInterface,
+        webhooks: WebhooksServiceInterface,
+        # A copy adds its entries below this line.
         agent_sessions: AgentSessionsServiceInterface,
     ) -> None:
-        self._tenancy = tenancy
         self._admin = admin
-        self._events = events
-        self._media = media
+        self._change_events = change_events
         self._flags = flags
-        self._realtime = realtime
-        self._webhooks = webhooks
         self._leases = leases
+        self._media = media
+        self._realtime = realtime
+        self._tenancy = tenancy
+        self._webhooks = webhooks
+        # A copy adds its entries below this line.
         self._agent_sessions = agent_sessions
-
-    def get_tenancy_service(self) -> TenancyServiceInterface:
-        return self._tenancy
 
     def get_admin_service(self) -> AdminServiceInterface:
         return self._admin
 
-    def get_events_service(self) -> EventsServiceInterface:
-        return self._events
-
-    def get_media_service(self) -> MediaServiceInterface:
-        return self._media
+    def get_change_events_service(self) -> ChangeEventsServiceInterface:
+        return self._change_events
 
     def get_flags_service(self) -> FlagsServiceInterface:
         return self._flags
 
+    def get_lease_service(self) -> LeasesServiceInterface:
+        return self._leases
+
+    def get_media_service(self) -> MediaServiceInterface:
+        return self._media
+
     def get_realtime_service(self) -> RealtimeServiceInterface:
         return self._realtime
+
+    def get_tenancy_service(self) -> TenancyServiceInterface:
+        return self._tenancy
 
     def get_webhooks_service(self) -> WebhooksServiceInterface:
         return self._webhooks
 
-    def get_lease_service(self) -> LeasesServiceInterface:
-        return self._leases
+    # A copy adds its entries below this line.
 
     def get_agent_sessions_service(self) -> AgentSessionsServiceInterface:
         return self._agent_sessions
@@ -91,38 +96,41 @@ def build_services(
     intake: IntakeManagerInterface,
     agent_projects: AgentProjectsManagerInterface,
     agent_project_required: bool,
+    kinds: AgentKindCatalog,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`. A
-    delivery from an integration reaches `intake`, and a session starts in
-    one of `agent_projects`, as `agent_project_required` says."""
+    delivery from an integration reaches `intake`, a session starts in one
+    of `agent_projects`, as `agent_project_required` says, and its kind's
+    bounds are read from `kinds`."""
     return ServicesImpl(
-        tenancy=TenancyServiceImpl(managers.tenancy),
-        admin=AdminServiceImpl(
-            managers.tenancy_operator, managers.work_operator, managers.budgets_operator
-        ),
-        events=EventsServiceImpl(managers.events),
-        media=MediaServiceImpl(managers.media),
+        admin=AdminServiceImpl(managers.tenancy_operator, managers.work_operator),
+        change_events=ChangeEventsServiceImpl(managers.change_events),
         flags=FlagsServiceImpl(infra.get_flags()),
+        leases=LeasesServiceImpl(managers.leases),
+        media=MediaServiceImpl(managers.media),
         realtime=RealtimeServiceImpl(
-            managers.tenancy, managers.events, infra.get_topics(), head_max_age
+            managers.tenancy, managers.change_events, infra.get_topics(), head_max_age
         ),
+        tenancy=TenancyServiceImpl(managers.tenancy),
         webhooks=WebhooksServiceImpl(
             integrations.get_identity_provider(),
             infra.get_queues(),
             integrations.get_integration,
             intake,
         ),
-        leases=LeasesServiceImpl(managers.leases),
+        # A copy adds its entries below this line.
         agent_sessions=AgentSessionsServiceImpl(
             managers.agent_sessions,
             managers.agents,
-            managers.steps,
+            managers.agent_steps,
             managers.tools,
             managers.attribution,
             managers.loop,
             managers.windows,
+            managers.spend_budgets_operator,
             agent_projects,
             agent_project_required=agent_project_required,
+            kinds=kinds,
         ),
     )

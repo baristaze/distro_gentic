@@ -14,8 +14,10 @@ from pydantic import Field, field_validator
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface, PullRequestRead
 from acme.integrations.exceptions import ProviderRefused
+from acme.om.agent_steps.types.content import MAX_NAME
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.agent_workspaces.rules import COMMIT
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.exceptions import (
     ToolFailed,
@@ -31,8 +33,6 @@ from acme.om.platform_agents.tools.base import (
     ResultInput,
     Text,
 )
-from acme.om.steps.types.content import MAX_NAME
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.rules import bounded
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
@@ -49,19 +49,19 @@ class PullRequestAddress(ToolInput):
     on: str = Field(min_length=1, max_length=MAX_NAME, pattern=ONE_LINE)
 
 
-class ReviewedFile(Platform):
+class ReviewedFile(OmBase):
     path: str
     status: str
     patch: str | None = None  # None: the forge shows none, or the bound left it out
 
 
-class Check(Platform):
+class Check(OmBase):
     name: str
     status: str
     conclusion: str | None = None
 
 
-class PullRequestView(Platform):
+class PullRequestView(OmBase):
     """A pull request as the forge holds it, read for a review: the id a
     review cites for this read, its head, the files it changes with their
     patches, and its checks, within `MAX_VIEW`. The fields a review cites
@@ -198,9 +198,7 @@ class ReadPullRequestImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PullRequestAddress)
         forge = self._integrations(FORGE)
         try:
@@ -247,7 +245,7 @@ async def file_at(
         raise ToolFailed(ToolFailure.PERMANENT, f"{at.path} is not text") from None
 
 
-class FileAtHead(Platform):
+class FileAtHead(OmBase):
     """A file of a pull request's repository at its head, read for a
     review: the id a review cites for this read, and its text."""
 
@@ -287,9 +285,7 @@ class ReadPullRequestFileImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, FileAtHeadInput)
         forge = self._integrations(FORGE)
         try:
@@ -305,7 +301,7 @@ class FindingInput(FileAtHeadInput):
     text: str = Field(min_length=1, max_length=MAX_FINDING)
 
 
-class Finding(Platform):
+class Finding(OmBase):
     """A finding as it was noted: the id a review cites for it, and where it
     lands."""
 
@@ -352,9 +348,7 @@ class NoteFindingImpl(NativeToolImpl):
         self._intake = intake
         self._integrations = integrations
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, FindingInput)
         forge = self._integrations(FORGE)
         try:
@@ -398,7 +392,5 @@ class SubmitReviewImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         raise ToolFailed(ToolFailure.PERMANENT, "a review is judged by the loop, never run")

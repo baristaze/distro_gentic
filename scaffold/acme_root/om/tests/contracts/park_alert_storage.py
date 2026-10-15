@@ -6,10 +6,13 @@ and nothing changes."""
 from datetime import timedelta
 from uuid import UUID
 
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.base import new_id, utcnow
 from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
-from acme.om.steps.types.header import ParkReason
+
+INTERFACE = ParkAlertStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -17,7 +20,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_park_alert",
         "read_park_alerts",
         "mark_read",
-        "purge_session",
+        "purge_agent_session",
         "purge_tenant",
     }
 )
@@ -30,7 +33,7 @@ def make_park_alert(recipient: UUID, minutes: int = 0) -> ParkAlert:
         id=new_id(),
         created_at=utcnow() + timedelta(minutes=minutes),
         recipient=recipient,
-        session_id=new_id(),
+        agent_session_id=new_id(),
         park_step=new_id(),
         reason=ParkReason.PERSON,
         unlock="approval",
@@ -114,9 +117,9 @@ class ParkAlertStorageContract:
         kept = make_park_alert(new_id())
         for park_alert in (gone, also, kept):
             await storage.create_park_alert(org, park_alert)
-        assert await storage.purge_session(other, gone.session_id, 10) == 0
-        assert await storage.purge_session(org, gone.session_id, 1) == 1
-        assert await storage.purge_session(org, gone.session_id, 10) == 1
-        assert await storage.purge_session(org, gone.session_id, 10) == 0
+        assert await storage.purge_agent_session(other, gone.agent_session_id, 10) == 0
+        assert await storage.purge_agent_session(org, gone.agent_session_id, 1) == 1
+        assert await storage.purge_agent_session(org, gone.agent_session_id, 10) == 1
+        assert await storage.purge_agent_session(org, gone.agent_session_id, 10) == 0
         assert await storage.read_park_alert(org, gone.id) is None
         assert await storage.read_park_alert(org, kept.id) == kept

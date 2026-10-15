@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from uuid import UUID
 
-from acme.om.context import OperatorContext, RequestContext, TenantContext
+from acme.om.context import OperatorContext, RequestContext, TenantContext, stageless, transition
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.work.types.tenant_cap import TenantCap
 from acme.om.work.types.work_item import WorkItem
@@ -23,14 +23,15 @@ class WorkManagerInterface(ABC):
         retried enqueue never resets a claim, and so does a reused idempotency
         key: the insert reports which key collided and the manager reads the
         row back by it. Raises NotAuthorized when the context lacks the
-        permission the kind is registered with, or the kinds' registry
+        permission the kind's spec names (`work.kinds`), or the registry
         holds no such kind, and ValidationFailed when the payload is not the
-        shape the kind fixes."""
+        shape the spec fixes for the kind."""
         ...
 
     @abstractmethod
+    @stageless
     async def enqueue_relayed(self, org_id: UUID, row: OutboxRow) -> WorkItem:
-        """Platform-internal: the enqueue of a work item that follows a core write,
+        """System-internal: the enqueue of a work item that follows a core write,
         which the relay makes from the row of kind `work.<kind>` that rode that
         write. It takes no context, because the relay runs without a principal,
         and stamps the actor from the row, along with the request that made the
@@ -38,11 +39,12 @@ class WorkManagerInterface(ABC):
         cause and links its spans to. The row's id is the item's
         `idempotency_key`, the same on every run of the relay, so a relay that
         runs twice and a caller that retries meet one row under one key. Raises
-        ValidationFailed when the row names a kind this build does not know or
-        carries a payload outside the shape its kind fixes."""
+        ValidationFailed when the row names a kind the registry does not hold
+        or carries a payload outside the shape the kind's spec fixes."""
         ...
 
     @abstractmethod
+    @transition
     async def claim(
         self,
         rctx: RequestContext,
@@ -52,7 +54,7 @@ class WorkManagerInterface(ABC):
         lease: timedelta,
         tenant_cap: int | None = None,
     ) -> tuple[TenantContext, WorkItem] | None:
-        """Platform-internal: claims the oldest available item on the lane and rebuilds the
+        """System-internal: claims the oldest available item on the lane and rebuilds the
         enqueuer's principal under the service role, refining the request stage the
         worker minted for this claim; returns the context with the item. The
         stage it returns names the item's `request_id` as its
@@ -127,18 +129,20 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
-        """Platform-internal: ends every item of the tenant queued or claimed
+        """System-internal: ends every item of the tenant queued or claimed
         on `lane`, as done, with `reason` as its last word, for a lane whose
         one claimant is gone, such as a revoked host: no claim would take
         them, and a hold of theirs is refused. Returns the items it ended."""
         ...
 
     @abstractmethod
+    @stageless
     async def end_open_for_target(
         self, org_id: UUID, kind: str, target_id: UUID, reason: str
     ) -> list[WorkItem]:
-        """Platform-internal: as `end_open_on_lane`, for the tenant's items
+        """System-internal: as `end_open_on_lane`, for the tenant's items
         of `kind` on `target_id`, such as a purged session's commands."""
         ...
 
@@ -175,8 +179,9 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def requeue_stale(self, rctx: RequestContext, limit: int) -> int:
-        """Platform-internal: the sweep, across tenants, like the claim: returns
+        """System-internal: the sweep, across tenants, like the claim: returns
         up to `limit` items whose lease expired to the queue, or fails them
         when their attempts are spent; returns how many it moved. `limit` is
         the batch; the sweep calls again while a batch comes back full. A
@@ -187,16 +192,18 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def purge_items(self) -> int:
-        """Platform-internal: the sweep, across tenants, like the outbox's
+        """System-internal: the sweep, across tenants, like the outbox's
         purge: deletes items done or failed past the retention, a batch at a
         time; returns how many. The one hard delete of an item. It takes no context,
         because it runs for no tenant and no principal."""
         ...
 
     @abstractmethod
+    @stageless
     async def oldest_ready_age(self) -> timedelta:
-        """Platform-internal: the sweep's backlog gauge, across tenants like
+        """System-internal: the sweep's backlog gauge, across tenants like
         the purge: how long the item ready longest has waited for a worker, on
         any lane; zero when nothing is ready. An item parked until later has
         not waited yet. Takes no context, because it reads for no tenant and
@@ -204,15 +211,17 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def failed_within(self, window: timedelta) -> int:
-        """Platform-internal: the sweep's dead-letter gauge, across tenants
+        """System-internal: the sweep's dead-letter gauge, across tenants
         like the purge: how many items failed in the last `window` and are
         still failed. Takes no context, for the same reason."""
         ...
 
     @abstractmethod
+    @transition
     async def maintenance_contexts(self, rctx: RequestContext) -> list[TenantContext]:
-        """Platform-internal: the tenancy manager's service contexts (the system
+        """System-internal: the tenancy manager's service contexts (the system
         scope first, then every tenant), for the sweep, each refining the request
         stage the worker minted for this pass."""
         ...
@@ -227,7 +236,7 @@ class WorkManagerInterface(ABC):
 
     @abstractmethod
     async def mark_purged(self, ctx: TenantContext) -> bool:
-        """Platform-internal: the tenancy manager's `mark_purged`, for the sweep,
+        """System-internal: the tenancy manager's `mark_purged`, for the sweep,
         once a pass found nothing left of the tenant to trim."""
         ...
 

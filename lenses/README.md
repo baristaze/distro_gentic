@@ -16,7 +16,7 @@ names that rule without restating it.
 
 | Group id     | Prefix | File            | Covers |
 |--------------|--------|-----------------|--------|
-| `placement`  | `PLC`  | `placement.md`  | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
+| `placement`  | `PLC`  | `placement.md`  | Sessions Are Work; Agent Session Runners; Placement and Workspace Hosts |
 | `workspaces` | `WSP`  | `workspaces.md` | Workspaces and Isolation |
 | `watch`      | `WAT`  | `watch.md`      | Watching and Steering |
 | `intake`     | `INT`  | `intake.md`     | Work In, Results Out |
@@ -116,5 +116,5 @@ registers, and every identifier a lens quotes to the section it cites.
 That a lens stays inside its rule, stricter and never contrary, is held
 by review, not by a program.
 
-[e-lenses]: https://github.com/baristaze/agentic_core/blob/v0.18.0/lenses/README.md
-[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.60.0/lenses/README.md
+[e-lenses]: https://github.com/baristaze/agentic_core/blob/v0.19.0/lenses/README.md
+[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.61.0/lenses/README.md

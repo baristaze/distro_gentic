@@ -10,7 +10,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from acme.om.context import OperatorContext, RequestContext, TenantContext
+from acme.om.context import OperatorContext, RequestContext, TenantContext, stageless, transition
 from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.placement.types.share import ShareStanding
 
@@ -24,8 +24,9 @@ if TYPE_CHECKING:
 
 class PlacementManagerInterface(ABC):
     @abstractmethod
+    @stageless
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
-        """Platform-internal: the lane an item is enqueued on, which the work
+        """System-internal: the lane an item is enqueued on, which the work
         manager asks at every enqueue, so no producer picks one. A loop goes
         to its tenant's lane, a lane of its own when its share says so and
         its plan tier's otherwise. A kind with a lane of its own goes where
@@ -37,10 +38,11 @@ class PlacementManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def claim_for(
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
     ) -> tuple[TenantContext, WorkItem] | None:
-        """Platform-internal: the claim the control plane makes on behalf of
+        """System-internal: the claim the control plane makes on behalf of
         a claimant outside its processes, which holds no database
         credential. The lanes and the kinds come from the claimant's
         identity, never from its call (`kinds.claims_of`): only the kinds
@@ -51,6 +53,7 @@ class PlacementManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def held_for(
         self,
         rctx: RequestContext,
@@ -59,7 +62,7 @@ class PlacementManagerInterface(ABC):
         item_id: UUID,
         claim_token: UUID,
     ) -> WorkItem:
-        """Platform-internal: the item `claimant` holds, in the tenant
+        """System-internal: the item `claimant` holds, in the tenant
         `org_id`, under the `claim_token` its claim was handed, as the
         gateway reads it for the claimant. NotFound alike for an item of
         another tenant, one another claimant holds, one of a kind its kind
@@ -69,16 +72,18 @@ class PlacementManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def report_for(
         self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport
     ) -> WorkItem:
-        """Platform-internal: a claimant's answer for an item it holds, as
+        """System-internal: a claimant's answer for an item it holds, as
         the gateway passes it: done completes the item, failed fails it with
         the reason, retried until its attempts are spent. Held as `held_for`
         holds the read, and LeaseLost once its claim went to another."""
         ...
 
     @abstractmethod
+    @transition
     async def extend_for(
         self,
         rctx: RequestContext,
@@ -88,7 +93,7 @@ class PlacementManagerInterface(ABC):
         claim_token: UUID,
         lease: timedelta,
     ) -> WorkItem:
-        """Platform-internal: renews the lease on an item the claimant holds,
+        """System-internal: renews the lease on an item the claimant holds,
         held as `held_for` holds the read."""
         ...
 
@@ -130,7 +135,7 @@ class PlacementOperatorManagerInterface(ABC):
 
     @abstractmethod
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
     ) -> SessionStanding:
         """Why the named tenant's session is or is not moving: its status, its
         park and when it last changed, its tenant's share, where it runs and
@@ -151,8 +156,9 @@ class PlacementOperatorManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def agent_fleet_counts(self) -> AgentFleetCounts:
-        """Platform-internal: the sweep's read of the platform's signals,
+        """System-internal: the sweep's read of the platform's signals,
         across every tenant, each by bounded labels alone: the parked
         sessions by park reason and age, the ready loops by plan tier (every
         tenant's own lane under one label), and the hosts by state. Takes no
@@ -160,8 +166,9 @@ class PlacementOperatorManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def carry_caps(self, limit: int) -> int:
-        """Platform-internal: the sweep's carry, across every tenant, of at
+        """System-internal: the sweep's carry, across every tenant, of at
         most `limit` shares the release before wrote. Each one's
         concurrency becomes the tenant's own cap on its loop lane, unless
         the tenant holds one there already, and the share is marked carried,

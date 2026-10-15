@@ -11,7 +11,7 @@ of](../../../../README.md).
   its credential. The **principal** is whom it ran under. The
   **spender** paid for the model call that chose it. The **actor** is
   the agent that asked. The last three come from the
-  [steps](../steps/README.md) and [attribution](../attribution/README.md);
+  [steps](../agent_steps/README.md) and [attribution](../attribution/README.md);
   the executor is what this namespace adds.
 - **Secret declaration**: a secret by name, never by value. It names the
   variable a command sees, the scope the credential is made for, the

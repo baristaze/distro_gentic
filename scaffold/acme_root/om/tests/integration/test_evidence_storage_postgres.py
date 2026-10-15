@@ -1,7 +1,6 @@
 from uuid import UUID
 
 import pytest
-from contracts.evidence_storage import EvidenceStorageContract, make_record, make_validation
 from sqlalchemy import TextClause, text
 from sqlalchemy.exc import DBAPIError
 
@@ -13,6 +12,8 @@ from acme.om.storage.logins import RUNTIME_LOGIN, SYSTEM_LOGIN
 from acme.om.storage.migrate import ensure_logins_everywhere
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+
+from contracts.evidence_storage import EvidenceStorageContract, make_record, make_validation
 
 pytestmark = pytest.mark.integration
 

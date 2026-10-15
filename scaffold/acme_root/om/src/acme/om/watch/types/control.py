@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.exec_relay.types.exec import ExecState
 
 MAX_ARGS = 256
@@ -16,7 +16,7 @@ MAX_ARG = 4096
 MAX_TIMEOUT = 3600
 
 
-class HandCommand(Platform):
+class HandCommand(OmBase):
     """A command a person runs by hand: its key, which a retry sends again
     so the command runs once, what it runs, where in the workspace, and how
     long it may take."""
@@ -29,13 +29,13 @@ class HandCommand(Platform):
     timeout_seconds: int = Field(default=300, gt=0, le=MAX_TIMEOUT)
 
 
-class HandRun(Platform):
+class HandRun(OmBase):
     """A person's command as it was recorded: the exec relay's item, which holds
     what ran and how it ended, the person it is attributed to, and the
     writer epoch it runs under."""
 
     item_id: UUID
-    session_id: UUID
+    agent_session_id: UUID
     key: UUID
     user_id: UUID
     epoch: int = Field(ge=0)

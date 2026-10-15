@@ -9,7 +9,7 @@ from acme.om.platform_agents.types.validation import ValidationSession, Validati
 from acme.services.api.services.impl.evidence import execution_view
 from acme.services.api.services.validations import ValidationsServiceInterface
 from acme.services.api.types.common import LIMIT_MAX
-from acme.services.api.types.validations import StartValidationRequest, ValidationSessionView
+from acme.services.api.types.platform_agents import StartValidationRequest, ValidationSessionView
 
 
 class ValidationsServiceImpl(ValidationsServiceInterface):
@@ -20,10 +20,10 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
         self._evidence = evidence
 
     async def start_validation(
-        self, ctx: TenantContext, body: StartValidationRequest, session_id: UUID
+        self, ctx: TenantContext, body: StartValidationRequest, agent_session_id: UUID
     ) -> ValidationSessionView:
         start = ValidationStart(
-            id=session_id,
+            id=agent_session_id,
             agent_project_id=body.agent_project_id,
             check_name=body.check,
             head=body.head,
@@ -31,8 +31,12 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
         )
         return await self._view(ctx, await self._platform_agents.start_validation(ctx, start))
 
-    async def get_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSessionView:
-        return await self._view(ctx, await self._platform_agents.get_validation(ctx, session_id))
+    async def get_validation(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> ValidationSessionView:
+        return await self._view(
+            ctx, await self._platform_agents.get_validation(ctx, agent_session_id)
+        )
 
     async def _view(self, ctx: TenantContext, session: ValidationSession) -> ValidationSessionView:
         runs: list[ExecutionRecord] = []
@@ -71,13 +75,13 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             run=None if record is None else execution_view(record),
         )
 
-    async def _runs(self, ctx: TenantContext, session_id: UUID) -> list[ExecutionRecord]:
+    async def _runs(self, ctx: TenantContext, agent_session_id: UUID) -> list[ExecutionRecord]:
         """Every run of the session, oldest first: a rated check's trials
         may fill more than one page."""
         runs: list[ExecutionRecord] = []
         after = None
         while True:
-            page = await self._evidence.get_runs(ctx, session_id, after, LIMIT_MAX)
+            page = await self._evidence.get_runs(ctx, agent_session_id, after, LIMIT_MAX)
             runs.extend(page.items)
             if not page.has_more or not page.items:
                 return runs

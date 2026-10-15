@@ -17,11 +17,11 @@ from acme.om.agent_knowledge.types.agent_knowledge import (
     AgentKnowledge,
     AgentKnowledgeStatus,
 )
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
+from acme.om.agent_steps.types.content import Content, TextBlock
+from acme.om.agent_steps.types.header import InputHeader
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import derived_id
-from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import InputHeader
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
 
 WORD = re.compile(r"[a-z0-9_.-]+")
 SLUG_CUT = re.compile(r"[^a-z0-9]+")
@@ -81,18 +81,18 @@ def slug_of(title: str, entry_id: UUID) -> str:
 
 
 def recalled_step(
-    entry: AgentKnowledge, session_id: UUID, principal: Principal, now: datetime
-) -> Step:
+    entry: AgentKnowledge, agent_session_id: UUID, principal: Principal, now: datetime
+) -> AgentStep:
     """An entry as the input a session receives: an event, which waits for
     the next model call and wakes nothing, and reads as data. Its id is
     derived from the entry's and the session's, so it arrives once."""
-    step_id = derived_id(entry.id, entry.created_at, f"recall:{session_id}")
-    return Step(
-        id=step_id,
+    agent_step_id = derived_id(entry.id, entry.created_at, f"recall:{agent_session_id}")
+    return AgentStep(
+        id=agent_step_id,
         created_at=now,
-        session_id=session_id,
-        loop_id=step_id,
-        type=StepType.EVENT,
+        agent_session_id=agent_session_id,
+        loop_id=agent_step_id,
+        type=AgentStepType.EVENT,
         actor=Actor.EXTERNAL,
         origin=Origin.ENGINE,
         header=InputHeader(waking=False, principal=principal),

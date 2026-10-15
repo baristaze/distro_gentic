@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
-import type { BudgetUsageView } from "@acme/client";
+import type { spend_budgets } from "@acme/client";
 import { usageRow, windowLine } from "./usageModel";
 
 const nameOf = { person: (id: string) => (id === "u1" ? "Ada" : "a former member"), agentProject: (id: string) => (id === "p1" ? "Docs" : "a removed agent project") };
-const usage = (budget: Partial<BudgetUsageView["budget"]>, spent: number, held = 0): BudgetUsageView => ({
+const usage = (budget: Partial<spend_budgets.BudgetUsageView["budget"]>, spent: number, held = 0): spend_budgets.BudgetUsageView => ({
   budget: { id: "b1", scope_kind: "tenant", scope_key: "o1", window_kind: "month", window_seconds: null, cost_micros: 10_000_000, tokens: null, version: 1, ...budget },
   window_start: "2026-10-01T00:00:00Z",
   spent_cost_micros: spent,
@@ -25,7 +25,7 @@ it("shows a budget's spend and holds against its amount", () => {
 
 it("names a person or an agent project it bounds", () => {
   expect(usageRow(usage({ scope_kind: "person", scope_key: "u1" }, 0), nameOf).scope).toBe("Ada");
-  expect(usageRow(usage({ scope_kind: "project", scope_key: "p1" }, 0), nameOf).scope).toBe("the agent project Docs");
+  expect(usageRow(usage({ scope_kind: "agent_project", scope_key: "p1" }, 0), nameOf).scope).toBe("the agent project Docs");
 });
 
 it("says a window in words", () => {

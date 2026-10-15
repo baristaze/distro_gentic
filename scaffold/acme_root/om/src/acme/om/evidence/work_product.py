@@ -12,7 +12,7 @@ from acme.om.evidence.types.validation import WorkProduct
 
 class WorkProductInterface(ABC):
     @abstractmethod
-    async def delivered(self, ctx: TenantContext, session_id: UUID) -> WorkProduct | None:
+    async def delivered(self, ctx: TenantContext, agent_session_id: UUID) -> WorkProduct | None:
         """The session's work product as it stands: its agent project, its base,
         its committed head, whether its tree is dirty, and the paths changed
         from the base. None when the session holds no work product."""

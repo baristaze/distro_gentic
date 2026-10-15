@@ -29,7 +29,7 @@ def build_park_alerts(
     return ParkAlertsManagerImpl(
         storage.get_park_alert_storage(),
         managers.agent_sessions,
-        managers.steps,
+        managers.agent_steps,
         managers.tools,
         managers.tenancy,
         intake,

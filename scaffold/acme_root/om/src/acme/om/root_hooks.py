@@ -1,14 +1,17 @@
-"""Where a layer above the engine reaches the graph the business-layer root
-builds (`acme.om.root.build_managers`): the kinds its work queue and its
-leases read, the key service its sessions' keys are wrapped by, a face over
-the sessions, the tools, and the agents, the gates a model call and a
-result pass, the transport the tools run on, the toolsets a session holds
-beyond its kind, and what goes with a purged session.
+"""Where a layer above the engine reaches the graph the roots build: the
+lane each work item goes to and the leasable resource kinds a product adds,
+in the business root (`acme.om.root.build_managers`); and, in the engine's
+root (`acme.om.agent_root.build_agent_managers`), the key service its
+sessions' keys are wrapped by, a face over the sessions, the tools, and the
+agents, the gates a model call and a result pass, the transport the tools
+run on, and what goes with a purged session. What a session holds beyond
+its kind, and what a loop appends before its first call, are the loop's
+hooks (`acme.om.agents.hooks`), set on the engine's options.
 
-The root calls each hook once, in the order it builds, so an impl may keep
+The roots call each hook once, in the order they build, so an impl may keep
 what an earlier hook handed it for a later one. `RootHooksNullImpl` reaches
-nothing: the root builds the engine's graph as it is. The platform's impl is
-`acme.om.platform_root.RootHooksPlatformImpl`."""
+nothing: the roots build the engine's graph as it is. The platform's impl
+is `acme.om.platform_root.RootHooksPlatformImpl`."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
@@ -18,27 +21,23 @@ from acme.infra.keys import KeyServiceInterface
 from acme.infra.transports import TransportInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsNoneImpl
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
-from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
-from acme.om.budgets.pricing import PricingInterface
-from acme.om.events import EventsManagerInterface
-from acme.om.leases.hooks import ResourceKindInterface
-from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
-from acme.om.leases.types.request import ASK_PAYLOADS
-from acme.om.models.layer import ModelsLayer
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.language_models.layer import LanguageModelsLayer
+from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.privacy import PrivacyManagerInterface
-from acme.om.steps import StepsManagerInterface
+from acme.om.spend_budgets import SpendBudgetGateInterface, SpendBudgetsManagerInterface
+from acme.om.spend_budgets.pricing import PricingInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.impl.manager import ForkPoints
 from acme.om.tools.impl.snapshots import SnapshotStore
 from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.impl.gate import CallGateBudgetImpl
+from acme.om.windows.impl.gate import CallGateSpendBudgetImpl
 from acme.om.work.impl.manager import Lanes
-from acme.om.work.kinds import WORK_KINDS, WorkKinds
 
 SessionPurge = Callable[[UUID, UUID, UUID | None], Awaitable[None]]
 """What goes with a session the sweep purges, given its org, its id, and its
@@ -48,21 +47,22 @@ tree when it was the tree's last session."""
 class RootHooksInterface(ABC):
     @property
     @abstractmethod
-    def work_kinds(self) -> WorkKinds:
-        """The kinds the work queue reads every item through."""
-        ...
-
-    @property
-    @abstractmethod
     def lanes(self) -> Lanes | None:
         """The lane each item goes to, asked at every enqueue; None keeps the
         lane the item came with."""
         ...
 
     @abstractmethod
-    def resource_kinds(self, own: Mapping[str, ResourceKindInterface]) -> ResourceKinds:
-        """The resource kinds the leases read: the mechanism's `own`, each with
-        the shape of its ask, and the layer's beside them."""
+    def resource_kinds(self) -> Mapping[str, LeasableResourceKindInterface]:
+        """The leasable resource kinds the layer registers beside the
+        mechanism's own, each by its name with its hooks, whose `ASK` is the
+        shape of its ask."""
+        ...
+
+    @abstractmethod
+    def resource_checks(self) -> Mapping[str, AskCheckInterface]:
+        """The check of each of the layer's kinds that refuses some asks, by
+        the kind's name."""
         ...
 
     @abstractmethod
@@ -82,10 +82,10 @@ class RootHooksInterface(ABC):
         self,
         sessions: AgentSessionsManagerInterface,
         *,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         privacy: PrivacyManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         outbox: OutboxRelayInterface,
     ) -> AgentSessionsManagerInterface:
         """The sessions every manager built after them reaches: `sessions`, or
@@ -94,22 +94,22 @@ class RootHooksInterface(ABC):
         ...
 
     @abstractmethod
-    def pricing(self, gate: BudgetGateInterface) -> PricingInterface | None:
+    def pricing(self, gate: SpendBudgetGateInterface) -> PricingInterface | None:
         """The one source of prices behind `gate`; None is the list table."""
         ...
 
     @abstractmethod
     def call_gate(
         self,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
-        models_layer: ModelsLayer | None,
+        budgets: SpendBudgetsManagerInterface,
+        language_models_layer: LanguageModelsLayer | None,
     ) -> CallGateInterface:
         """The gate every model call passes when the root is handed none,
         priced from `pricing`, counted under the version and the tier
-        `models_layer` reads."""
+        `language_models_layer` reads."""
         ...
 
     @abstractmethod
@@ -150,32 +150,22 @@ class RootHooksInterface(ABC):
         them that sees each session made."""
         ...
 
-    @property
-    @abstractmethod
-    def attached(self) -> AttachedToolsetsInterface:
-        """The toolsets a session holds beyond its kind, which the loop folds
-        in at each run."""
-        ...
-
 
 class RootHooksNullImpl(RootHooksInterface):
-    """Reaches nothing: the work namespace's own kinds, the mechanism's own
-    resource kinds, infra's key service and transport, the managers as they
-    are built, the list table's prices, a call gate that keys no budget by
-    agent project, the gate the root was handed, and nothing attached."""
-
-    @property
-    def work_kinds(self) -> WorkKinds:
-        return WorkKinds(WORK_KINDS)
+    """Reaches nothing: no resource kind beside the mechanism's own, infra's
+    key service and transport, the managers as they are built, the list
+    table's prices, a call gate that keys no budget by agent project, and
+    the gate the root was handed."""
 
     @property
     def lanes(self) -> Lanes | None:
         return None
 
-    def resource_kinds(self, own: Mapping[str, ResourceKindInterface]) -> ResourceKinds:
-        return ResourceKinds(
-            ResourceKindSpec(name, ASK_PAYLOADS[name], hooks) for name, hooks in own.items()
-        )
+    def resource_kinds(self) -> Mapping[str, LeasableResourceKindInterface]:
+        return {}
+
+    def resource_checks(self) -> Mapping[str, AskCheckInterface]:
+        return {}
 
     def key_service(self, keys: KeyServiceInterface) -> KeyServiceInterface:
         return keys
@@ -187,33 +177,33 @@ class RootHooksNullImpl(RootHooksInterface):
         self,
         sessions: AgentSessionsManagerInterface,
         *,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         privacy: PrivacyManagerInterface,
         tenancy: TenancyManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         outbox: OutboxRelayInterface,
     ) -> AgentSessionsManagerInterface:
         return sessions
 
-    def pricing(self, gate: BudgetGateInterface) -> PricingInterface | None:
+    def pricing(self, gate: SpendBudgetGateInterface) -> PricingInterface | None:
         return None
 
     def call_gate(
         self,
-        gate: BudgetGateInterface,
+        gate: SpendBudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
-        budgets: BudgetsManagerInterface,
-        models_layer: ModelsLayer | None,
+        budgets: SpendBudgetsManagerInterface,
+        language_models_layer: LanguageModelsLayer | None,
     ) -> CallGateInterface:
-        return CallGateBudgetImpl(
+        return CallGateSpendBudgetImpl(
             gate,
             pricing,
             sessions,
             budgets,
-            SessionAgentProjectsNoneImpl(),
-            version=None if models_layer is None else models_layer.version,
-            tier=None if models_layer is None else models_layer.tier,
+            agent_projects=SessionAgentProjectsNoneImpl(),
+            version=None if language_models_layer is None else language_models_layer.version,
+            tier=None if language_models_layer is None else language_models_layer.tier,
         )
 
     def catalog(self, catalog: tuple[ToolInterface, ...]) -> None:
@@ -236,7 +226,3 @@ class RootHooksNullImpl(RootHooksInterface):
 
     def agents(self, agents: AgentsManagerInterface) -> AgentsManagerInterface:
         return agents
-
-    @property
-    def attached(self) -> AttachedToolsetsInterface:
-        return AttachedToolsetsNoneImpl()

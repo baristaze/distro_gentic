@@ -3,7 +3,7 @@
 // `approve tool <name>` or `deny class <name>`: a gate selects calls by tool
 // or by authorization class and needs a person's approval or denies them; it
 // never allows. No React, no fetch.
-import type { GateBody, AgentPlaybookView, PublishRequest } from "@acme/client";
+import type { agent_playbooks } from "@acme/client";
 
 export const NAME_MAX = 64;
 export const DESCRIPTION_MAX = 1024;
@@ -21,8 +21,8 @@ export function nameProblem(name: string): string | null {
 }
 
 /** The gates a person wrote, one to a line; blank lines are skipped. */
-export function gatesOf(text: string): { gates: GateBody[] } | { problem: string } {
-  const gates: GateBody[] = [];
+export function gatesOf(text: string): { gates: agent_playbooks.GateBody[] } | { problem: string } {
+  const gates: agent_playbooks.GateBody[] = [];
   const lines = text.split("\n");
   for (const [index, line] of lines.entries()) {
     const words = line.trim().split(/\s+/).filter(Boolean);
@@ -39,7 +39,7 @@ export function gatesOf(text: string): { gates: GateBody[] } | { problem: string
 }
 
 /** The gates as their lines. */
-export function gatesText(gates: readonly Pick<GateBody, "decision" | "tool" | "authorization_class">[]): string {
+export function gatesText(gates: readonly Pick<agent_playbooks.GateBody, "decision" | "tool" | "authorization_class">[]): string {
   return gates.map((gate) => (gate.tool ? `${gate.decision} tool ${gate.tool}` : `${gate.decision} class ${gate.authorization_class ?? ""}`)).join("\n");
 }
 
@@ -52,7 +52,7 @@ export interface AgentPlaybookDraft {
 
 export const EMPTY_DRAFT: AgentPlaybookDraft = { name: "", description: "", body: "", gates: "" };
 
-export function publishRequest(draft: AgentPlaybookDraft): { request: PublishRequest } | { problem: string } {
+export function publishRequest(draft: AgentPlaybookDraft): { request: agent_playbooks.PublishRequest } | { problem: string } {
   const name = draft.name.trim();
   const problem = nameProblem(name);
   if (problem) return { problem };
@@ -67,12 +67,12 @@ export function publishRequest(draft: AgentPlaybookDraft): { request: PublishReq
 }
 
 /** The form to publish a name's next version, filled from its latest. */
-export function draftOf(agentPlaybook: AgentPlaybookView): AgentPlaybookDraft {
+export function draftOf(agentPlaybook: agent_playbooks.AgentPlaybookView): AgentPlaybookDraft {
   return { name: agentPlaybook.name, description: agentPlaybook.description, body: agentPlaybook.body, gates: gatesText(agentPlaybook.gates) };
 }
 
 /** What a gate does, in words. */
-export function gateLine(gate: Pick<GateBody, "decision" | "tool" | "authorization_class">): string {
+export function gateLine(gate: Pick<agent_playbooks.GateBody, "decision" | "tool" | "authorization_class">): string {
   const what = gate.tool ? `a call to ${gate.tool}` : `a call of class ${gate.authorization_class ?? ""}`;
   return gate.decision === "deny" ? `${what} is denied` : `${what} waits for a person's approval`;
 }

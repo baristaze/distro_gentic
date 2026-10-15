@@ -12,7 +12,7 @@ from uuid import UUID
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.services.api.types.agent_sessions import AgentSessionView
-from acme.services.api.types.claimants import ClaimantAppendRequest
+from acme.services.api.types.hosts import ClaimantAppendRequest
 from acme.services.api.types.watch import (
     CommandProgressView,
     CommandRequest,
@@ -27,14 +27,14 @@ from acme.services.api.types.watch import (
 
 class WatchServiceInterface(ABC):
     @abstractmethod
-    async def open_live(self, ctx: TenantContext, session_id: UUID) -> LiveReadView: ...
+    async def open_live(self, ctx: TenantContext, agent_session_id: UUID) -> LiveReadView: ...
 
     @abstractmethod
     async def read_live(
         self, rctx: RequestContext, handle: str, after: Sequence[str]
     ) -> LivePageView:
         """The open streams of the handle's session. Each of `after` is
-        `<step_id>:<last>`, the `last` of the last part read of one stream;
+        `<agent_step_id>:<last>`, the `last` of the last part read of one stream;
         one that is not is refused."""
         ...
 
@@ -78,21 +78,23 @@ class WatchServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView: ...
+    async def take_control(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> AgentSessionView: ...
 
     @abstractmethod
     async def run_command(
-        self, ctx: TenantContext, session_id: UUID, body: CommandRequest, key: UUID
+        self, ctx: TenantContext, agent_session_id: UUID, body: CommandRequest, key: UUID
     ) -> HandRunView:
         """The command under `key`, the id the idempotency record minted."""
         ...
 
     @abstractmethod
     async def command(
-        self, ctx: TenantContext, session_id: UUID, key: UUID, after_seq: int
+        self, ctx: TenantContext, agent_session_id: UUID, key: UUID, after_seq: int
     ) -> CommandProgressView: ...
 
     @abstractmethod
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, body: ControlGiveBackRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: ControlGiveBackRequest
     ) -> AgentSessionView: ...

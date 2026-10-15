@@ -6,20 +6,24 @@ and expects the boot refused, naming what is missing."""
 
 from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsNullImpl
 from acme.om.agents.impl.gate import ResultGateNullImpl
-from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateNullImpl, BudgetGateOptions
 from acme.om.platform_root import PlatformPorts
 from acme.om.retention.impl.agent_projects import SessionAgentProjectNullImpl
+from acme.om.spend_budgets.impl.gate import (
+    SpendBudgetGateImpl,
+    SpendBudgetGateNullImpl,
+    SpendBudgetGateOptions,
+)
 from acme.om.storage.root import StorageInterface
 
 
 def open_ports(storage: StorageInterface) -> list[tuple[str, PlatformPorts]]:
     """Each port that ships a gate open, with the name the refusal says."""
-    engine_gate = BudgetGateImpl(
-        storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
+    engine_gate = SpendBudgetGateImpl(
+        storage.get_spend_budget_storage(), storage.get_ledger_storage(), SpendBudgetGateOptions()
     )
     return [
-        ("BudgetGateNullImpl", PlatformPorts(budget_gate=BudgetGateNullImpl())),
-        ("BudgetGateImpl is not the money gate", PlatformPorts(budget_gate=engine_gate)),
+        ("SpendBudgetGateNullImpl", PlatformPorts(spend_budget_gate=SpendBudgetGateNullImpl())),
+        ("SpendBudgetGateImpl is not the money gate", PlatformPorts(spend_budget_gate=engine_gate)),
         ("ResultGateNullImpl", PlatformPorts(result_gate=ResultGateNullImpl())),
         (
             "SessionAgentProjectNullImpl",

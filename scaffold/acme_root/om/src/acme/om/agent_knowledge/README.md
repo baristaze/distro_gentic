@@ -53,7 +53,7 @@ of](../../../../README.md).
 
 <!-- agents-only
 The recall at start is the tools layer `root.AgentKnowledgeLayer`,
-around `prepare_workspace`, for a session with no model request yet
+around `prepare_agent_workspace`, for a session with no model request yet
 (`AgentSession.speaker` is None). A root that runs loops wraps its tools
 in it, and hands `AgentKnowledgeLayer.manager` to `PlatformRootOptions` as
 `agent_knowledge`, for the agents' tools. A session's agent project is

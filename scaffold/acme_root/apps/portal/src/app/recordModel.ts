@@ -1,12 +1,12 @@
 // Pure: what every record screen says the same way: who did a thing, and a
 // cost or a count. No React, no fetch.
-import type { UserView } from "@acme/client";
+import type { tenancy } from "@acme/client";
 
 /** A member by name, else by address; the org's agent automation principal, whose
  * id its runs' calls and records carry, as itself; one no longer in the org,
  * or not yet read, is said so, never shown as an id. */
 export function personName(
-  users: readonly Pick<UserView, "id" | "display_name" | "email">[] | undefined,
+  users: readonly Pick<tenancy.UserView, "id" | "display_name" | "email">[] | undefined,
   id: string | null,
   principalId: string | null = null,
 ): string {

@@ -105,7 +105,9 @@ class AgentAutomationStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_session_run(self, org_id: UUID, session_id: UUID) -> AgentAutomationRun | None:
+    async def read_session_run(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentAutomationRun | None:
         """The latest started run that names the session."""
         ...
 

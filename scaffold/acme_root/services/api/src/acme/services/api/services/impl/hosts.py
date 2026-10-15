@@ -20,31 +20,29 @@ from acme.om.hosts.types.host import (
 from acme.om.hosts.types.pool import HostPool
 from acme.om.work.types.work_item import WorkItem
 from acme.services.api.services.hosts import HostsServiceInterface
-from acme.services.api.types.claimants import (
+from acme.services.api.types.hosts import (
+    AdvertisementBody,
+    AdvertisementView,
     ClaimantClaimView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
     ClaimantWorkView,
-    ExtendLeaseRequest,
-    IssuedClaimantCredentialView,
-)
-from acme.services.api.types.hosts import (
-    AdvertisementBody,
-    AdvertisementView,
     ClaimedWorkView,
     ClaimRequest,
     ClaimView,
     CreatePoolRequest,
     EnrollmentTokenView,
     EnrollRequest,
+    ExtendLeaseRequest,
     HeartbeatRequest,
     HostView,
+    IssuedClaimantCredentialView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
+    PlaceAgentSessionRequest,
     PlacementView,
-    PlaceSessionRequest,
     PoolView,
 )
 
@@ -188,15 +186,15 @@ class HostsServiceImpl(HostsServiceInterface):
         return claimant_view(await self._hosts.revoke_claimant(ctx, claimant_id))
 
     async def place_session(
-        self, ctx: TenantContext, session_id: UUID, body: PlaceSessionRequest
+        self, ctx: TenantContext, agent_session_id: UUID, body: PlaceAgentSessionRequest
     ) -> PlacementView:
-        await self._hosts.place_session(ctx, session_id, body.pool_id)
-        return await self.placement_of(ctx, session_id)
+        await self._hosts.place_session(ctx, agent_session_id, body.pool_id)
+        return await self.placement_of(ctx, agent_session_id)
 
-    async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementView:
-        state = await self._hosts.placement_of(ctx, session_id)
+    async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementView:
+        state = await self._hosts.placement_of(ctx, agent_session_id)
         return PlacementView(
-            session_id=state.session_id,
+            agent_session_id=state.agent_session_id,
             pool=None if state.pool is None else pool_view(state.pool),
             hosts_online=state.hosts_online,
             waiting=state.waiting,
@@ -213,7 +211,7 @@ class HostsServiceImpl(HostsServiceInterface):
         )
         return credential_view(await self._hosts.enroll(rctx, token, enrollment))
 
-    async def enroll_machine(
+    async def enroll_vm(
         self, rctx: RequestContext, key: str, body: EnrollRequest
     ) -> IssuedHostCredentialView:
         enrollment = Enrollment(

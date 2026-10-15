@@ -16,7 +16,7 @@ else. A claimant's own credential carries its kind's prefix
 
 
 class WireType(StrEnum):
-    """The work a machine outside the platform's processes reads off the wire:
+    """The work a VM outside the platform's processes reads off the wire:
     public types, versioned like any other."""
 
     EXEC = "exec"  # what a workspace host runs: commands, file operations, workspaces
@@ -33,7 +33,7 @@ own schedule."""
 
 
 def at_or_above_floor(wire: WireType, version: int) -> bool:
-    """Whether a machine that reads `version` of the wire type may be handed
+    """Whether a VM that reads `version` of the wire type may be handed
     work of it."""
     return version >= WIRE_FLOOR[wire]
 

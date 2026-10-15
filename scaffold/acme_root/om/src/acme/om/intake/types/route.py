@@ -4,7 +4,7 @@ effect the routing table gives the event there."""
 from enum import StrEnum
 from uuid import UUID
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 from acme.om.evidence.types.provenance import Provenance
 
 
@@ -20,14 +20,14 @@ class Effect(StrEnum):
     UNROUTED = "unrouted"  # names no session of the tenant: audited only
 
 
-class Routed(Platform):
+class Routed(OmBase):
     """The router's answer for one event, as its audit entry holds it.
     `caused_by` is the session whose act through the platform's account
     the event is or follows from, as the acts it names were recorded,
     whatever session the event reaches; with no act recorded, the session
     whose own work it lands on. An agent automation tells its own sessions'
     events from others' by it, and a chain's hop follows it.
-    `platform` is set when the platform's account wrote the event. `step_id` is
+    `platform` is set when the platform's account wrote the event. `agent_step_id` is
     the input the session received, when it received one. `provenance` is
     what served the event: a twin's is never taken for the real system's."""
 
@@ -36,8 +36,8 @@ class Routed(Platform):
     provenance: Provenance
     arrival: str
     effect: Effect
-    session_id: UUID | None = None
-    step_id: UUID | None = None
+    agent_session_id: UUID | None = None
+    agent_step_id: UUID | None = None
     principal_id: UUID | None = None  # the mapped user a principal's message speaks for
     caused_by: UUID | None = None
     platform: bool = False

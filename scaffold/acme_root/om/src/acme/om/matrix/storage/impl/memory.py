@@ -3,11 +3,11 @@ from uuid import UUID
 
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
+from acme.om.language_models.types.fill import ModelRole
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.types.matrix import MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOverride, MatrixPin
-from acme.om.models.types.fill import ModelRole
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
@@ -88,7 +88,8 @@ class MatrixTenantStorageMemoryImpl(MemoryStorageBase, MatrixTenantStorageInterf
                 (
                     p
                     for p in self._rows(self._pins, org_id)
-                    if p.session_id == pin.session_id and p.fill_set_version == pin.fill_set_version
+                    if p.agent_session_id == pin.agent_session_id
+                    and p.fill_set_version == pin.fill_set_version
                 ),
                 None,
             )
@@ -101,8 +102,10 @@ class MatrixTenantStorageMemoryImpl(MemoryStorageBase, MatrixTenantStorageInterf
                 return stored
             return pin
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> MatrixPin | None:
-        found = [p for p in self._rows(self._pins, org_id) if p.session_id == session_id]
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> MatrixPin | None:
+        found = [
+            p for p in self._rows(self._pins, org_id) if p.agent_session_id == agent_session_id
+        ]
         return max(found, key=lambda p: p.fill_set_version, default=None)
 
     async def write_override(self, org_id: UUID, override: FillOverride) -> FillOverride:

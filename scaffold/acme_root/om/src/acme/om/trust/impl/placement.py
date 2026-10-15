@@ -14,8 +14,8 @@ class PlacementCloudImpl(PlacementInterface):
             raise ValueError("a session in the cloud runs on a machine of the cloud")
         self._executor = executor
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
+    async def inside_wall(self, org_id: UUID, agent_session_id: UUID) -> bool:
         return False
 
-    async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
+    async def executor_of(self, org_id: UUID, agent_session_id: UUID) -> Executor:
         return self._executor

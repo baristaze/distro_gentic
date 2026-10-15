@@ -8,33 +8,38 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
+from acme.om.language_models.types.fill import ModelRole
 from acme.om.matrix.types.matrix import MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOverride, MatrixPin
-from acme.om.models.types.fill import ModelRole
 
 
 class MatrixStorageInterface(ABC):
     # The versions.
 
     @abstractmethod
+    @tenantless
     async def create_version(self, version: MatrixVersion) -> None:
         """Global: writes a version, once. `PreconditionFailed`, with nothing
         written, when its number is taken."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_version(self, number: int) -> MatrixVersion | None:
         """Global: the version `number`, or None."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_latest(self, status: MatrixStatus | None) -> MatrixVersion | None:
         """Global: the version of the highest number, of `status` when one is
         given; None when there is none."""
         ...
 
     @abstractmethod
+    @tenantless
     async def publish_version(
         self, number: int, published_at: datetime, published_by: UUID
     ) -> MatrixVersion | None:
@@ -46,24 +51,28 @@ class MatrixStorageInterface(ABC):
     # The records.
 
     @abstractmethod
+    @tenantless
     async def add_result(self, result: BenchmarkResult) -> None:
         """Global: writes a benchmark result, once; a retry of its id writes
         nothing."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_results(self, model: ModelRef, limit: int) -> list[BenchmarkResult]:
         """Global: the results recorded for `model`, newest first, at most
         `limit`."""
         ...
 
     @abstractmethod
+    @tenantless
     async def add_retirement(self, retirement: Retirement) -> Retirement:
         """Global: writes a retirement, once a model; the stored one when the
         model is retired already."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_retirements(self, limit: int) -> list[Retirement]:
         """Global: the retired models, newest first, at most `limit`."""
         ...
@@ -77,7 +86,7 @@ class MatrixTenantStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> MatrixPin | None:
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> MatrixPin | None:
         """The pin of the session's latest pinned fill-set version, or None."""
         ...
 

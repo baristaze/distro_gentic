@@ -8,7 +8,7 @@ from pydantic import Field, field_validator
 
 from acme.om.agent_knowledge.rules import words
 from acme.om.agent_knowledge.types.agent_knowledge import MAX_TEXT, AgentKnowledgeStatus
-from acme.om.steps.types.content import MAX_NAME
+from acme.om.agent_steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
 from acme.services.api.types.levers import FindingView
 

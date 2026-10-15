@@ -14,9 +14,12 @@ A request passes four layers, each in its own folder under
   meets: the request id and access log, the trusted proxy hops, admission
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
-- **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, agent sessions, hosts, the exec relay,
-  and webhooks. Each route makes one call into a service.
+- **Routers** (`routers/`). One module per namespace, named by it, and
+  `webhooks` for the providers' deliveries; `HOSTED` in
+  `routers/__init__.py` lists the namespaces the image serves. A module
+  tags its routes with its namespace and keeps its operator routes
+  beside them.
+  Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a
   provider, and returns a view from `types/`.
@@ -26,8 +29,8 @@ A request passes four layers, each in its own folder under
   with the host's credential as it is then.
 
 `container.py` builds everything once per process, `app.py` assembles the
-app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
-`bootstrap`, `add-member`, `grant-operator`, and `openapi`.
+app, and `main.py` is the `acme-api` command, whose subcommands are
+[below](#the-subcommands); `acme-api --help` lists them.
 
 A product built on Acme declares a namespace of its own once, in
 `product_api.py`: one `ProductApiNamespace` in `PRODUCT_API` names its
@@ -38,275 +41,22 @@ guideline's `arch-scaffold-entity` says, a product adds nothing to
 `HOSTED` in `routers/__init__.py`, to the services interface or its root,
 to `gateway/resolve.py`, or to `container.py`.
 
-## Routes, by area
+## Routes, by namespace
 
-- **Sign-in.** Start a sign-in at the identity provider, WorkOS
-  AuthKit, for this environment's portal callback, and finish it with
-  the code the browser brought back, which the API exchanges
-  server-side; a person nobody knew is signed up by it, with their
-  personal org (`/v1/auth/sign-in`, `/v1/auth/callback`). Start and
-  finish a device sign-in for the command line (`/v1/auth/device`,
-  `/v1/auth/device/token`). Confirm an operator's second factor on a
-  sign-in (`/v1/auth/second-factor`). List my places; exchange the
-  login, once, or switch a session, for a session in one org; sign out
-  (`/v1/auth/memberships`, `/v1/auth/sessions`, `/v1/auth/logout`).
-  The sign-out ends the credential presented, whichever a person holds:
-  a session, a login (with or without its second factor), or an
-  operator token; an API key has none and is `401`. It takes an optional
-  `return_to`, one of this environment's `ACME_SIGN_OUT_RETURN_URIS`,
-  and answers the row it ended with `provider_logout_url`: WorkOS's
-  logout for the AuthKit session the sign-in left in the browser, or
-  null when there is none (the device sign-in, the local sign-in, an
-  operator token).
-  Locally and in the tests only, sign in by address alone
-  (`/v1/auth/dev-sign-in`, ADR 0029); a deployed process refuses to
-  start with it on.
-- **Me.** The current org, my user, my identity, and my display name;
-  a new team org I own. (`/v1/orgs/current`, `/v1/me`,
-  `/v1/me/identity`, `/v1/orgs`)
-- **Delete my account.** From a session, with the account's email typed
-  to confirm: the account goes at once, in every org, and the answer
-  names the identity provider's logout, as a sign-out does. `409
-  last_owner` names each team org the person is the last owner of, in
-  the envelope's `last_owner.orgs`; `403 operator_role_held` refuses an
-  operator. (`POST /v1/me/deletion`, ADR 0041)
-- **Delete this organization.** From an owner's session, with the
-  org's name typed to confirm: everyone in the team org loses it at
-  once, and the answer carries the owner's new session in their
-  personal org. `403 not_authorized` refuses an admin, a member, and an
-  api key; `409 personal_org_fixed` refuses a personal org.
-  (`POST /v1/orgs/current/deletion`, ADR 0042)
-- **Members.** The org's members and their roles a page at a time,
-  a member's role, removing a member. (`/v1/users`, `/v1/memberships`,
-  `/v1/memberships/{user_id}`)
-- **Invitations and single sign-on.** Invite a person by email with a
-  role, under an Idempotency-Key; the identity provider sends the
-  email. The org's pending invitations a page at a time, sending one
-  again, revoking one. A short-lived link to the provider's admin
-  portal, where an owner or an admin of a team org sets up single
-  sign-on or proves a domain. (`/v1/invitations`,
-  `/v1/invitations/{invitation_id}/resend`,
-  `/v1/invitations/{invitation_id}`, `/v1/orgs/current/sso-link`)
-- **Credentials.** My live sessions and revoking one; the org's API
-  keys, creating one, revoking one; a ticket for the live channel.
-  (`/v1/sessions`, `/v1/api-keys`, `/v1/realtime/tickets`)
-- **Files.** Starting an upload, under an Idempotency-Key; the org's
-  stored files a page at a time; a file, and deleting it; the form that
-  posts its bytes straight to the store, or the bytes through the API
-  where the store cannot take a form; the confirm once the upload is
-  done; the link a download follows, or the bytes through the API; and
-  the org's storage used. (`/v1/media/files`,
-  `/v1/media/files/{file_id}`, `.../upload`, `.../content`,
-  `.../confirm`, `.../download`, `/v1/media/usage`)
-- **Events.** The org's diary after a sequence number. (`/v1/events`)
-- **Leases.** Ask for a resource, by its id or by a selector, under an
-  idempotency key; read where the request stands, its place and its
-  estimate, or its lease; cancel it; read a resource's line, with each
-  place and estimate, and the history of leases, newest first, a page
-  at a time; renew a lease, for a length it names or its term again,
-  and release it, as its holder. The worker that runs a lease's job
-  acts through the manager, not a route. A manager reorders a request
-  and revokes a lease. (`/v1/leases/requests`,
-  `/v1/leases/requests/{request_id}`, `.../cancel`, `.../reorder`,
-  `/v1/leases/resources/{resource_id}/line`, `/v1/leases`,
-  `/v1/leases/{lease_id}`, `.../renew`, `.../release`, `.../revoke`,
-  ADRs 0086, 0094, and 0098)
-- **Agent sessions.** Start a session on an agent kind the product runs,
-  under an Idempotency-Key; list the ones a person made or takes part
-  in, or every one they see; read it; join an org-wide one, or as its
-  creator add someone, the one way into a private one; leave it, or as
-  its creator remove someone, never its steerer; switch who sees it,
-  org-wide or private, as its creator; hand its steer to a participant,
-  or take a lapsed one with `manage_sessions`; send it a message or a
-  control (pause, resume, cancel, an interrupt of the call it names,
-  compact, unlock), each kept when the answer comes and kept once under
-  a retried key; decide a tool call its loop waits on; clear the park a
-  person clears (move the tree's deadline, take its steer, take its
-  environment over and give it back in person, complete a job it waits
-  on); and read its history and its artifacts a page at a time. A
-  message, or a park cleared, asks for a run of its loop, which the
-  session runner claims; the API never runs a loop. Only the steerer's
-  message instructs; a participant's is data and asks for no run. A
-  hand-over is its holder's: no one else unlocks it or gives it back. A
-  session the caller does not see, another org's included, answers as
-  one that never existed. (`/v1/agent-sessions`,
-  `/v1/agent-sessions/{session_id}`, `.../participants/{user_id}`,
-  `.../visibility`, `.../messages`, `.../controls`,
-  `.../calls/{request_seq}/decision`, `.../deadline`, `.../principal`,
-  `.../take-over`, `.../give-back`, `.../jobs/{key}/completion`,
-  `.../steps`, `.../artifacts/{artifact_id}`, ADRs 1038 and 1039)
-- **Parks on the tenant's money.** An owner or an admin approves a
-  session's next call far above its norm, up to a cost, and raises a
-  budget for the window open now, its own amount unchanged, each under an
-  Idempotency-Key; a person who may write posts a payment the provider
-  confirmed, with its signature in `Payment-Signature`, credited once by
-  the provider's reference. Each wakes the sessions parked on it and
-  answers the ledger entry it posted. A signature that does not check out
-  is `400`, and another tenant's confirmation `403`.
-  (`/v1/agent-sessions/{session_id}/cost-approval`,
-  `/v1/budgets/{budget_id}/raises`, `/v1/agent-billing/payments`, ADR 2060)
-- **Agent projects.** An owner or an admin creates an agent project
-  bound to its repository, under an Idempotency-Key, renames it, and
-  removes it while no session belongs to it (`409 agent_project_in_use`
-  otherwise); any member lists and reads them. The repository never
-  moves. An owner or an admin sets the workspace base its sessions'
-  workspaces start from, an image, its setup commands, and the
-  registries the setup reaches, or takes it away; a session keeps the
-  one it started on. Its fetch credential is written and never read
-  back: the answer says who gave it when, and it leaves the tenant's
-  store with its agent project. (`/v1/agent-projects`,
-  `/v1/agent-projects/{agent_project_id}`, `.../workspace-base`,
-  `.../credential`)
-- **Validation sessions.** A member who may write starts one, under an
-  Idempotency-Key, as a CI job asks for one: a check its agent project's
-  policy declares, at a delivered head, with its checks from a base. The
-  platform's worker runs it once on a fresh executor, or, for a check a
-  requirement rates, its declared trials, which pass only together. Any
-  member reads it, and once its run is recorded, its verdict and the run
-  (the last trial's, for a rated check). A check that cannot run there for
-  good, one the policy no longer declares or no executor can run, reads
-  `refused`, with its reason and no run, so a CI job stops waiting. So
-  does one whose work fails on its last attempt, with the error's class.
-  An agent project with no policy in the tenant is `404`, as another
-  tenant's is, and a check the policy does not declare is `422`.
-  (`/v1/validation-sessions`, `/v1/validation-sessions/{session_id}`)
-- **Agent knowledge and agent playbooks.** The entries in a state, the
-  suggestions waiting on a review among them, and one entry; a person
-  writes one in person, under an Idempotency-Key, edits it on the
-  version `If-Match` names, and keeps or rejects a suggestion. A person
-  publishes an agent playbook's next version with its gates, under an
-  Idempotency-Key, and the latest version of a name is read. A person
-  invokes the latest version into a session they may instruct, once a
-  version. A person who manages the tenant pins one to a kind as its
-  kind manual, for the tenant or one agent project, lists the pins, and
-  takes one away; each session of the kind started after holds it as its
-  standing text. (`/v1/agent-knowledge`,
-  `/v1/agent-knowledge/{entry_id}`, `.../review`, `/v1/agent-playbooks`,
-  `/v1/agent-playbooks/{name}`, `.../invocations`,
-  `/v1/agent-playbook-pins`)
-- **AgentAutomations.** A person makes one in person, under an
-  Idempotency-Key, in an agent project of the tenant; any member lists
-  and reads them; its creator edits one that runs as its creator, and a
-  person whose role holds the grant one that runs as the agent
-  automation principal. The principal's grant is read and set beside
-  them. (`/v1/agent-automations`,
-  `/v1/agent-automations/{agent_automation_id}`,
-  `/v1/agent-automations/principal`)
-- **Tool policy.** Any member reads the tenant's layer; an owner or an
-  admin writes it whole on the version `If-Match` names.
-  (`/v1/tools/policy`)
-- **Retention.** Any member reads the tenant's retention policy; an
-  owner or an admin writes it whole on the version `If-Match` names, the
-  first with none. An owner or an admin erases one session's content for
-  good: its key is revoked and destroyed, the audit holds it, and its
-  shape stays. (`/v1/retention/policy`,
-  `/v1/retention/sessions/{id}/erase`)
-- **Hosts.** An owner or an admin makes a host pool, under an
-  Idempotency-Key, and issues a token that enrolls hosts into it, or a
-  product's claimant kind the body names, shown once; lists a pool's
-  hosts with whether each is online, and its claimants of every kind;
-  and revokes a token, a host, or a product's claimant. A principal reads and sets where a
-  session runs: the cloud, or one of the org's pools; a pinned session
-  with no host online reads `waiting`. (`/v1/host-pools`,
-  `/v1/host-pools/{pool_id}/hosts`, `.../claimants`, `.../enrollment-tokens`,
-  `/v1/host-enrollment-tokens/{token_id}`, `/v1/hosts/{host_id}`,
-  `/v1/claimants/{claimant_id}`, `/v1/agent-sessions/{session_id}/placement`)
-- **A host's own calls.** A workspace host enrolls once, with an
-  enrollment token as its bearer, and gets a credential of its own kind
-  (`hst_`), which no tenant route accepts and which every other host
-  route requires: rotate it, beat, and claim. A claim states only the
-  version of `exec` work the host reads; below the floor it is `426
-  version_below_floor`, and what it is handed is read off the host's
-  identity. (`/v1/hosts/enrollments`, `/v1/hosts/me/credentials`,
-  `/v1/hosts/me/heartbeats`, `/v1/hosts/me/claims`, ADR 2003)
-- **A product's claimant's own calls.** A claimant of a product's kind
-  enrolls once with a token of its kind, and gets a credential under its
-  kind's prefix, which no tenant route and no host route accepts. With
-  it alone it rotates the credential, claims its kind's next item, and
-  reads, renews, and reports the item it holds under the claim token its
-  claim was handed (a `Claim-Token` header on the read); any other item
-  is `404`. While it holds the item, it appends to a stream of a kind its
-  own kind writes, a bounded batch at a time, which a member of the
-  item's tenant reads by a handle, as a session's. Each entry carries
-  the hash it crossed the wall with, and an append with one that does
-  not match is `422 crossing_refused`. It reads the item's streams of a
-  kind its own kind reads, under its claim token, while its lease is
-  live; any other item or kind, and a lapsed lease, are `404`.
-  (`/v1/claimants/enrollments`, `/v1/claimants/me/credentials`,
-  `/v1/claimants/me/claims`, `/v1/claimants/me/items/{item_id}`,
-  `.../lease`, `.../report`, `.../streams/{kind}`,
-  `/v1/work-items/{item_id}/streams/{kind}/live`, `/v1/live/items`, ADR
-  2029, ADR 2030, ADR 2038)
-- **The exec work a host holds.** With its own credential alone, a host
-  reads what an item it holds runs, pushes its output a part at a time
-  and how it ended, and renews its lease. Each push carries the bytes as
-  they crossed, in base64, and the hash the host declares of them; bytes
-  that do not match are `422 crossing_refused`, and an item the host does
-  not hold is `409 exec_not_held`. Its control stream is the one
-  long-lived connection it holds, opened from inside its wall: one JSON
-  line per wake, stop, or ping. (`/v1/hosts/me/exec/{item_id}`,
-  `.../parts`, `.../result`, `.../lease`, `/v1/hosts/me/control`,
-  ADR 2004)
-- **The identity provider's deliveries.** Outside `/v1`, since their
-  shape is the provider's. No credential: the route checks the provider's
-  signature over the body and its timestamp, and queues the delivery for
-  the worker; one that fails the check is refused and nothing is queued.
-  (`/webhooks/identity`)
+Each namespace's routes are in its OpenAPI document,
+[`clients/openapi/<namespace>.json`](../../clients/openapi/), under the
+namespace's tag. The tag's description is the router module's
+docstring, which tells the namespace's routes by area. `make openapi`
+writes the documents from the code, so they hold what runs. Two kinds of
+route are in no document:
+
 - **Realtime.** The live channel, a websocket opened with a
-  single-use ticket. (`/v1/realtime`)
-- **The operator plane.** For an identity on the operator allowlist,
-  across every org: create an org with its owner, add a member, read
-  an org, its members, and its events, list every org a page at a
-  time, delete a team org as its owner does (closed for everyone in it
-  at once; the worker ends its providers and then deletes it; a
-  personal org is refused), send one of an org's failed work items back
-  to the queue, set, read, or clear an org's own cap on a lane (the
-  most items it holds claimed there at once, in place of the lane's
-  cap; `404` where it has none), and read the platform's size: the
-  tenant count, the user count, and the events of twenty-four hours,
-  as the maintenance worker last counted them, with the moment it did
-  (`404` before its first count; the route counts nothing).
-  (`/v1/admin/orgs`, `/v1/admin/orgs/{org_id}`,
-  `/v1/admin/orgs/{org_id}/members`, `/v1/admin/orgs/{org_id}/events`,
-  `/v1/admin/orgs/{org_id}/work/{item_id}/requeue`,
-  `/v1/admin/orgs/{org_id}/work/lanes/{lane}/cap`, `/v1/admin/size`). A read route
-  needs an operator who may read; a write route one who may write.
-  Every read and write takes an operator token. An operator enrols the
-  second factor once, at the first sign-in to the plane, and until then
-  only the two enrolment routes answer (`/v1/admin/me/totp`,
-  `/v1/admin/me/totp/confirm`). A sign-in that verified a TOTP code
-  mints one operator token, one permission and an hour at most, and
-  ends in that mint; every other route refuses it `403
-  operator_token_required` (`POST /v1/admin/me/tokens`). An operator
-  lists their own live tokens and revokes one by its id, refused from its
-  next request; another operator's is `404` (`GET /v1/admin/me/tokens`,
-  `DELETE /v1/admin/me/tokens/{token_id}`, ADR 0068).
-- **The platform's operator routes.** Beside the plane's own, each
-  naming the tenant: an operator who may write sets a tenant's fair
-  share, its plan tier, its own lane, and how many of its loops run at
-  once, a new version each time, on the tenant's own record
-  (`PUT /v1/admin/orgs/{org_id}/share`). An operator who may read reads
-  why a session is or is not moving, and why a host takes no work, as
-  ids, counts, times, and states
-  (`/v1/admin/orgs/{org_id}/sessions/{session_id}/standing`,
-  `/v1/admin/orgs/{org_id}/hosts/{host_id}/standing`), and a session's
-  shape, never what it says (`.../sessions/{session_id}/shape`). Its
-  content opens only under a grant the grant job wrote in that tenant,
-  `403 content_not_granted` otherwise, and the tenant's stream names the
-  operator at every opening (`.../sessions/{session_id}/content`,
-  ADR 2010). An operator who may read reads which levers a tenant's
-  sessions created in a window reached before they stalled, each lever
-  by its kind, id, and version, never its name or its slug, with
-  counts and session ids (`/v1/admin/orgs/{org_id}/levers`, ADR 2054).
-  An operator who may read reads the tenant's ledger, and one who may
-  write grants it units for its life, under an Idempotency-Key, which
-  wakes its sessions parked on its funds; an org that is gone is `404`
-  (`/v1/admin/orgs/{org_id}/spend-ledger`, `.../grants`, ADR 2060).
+  single-use ticket (`/v1/realtime`).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
-  than the probe's interval), metrics (`/metrics`), and the OpenAPI
-  document with its UI (`/docs`). The first three are never refused
-  by admission.
+  than the probe's interval), and metrics (`/metrics`), never refused
+  by admission; and, for a developer, the interactive document with
+  its UI (`/docs`).
 
 ## What the gateway guarantees
 
@@ -328,8 +78,8 @@ to `gateway/resolve.py`, or to `container.py`.
   status. A 5xx says `internal error` and the real message goes to the
   log under the request id; the admission 503 alone says which bound it
   hit, with a `Retry-After`.
-- **Bearer by prefix.** The credential's prefix says what it is: a
-  session token, an API key, a login, a ticket, or an operator token. A missing or
+- **Bearer by prefix.** The credential's prefix says what it is: an
+  auth session token, an API key, a login, a ticket, or an operator token. A missing or
   invalid one is a 401; a route asked with the wrong kind is refused.
 - **The answer never waits for the relay.** A write commits its
   outbox rows before it answers. Their relay, the push and the queued
@@ -355,7 +105,7 @@ to `gateway/resolve.py`, or to `container.py`.
   shares one budget. Past a budget the answer is a 429,
   `rate_limited`, in the one envelope, with a `Retry-After` in
   seconds: the time left on the window. There are three budgets.
-  - **Per credential.** Every session and API key has a budget of
+  - **Per credential.** Every auth session and API key has a budget of
     reads (`GET`, `HEAD`) and one of writes, spent once the credential
     resolves (`ACME_CREDENTIAL_RATE_LIMIT_READS`, `_WRITES`, over
     `ACME_CREDENTIAL_RATE_WINDOW_SECONDS`). Two people behind one
@@ -390,7 +140,7 @@ to `gateway/resolve.py`, or to `container.py`.
   audience, and a narrower view is the client's filter. Every push carries the
   org's stream position, and each client holds a contiguous cursor, so
   a push the server withheld would be a gap. The replay of
-  `/v1/events` that fills a gap is unscoped, and it would hand back
+  `/v1/change-events` that fills a gap is unscoped, and it would hand back
   what was withheld. Filtering at the server needs a scoped replay and
   a frame counter per subscription, a second protocol, and it waits
   until the channel's traffic makes the filter worth that protocol.
@@ -407,7 +157,7 @@ container the server does.
 | `serve` | Runs the process. |
 | `migrate` | Applies every role's migration chain (`--all`) or one role's. Idempotent per revision. `migrate ensure-logins` makes the database logins, as the master, on each database a role lives on. |
 | `bootstrap` | Seeds a fresh local environment with one org and its owner; `--operator` puts the owner on the operator allowlist with write. Local only, like every seed. |
-| `grant-operator` | The grant job: `--email <e> --permission read\|write` puts an identity on the operator allowlist, `--email <e> --disable` takes it off, `--email <e> --grant-content <org_id> [--expires-in N]` opens that org's session content to the operator for an hour or less, at most eight, and `--email <e> --revoke-content <org_id>` ends it, each on the org's own record; and `--email <e> --mint-token provisioner\|smoke [--expires-in N]` mints that identity's operator token into the secret store as `acme-<env>-<holder>-token`, never printed in the cloud. On a local database it prints the token instead, and `--mint-token operator` mints the local read operator's `read` token, which `make seed` writes into `~/.config/acme/ops/local.env`; a cloud refuses it. An operator signs up first; the platform's own identities (`@platform.acme.invalid`) are made by their first grant. |
+| `grant-operator` | The grant job: `--email <e> --permission read\|write` puts an identity on the operator allowlist, `--email <e> --disable` takes it off, `--email <e> --grant-content <org_id> [--expires-in N]` opens that org's session content to the operator for an hour or less, at most eight, and `--email <e> --revoke-content <org_id>` ends it, each on the org's own record; and `--email <e> --mint-token provisioner\|smoke [--expires-in N]` mints that identity's operator token into the secret store as `acme-<env>-<holder>-token`, never printed in the cloud. On a local database it prints the token instead, and `--mint-token operator` mints the local read operator's `read` token, which `make seed` writes into `~/.config/acme/ops/local.env`; a cloud refuses it. An operator signs up first; the system's own identities (`@platform.acme.invalid`) are made by their first grant. |
 | `add-member` | Seeds a person into an existing org; a no-op for a member. |
 | `openapi` | Emits the OpenAPI document the clients are generated from. |
 

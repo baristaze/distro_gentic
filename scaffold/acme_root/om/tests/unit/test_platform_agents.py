@@ -14,31 +14,17 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import in_agent_project
-from contracts.evidence import ScriptedExecutor
-from contracts.evidence_storage import make_policy
-from contracts.hosts_storage import make_credential, make_host
-from contracts.loops import reply, said
-from contracts.platform_agents import (
-    CORPUS,
-    Platform,
-    a_software_engineer,
-    a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report,
-    calls,
-    citing,
-    on_the_twin,
-    platform_over,
-    sub_agents_over,
-)
 from unit.platform_tools import REVIEWED, reviewing, unbound
 
+from acme.infra.agent_workspaces import IsolationMode
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import IsolationMode
 from acme.integrations.model_providers.calls import ModelCall
+from acme.om.agent_root import AgentRootOptions, native_tools
 from acme.om.agent_sessions.limits import Limits
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.types.header import LoopOutcome, ParkReason, ToolFailure
 from acme.om.agents.types.kind import (
-    NO_WORKSPACE,
+    NO_AGENT_WORKSPACE,
     AgentKind,
     AgentKindCatalog,
     DoneRule,
@@ -48,7 +34,6 @@ from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.result import Claim
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.context import (
     AppContext,
     AppType,
@@ -71,7 +56,7 @@ from acme.om.exceptions import (
 )
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.types.pool import HostPool
-from acme.om.models.types.fill import MAIN, SUMMARIZER, ModelSize
+from acme.om.language_models.types.fill import MAIN, SUMMARIZER, ModelSize
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.catalog import (
     PlatformAgents,
@@ -93,11 +78,11 @@ from acme.om.platform_agents.kinds import (
     SOFTWARE_ENGINEER_SHARE,
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
+    ValidationWorkKind,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
-from acme.om.root import engine_tools
-from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure
+from acme.om.spend_budgets.types.spend_budget import SpendBudgetScope, SpendBudgetScopeKind
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.native.load_toolset import callable_tools
@@ -105,12 +90,29 @@ from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
+from acme.om.tools.types.policy import Decision, ToolPolicy, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.tools.types.toolset import Toolset
-from acme.om.windows.rules import READ_ARTIFACT
+from acme.om.windows.rules import READ_TOOL_OUTPUT
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.evidence import ScriptedExecutor
+from contracts.evidence_storage import make_policy
+from contracts.hosts_storage import make_credential, make_host
+from contracts.loops import reply, said
+from contracts.platform_agents import (
+    CORPUS,
+    Platform,
+    a_software_engineer,
+    a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report,
+    calls,
+    citing,
+    on_the_twin,
+    platform_over,
+    sub_agents_over,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 """The root of this agent project, where its knowledge map is."""
@@ -121,7 +123,7 @@ APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 def shipped_catalog() -> tuple[ToolInterface, ...]:
     """The engine's tools and the platform's, as the root offers them."""
-    engine = engine_tools(
+    engine = native_tools(
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
@@ -163,11 +165,11 @@ def member_of(platform: Platform, *only: Permission) -> TenantContext:
         org_id=platform.owner.org_id,
         role=Role.MEMBER,
         permissions=only or permissions_of(Role.MEMBER),
-        credential_kind=CredentialKind.SESSION_TOKEN,
+        credential_kind=CredentialKind.AUTH_SESSION_TOKEN,
     )
 
 
-def a_policy(platform: Platform, *policy_rules: PolicyRule, version: int) -> ToolPolicy:
+def a_policy(platform: Platform, *policy_rules: ToolPolicyRule, version: int) -> ToolPolicy:
     now = utcnow()
     return ToolPolicy(
         id=new_id(),
@@ -302,15 +304,15 @@ def test_the_software_engineer_and_analysis_read_back_a_kept_result_in_a_version
     latest: AgentKind, before: AgentKind
 ) -> None:
     """A result too large for the window, or one compaction elided, is read
-    back with read_artifact. Each kind names it in a version of its own,
+    back with read_tool_output. Each kind names it in a version of its own,
     which changes nothing else, and the version before it stays shipped
     for the sessions pinned to it."""
-    assert READ_ARTIFACT in latest.tools and READ_ARTIFACT not in before.tools
+    assert READ_TOOL_OUTPUT in latest.tools and READ_TOOL_OUTPUT not in before.tools
     assert latest.version == before.version + 1
     same = {"version": before.version, "tools": before.tools, "toolsets": before.toolsets}
     assert latest.model_copy(update=same) == before
     assert latest in SHIPPED and before in SHIPPED
-    assert READ_ARTIFACT in {tool.spec.name for tool in shipped_catalog()}
+    assert READ_TOOL_OUTPUT in {tool.spec.name for tool in shipped_catalog()}
 
 
 def test_analysis_waits_for_every_report_before_it_answers() -> None:
@@ -355,7 +357,7 @@ LEAD = AgentKind(
     result_tool=kinds.SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=1),
-    isolation=NO_WORKSPACE,
+    isolation=NO_AGENT_WORKSPACE,
 )
 """A product's kind that delegates: it can grant the software engineer its result
 tool, and its tree has room for one child."""
@@ -399,8 +401,8 @@ async def test_a_products_kind_spawns_the_software_engineer_under_its_share(tmp_
         kinds.SOFTWARE_ENGINEER,
         SOFTWARE_ENGINEER_KIND.version,
     )
-    page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
-    own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    page = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
+    own = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [
         SOFTWARE_ENGINEER_SHARE
     ]
@@ -424,8 +426,8 @@ async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> Non
     child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
 
     assert (child.kind, child.kind_version) == (kinds.REVIEWER, REVIEWER_KIND.version)
-    page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
-    own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    page = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
+    own = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
 
 
@@ -501,12 +503,12 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
         (kinds.PLANNER, "Plan: one task, a new software engineer session for the dropped total."),
         (kinds.PLATFORM_ASSISTANT, "A session waits while its tenant is at its share."),
     ):
-        session_id = await platform.start(kind)
-        await platform.say(session_id, "Go on.")
+        agent_session_id = await platform.start(kind)
+        await platform.say(agent_session_id, "Go on.")
         platform.anthropic.add(reply(said(answer)))
-        run = await platform.managers.loop.run(platform.owner, session_id)
+        run = await platform.managers.loop.run(platform.owner, agent_session_id)
         assert run.outcome is LoopOutcome.SUCCEEDED, kind
-        steps = await platform.history(session_id)
+        steps = await platform.history(agent_session_id)
         assert answer in [step.as_text() for step in steps], kind
 
 
@@ -514,15 +516,15 @@ RENDERED = {
     (
         kinds.SOFTWARE_ENGINEER,
         8,
-    ): "e95c4d517f6337704afffec7fb86aea679d475063686f797eba482db6033ab55",
-    (kinds.ANALYSIS, 4): "1b8dc15d3ef03802fe55eb09ceda1f7fd6f6270c997a6b9138f23ce0d329feba",
-    (kinds.PLANNER, 1): "79036b8634a53884d1b6f04f08ae7cdab7d45c793394811c693ca251843a2a73",
+    ): "9cc87aa9d21dd89c27a67b9b8ed4899e50a36f416386ff0d5d4b8cb3a560ba05",
+    (kinds.ANALYSIS, 4): "5b4047be69f2dedab3921c6d31c92796a2887d7e12c0dcf7d319b6b28eed2d52",
+    (kinds.PLANNER, 1): "6aff6c34908d0b1791f6ecc3e155b77f31d6635faa23fb75c46756e741205035",
     (
         kinds.PLATFORM_ASSISTANT,
         2,
-    ): "ad8ce54fb50244be1513ee6c985c0fa57af9d623a35ee99d7fa08c989e4318dd",
-    (kinds.REVIEWER, 1): "9d40afdd71b8b804b7a5f52efa074ed126898493987cc0557bc26f132f72909f",
-    (kinds.OPS_ANALYST, 1): "508d8625db0ad0f662b643a376b87e7a03649ee547f5563b8f5e24fce87f5b12",
+    ): "930825c984ab75a673c1a65353f365f29dae1e6e1501ba4ccc2c9889bfc03753",
+    (kinds.REVIEWER, 1): "f19192e0af04c5b3c6ba12c5724b563d540a2b4cb452a4f654e11b36d1fe0eb1",
+    (kinds.OPS_ANALYST, 1): "2377712e4882d2500950e01c904163bb8bf6c8411cf122fafc1c060234672f3e",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -556,12 +558,12 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
     ):
         before = len(platform.anthropic.calls)
         if kind is SOFTWARE_ENGINEER_KIND:
-            session_id = await a_software_engineer(platform, work, agent_project_id)
+            agent_session_id = await a_software_engineer(platform, work, agent_project_id)
         else:
-            session_id = await platform.start(kind.name)
-            await platform.say(session_id, "Go on.")
+            agent_session_id = await platform.start(kind.name)
+            await platform.say(agent_session_id, "Go on.")
         platform.anthropic.add(reply(said("Done.")))
-        await platform.managers.loop.run(platform.owner, session_id)
+        await platform.managers.loop.run(platform.owner, agent_session_id)
         call = platform.anthropic.calls[before]
         assert layers_of(call) == RENDERED[(kind.name, kind.version)], kind.name
         prompts = [prompt for prompt in kind.prompts if prompt]
@@ -612,7 +614,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "validate",
             "open_pull_request",
             "submit_result",
-            *(("read_artifact",) if version >= 7 else ()),
+            *(("read_tool_output",) if version >= 7 else ()),
         )
         for version in (5, 6, 7, 8)
     },
@@ -626,14 +628,14 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
             "search_agent_knowledge",
             "read_agent_knowledge",
             *(("spawn_sub_agent", "wait_for_sub_agents") if version >= 3 else ()),
-            *(("read_artifact",) if version >= 4 else ()),
+            *(("read_tool_output",) if version >= 4 else ()),
         )
         for version in (2, 3, 4)
     },
-    (kinds.PLANNER, 1): ("read_session", "hand_off_to_software_engineer"),
+    (kinds.PLANNER, 1): ("read_agent_session", "hand_off_to_software_engineer"),
     (kinds.PLATFORM_ASSISTANT, 1): (
         "search_corpus",
-        "read_session",
+        "read_agent_session",
         "draft_tool_policy",
         "hand_off_to_software_engineer",
     ),
@@ -641,8 +643,8 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "search_corpus",
         "search_agent_knowledge",
         "read_agent_knowledge",
-        "read_session",
-        "list_sessions",
+        "read_agent_session",
+        "list_agent_sessions",
         "read_wait",
         "list_agent_projects",
         "read_agent_project",
@@ -659,11 +661,11 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "comment",
         "search_agent_knowledge",
         "read_agent_knowledge",
-        "read_artifact",
+        "read_tool_output",
     ),
     (kinds.OPS_ANALYST, 1): (
-        "read_session",
-        "list_sessions",
+        "read_agent_session",
+        "list_agent_sessions",
         "read_wait",
         "list_agent_projects",
         "read_agent_project",
@@ -673,7 +675,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_spend",
         "search_agent_knowledge",
         "read_agent_knowledge",
-        "read_artifact",
+        "read_tool_output",
     ),
 }
 """Each shipped kind's tools by name: as it named them one by one before it
@@ -815,10 +817,10 @@ def test_an_assistant_with_a_workspace_or_steady_authority_is_refused_at_boot(
         build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            agent_kinds=(with_workspace,),
             platform_root_options=PlatformRootOptions(
                 platform_agents=PlatformAgents(corpus=CORPUS),
             ),
+            agent_root_options=AgentRootOptions(agent_kinds=(with_workspace,)),
         )
 
 
@@ -832,8 +834,8 @@ async def test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused(
     tmp_path: Path,
 ) -> None:
     platform = platform_over(tmp_path)
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "Run the tests for me.")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "Run the tests for me.")
     platform.anthropic.add(
         reply(
             said("Let me try."),
@@ -844,7 +846,7 @@ async def test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused(
         reply(said("I cannot run commands or touch files; a software engineer can.")),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
     for use_id, tool in (
@@ -852,12 +854,12 @@ async def test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused(
         ("use_write", kinds.WRITE_FILE),
         ("use_read", kinds.READ_FILE),
     ):
-        failure, text = await platform.answer(session_id, use_id)
+        failure, text = await platform.answer(agent_session_id, use_id)
         assert failure is ToolFailure.INVALID_INPUT
         assert f"there is no tool named {tool!r}" in text
     # The catalog holds every one of them: a software engineer's session has them.
     software_engineer_id = await platform.start(kinds.SOFTWARE_ENGINEER)
-    software_engineer = await platform.managers.agent_sessions.get_session(
+    software_engineer = await platform.managers.agent_sessions.get_agent_session(
         platform.owner, software_engineer_id
     )
     assert {kinds.RUN_COMMAND, kinds.WRITE_FILE, kinds.READ_FILE} <= set(software_engineer.tools)
@@ -867,8 +869,8 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
     tmp_path: Path,
 ) -> None:
     platform = platform_over(tmp_path)
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "The weekly report sometimes misses its total. Fix it.")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "The weekly report sometimes misses its total. Fix it.")
     objective = (
         "The weekly report sometimes misses its total. Reproduce it, fix it, and show the "
         "total is there on every run."
@@ -881,32 +883,34 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
         reply(said("A software engineer session holds it; confirm it to start.")),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    failure, text = await platform.answer(session_id, "use_hand")
+    failure, text = await platform.answer(agent_session_id, "use_hand")
     assert failure is None
-    software_engineer_id = UUID(json.loads(text)["session_id"])
-    software_engineer = await platform.managers.agent_sessions.get_session(
+    software_engineer_id = UUID(json.loads(text)["agent_session_id"])
+    software_engineer = await platform.managers.agent_sessions.get_agent_session(
         platform.owner, software_engineer_id
     )
     # A session of its own, which names where it came from and waits for its
     # person: the assistant's conversation is not in it, only the objective.
     assert (software_engineer.kind, software_engineer.handed_off_from) == (
         kinds.SOFTWARE_ENGINEER,
-        session_id,
+        agent_session_id,
     )
-    assert software_engineer.status is SessionStatus.IDLE
+    assert software_engineer.status is AgentSessionStatus.IDLE
     handed = await platform.history(software_engineer_id)
     assert [step.as_text() for step in handed] == [objective]
 
-    await platform.say(session_id, "Where does it stand?")
+    await platform.say(agent_session_id, "Where does it stand?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_SESSION, "use_read", session_id=str(software_engineer_id))),
+        reply(
+            calls(kinds.READ_AGENT_SESSION, "use_read", agent_session_id=str(software_engineer_id))
+        ),
         reply(said("It waits for you to confirm it.")),
     )
-    await platform.managers.loop.run(platform.owner, session_id)
-    failure, text = await platform.answer(session_id, "use_read")
+    await platform.managers.loop.run(platform.owner, agent_session_id)
+    failure, text = await platform.answer(agent_session_id, "use_read")
     assert failure is None
     state = json.loads(text)
     assert (state["kind"], state["status"]) == (kinds.SOFTWARE_ENGINEER, "idle")
@@ -918,8 +922,8 @@ async def test_the_assistant_hands_engineering_on_and_reads_where_it_stands(
 async def test_the_assistant_drafts_the_policy_and_a_person_applies_it(tmp_path: Path) -> None:
     platform = platform_over(tmp_path)
     policies = platform.managers.tools
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "Let my software engineers run commands unattended.")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "Let my software engineers run commands unattended.")
     platform.anthropic.add(
         reply(
             said("Here is a draft."),
@@ -937,13 +941,13 @@ async def test_the_assistant_drafts_the_policy_and_a_person_applies_it(tmp_path:
         reply(said("The draft adds one rule. Apply it when you are ready.")),
     )
 
-    await platform.managers.loop.run(platform.owner, session_id)
+    await platform.managers.loop.run(platform.owner, agent_session_id)
 
-    failure, text = await platform.answer(session_id, "use_draft")
+    failure, text = await platform.answer(agent_session_id, "use_draft")
     flat = text.replace(" ", "")
     assert failure is None
     assert '"valid":true' in flat and '"based_on":1' in flat and '"added":[{' in flat
-    failure, text = await platform.answer(session_id, "use_bad")
+    failure, text = await platform.answer(agent_session_id, "use_bad")
     assert failure is None and "rm_rf" in text and '"valid":false' in text.replace(" ", "")
     # The draft wrote nothing: what is live is as it was.
     assert (await policies.get_policy(platform.owner)).rules == ()
@@ -952,7 +956,7 @@ async def test_the_assistant_drafts_the_policy_and_a_person_applies_it(tmp_path:
     assert ToolClass.CONFIGURATION not in {classes[t] for t in PLATFORM_ASSISTANT_KIND.tools}
 
     # A person who manages the tenant applies it; one who does not cannot.
-    rule = PolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW)
+    rule = ToolPolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW)
     with pytest.raises(NotAuthorized):
         await policies.write_policy(member_of(platform), a_policy(platform, rule, version=1))
     applied = await policies.write_policy(platform.owner, a_policy(platform, rule, version=1))
@@ -960,9 +964,9 @@ async def test_the_assistant_drafts_the_policy_and_a_person_applies_it(tmp_path:
 
 
 def test_a_draft_names_what_it_adds_and_removes_and_what_cannot_hold() -> None:
-    keep = PolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW)
-    drop = PolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.APPROVE)
-    add = PolicyRule(tool=kinds.RUN_COMMAND, decision=Decision.DENY)
+    keep = ToolPolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW)
+    drop = ToolPolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.APPROVE)
+    add = ToolPolicyRule(tool=kinds.RUN_COMMAND, decision=Decision.DENY)
     now = utcnow()
     live = ToolPolicy(
         id=new_id(),
@@ -980,7 +984,7 @@ def test_a_draft_names_what_it_adds_and_removes_and_what_cannot_hold() -> None:
     assert draft.valid and draft.based_on == 3
     assert (draft.added, draft.removed) == ((add,), (drop,))
 
-    unknown = PolicyRule(
+    unknown = ToolPolicyRule(
         tool="no_such_tool", authorization_class="telepathy", decision=Decision.ALLOW
     )
     bad = rules.draft_policy(live, (unknown,), (), tools, known)
@@ -1030,14 +1034,14 @@ async def test_the_corpus_holds_only_what_the_map_lists_for_the_tenants_users(
 
     # The assistant's search answers from that corpus and no other.
     platform = platform_over(tmp_path, corpus=corpus)
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "How do I rotate the signing secret?")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "How do I rotate the signing secret?")
     platform.anthropic.add(
         reply(said("Let me look."), calls(kinds.SEARCH_CORPUS, "use_search", query="signing")),
         reply(said("The documentation does not say.")),
     )
-    await platform.managers.loop.run(platform.owner, session_id)
-    failure, text = await platform.answer(session_id, "use_search")
+    await platform.managers.loop.run(platform.owner, agent_session_id)
+    failure, text = await platform.answer(agent_session_id, "use_search")
     assert failure is None and text.replace(" ", "") == '{"passages":[]}'
 
 
@@ -1099,14 +1103,14 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
     assert await validations.start_validation(platform.owner, start) == session
     assert session.status is ValidationStatus.QUEUED
     assert [(i.kind, i.lane, i.target_id) for i in items_of(platform)] == [
-        (WorkKind.VALIDATION, "default", session.id)
+        (ValidationWorkKind.VALIDATION, "default", session.id)
     ], "one item on the platform's own lane, and no loop"
     # The platform's worker claims it, as it claims any of its own work, and
     # the check runs on the executor.
     claimed = await platform.managers.work.claim(
         RequestContext(request_id=new_id(), app=WORKER),
         "default",
-        (WorkKind.VALIDATION,),
+        (ValidationWorkKind.VALIDATION,),
         "maintenance-1",
         timedelta(seconds=30),
     )
@@ -1116,7 +1120,7 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
     await platform.managers.work.complete(ctx, item)
 
     (asked,) = executor.requests
-    assert (asked.session_id, asked.version, asked.source) == (session.id, HEAD, BASE)
+    assert (asked.agent_session_id, asked.version, asked.source) == (session.id, HEAD, BASE)
     assert ([c.name for c in asked.checks], asked.protected) == (["unit"], policy.protected)
     (validation,) = await platform.managers.evidence.get_validations(ctx, session.id, 10)
     (record,) = (await platform.managers.evidence.get_runs(ctx, session.id, None, 10)).items
@@ -1128,7 +1132,7 @@ async def test_a_validation_session_is_platform_work_that_finishes_with_its_reco
         RunPurpose.VALIDATION,
     ), "the same execution record an agent's validation writes"
     assert [(i.kind, i.status) for i in items_of(platform)] == [
-        (WorkKind.VALIDATION, WorkStatus.DONE)
+        (ValidationWorkKind.VALIDATION, WorkStatus.DONE)
     ]
     assert platform.model_calls() == 0, "no model was called"
     # It runs its check once: run again, it runs nothing; finished with
@@ -1263,13 +1267,13 @@ def test_the_reviewer_and_the_ops_analyst_are_built_from_toolsets_and_ask_sizes(
     assert REVIEWER_KIND.toolsets == (
         kinds.REVIEW_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
-        kinds.ARTIFACTS_TOOLSET,
+        kinds.TOOL_OUTPUTS_TOOLSET,
     )
     assert OPS_ANALYST_KIND.toolsets == (
         kinds.RECORDS_TOOLSET,
         kinds.OPERATIONS_TOOLSET,
         kinds.AGENT_KNOWLEDGE_TOOLSET,
-        kinds.ARTIFACTS_TOOLSET,
+        kinds.TOOL_OUTPUTS_TOOLSET,
     )
     for kind in (REVIEWER_KIND, OPS_ANALYST_KIND):
         assert set(kind.toolsets) <= set(kinds.TOOLSETS), kind.name
@@ -1297,8 +1301,8 @@ async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:
     classes = classes_of(shipped_catalog())
     assert REVIEWER_KIND.isolation.mode is IsolationMode.NONE
     assert {classes[tool] for tool in REVIEWER_KIND.tools} == {ToolClass.READ, "integration"}
-    session_id = await platform.start(kinds.REVIEWER)
-    await platform.say(session_id, f"Fix what you find in {REVIEWED}, and say so on it.")
+    agent_session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(agent_session_id, f"Fix what you find in {REVIEWED}, and say so on it.")
     platform.anthropic.add(
         reply(
             calls(kinds.WRITE_FILE, "use_write", path="src/cart.py", text="fixed"),
@@ -1309,7 +1313,7 @@ async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:
         reply(calls(kinds.COMMENT, "use_comment", on=REVIEWED, text="Fixed it.")),
     )
 
-    await platform.managers.loop.run(platform.owner, session_id)
+    await platform.managers.loop.run(platform.owner, agent_session_id)
 
     for use_id, tool in (
         ("use_write", kinds.WRITE_FILE),
@@ -1317,11 +1321,13 @@ async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:
         ("use_shell", kinds.RUN_COMMAND),
         ("use_open", kinds.OPEN_PULL_REQUEST),
     ):
-        failure, text = await platform.answer(session_id, use_id)
+        failure, text = await platform.answer(agent_session_id, use_id)
         assert failure is ToolFailure.INVALID_INPUT
         assert f"there is no tool named {tool!r}" in text
     # Its comment waits for a person's approval; nothing reached the forge.
-    held = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    held = await platform.managers.agent_sessions.get_agent_session(
+        platform.owner, agent_session_id
+    )
     assert held.park is not None and held.park.reason is ParkReason.PERSON
     assert forge.posted == [] and forge.refs == {} and forge.pull_requests == []
 
@@ -1414,8 +1420,8 @@ async def test_an_ops_analyst_answers_why_a_session_waits_from_the_records(tmp_p
     answer = "It waits for a host of build: host-1, its only one, is offline."
     platform.anthropic.add(
         reply(
-            calls(kinds.LIST_SESSIONS, "use_list", status="idle"),
-            calls(kinds.READ_WAIT, "use_wait", session_id=str(waiting)),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_list", status="idle"),
+            calls(kinds.READ_WAIT, "use_wait", agent_session_id=str(waiting)),
             calls(kinds.LIST_HOSTS, "use_hosts"),
             calls(kinds.READ_SPEND, "use_spend"),
         ),
@@ -1426,7 +1432,7 @@ async def test_an_ops_analyst_answers_why_a_session_waits_from_the_records(tmp_p
 
     assert run.outcome is LoopOutcome.SUCCEEDED
     _, text = await platform.answer(asking, "use_list")
-    assert str(waiting) in {s["session_id"] for s in json.loads(text)["sessions"]}
+    assert str(waiting) in {s["agent_session_id"] for s in json.loads(text)["sessions"]}
     failure, text = await platform.answer(asking, "use_wait")
     wait = json.loads(text)
     assert failure is None
@@ -1450,8 +1456,10 @@ async def test_every_tool_the_ops_analyst_holds_reads(tmp_path: Path) -> None:
     decided = {rule.authorization_class: rule.decision for rule in OPS_ANALYST_KIND.policy.rules}
     assert decided == {ToolClass.READ: Decision.ALLOW}
     platform = platform_over(tmp_path)
-    session_id = await platform.start(kinds.OPS_ANALYST)
-    session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    agent_session_id = await platform.start(kinds.OPS_ANALYST)
+    session = await platform.managers.agent_sessions.get_agent_session(
+        platform.owner, agent_session_id
+    )
     assert {classes[tool] for tool in session.tools} == {ToolClass.READ}
     # A version of it that holds a tool past reading is refused at boot,
     # whoever declares it.
@@ -1462,8 +1470,8 @@ async def test_every_tool_the_ops_analyst_holds_reads(tmp_path: Path) -> None:
         build_platform_managers(
             StorageMemoryImpl(),
             InfraLocalImpl(tmp_path),
-            agent_kinds=(acting,),
             platform_root_options=PlatformRootOptions(
                 platform_agents=PlatformAgents(corpus=CORPUS),
             ),
+            agent_root_options=AgentRootOptions(agent_kinds=(acting,)),
         )

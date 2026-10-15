@@ -1,34 +1,31 @@
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.context import OperatorContext
-from acme.om.levers import LeversManagerInterface
-from acme.om.placement import PlacementOperatorManagerInterface
-from acme.om.steps.types.header import (
+from acme.om.agent_steps.types.header import (
     ControlHeader,
     LoopEndedHeader,
     ParkedHeader,
     ToolRequestHeader,
     ToolResponseHeader,
 )
+from acme.om.context import OperatorContext
+from acme.om.levers import LeversManagerInterface
+from acme.om.placement import PlacementOperatorManagerInterface
 from acme.om.trust import TrustOperatorManagerInterface
 from acme.om.trust.types.shape import StepShape
 from acme.services.api.services.agent_fleet import AgentFleetServiceInterface
 from acme.services.api.services.impl.agent_sessions import park_view, step_view
-from acme.services.api.types.agent_fleet import (
-    HostStandingView,
-    LaneLoadView,
-    LoopStandingView,
-    SessionStandingView,
-    SetShareRequest,
-    ShapePageView,
-    ShareView,
-    StepShapeView,
-)
-from acme.services.api.types.agent_sessions import StepPageView
+from acme.services.api.types.agent_sessions import AgentStepPageView
 from acme.services.api.types.common import clamp_limit
-from acme.services.api.types.hosts import AdvertisementView
+from acme.services.api.types.hosts import AdvertisementView, HostStandingView, LaneLoadView
 from acme.services.api.types.levers import LeverReadingView
+from acme.services.api.types.placement import (
+    AgentSessionStandingView,
+    LoopStandingView,
+    SetShareRequest,
+    ShareView,
+)
+from acme.services.api.types.trust import ShapePageView, StepShapeView
 
 
 def shape_view(shape: StepShape) -> StepShapeView:
@@ -85,12 +82,12 @@ class AgentFleetServiceImpl(AgentFleetServiceInterface):
         )
 
     async def get_session_standing(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID
-    ) -> SessionStandingView:
-        standing = await self._placement.get_session_standing(admin, org_id, session_id)
+        self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionStandingView:
+        standing = await self._placement.get_session_standing(admin, org_id, agent_session_id)
         loop = standing.loop
-        return SessionStandingView(
-            session_id=standing.session_id,
+        return AgentSessionStandingView(
+            agent_session_id=standing.agent_session_id,
             status=standing.status,
             park=park_view(standing.park),
             changed_at=standing.changed_at,
@@ -128,22 +125,34 @@ class AgentFleetServiceImpl(AgentFleetServiceInterface):
         )
 
     async def get_session_shape(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
     ) -> ShapePageView:
         page = await self._trust.get_session_shape(
-            admin, org_id, session_id, after_seq, clamp_limit(limit)
+            admin, org_id, agent_session_id, after_seq, clamp_limit(limit)
         )
         return ShapePageView(
             items=[shape_view(item) for item in page.items], has_more=page.has_more
         )
 
     async def get_session_content(
-        self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
-    ) -> StepPageView:
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        agent_session_id: UUID,
+        after_seq: int,
+        limit: int,
+    ) -> AgentStepPageView:
         page = await self._trust.get_session_content(
-            admin, org_id, session_id, after_seq, clamp_limit(limit)
+            admin, org_id, agent_session_id, after_seq, clamp_limit(limit)
         )
-        return StepPageView(items=[step_view(step) for step in page.items], has_more=page.has_more)
+        return AgentStepPageView(
+            items=[step_view(step) for step in page.items], has_more=page.has_more
+        )
 
     async def read_levers(
         self, admin: OperatorContext, org_id: UUID, since: datetime, until: datetime

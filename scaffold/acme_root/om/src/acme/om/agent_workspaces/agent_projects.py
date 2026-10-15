@@ -15,7 +15,7 @@ checkout, and every write it makes to source control acts outward
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.infra.workspaces import WorkspaceBase
+from acme.infra.agent_workspaces import AgentWorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.types.source import (
     OpenedPullRequest,
@@ -50,7 +50,7 @@ class WorkspaceAgentProjectsInterface(ABC):
     @abstractmethod
     async def workspace_base_of(
         self, ctx: TenantContext, agent_project_id: UUID
-    ) -> WorkspaceBase | None:
+    ) -> AgentWorkspaceBase | None:
         """The base the tenant's agent project names for its sessions' workspaces:
         its workspace base's image, setup, and the setup's egress. None when it
         names none, or the tenant does not hold it."""

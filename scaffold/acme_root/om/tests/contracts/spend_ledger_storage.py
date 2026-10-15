@@ -29,18 +29,28 @@ from acme.om.agent_billing.types.spend_ledger import (
 )
 from acme.om.agent_billing.types.unit_plan import UnitPlanRef
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.rules import settlement_of
-from acme.om.budgets.types.amount import Spend
-from acme.om.budgets.types.hold import Billed, BillUnknown, Hold, HoldLine, Settlement
 from acme.om.exceptions import NotFound, TenantMismatch
+from acme.om.spend_budgets.rules import spend_settlement_of
+from acme.om.spend_budgets.types.amount import Spend
+from acme.om.spend_budgets.types.spend_hold import (
+    Billed,
+    BillUnknown,
+    SpendHold,
+    SpendHoldLine,
+    SpendSettlement,
+)
+
 from contracts.ledger_storage import a_line
 from contracts.racing import race
 
+INTERFACE = SpendLedgerStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
-        "close_hold",
+        "close_spend_hold",
         "count_tenant",
-        "open_hold",
+        "open_spend_hold",
         "post_approval",
         "post_credit",
         "post_grant",
@@ -77,17 +87,17 @@ def funding(
 
 
 def a_funded_hold(
-    *lines: HoldLine,
+    *lines: SpendHoldLine,
     units: int | None = 5,
     paid_by: Funding | None = None,
-    session_id: UUID | None = None,
+    agent_session_id: UUID | None = None,
 ) -> FundedHold:
     return FundedHold(
-        hold=Hold(
+        hold=SpendHold(
             id=new_id(),
             created_at=utcnow(),
             spender_id=new_id(),
-            session_id=session_id or new_id(),
+            agent_session_id=agent_session_id or new_id(),
             purpose="main",
             exposure=Spend(cost_micros=None if units is None else units * 1_000, tokens=100),
             lines=lines,
@@ -108,10 +118,10 @@ def a_credit(amount: int = 5_000, reference: str | None = None) -> Credit:
     )
 
 
-def closing(hold: FundedHold, spent_units: int) -> tuple[Settlement, Charge]:
+def closing(hold: FundedHold, spent_units: int) -> tuple[SpendSettlement, Charge]:
     now = utcnow()
     bill = Billed(usage=Spend(cost_micros=spent_units * 1_000, tokens=40))
-    settlement = settlement_of(hold.hold, bill, new_id(), now)
+    settlement = spend_settlement_of(hold.hold, bill, new_id(), now)
     return settlement, charge_of(hold, settlement, new_id(), now)
 
 
@@ -132,7 +142,7 @@ class SpendLedgerStorageContract:
         line = a_line(cost_micros=100_000)
         hold = a_funded_hold(line, units=6, paid_by=paid_by)
 
-        stored = await storage.open_hold(org, hold)
+        stored = await storage.open_spend_hold(org, hold)
 
         assert isinstance(stored, FundedHold)
         assert (stored.draw.included, stored.draw.granted) == (2, 1)
@@ -142,7 +152,9 @@ class SpendLedgerStorageContract:
         counts = await storage.read_counts(org, keys)
         held = [counts[key].held for key in keys]
         assert held == [2, 1, 1_000, 2_000, 6_000, 100]
-        assert await storage.open_hold(org, hold) == stored, "a hold opened already is as stored"
+        assert await storage.open_spend_hold(org, hold) == stored, (
+            "a hold opened already is as stored"
+        )
 
     async def test_a_hold_turned_away_writes_nothing_and_says_every_reason(
         self, storage: SpendLedgerStorageInterface
@@ -151,10 +163,13 @@ class SpendLedgerStorageContract:
         line = a_line(cost_micros=1_000)
         hold = a_funded_hold(line, units=3, paid_by=funding(included=1))
 
-        turned = await storage.open_hold(org, hold)
+        turned = await storage.open_spend_hold(org, hold)
 
         assert isinstance(turned, Turned)
-        assert turned.refusal is not None and turned.refusal.breaches[0].budget_id == line.budget_id
+        assert (
+            turned.refusal is not None
+            and turned.refusal.breaches[0].spend_budget_id == line.spend_budget_id
+        )
         assert turned.shortfall is not None and turned.shortfall.short == 2
         assert turned.shortfall.resets_at is None, "a period's one unit never covers three"
         assert await storage.read_hold(org, hold.id) is None
@@ -165,7 +180,7 @@ class SpendLedgerStorageContract:
         self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
-        turned = await storage.open_hold(org, a_funded_hold(units=None))
+        turned = await storage.open_spend_hold(org, a_funded_hold(units=None))
         assert isinstance(turned, Turned) and turned.shortfall is not None
         assert turned.shortfall.units is None and turned.shortfall.resets_at is None
 
@@ -174,10 +189,10 @@ class SpendLedgerStorageContract:
     ) -> None:
         org = new_id()
         hold = a_funded_hold(units=7, paid_by=funding(mode=FundingMode.OWN_KEY))
-        stored = await storage.open_hold(org, hold)
+        stored = await storage.open_spend_hold(org, hold)
         assert isinstance(stored, FundedHold) and stored.draw.charged_micros == 0
         settlement, charge = closing(stored, 7)
-        _, stored_charge = await storage.close_hold(org, settlement, charge)
+        _, stored_charge = await storage.close_spend_hold(org, settlement, charge)
         assert stored_charge.units == 7 and stored_charge.amount_micros == 0
 
     async def test_holds_over_one_bucket_never_all_pass_when_fewer_fit(
@@ -188,7 +203,7 @@ class SpendLedgerStorageContract:
         paid_by = funding()
 
         async def one() -> FundedHold | None:
-            answer = await storage.open_hold(org, a_funded_hold(units=1, paid_by=paid_by))
+            answer = await storage.open_spend_hold(org, a_funded_hold(units=1, paid_by=paid_by))
             return answer if isinstance(answer, FundedHold) else None
 
         run = await race(*(one() for _ in range(6)))
@@ -205,7 +220,9 @@ class SpendLedgerStorageContract:
         paid_by = funding(included=10, mode=mode)
 
         async def one() -> FundedHold | None:
-            answer = await storage.open_hold(org, a_funded_hold(line, units=1, paid_by=paid_by))
+            answer = await storage.open_spend_hold(
+                org, a_funded_hold(line, units=1, paid_by=paid_by)
+            )
             return answer if isinstance(answer, FundedHold) else None
 
         # Each hold is 1_000 against the line's 1_500: one fits, two never do.
@@ -220,18 +237,19 @@ class SpendLedgerStorageContract:
         org = new_id()
         line = a_line(cost_micros=100_000)
         paid_by = funding(included=10)
-        stored = await storage.open_hold(org, a_funded_hold(line, units=5, paid_by=paid_by))
+        stored = await storage.open_spend_hold(org, a_funded_hold(line, units=5, paid_by=paid_by))
         assert isinstance(stored, FundedHold)
         settlement, charge = closing(stored, 3)
 
-        first = await storage.close_hold(org, settlement, charge)
-        second = await storage.close_hold(org, *closing(stored, 5))
+        first = await storage.close_spend_hold(org, settlement, charge)
+        second = await storage.close_spend_hold(org, *closing(stored, 5))
 
         assert first == (settlement, charge) and second == first, "the first counts"
         kinds = {
-            type(e).__name__ for e in await storage.read_entries(org, hold_id=stored.id, limit=10)
+            type(e).__name__
+            for e in await storage.read_entries(org, spend_hold_id=stored.id, limit=10)
         }
-        assert kinds == {"FundedHold", "Settlement", "Charge"}
+        assert kinds == {"FundedHold", "SpendSettlement", "Charge"}
         key = bucket_key(Bucket.INCLUDED, paid_by)
         included = (await storage.read_counts(org, [key]))[key]
         assert (included.held, included.spent) == (0, 3)
@@ -261,8 +279,8 @@ class SpendLedgerStorageContract:
             (first, recent),
             (second, ancient),
         ):
-            assert isinstance(await storage.open_hold(org, hold), FundedHold)
-        await storage.close_hold(first, *closing(settled, 3))
+            assert isinstance(await storage.open_spend_hold(org, hold), FundedHold)
+        await storage.close_spend_hold(first, *closing(settled, 3))
         floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
         found = await storage.read_open(floor, cut, 10)
         assert [(org, hold.id, due) for org, hold, due in found] == [
@@ -294,7 +312,7 @@ class SpendLedgerStorageContract:
         done = held(timedelta(hours=5), timedelta(hours=3))
         working = held(timedelta(hours=2), -timedelta(hours=1))
         for hold in (call, done, working):
-            assert isinstance(await storage.open_hold(org, hold), FundedHold)
+            assert isinstance(await storage.open_spend_hold(org, hold), FundedHold)
         floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
 
         found = await storage.read_open(floor, cut, 10)
@@ -310,9 +328,11 @@ class SpendLedgerStorageContract:
         self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
-        stored = await storage.open_hold(org, a_funded_hold(units=2, paid_by=funding(included=2)))
+        stored = await storage.open_spend_hold(
+            org, a_funded_hold(units=2, paid_by=funding(included=2))
+        )
         assert isinstance(stored, FundedHold)
-        _, charge = await storage.close_hold(org, *closing(stored, 5))
+        _, charge = await storage.close_spend_hold(org, *closing(stored, 5))
         assert charge.draw.included == 2 and charge.draw.credits == 3_000
         assert charge.amount_micros == 3_000
 
@@ -320,11 +340,13 @@ class SpendLedgerStorageContract:
         self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
-        stored = await storage.open_hold(org, a_funded_hold(units=4, paid_by=funding(included=9)))
+        stored = await storage.open_spend_hold(
+            org, a_funded_hold(units=4, paid_by=funding(included=9))
+        )
         assert isinstance(stored, FundedHold)
         now = utcnow()
-        settlement = settlement_of(stored.hold, BillUnknown(), new_id(), now)
-        _, charge = await storage.close_hold(
+        settlement = spend_settlement_of(stored.hold, BillUnknown(), new_id(), now)
+        _, charge = await storage.close_spend_hold(
             org, settlement, charge_of(stored, settlement, new_id(), now)
         )
         assert charge.units == 4
@@ -347,33 +369,35 @@ class SpendLedgerStorageContract:
         raised = WindowRaise(
             id=new_id(),
             created_at=utcnow(),
-            budget_id=line.budget_id,
+            spend_budget_id=line.spend_budget_id,
             window_start=line.window_start,
             cost_micros=4_000,
             raised_by=new_id(),
         )
         assert await storage.post_raise(org, raised) == raised
         assert await storage.post_raise(org, raised) == raised
-        assert isinstance(await storage.open_hold(org, a_funded_hold(line, units=4)), FundedHold)
-        turned = await storage.open_hold(org, a_funded_hold(later, units=4))
+        assert isinstance(
+            await storage.open_spend_hold(org, a_funded_hold(line, units=4)), FundedHold
+        )
+        turned = await storage.open_spend_hold(org, a_funded_hold(later, units=4))
         assert isinstance(turned, Turned) and turned.refusal is not None
 
     async def test_an_entry_is_written_once_and_read_newest_first(
         self, storage: SpendLedgerStorageInterface
     ) -> None:
         org = new_id()
-        session_id = new_id()
+        agent_session_id = new_id()
         approval = Approval(
             id=new_id(),
             created_at=utcnow(),
-            session_id=session_id,
+            agent_session_id=agent_session_id,
             up_to_micros=9,
             approved_by=new_id(),
         )
         assert await storage.post_approval(org, approval) == approval
         assert await storage.post_approval(org, approval) == approval
-        hold = await storage.open_hold(org, a_funded_hold(session_id=session_id))
-        found = await storage.read_entries(org, session_id=session_id, limit=10)
+        hold = await storage.open_spend_hold(org, a_funded_hold(agent_session_id=agent_session_id))
+        found = await storage.read_entries(org, agent_session_id=agent_session_id, limit=10)
         assert found == [hold, approval]
         assert await storage.read_entries(org, kind=EntryKind.APPROVAL, limit=10) == [approval]
 
@@ -382,17 +406,17 @@ class SpendLedgerStorageContract:
     ) -> None:
         org, other = new_id(), new_id()
         await storage.post_credit(org, a_credit(5_000, reference="pay_x"))
-        hold = await storage.open_hold(org, a_funded_hold(units=1, paid_by=funding()))
+        hold = await storage.open_spend_hold(org, a_funded_hold(units=1, paid_by=funding()))
         assert isinstance(hold, FundedHold)
 
         # Paid by the tenant's own key there too, so the hold fits, and its id
         # is what turns it away.
         own = hold.model_copy(update={"funding": funding(mode=FundingMode.OWN_KEY)})
         with pytest.raises(TenantMismatch):
-            await storage.open_hold(other, own)
+            await storage.open_spend_hold(other, own)
         assert await storage.read_hold(other, hold.id) is None
         with pytest.raises(NotFound):
-            await storage.close_hold(other, *closing(hold, 1))
+            await storage.close_spend_hold(other, *closing(hold, 1))
         assert await storage.read_entries(other, limit=10) == []
         key = bucket_key(Bucket.CREDITS, funding())
         assert await storage.read_counts(other, [key]) == {}
@@ -405,7 +429,7 @@ class SpendLedgerStorageContract:
         raised = WindowRaise(
             id=new_id(),
             created_at=utcnow(),
-            budget_id=new_id(),
+            spend_budget_id=new_id(),
             window_start=PERIOD,
             raised_by=new_id(),
         )
@@ -415,7 +439,7 @@ class SpendLedgerStorageContract:
         approval = Approval(
             id=new_id(),
             created_at=utcnow(),
-            session_id=new_id(),
+            agent_session_id=new_id(),
             up_to_micros=1,
             approved_by=new_id(),
         )

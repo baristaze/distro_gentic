@@ -96,7 +96,7 @@ class ExecDetailView(View):
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
     org_id: UUID  # the host's own tenant, which its secret store is keyed by
-    session_id: UUID
+    agent_session_id: UUID
     effect: str
     deadline: datetime
     epoch: int | None

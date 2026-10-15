@@ -68,7 +68,7 @@ class InvokeRequest(RequestBody):
     """The session a person brings the name's latest version into, one they
     may instruct."""
 
-    session_id: UUID
+    agent_session_id: UUID
 
 
 class InvocationView(View):
@@ -77,7 +77,7 @@ class InvocationView(View):
     invocation's brief arrived as its invoker's message."""
 
     id: UUID
-    session_id: UUID
+    agent_session_id: UUID
     agent_playbook_id: UUID
     name: str
     version: int

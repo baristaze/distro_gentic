@@ -11,8 +11,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from contracts.intake import wired
-from contracts.loops import reply, said, use
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
@@ -29,7 +27,8 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
-from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_steps.rules import message_step
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
@@ -47,10 +46,12 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.link import HandleKind
 from acme.om.intake.types.route import Effect
 from acme.om.platform_root import build_platform_managers
-from acme.om.steps.rules import message_step
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.tenancy.rules import permissions_of
+
+from contracts.intake import wired
+from contracts.loops import reply, said, use
 
 pytestmark = pytest.mark.integration
 
@@ -91,12 +92,12 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
 ) -> None:
     owner = await an_owner(storage, tmp_path)
     platform = wired(tmp_path, storage=storage, owner=owner)
-    session_id = await platform.start()
-    await platform.intake.bind_work(owner, session_id, HandleKind.BRANCH, "agent/fix")
-    said_first = message_step(new_id(), utcnow(), session_id, owner, "Fix the import.")
-    await platform.managers.agent_sessions.receive(owner, session_id, [said_first])
+    agent_session_id = await platform.start()
+    await platform.intake.bind_work(owner, agent_session_id, HandleKind.BRANCH, "agent/fix")
+    said_first = message_step(new_id(), utcnow(), agent_session_id, owner, "Fix the import.")
+    await platform.managers.agent_sessions.receive(owner, agent_session_id, [said_first])
     platform.anthropic.add(reply(said("Pushed the fix.")))
-    assert (await platform.loops.run(owner, session_id)).end is RunEnd.ENDED
+    assert (await platform.loops.run(owner, agent_session_id)).end is RunEnd.ENDED
     # A person at the portal makes the agent automation, and it runs as them.
     creator = platform.person(Role.ADMIN)
     now = utcnow()
@@ -128,9 +129,9 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
         occurred_at=now,
     )
     routed = await platform.intake.route(platform.service, check)
-    assert (routed.effect, routed.session_id) == (Effect.WAKE_AS_DATA, session_id)
-    woken = await platform.managers.agent_sessions.get_session(owner, session_id)
-    assert woken.status is SessionStatus.PENDING
+    assert (routed.effect, routed.agent_session_id) == (Effect.WAKE_AS_DATA, agent_session_id)
+    woken = await platform.managers.agent_sessions.get_agent_session(owner, agent_session_id)
+    assert woken.status is AgentSessionStatus.PENDING
     firing = Firing(
         event_id=check.id,
         occurred_at=check.occurred_at,
@@ -140,13 +141,13 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
         text=described(check),
     )
     (run,) = await platform.agent_automations.fire(platform.service, firing)
-    assert run.status is RunStatus.STARTED and run.budget_id is not None
+    assert run.status is RunStatus.STARTED and run.spend_budget_id is not None
     assert await platform.agent_automations.fire(platform.service, firing) == (run,)
     (limited,) = await platform.agent_automations.fire(
         platform.service, firing.model_copy(update={"event_id": new_id()})
     )
     assert limited.status is RunStatus.REFUSED
-    budget = await platform.managers.budgets.get_budget(owner, run.budget_id)
+    budget = await platform.managers.spend_budgets.get_spend_budget(owner, run.spend_budget_id)
     assert budget.cost_micros == agent_automation.limits.run_cap_micros
 
 
@@ -197,10 +198,10 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
         await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
         runs = await platform.agent_automations.get_runs(owner, mine.id, 10)
         assert len(runs) == slot and {r.status for r in runs} == {RunStatus.STARTED}
-        page = await platform.managers.agent_sessions.get_sessions(owner, None, None, 100)
+        page = await platform.managers.agent_sessions.get_agent_sessions(owner, None, None, 100)
         started = [s for s in page.items if s.title == "the nightly records"]
         assert len(started) == slot
-        assert {s.id for s in started} == {r.session_id for r in runs}
+        assert {s.id for s in started} == {r.agent_session_id for r in runs}
         platform.clock.now += timedelta(hours=1)
 
 
@@ -215,11 +216,11 @@ async def test_an_agent_automation_run_as_the_agent_automation_principal_holds_i
         creator, every_hour(creator, RunsAs.AGENT_AUTOMATION_PRINCIPAL)
     )
     (run,) = await platform.agent_automations.tick(platform.service)
-    assert run.status is RunStatus.STARTED and run.session_id is not None
-    session = await platform.managers.agent_sessions.get_session(owner, run.session_id)
+    assert run.status is RunStatus.STARTED and run.agent_session_id is not None
+    session = await platform.managers.agent_sessions.get_agent_session(owner, run.agent_session_id)
     assert session.created_by == granted.id != creator.user_id
     platform.anthropic.add(reply(use("lookup")), reply(said("Checked.")))
-    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert (await platform.loops.run(platform.service, run.agent_session_id)).end is RunEnd.ENDED
     assert platform.lookup.ran_as == [granted.id]
     live = await platform.principals(
         RequestContext(request_id=new_id(), app=APP),
@@ -231,7 +232,7 @@ async def test_an_agent_automation_run_as_the_agent_automation_principal_holds_i
     await platform.agent_automations.grant_principal(creator, Role.VIEWER)
     platform.clock.now += timedelta(hours=1)
     (refused,) = await platform.agent_automations.tick(platform.service)
-    assert (refused.status, refused.refusal, refused.session_id) == (
+    assert (refused.status, refused.refusal, refused.agent_session_id) == (
         RunStatus.REFUSED,
         Refusal.ACTION,
         None,

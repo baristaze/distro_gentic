@@ -4,7 +4,7 @@
 // another org holds answers 404. A member who may not write is offered no
 // form; one who does not manage the org is offered no grant.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentAutomationView } from "@acme/client";
+import type { agent_automations } from "@acme/client";
 import { EMPTY_PRODUCT, type PortalProduct } from "../../app/product";
 import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AgentAutomationPage } from "./AgentAutomationPage";
@@ -15,11 +15,11 @@ vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(
 vi.mock("../../app/config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-const agentAutomation = (org: "a" | "b", name: string): AgentAutomationView => ({
+const agentAutomation = (org: "a" | "b", name: string): agent_automations.AgentAutomationView => ({
   id: `au${org}`,
   name,
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", agent_project_id: null, session_id: null, params: {}, agent_playbook: null },
+  action: { kind: "start_agent_session", brief: "Tidy the **docs**.", agent_kind: "assistant", title: "Tidy", agent_project_id: null, agent_session_id: null, params: {}, agent_playbook: null },
   limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
@@ -88,7 +88,7 @@ describe("the agent automations list", () => {
     expect(made!.body).toMatchObject({
       name: "Nightly tidy",
       trigger: { kind: "schedule", every: "PT86400S" },
-      action: { kind: "start_session", agent_kind: "assistant", title: "Tidy the docs", brief: "Tidy the docs." },
+      action: { kind: "start_agent_session", agent_kind: "assistant", title: "Tidy the docs", brief: "Tidy the docs." },
       limits: { cost_cap_micros: 2_000_000, run_cap_micros: 500_000 },
     });
   });

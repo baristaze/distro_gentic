@@ -25,6 +25,9 @@ from acme.om.tools.rules import definition_hash
 from acme.om.tools.types.mcp import McpToolDefinition
 from acme.om.tools.types.tool import Effect, ToolClass
 
+INTERFACE = ConnectorStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_connector",
@@ -93,9 +96,9 @@ def reviewed(connector: Connector, agent_project_id: UUID | None = None) -> Conn
     )
 
 
-def make_pin(session_id: UUID, connector: Connector) -> AgentSessionConnectors:
+def make_pin(agent_session_id: UUID, connector: Connector) -> AgentSessionConnectors:
     return AgentSessionConnectors(
-        id=session_id,
+        id=agent_session_id,
         created_at=utcnow(),
         connectors=(
             PinnedConnector(
@@ -139,12 +142,12 @@ class ConnectorStorageContract:
 
     async def test_a_session_pins_once(self, storage: ConnectorStorageInterface) -> None:
         org = new_id()
-        session_id = new_id()
-        first = make_pin(session_id, make_connector())
+        agent_session_id = new_id()
+        first = make_pin(agent_session_id, make_connector())
         assert await storage.create_pin(org, first) == first
-        later = AgentSessionConnectors(id=session_id, created_at=utcnow(), connectors=())
+        later = AgentSessionConnectors(id=agent_session_id, created_at=utcnow(), connectors=())
         assert await storage.create_pin(org, later) == first, "the first pin stands"
-        assert await storage.read_pin(org, session_id) == first
+        assert await storage.read_pin(org, agent_session_id) == first
 
     async def test_create_connector_in_another_tenant_is_not_read_here(
         self, storage: ConnectorStorageInterface

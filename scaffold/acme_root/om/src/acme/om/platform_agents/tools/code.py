@@ -9,7 +9,8 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from acme.om.base import Platform
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.rules import PATHS
@@ -18,7 +19,6 @@ from acme.om.exceptions import (
 )
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools.base import MAX_PATH, MAX_READ, NativeToolImpl
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 
@@ -30,7 +30,7 @@ class WriteInput(ToolInput):
     text: str
 
 
-class Written(Platform):
+class Written(OmBase):
     path: str
     size: int
 
@@ -57,7 +57,7 @@ class EditInput(ToolInput):
         return self
 
 
-class Edited(Platform):
+class Edited(OmBase):
     path: str
     line: int  # where the new text starts
     lines: int  # how many lines the new text holds there
@@ -79,7 +79,7 @@ class FileChangeImpl(NativeToolImpl):
         # The engine asks a tool's target with no session, and the session's
         # agent project is what protects a path, so the refusal is made here.
         assert isinstance(call_input, WriteInput | EditInput)
-        target = await self._evidence().protection(ctx, runtime.session_id, [call_input.path])
+        target = await self._evidence().protection(ctx, runtime.agent_session_id, [call_input.path])
         if target.kind == PATHS and target.attributes.get("protected"):
             raise ToolFailed(
                 ToolFailure.DENIED,
@@ -103,9 +103,7 @@ class WriteFileImpl(FileChangeImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, WriteInput)
         data = call_input.text.encode()
         await runtime.write_file(call_input.path, data)
@@ -137,9 +135,7 @@ class EditFileImpl(FileChangeImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, EditInput)
         path = call_input.path
         data = await runtime.read_file(path, MAX_EDIT + 1)
@@ -170,7 +166,7 @@ class CommandInput(ToolInput):
     argv: tuple[str, ...] = Field(min_length=1)
 
 
-class CommandOutput(Platform):
+class CommandOutput(OmBase):
     exit_code: int | None
     stdout: str
     stderr: str
@@ -192,9 +188,7 @@ class RunCommandImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, CommandInput)
         result = await runtime.run(call_input.argv)
         return CommandOutput(exit_code=result.exit_code, stdout=result.stdout, stderr=result.stderr)

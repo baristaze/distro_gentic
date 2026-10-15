@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from acme.om.base import Platform
+from acme.om.base import OmBase
 
 SHA256 = r"^[0-9a-f]{64}$"
 """A hash as the executor writes it: sha256, lower-case hex."""
@@ -34,7 +34,7 @@ STRENGTH = {
 }
 
 
-class Dependency(Platform):
+class Dependency(OmBase):
     """One thing an execution relied on, such as a service, a device, or a
     model provider, and what served it."""
 
@@ -42,7 +42,7 @@ class Dependency(Platform):
     provenance: Provenance
 
 
-class ArtifactRef(Platform):
+class ArtifactRef(OmBase):
     """An artifact an execution made: its name, the hash of its bytes, and
     what made it. The bytes are in the object store, never here."""
 

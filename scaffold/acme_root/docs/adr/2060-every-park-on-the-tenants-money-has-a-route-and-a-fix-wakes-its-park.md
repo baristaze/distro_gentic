@@ -28,7 +28,7 @@ of the price table, and nothing tells a parked session that it came.
 **A route for each agent billing park.** A person who approves calls past
 their norm posts the session's cost approval
 (`POST /v1/agent-sessions/{id}/cost-approval`). A person who sets budgets
-raises a budget for the window open now (`POST /v1/budgets/{id}/raises`).
+raises a budget for the window open now (`POST /v1/spend-budgets/{id}/raises`).
 A person who may write posts a payment the provider confirmed
 (`POST /v1/agent-billing/payments`). An operator who may write grants units
 (`POST /v1/admin/orgs/{org_id}/grants`). Each takes the permission

@@ -12,14 +12,14 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspaceBase,
     Durability,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
     ResourceLimits,
-    WorkspaceBase,
 )
 from acme.om.agent_workspaces.types.egress import EgressRule
 from acme.om.base import Identifiable, Trackable
@@ -59,7 +59,7 @@ class AgentSessionWorkspace(Identifiable, Trackable):
     # Whether a snapshot of the whole workspace keeps it between runs, or it
     # is a cache alone: its kind's, narrowed by its agent project.
     durability: Durability = Durability.CACHE
-    base: WorkspaceBase | None = None  # its kind's; None, the provider's own image
+    base: AgentWorkspaceBase | None = None  # its kind's; None, the provider's own image
     branch: str = Field(min_length=1, max_length=200)
     # The remote held the session's branch at a release: gone after that,
     # it vanished.

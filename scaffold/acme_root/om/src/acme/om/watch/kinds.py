@@ -4,7 +4,7 @@ one group. The open streams of every group at once and the idle time bound
 the shared cache, every kind's streams together, so they are the step's
 alone, never a kind's own. The platform's own kind, the parts of a step,
 registers here as a product's kind does at its roots
-(`root.PlatformPorts.kinds`), so no stream is written without a bound. A
+(`platform_root.PlatformPorts.kinds`), so no stream is written without a bound. A
 product's kind may name the claimant kind that writes it through the
 gateway, and the one that reads it there, for the item one of its claimants
 holds."""

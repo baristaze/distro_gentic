@@ -5,18 +5,18 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from acme.om.base import Platform
-from acme.om.budgets import BudgetsManagerInterface
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostStatus
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.tools.base import HOSTS_MAX, LIST_MAX, NativeToolImpl, PageInput
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 
 
-class Offer(Platform):
+class Offer(OmBase):
     """What a host offers, as it advertised itself."""
 
     os: str
@@ -26,7 +26,7 @@ class Offer(Platform):
     exec_version: int
 
 
-class OfferingHost(Platform):
+class OfferingHost(OmBase):
     host_id: UUID
     name: str
     online: bool
@@ -34,7 +34,7 @@ class OfferingHost(Platform):
     offers: Offer
 
 
-class PoolHosts(Platform):
+class PoolHosts(OmBase):
     pool_id: UUID
     name: str
     region: str
@@ -42,7 +42,7 @@ class PoolHosts(Platform):
     more_hosts: bool
 
 
-class Hosts(Platform):
+class Hosts(OmBase):
     pools: tuple[PoolHosts, ...]
 
 
@@ -54,7 +54,7 @@ class ListHostsImpl(NativeToolImpl):
     """Lists the tenant's own pools of hosts, each with its live hosts and
     what each offers: its operating system and shell, its capabilities, the
     isolation it can give, and the version of work it reads, as the host
-    advertised them. A machine the cloud pool runs for one session is the
+    advertised them. A VM the cloud pool runs for one session is the
     platform's, never listed."""
 
     SPEC = ToolSpec(
@@ -76,9 +76,7 @@ class ListHostsImpl(NativeToolImpl):
     def __init__(self, hosts: Callable[[], HostsManagerInterface]) -> None:
         self._hosts = hosts
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         hosts = self._hosts()
         pools: list[PoolHosts] = []
         for pool in (await hosts.get_pools(ctx))[:LIST_MAX]:
@@ -113,8 +111,8 @@ def _offering(status: HostStatus) -> OfferingHost:
     )
 
 
-class BudgetSpend(Platform):
-    budget_id: UUID
+class BudgetSpend(OmBase):
+    spend_budget_id: UUID
     scope: str  # what it bounds: the org, an agent project, a person, a session
     key: str
     window: str
@@ -127,7 +125,7 @@ class BudgetSpend(Platform):
     held_cost_micros: int  # what calls running now reserve
 
 
-class Spend(Platform):
+class Spend(OmBase):
     budgets: tuple[BudgetSpend, ...]
     next: UUID | None = None
 
@@ -152,21 +150,19 @@ class ReadSpendImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, budgets: Callable[[], BudgetsManagerInterface]) -> None:
+    def __init__(self, budgets: Callable[[], SpendBudgetsManagerInterface]) -> None:
         self._budgets = budgets
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, PageInput)
         budgets = self._budgets()
-        page = await budgets.get_budgets(ctx, call_input.after, call_input.limit)
+        page = await budgets.get_spend_budgets(ctx, call_input.after, call_input.limit)
         read: list[BudgetSpend] = []
         for budget in page.items:
             tally = await budgets.get_spend(ctx, budget.id)
             read.append(
                 BudgetSpend(
-                    budget_id=budget.id,
+                    spend_budget_id=budget.id,
                     scope=budget.scope_kind.value,
                     key=budget.scope_key,
                     window=budget.window_kind.value,

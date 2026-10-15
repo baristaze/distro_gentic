@@ -26,6 +26,19 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from acme.om.agent_sessions.kinds import AGENT_SESSION_WAITER
+from acme.om.agent_steps.types.agent_step import Actor, AgentStep
+from acme.om.agent_steps.types.content import TextBlock
+from acme.om.agent_steps.types.header import (
+    InputHeader,
+    JobPark,
+    Park,
+    ParkReason,
+    ToolFailure,
+    ToolRequestHeader,
+    ToolResponseHeader,
+    WaitLinePark,
+)
 from acme.om.agents.types.line import InLine
 from acme.om.base import derived_id
 from acme.om.leases.types.lease import LeaseStatus
@@ -34,20 +47,7 @@ from acme.om.leases.types.request import (
     LeaseRequest,
     RequestStatus,
     Standing,
-    WaiterKind,
 )
-from acme.om.steps.types.content import TextBlock
-from acme.om.steps.types.header import (
-    InputHeader,
-    JobPark,
-    LinePark,
-    Park,
-    ParkReason,
-    ToolFailure,
-    ToolRequestHeader,
-    ToolResponseHeader,
-)
-from acme.om.steps.types.step import Actor, Step
 
 LINE_UNLOCK = "grant"
 """What clears a park in line: the grant, or its request's end without one."""
@@ -107,7 +107,7 @@ class Ask:
     answered_at: datetime
 
 
-def in_line(request: LeaseRequest, session_id: UUID, key: UUID) -> LeaseRequest:
+def in_line(request: LeaseRequest, agent_session_id: UUID, key: UUID) -> LeaseRequest:
     """The ask of a tool call: the call's key is the request's id and its
     key, so a repeat after a crash answers the request the first made and
     joins no line twice, and the session that made the call is its waiter."""
@@ -115,13 +115,13 @@ def in_line(request: LeaseRequest, session_id: UUID, key: UUID) -> LeaseRequest:
         update={
             "id": key,
             "idempotency_key": key,
-            "waiter_kind": WaiterKind.SESSION,
-            "waiter_id": session_id,
+            "waiter_kind": AGENT_SESSION_WAITER,
+            "waiter_id": agent_session_id,
         }
     )
 
 
-def asks(steps: Sequence[Step], tools: Collection[str]) -> list[Ask]:
+def asks(steps: Sequence[AgentStep], tools: Collection[str]) -> list[Ask]:
     """The asks of a session, in order, across its loops: each answer
     without a failure to a call of one of `tools`, read from what the call
     answered. A lease outlives the loop that took it, so its end is told in
@@ -145,7 +145,7 @@ def asks(steps: Sequence[Step], tools: Collection[str]) -> list[Ask]:
     return found
 
 
-def _answer(response: Step) -> InLine | None:
+def _answer(response: AgentStep) -> InLine | None:
     """What a call that asked in line answered: the fields of `InLine` in
     its result, whatever else a tool built on it adds."""
     text = "".join(
@@ -202,8 +202,8 @@ def untold(standing: Standing, ask: Ask, told: Collection[UUID]) -> list[tuple[U
         text = ENDED.format(request=request.id, why=EXPIRED if reason is None else WHY[reason])
     else:
         return []
-    step_id = notice_id(ask, answer)
-    return [] if step_id in told else [(step_id, text)]
+    agent_step_id = notice_id(ask, answer)
+    return [] if agent_step_id in told else [(agent_step_id, text)]
 
 
 def line_park(waiting: Sequence[Standing]) -> Park:
@@ -214,7 +214,7 @@ def line_park(waiting: Sequence[Standing]) -> Park:
         waiting,
         key=lambda standing: (standing.place is None, standing.place or 0),
     )
-    return Park(reason=ParkReason.RESOURCE, unlock=LINE_UNLOCK, line=_line(first))
+    return Park(reason=ParkReason.LEASABLE_RESOURCE, unlock=LINE_UNLOCK, wait_line=_line(first))
 
 
 def job_line_park(standing: Standing, job: JobPark, deadline: datetime) -> Park:
@@ -222,20 +222,20 @@ def job_line_park(standing: Standing, job: JobPark, deadline: datetime) -> Park:
     its place and estimate, and the job it waits to start. The grant, or the
     request's end, clears it, and the job's deadline bounds it."""
     return Park(
-        reason=ParkReason.RESOURCE,
+        reason=ParkReason.LEASABLE_RESOURCE,
         unlock=LINE_UNLOCK,
         retry_at=deadline,
         job=job,
-        line=_line(standing),
+        wait_line=_line(standing),
     )
 
 
-def _line(standing: Standing) -> LinePark:
+def _line(standing: Standing) -> WaitLinePark:
     request = standing.request
-    return LinePark(
+    return WaitLinePark(
         request_id=request.id,
         kind=request.kind,
-        resource_id=request.resource_id,
+        leasable_resource_id=request.leasable_resource_id,
         place=standing.place,
         estimate_seconds=standing.estimate_seconds,
     )
@@ -259,7 +259,7 @@ def unstarted(request: LeaseRequest) -> tuple[str, ToolFailure]:
     return UNSTARTED.format(request=request.id, why=why), FAILS[reason]
 
 
-def unheard(steps: Sequence[Step], response: Step) -> bool:
+def unheard(steps: Sequence[AgentStep], response: AgentStep) -> bool:
     """Whether something the model has not read landed after the request
     `response` answers: the engine's notice, or a waking input."""
     since = next((step.seq for step in steps if step.id == response.responds_to), response.seq)

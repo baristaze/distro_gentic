@@ -22,9 +22,11 @@ from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 
 class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInterface):
-    async def read_workspace(self, org_id: UUID, session_id: UUID) -> AgentSessionWorkspace | None:
+    async def read_workspace(
+        self, org_id: UUID, agent_session_id: UUID
+    ) -> AgentSessionWorkspace | None:
         stmt = select(AgentSessionWorkspaces).where(
-            AgentSessionWorkspaces.id == session_id, AgentSessionWorkspaces.org_id == org_id
+            AgentSessionWorkspaces.id == agent_session_id, AgentSessionWorkspaces.org_id == org_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -174,13 +176,13 @@ class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInte
             return None if row is None else to_model(row, KeptSnapshot)
 
     async def read_snapshots(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[KeptSnapshot]:
         stmt = (
             select(AgentWorkspaceSnapshots)
             .where(
                 AgentWorkspaceSnapshots.org_id == org_id,
-                AgentWorkspaceSnapshots.session_id == session_id,
+                AgentWorkspaceSnapshots.agent_session_id == agent_session_id,
             )
             .order_by(AgentWorkspaceSnapshots.created_at, AgentWorkspaceSnapshots.id)
             .limit(limit)
@@ -189,19 +191,19 @@ class AgentWorkspaceStoragePostgresImpl(PgStorageBase, AgentWorkspaceStorageInte
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, KeptSnapshot) for row in rows]
 
-    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+    async def purge_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
         stmt = delete(AgentWorkspaceSnapshots).where(
             AgentWorkspaceSnapshots.org_id == org_id,
-            AgentWorkspaceSnapshots.session_id == session_id,
+            AgentWorkspaceSnapshots.agent_session_id == agent_session_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             gone = deleted(await session.execute(stmt))
             await session.commit()
             return gone
 
-    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_workspace(self, org_id: UUID, agent_session_id: UUID) -> bool:
         stmt = delete(AgentSessionWorkspaces).where(
-            AgentSessionWorkspaces.org_id == org_id, AgentSessionWorkspaces.id == session_id
+            AgentSessionWorkspaces.org_id == org_id, AgentSessionWorkspaces.id == agent_session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             gone = deleted(await session.execute(stmt))

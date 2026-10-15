@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 
 from acme.infra.root import InfraInterface
 from acme.om.base import utcnow
-from acme.om.events import EventsManagerInterface
+from acme.om.change_events import ChangeEventsManagerInterface
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.platform_root import PlatformManagers, ProductKinds
 from acme.om.watch.impl.kinds import KindStreamsImpl
@@ -36,7 +36,7 @@ kept by snapshots to restore it from its latest one."""
 
 def build_stream(
     infra: InfraInterface,
-    events: Callable[[], EventsManagerInterface],
+    events: Callable[[], ChangeEventsManagerInterface],
     options: StreamOptions | None = None,
     product_kinds: ProductKinds | None = None,
 ) -> StreamServiceInterface:
@@ -71,10 +71,10 @@ def build_watch(
         managers.agent_sessions,
         managers.agents,
         managers.loop,
-        managers.steps,
+        managers.agent_steps,
         managers.exec_relay,
         managers.agent_workspaces,
-        managers.events,
+        managers.change_events,
         stream,
         options or WatchOptions(),
         clock,

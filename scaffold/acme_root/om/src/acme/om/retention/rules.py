@@ -11,7 +11,7 @@ either side."""
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention.types.policy import MAX_LIFETIME, RetentionPolicy, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 

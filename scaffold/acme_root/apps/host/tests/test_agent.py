@@ -23,15 +23,17 @@ from acme.apps.host.config import BadSetting, settings_from_env
 from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS
 from acme.client.claimant.credential import load_credential
 from acme.client.claimant.enrollment import NotEnrolled
-from acme.client.client import ApiClient, ApiError
-from acme.client.types import ClaimedWorkView, IsolationMode
-from acme.infra.workspaces.container import DEFAULT_IMAGE
+from acme.client.client import ApiClient
+from acme.client.transport import ApiError
+from acme.client.types.hosts import ClaimedWorkView, IsolationMode
+from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
 from acme.om.base import new_id, utcnow
 from acme.om.hosts import rules
 from acme.om.hosts.rules import WireType
+from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.rules import pool_lane
 from acme.om.placement.types.work import WorkspaceOperation
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 AGENT_PROJECT = new_id()
 CEILINGS = Ceilings(
@@ -83,7 +85,9 @@ def agent(
     )
 
 
-async def enqueue(api: Stack, kind: WorkKind, payload: dict[str, Any], lane: str) -> WorkItem:
+async def enqueue(
+    api: Stack, kind: PlacementWorkKind, payload: dict[str, Any], lane: str
+) -> WorkItem:
     """An item as a producer will write it, with the fields a host reads of
     what it asks (`ceilings.ask_of`), on the lane placement gives it. It is
     landed in the queue directly: the payloads of today's kinds carry where
@@ -108,7 +112,7 @@ async def enqueue(api: Stack, kind: WorkKind, payload: dict[str, Any], lane: str
     return item
 
 
-def an_item(api: Stack, kind: WorkKind, payload: dict[str, Any]) -> WorkItem:
+def an_item(api: Stack, kind: PlacementWorkKind, payload: dict[str, Any]) -> WorkItem:
     now = utcnow()
     return WorkItem(
         id=new_id(),
@@ -163,9 +167,9 @@ def test_a_container_workspace_runs_the_engines_default_image_unless_its_owner_n
     """The engine's default, which its container case shows holds `git`
     for a session's checkout, is the host's too."""
     monkeypatch.delenv("ACME_HOST_WORKSPACE_IMAGE", raising=False)
-    assert settings_from_env().workspace_image == DEFAULT_IMAGE
+    assert settings_from_env().agent_workspace_image == DEFAULT_IMAGE
     monkeypatch.setenv("ACME_HOST_WORKSPACE_IMAGE", "registry.example.test/tools:1")
-    assert settings_from_env().workspace_image == "registry.example.test/tools:1"
+    assert settings_from_env().agent_workspace_image == "registry.example.test/tools:1"
 
 
 def test_the_image_pull_has_a_limit_of_its_own_that_a_bad_value_refuses(
@@ -211,19 +215,21 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
     host = agent(api, tmp_path, await api.token(ours.id), executor=ran)
     await host.start()
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(ours.id)}
-    fits = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(ours.id))
+    fits = await enqueue(
+        api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(ours.id)
+    )
     await enqueue(
         api,
-        WorkKind.WORKSPACE,
+        PlacementWorkKind.WORKSPACE,
         {**prepare, "pool_id": str(theirs.id), **fitting()},
         pool_lane(theirs.id),
     )
     persons = await enqueue(
-        api, WorkKind.WORKSPACE, {**prepare, **fitting(by_person=True)}, pool_lane(ours.id)
+        api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting(by_person=True)}, pool_lane(ours.id)
     )
     # Where it runs, and nothing of what it asks.
     silent = await api.container.managers.work.enqueue(
-        api.owner, an_item(api, WorkKind.WORKSPACE, prepare)
+        api.owner, an_item(api, PlacementWorkKind.WORKSPACE, prepare)
     )
     handled = []
     while (one := await host.tick()) is not None:
@@ -247,9 +253,11 @@ async def test_a_host_that_reaches_a_metadata_service_refuses_open_egress(
     await host.start()
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
     opened = await enqueue(
-        api, WorkKind.WORKSPACE, {**prepare, **fitting(egress=None)}, pool_lane(pool.id)
+        api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting(egress=None)}, pool_lane(pool.id)
     )
-    listed = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
+    listed = await enqueue(
+        api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id)
+    )
     handled = []
     while (one := await host.tick()) is not None:
         handled.append(one)
@@ -273,7 +281,7 @@ async def test_a_host_below_the_floor_is_handed_nothing(
         api.owner,
         an_item(
             api,
-            WorkKind.WORKSPACE,
+            PlacementWorkKind.WORKSPACE,
             {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)},
         ),
     )
@@ -329,7 +337,9 @@ async def test_a_host_waits_out_a_failed_beat_and_goes_on_with_its_credential(
     assert 0 < wait <= BACKOFF_MAX_SECONDS
     assert host.credential == held == load_credential(tmp_path / "credential.json")
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
-    item = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
+    item = await enqueue(
+        api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id)
+    )
     assert await host.turn() == 0.0
     await host.idle()
     assert [one.id for one in ran.ran] == [item.id]
@@ -363,7 +373,9 @@ async def test_a_host_runs_no_more_items_at_once_than_its_ceilings_allow(
     await host.start()
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
     items = [
-        await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
+        await enqueue(
+            api, PlacementWorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id)
+        )
         for _ in range(3)
     ]
     assert await host.claim_once() is not None

@@ -7,7 +7,7 @@ made of](../../../../README.md).
 ## What it holds
 
 - **Question**: what a session asks for each [model
-  role](../models/README.md): the environment the platform runs in, the
+  role](../language_models/README.md): the environment the platform runs in, the
   model size its agent kind asks of the role, if it asks one, the model
   role, the session's agent kind, its tenant's plan tier, and its workload
   class. A product names its sessions' workload classes; with none named,
@@ -95,7 +95,7 @@ made of](../../../../README.md).
 
 <!-- agents-only
 The layer is `root.MatrixLayer`, a `models.layer.ModelsLayerInterface`
-that a root hands `build_platform_managers(models_layer=...)`: `impl/resolver.py`
+that a root hands `build_platform_managers(language_models_layer=...)`: `impl/resolver.py`
 is the engine's resolver, `impl/models.py` the face over the engine's
 models manager (eligibility from the retention snapshot, renewal, and the
 purge of pins and choices), and `impl/credentials.py` the call credentials

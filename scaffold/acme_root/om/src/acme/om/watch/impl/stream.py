@@ -10,11 +10,11 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from acme.infra.streams import StreamBounds, StreamsInterface
 from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface
-from acme.om.base import Platform, new_id
+from acme.om.agent_steps.types.stream import StreamPart
+from acme.om.base import OmBase, new_id
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
-from acme.om.steps.types.stream import StreamPart
 from acme.om.watch.kinds import STEP, StreamKind, StreamKinds
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.watch.types.live import LiveStream, Seen
@@ -29,7 +29,7 @@ under its session, naming its step, and hinted on the realtime channel."""
 PARTS: TypeAdapter[StreamPart] = TypeAdapter(StreamPart)
 
 
-class StreamOptions(Platform):
+class StreamOptions(OmBase):
     # The most parts, and the most bytes of them, one stream holds: past
     # either, its oldest part goes, never its newest.
     max_parts: int = Field(default=1024, gt=0)
@@ -75,8 +75,8 @@ class _Change:
 
     kind: str
     ctx: TenantContext
-    session_id: UUID
-    step_id: UUID
+    agent_session_id: UUID
+    agent_step_id: UUID
 
 
 @dataclass
@@ -106,13 +106,13 @@ class StreamServiceImpl(StreamServiceInterface):
         self,
         streams: StreamsInterface,
         topics: TopicsInterface,
-        events: Callable[[], EventsManagerInterface],
+        events: Callable[[], ChangeEventsManagerInterface],
         options: StreamOptions | None = None,
         kinds: StreamKinds | None = None,
     ) -> None:
         self._streams = streams
         self._topics = topics
-        self._events = events
+        self._change_events = events
         self._options = options or StreamOptions()
         step = (kinds or step_kinds(self._options)).bounds(STEP)
         if step is None:
@@ -128,7 +128,7 @@ class StreamServiceImpl(StreamServiceInterface):
         if not self._window:
             self._put(part)
             return
-        key = (part.session_id, part.step_id)
+        key = (part.agent_session_id, part.agent_step_id)
         held = self._held.get(key)
         if held is None:
             # Quiet for a window: the part goes at once, and those behind it
@@ -143,31 +143,32 @@ class StreamServiceImpl(StreamServiceInterface):
         if held.size >= self._options.join_bytes:
             self._release(held)
 
-    def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
-        self._put(_Change(OPENED, ctx, session_id, step_id))
+    def opened(self, ctx: TenantContext, agent_session_id: UUID, agent_step_id: UUID) -> None:
+        self._put(_Change(OPENED, ctx, agent_session_id, agent_step_id))
 
-    def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
-        held = self._held.pop((session_id, step_id), None)
+    def completed(self, ctx: TenantContext, agent_session_id: UUID, agent_step_id: UUID) -> None:
+        held = self._held.pop((agent_session_id, agent_step_id), None)
         if held is not None:
             held.timer.cancel()
             self._release(held)
-        self._put(_Change(COMPLETED, ctx, session_id, step_id))
+        self._put(_Change(COMPLETED, ctx, agent_session_id, agent_step_id))
 
-    async def read(self, session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
-        after = {mark.step_id: mark.n for mark in seen}
+    async def read(self, agent_session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
+        after = {mark.agent_step_id: mark.n for mark in seen}
         streams: list[LiveStream] = []
-        for held in await self._streams.read(session_id, after, self._bounds):
+        for held in await self._streams.read(agent_session_id, after, self._bounds):
             parts = tuple(
                 part
                 for part in (_part(entry) for _, entry in held.entries)
                 # A part is the stream's only when it names its session and
                 # its step: nothing else in the cache reaches this reader.
-                if part is not None and (part.session_id, part.step_id) == (session_id, held.stream)
+                if part is not None
+                and (part.agent_session_id, part.agent_step_id) == (agent_session_id, held.stream)
             )
             last = after.get(held.stream, -1)
             streams.append(
                 LiveStream(
-                    step_id=held.stream,
+                    agent_step_id=held.stream,
                     first=held.first,
                     parts=parts,
                     dropped=last + 1 < held.first,
@@ -238,28 +239,32 @@ class StreamServiceImpl(StreamServiceInterface):
         batch = [first]
         while self._queue:
             behind = self._queue[0]
-            if isinstance(behind, _Change) or (behind.session_id, behind.step_id) != (
-                first.session_id,
-                first.step_id,
+            if isinstance(behind, _Change) or (behind.agent_session_id, behind.agent_step_id) != (
+                first.agent_session_id,
+                first.agent_step_id,
             ):
                 break
             self._queue.popleft()
             batch.append(behind)
         await self._streams.append(
-            first.session_id,
-            first.step_id,
+            first.agent_session_id,
+            first.agent_step_id,
             [(part.n, PARTS.dump_json(part, exclude_none=True)) for part in batch],
             self._bounds,
         )
 
     async def _change(self, change: _Change) -> None:
         if change.kind == COMPLETED:
-            await self._streams.end(change.session_id, change.step_id)
+            await self._streams.end(change.agent_session_id, change.agent_step_id)
         ctx = change.ctx
-        event = await self._events().append_event(
+        event = await self._change_events().append_change_event(
             ctx,
-            audit_event(
-                ctx, new_id(), change.kind, change.session_id, {"step_id": str(change.step_id)}
+            audit_change_event(
+                ctx,
+                new_id(),
+                change.kind,
+                change.agent_session_id,
+                {"agent_step_id": str(change.agent_step_id)},
             ),
         )
         await self._topics.publish(

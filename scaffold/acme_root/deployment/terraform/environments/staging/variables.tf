@@ -25,7 +25,7 @@ variable "maintenance_image" {
   type        = string
 }
 
-variable "session_runner_image" {
+variable "agent_session_runner_image" {
   description = "The session runner image by digest; the deploy workflows pass it."
   type        = string
 }

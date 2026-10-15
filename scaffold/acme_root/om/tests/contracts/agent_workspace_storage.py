@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 
-from acme.infra.workspaces import EgressMode, IsolationMode, ResourceLimits
+from acme.infra.agent_workspaces import EgressMode, IsolationMode, ResourceLimits
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agent_workspaces.types.credential import RepositoryCredential
 from acme.om.agent_workspaces.types.egress import EgressAllowlist, EgressMethod, EgressRule
@@ -17,6 +17,9 @@ from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.outbox.types.row import OutboxRow
+
+INTERFACE = AgentWorkspaceStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -27,7 +30,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "purge_credentials",
         "purge_snapshots",
         "purge_tenant",
-        "purge_workspace",
+        "purge_agent_workspace",
         "read_allowlist",
         "read_credential",
         "read_credentials",
@@ -83,7 +86,7 @@ def make_allowlist(
     )
 
 
-def make_snapshot(session_id: UUID, *, on_host: bool = False) -> KeptSnapshot:
+def make_snapshot(agent_session_id: UUID, *, on_host: bool = False) -> KeptSnapshot:
     now = utcnow()
     actor = new_id()
     snapshot_id = new_id()
@@ -94,10 +97,10 @@ def make_snapshot(session_id: UUID, *, on_host: bool = False) -> KeptSnapshot:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         hash="hmac-sha256:" + "cd" * 32,
         size=4096,
-        reference=f"{session_id}/{snapshot_id}",
+        reference=f"{agent_session_id}/{snapshot_id}",
         **(hosted if on_host else {}),
     )
 
@@ -262,8 +265,8 @@ class AgentWorkspaceStorageContract:
         purged, stays = make_workspace(), make_workspace()
         assert await storage.create_workspace(org, purged)
         assert await storage.create_workspace(org, stays)
-        assert await storage.purge_workspace(org, purged.id)
-        assert not await storage.purge_workspace(org, purged.id)
+        assert await storage.purge_agent_workspace(org, purged.id)
+        assert not await storage.purge_agent_workspace(org, purged.id)
         assert await storage.read_workspace(org, purged.id) is None
         assert await storage.read_workspace(org, stays.id) == stays
 
@@ -323,7 +326,7 @@ class AgentWorkspaceStorageContract:
         org = new_id()
         workspace = make_workspace()
         assert await storage.create_workspace(org, workspace)
-        assert not await storage.purge_workspace(new_id(), workspace.id)
+        assert not await storage.purge_agent_workspace(new_id(), workspace.id)
         assert await storage.read_workspace(org, workspace.id) == workspace
 
     async def test_purge_tenant_takes_the_tenants_rows_and_no_other(

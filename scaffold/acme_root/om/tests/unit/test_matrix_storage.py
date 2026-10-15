@@ -1,11 +1,13 @@
 import pytest
-from contracts.matrix_storage import MatrixStorageContract, MatrixTenantStorageContract
 
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.storage.impl.memory import (
     MatrixStorageMemoryImpl,
     MatrixTenantStorageMemoryImpl,
 )
+
+from contracts.matrix_storage import MatrixStorageContract
+from contracts.matrix_tenant_storage import MatrixTenantStorageContract
 
 
 class TestMatrixStorageMemory(MatrixStorageContract):

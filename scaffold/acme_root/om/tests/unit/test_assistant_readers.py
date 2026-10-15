@@ -16,19 +16,14 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.agent_project_storage import in_agent_project
-from contracts.agent_session_storage import make_session
-from contracts.hosts_storage import make_credential, make_host
-from contracts.loops import reply, said
-from contracts.platform_agents import CORPUS, Platform, calls, platform_over
-from contracts.step_storage import make_message
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
+from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason, ToolFailure
+from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform as Record
+from acme.om.base import OmBase as Record
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import UnsafeConfiguration
@@ -49,11 +44,17 @@ from acme.om.platform_root import (
     ProductKinds,
     build_platform_managers,
 )
-from acme.om.steps.types.header import LoopOutcome, Park, ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.tool import ToolInterface, ToolRuntime
-from acme.om.tools.types.policy import PolicyLayer
+from acme.om.tools.types.policy import ToolPolicyLayer
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
+
+from contracts.agent_project_storage import in_agent_project
+from contracts.agent_session_storage import make_agent_session
+from contracts.agent_step_storage import make_message
+from contracts.hosts_storage import make_credential, make_host
+from contracts.loops import reply, said
+from contracts.platform_agents import CORPUS, Platform, calls, platform_over
 
 ROOT = Path(__file__).resolve().parents[3]
 OBJECT_MODEL = ROOT / "docs" / "object-model.md"
@@ -108,27 +109,31 @@ def tools_of(
 async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_names(
     tmp_path: Path,
 ) -> None:
-    product = ProductKinds(tools=tools_of(a_reader("read_tally")), assistant_tools=("read_tally",))
+    product = ProductKinds(
+        tools=tools_of(a_reader("read_spend_tally")), assistant_tools=("read_spend_tally",)
+    )
     platform = platform_over(tmp_path, product_kinds=product)
 
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
 
-    session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    session = await platform.managers.agent_sessions.get_agent_session(
+        platform.owner, agent_session_id
+    )
     assert session.kind_version == PLATFORM_ASSISTANT_KIND.version == 2
     readers = {*ASSISTANT_READERS, kinds.SEARCH_AGENT_KNOWLEDGE, kinds.READ_AGENT_KNOWLEDGE}
     assert readers <= set(session.tools)
-    assert "read_tally" in session.tools
+    assert "read_spend_tally" in session.tools
     # The product's tool joins the current version alone: a session still on
     # the version before keeps what it named.
-    joined = with_assistant_tools(SHIPPED, ("read_tally",))
+    joined = with_assistant_tools(SHIPPED, ("read_spend_tally",))
     assert PLATFORM_ASSISTANT_V1 in joined
-    assert "read_tally" not in PLATFORM_ASSISTANT_V1.tools
+    assert "read_spend_tally" not in PLATFORM_ASSISTANT_V1.tools
     # A kind of the product's own never gains it.
     software_engineer_id = await platform.start(kinds.SOFTWARE_ENGINEER)
-    software_engineer = await platform.managers.agent_sessions.get_session(
+    software_engineer = await platform.managers.agent_sessions.get_agent_session(
         platform.owner, software_engineer_id
     )
-    assert "read_tally" not in software_engineer.tools
+    assert "read_spend_tally" not in software_engineer.tools
 
 
 @pytest.mark.parametrize(
@@ -145,11 +150,11 @@ async def test_the_assistants_registry_holds_its_readers_and_the_tool_a_product_
             "write_tally",
         ),
         # A name the assistant holds already, or one named twice.
-        (ProductKinds(assistant_tools=(kinds.READ_SESSION,)), kinds.READ_SESSION),
+        (ProductKinds(assistant_tools=(kinds.READ_AGENT_SESSION,)), kinds.READ_AGENT_SESSION),
         (
             ProductKinds(
-                tools=tools_of(a_reader("read_tally")),
-                assistant_tools=("read_tally", "read_tally"),
+                tools=tools_of(a_reader("read_spend_tally")),
+                assistant_tools=("read_spend_tally", "read_spend_tally"),
             ),
             "twice",
         ),
@@ -175,18 +180,18 @@ def test_a_slot_that_names_a_tool_the_assistant_may_not_call_is_refused_at_start
 
 async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path) -> None:
     platform = platform_over(tmp_path)
-    session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
-    await platform.say(session_id, "What is stuck?")
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "What is stuck?")
     malformed = {
-        "bad_id": calls(kinds.READ_SESSION, "bad_id", session_id="not-a-session"),
+        "bad_id": calls(kinds.READ_AGENT_SESSION, "bad_id", agent_session_id="not-a-session"),
         "no_id": calls(kinds.READ_WAIT, "no_id"),
         "extra": calls(
             kinds.READ_AGENT_PROJECT, "extra", agent_project_id=str(new_id()), org_id="x"
         ),
-        "zero": calls(kinds.LIST_SESSIONS, "zero", limit=0),
+        "zero": calls(kinds.LIST_AGENT_SESSIONS, "zero", limit=0),
         "huge": calls(kinds.LIST_AGENT_PROJECTS, "huge", limit=10_000),
-        "status": calls(kinds.LIST_SESSIONS, "status", status="stuck"),
-        "reason": calls(kinds.LIST_SESSIONS, "reason", park_reason="person", status="idle"),
+        "status": calls(kinds.LIST_AGENT_SESSIONS, "status", status="stuck"),
+        "reason": calls(kinds.LIST_AGENT_SESSIONS, "reason", park_reason="person", status="idle"),
         "cursor": calls(kinds.LIST_AGENT_AUTOMATIONS, "cursor", after="page-2"),
         "runs": calls(
             kinds.READ_AGENT_AUTOMATION, "runs", agent_automation_id=str(new_id()), runs=500
@@ -197,13 +202,13 @@ async def test_a_readers_malformed_input_is_refused_never_a_crash(tmp_path: Path
         reply(said("I could not read that.")),
     )
 
-    run = await platform.managers.loop.run(platform.owner, session_id)
+    run = await platform.managers.loop.run(platform.owner, agent_session_id)
 
     # The streak of refusals may end the loop, as the engine ends any; none
     # of them is an error.
     assert run.outcome is not LoopOutcome.ERRORED
     for use_id in malformed:
-        failure, _ = await platform.answer(session_id, use_id)
+        failure, _ = await platform.answer(agent_session_id, use_id)
         assert failure is ToolFailure.INVALID_INPUT, use_id
 
 
@@ -217,19 +222,19 @@ CLERK = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=("Look it up.",),
-    policy=PolicyLayer(),  # it allows nothing, so its every call waits for a person
-    isolation=NO_WORKSPACE,
+    policy=ToolPolicyLayer(),  # it allows nothing, so its every call waits for a person
+    isolation=NO_AGENT_WORKSPACE,
 )
 
 
 async def held_session(platform: Platform) -> UUID:
     """A clerk's session parked on the call it holds for approval."""
     start = Start(id=new_id(), kind=CLERK.name, title="a held lookup")
-    session = await platform.managers.agents.start_session(platform.owner, start)
+    session = await platform.managers.agents.start_agent_session(platform.owner, start)
     await platform.say(session.id, "Look up why sessions wait.")
     platform.anthropic.add(reply(calls(kinds.SEARCH_CORPUS, "use_lookup", query="wait")))
     await platform.managers.loop.run(platform.owner, session.id)
-    held = await platform.managers.agent_sessions.get_session(platform.owner, session.id)
+    held = await platform.managers.agent_sessions.get_agent_session(platform.owner, session.id)
     assert held.park is not None and held.park.reason is ParkReason.PERSON
     return session.id
 
@@ -247,10 +252,10 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_agent_project_and_r
     await platform.say(asking, "Which sessions wait for a person?")
     platform.anthropic.add(
         reply(
-            calls(kinds.LIST_SESSIONS, "use_person", park_reason="person", limit=1),
-            calls(kinds.LIST_SESSIONS, "use_idle", status="idle"),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_person", park_reason="person", limit=1),
+            calls(kinds.LIST_AGENT_SESSIONS, "use_idle", status="idle"),
             calls(
-                kinds.LIST_SESSIONS,
+                kinds.LIST_AGENT_SESSIONS,
                 "use_agent_project",
                 park_reason="person",
                 agent_project_id=str(agent_project_id),
@@ -265,26 +270,28 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_agent_project_and_r
     page = json.loads(text)
     assert failure is None
     # Newest first, one at a time, with where to read on.
-    assert [s["session_id"] for s in page["sessions"]] == [str(second)]
+    assert [s["agent_session_id"] for s in page["sessions"]] == [str(second)]
     assert page["sessions"][0]["park_reason"] == "person"
     assert page["next"] == str(second)
     platform.anthropic.add(
-        reply(calls(kinds.LIST_SESSIONS, "use_on", park_reason="person", before=page["next"])),
+        reply(
+            calls(kinds.LIST_AGENT_SESSIONS, "use_on", park_reason="person", before=page["next"])
+        ),
         reply(said("And one more.")),
     )
     await platform.say(asking, "And the rest?")
     await platform.managers.loop.run(platform.owner, asking)
     _, text = await platform.answer(asking, "use_on")
     rest = json.loads(text)
-    assert [s["session_id"] for s in rest["sessions"]] == [str(first)]
+    assert [s["agent_session_id"] for s in rest["sessions"]] == [str(first)]
     assert rest["next"] is None
     _, text = await platform.answer(asking, "use_idle")
-    listed = {s["session_id"] for s in json.loads(text)["sessions"]}
+    listed = {s["agent_session_id"] for s in json.loads(text)["sessions"]}
     assert str(idle) in listed and str(first) not in listed
     # Of the two that wait, only the first is in the agent project.
     _, text = await platform.answer(asking, "use_agent_project")
     in_it = json.loads(text)
-    assert [s["session_id"] for s in in_it["sessions"]] == [str(first)]
+    assert [s["agent_session_id"] for s in in_it["sessions"]] == [str(first)]
     assert in_it["next"] is None
 
 
@@ -297,11 +304,11 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
     platform = platform_over(tmp_path, kinds=(CLERK,))
     sessions, steps, owner = (
         platform.managers.agent_sessions,
-        platform.managers.steps,
+        platform.managers.agent_steps,
         platform.owner,
     )
-    root = await sessions.get_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
-    child = await sessions.create_session(owner, make_session(parent=root))
+    root = await sessions.get_agent_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
+    child = await sessions.create_agent_session(owner, make_agent_session(parent=root))
     asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     (message,) = await steps.append_inputs(
         owner, child.id, [make_message(child.id, principal=asker)]
@@ -312,7 +319,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Which sessions wait for a person?")
     platform.anthropic.add(
-        reply(calls(kinds.LIST_SESSIONS, "use_person", park_reason="person")),
+        reply(calls(kinds.LIST_AGENT_SESSIONS, "use_person", park_reason="person")),
         reply(said("One waits for a person.")),
     )
 
@@ -322,7 +329,7 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
     page = json.loads(text)
     assert failure is None
     assert root.status.value == "idle"
-    assert [(s["session_id"], s["park_reason"]) for s in page["sessions"]] == [
+    assert [(s["agent_session_id"], s["park_reason"]) for s in page["sessions"]] == [
         (str(child.id), "person")
     ]
     assert page["next"] is None
@@ -368,7 +375,7 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
     asking = await platform.start(kinds.PLATFORM_ASSISTANT)
     await platform.say(asking, "Why has my session not started?")
     platform.anthropic.add(
-        reply(calls(kinds.READ_WAIT, "use_wait", session_id=str(pinned))),
+        reply(calls(kinds.READ_WAIT, "use_wait", agent_session_id=str(pinned))),
         reply(said("It waits for host-1, which is offline.")),
     )
 
@@ -391,12 +398,12 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
 # engine writes, each with its cause and who may clear it.
 
 COMPUTED = {
-    "agents/impl/loop.py: fill.provider.value": "a provider's name",
-    "agents/impl/loop.py: refused.unlock": "`<provider>:key`",
-    "agents/impl/loop.py: f'{fill.provider.value}:{cause}'": "`<provider>:billing`",
-    "agents/impl/loop.py: str(started.key)": "a job's key",
-    "agents/impl/loop.py: str(job.key)": "a job's key",
-    "budgets/rules.py: unlock": "a budget's id",
+    "agents/impl/loop_model_turn.py: fill.provider.value": "a provider's name",
+    "agents/impl/loop_model_turn.py: refused.unlock": "`<provider>:key`",
+    "agents/impl/loop_model_turn.py: f'{fill.provider.value}:{cause}'": "`<provider>:billing`",
+    "agents/impl/loop_tool_turn.py: str(started.key)": "a job's key",
+    "agents/impl/loop_tool_turn.py: str(job.key)": "a job's key",
+    "spend_budgets/rules.py: unlock": "a budget's id",
 }
 """Each unlock the engine computes rather than names, by the module and the
 expression that compute it, with the start of its row in the object model."""

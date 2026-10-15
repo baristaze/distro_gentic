@@ -20,12 +20,12 @@ from pydantic import Field
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface
 from acme.integrations.exceptions import ProviderRefused
-from acme.om.base import Platform
+from acme.om.agent_steps.types.content import MAX_NAME
+from acme.om.agent_steps.types.header import ToolFailure
+from acme.om.base import OmBase
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
 from acme.om.intake.manager import IntakeManagerInterface
-from acme.om.steps.types.content import MAX_NAME
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
@@ -64,7 +64,7 @@ class CommentInput(ToolInput):
     text: str = Field(min_length=1, max_length=MAX_COMMENT)
 
 
-class Commented(Platform):
+class Commented(OmBase):
     id: str
 
 
@@ -116,9 +116,7 @@ class CommentImpl(ToolInterface):
     ) -> None:
         return None
 
-    async def run(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> Platform:
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
         assert isinstance(call_input, CommentInput)
         intake = self._intake()
         forge = self._integrations(FORGE)
@@ -126,7 +124,7 @@ class CommentImpl(ToolInterface):
         installation = await connected(ctx, intake, forge, call_input.on)
         # Recorded before the act: the forge's event may come back before the
         # post answers.
-        await intake.record_act(ctx, runtime.session_id, FORGE, (mark,))
+        await intake.record_act(ctx, runtime.agent_session_id, FORGE, (mark,))
         try:
             posted = await forge.post(
                 call_input.on, call_input.text, mark, installation=installation
@@ -136,5 +134,5 @@ class CommentImpl(ToolInterface):
                 ToolFailure.TRANSIENT, f"the forge took no comment: {failed.message}"
             ) from None
         if posted.id != mark:
-            await intake.record_act(ctx, runtime.session_id, FORGE, (posted.id,))
+            await intake.record_act(ctx, runtime.agent_session_id, FORGE, (posted.id,))
         return Commented(id=posted.id)

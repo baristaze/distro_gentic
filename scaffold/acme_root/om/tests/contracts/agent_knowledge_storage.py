@@ -22,6 +22,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
 from acme.om.levers.types.lever import LeverCheck, LeverFinding
 
+INTERFACE = AgentKnowledgeStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_entry",
@@ -70,11 +73,11 @@ def make_entry(
     )
 
 
-def make_recall(session_id: UUID, entry: AgentKnowledge) -> AgentKnowledgeRecall:
+def make_recall(agent_session_id: UUID, entry: AgentKnowledge) -> AgentKnowledgeRecall:
     return AgentKnowledgeRecall(
         id=new_id(),
         created_at=utcnow(),
-        session_id=session_id,
+        agent_session_id=agent_session_id,
         entry_id=entry.id,
         version=entry.version,
     )
@@ -164,39 +167,39 @@ class AgentKnowledgeStorageContract:
         assert await storage.purge_tenant(org_a, 10) == 2
         assert await storage.purge_tenant(org_a, 10) == 0
         assert await storage.read_entry(org_b, kept.id) == kept
-        assert await storage.read_recalls(org_b, recall.session_id, 10) == [recall]
+        assert await storage.read_recalls(org_b, recall.agent_session_id, 10) == [recall]
 
     async def test_a_session_recalls_an_entry_once_at_the_version_it_read(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
-        org, session_id = new_id(), new_id()
+        org, agent_session_id = new_id(), new_id()
         first, second = (
             make_entry(AgentKnowledgeStatus.REVIEWED),
             make_entry(AgentKnowledgeStatus.REVIEWED),
         )
-        recalls = (make_recall(session_id, first), make_recall(session_id, second))
+        recalls = (make_recall(agent_session_id, first), make_recall(agent_session_id, second))
         await storage.create_recalls(org, recalls)
-        await storage.create_recalls(org, (make_recall(session_id, reviewed(first)),))
+        await storage.create_recalls(org, (make_recall(agent_session_id, reviewed(first)),))
         await storage.create_recalls(org, ())
-        assert await storage.read_recalls(org, session_id, 10) == sorted(
+        assert await storage.read_recalls(org, agent_session_id, 10) == sorted(
             recalls, key=lambda r: (r.created_at, r.id)
         )
-        assert len(await storage.read_recalls(org, session_id, 1)) == 1
+        assert len(await storage.read_recalls(org, agent_session_id, 1)) == 1
         assert await storage.read_recalls(org, new_id(), 10) == []
 
     async def test_create_recalls_in_another_tenant_is_not_read_here(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
-        org, session_id = new_id(), new_id()
-        await storage.create_recalls(new_id(), (make_recall(session_id, make_entry()),))
-        assert await storage.read_recalls(org, session_id, 10) == []
+        org, agent_session_id = new_id(), new_id()
+        await storage.create_recalls(new_id(), (make_recall(agent_session_id, make_entry()),))
+        assert await storage.read_recalls(org, agent_session_id, 10) == []
 
     async def test_read_recalls_of_another_tenant_finds_nothing(
         self, storage: AgentKnowledgeStorageInterface
     ) -> None:
-        session_id = new_id()
-        await storage.create_recalls(new_id(), (make_recall(session_id, make_entry()),))
-        assert await storage.read_recalls(new_id(), session_id, 10) == []
+        agent_session_id = new_id()
+        await storage.create_recalls(new_id(), (make_recall(agent_session_id, make_entry()),))
+        assert await storage.read_recalls(new_id(), agent_session_id, 10) == []
 
     async def test_a_session_reaches_its_agent_projects_entries_and_the_tenants_alone(
         self, storage: AgentKnowledgeStorageInterface

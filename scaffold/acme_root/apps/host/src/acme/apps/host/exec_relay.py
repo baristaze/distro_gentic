@@ -46,9 +46,21 @@ from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
 from acme.apps.host.mcp import HostServers
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
-from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
-from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
-from acme.client.types import IsolationMode as HostIsolation
+from acme.client.client import ApiClient
+from acme.client.transport import WIRE_FAILURES, ApiError
+from acme.client.types.exec_relay import ExecDetailView, OutputStream
+from acme.client.types.hosts import ClaimedWorkView
+from acme.client.types.hosts import IsolationMode as HostIsolation
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceLost,
+    AgentWorkspaceProviderInterface,
+    Durability,
+    EgressMode,
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+)
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
     CommandSpec,
@@ -56,16 +68,6 @@ from acme.infra.transports import (
     RecordSeal,
     TransportInterface,
     secret_held,
-)
-from acme.infra.workspaces import (
-    Durability,
-    EgressMode,
-    IsolationMode,
-    IsolationRefused,
-    IsolationSpec,
-    Workspace,
-    WorkspaceLost,
-    WorkspaceProviderInterface,
 )
 
 log = logging.getLogger(__name__)
@@ -160,8 +162,8 @@ class ExecutorRelayImpl(ExecutorInterface):
     """`transports` names the transport that runs each isolation mode this
     host gives; an item at any other mode is refused, with nothing run.
     `kept_whole` names the modes a workspace kept by snapshots is held at
-    with no snapshot of the host's: a machine of the cloud pool, whose pool
-    keeps the machine's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
+    with no snapshot of the host's: a VM of the cloud pool, whose pool
+    keeps the VM's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
     sent as a part, and the lease is renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts
@@ -171,7 +173,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self,
         client: ClientFactory,
         transports: Mapping[IsolationMode, TransportInterface],
-        workspaces: Mapping[IsolationMode, WorkspaceProviderInterface] | None = None,
+        workspaces: Mapping[IsolationMode, AgentWorkspaceProviderInterface] | None = None,
         *,
         snapshots: HostSnapshots | None = None,
         snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
@@ -186,12 +188,14 @@ class ExecutorRelayImpl(ExecutorInterface):
     ) -> None:
         self._client = client
         self._transports = dict(transports)
-        self._workspaces = dict(workspaces or {})
+        self._agent_workspaces = dict(workspaces or {})
         self._snapshots = snapshots
         self._bases = (
             None
             if snapshots is None
-            else HostBases(snapshots, self._workspaces, self._transports, **(base_options or {}))
+            else HostBases(
+                snapshots, self._agent_workspaces, self._transports, **(base_options or {})
+            )
         )
         self._probed_snapshots = snapshot_modes
         self._kept_whole = kept_whole
@@ -338,7 +342,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             secrets=[used] if used is not None else [],
         )
 
-    async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> Workspace:
+    async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> AgentWorkspace:
         """The workspace an item runs in, as this host holds it. One its own
         provider makes is prepared again first: a look while its instance
         runs, and a new instance over its files when it stopped, as after a
@@ -347,10 +351,13 @@ class ExecutorRelayImpl(ExecutorInterface):
         instance starts from it; none is built here, since an item's
         ceilings hold no setup's egress. One this host would make elsewhere
         than the platform says it is is refused."""
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         if provider is None:
-            return Workspace(
-                id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
+            return AgentWorkspace(
+                id=detail.agent_session_id,
+                org_id=detail.org_id,
+                spec=spec,
+                location=detail.location,
             )
         base = None
         if spec.base is not None and spec.base.setup:
@@ -358,12 +365,12 @@ class ExecutorRelayImpl(ExecutorInterface):
                 base = await self._bases.kept(detail.org_id, spec)
             if base is None:
                 raise IsolationRefused(
-                    f"this host keeps no base for session {detail.session_id}'s workspace"
+                    f"this host keeps no base for session {detail.agent_session_id}'s workspace"
                 )
-        workspace = await provider.prepare(detail.org_id, detail.session_id, spec, base=base)
+        workspace = await provider.prepare(detail.org_id, detail.agent_session_id, spec, base=base)
         if workspace.location != detail.location:
             raise IsolationRefused(
-                f"this host holds session {detail.session_id}'s workspace at "
+                f"this host holds session {detail.agent_session_id}'s workspace at "
                 f"{workspace.location}, not at {detail.location}"
             )
         return workspace
@@ -398,7 +405,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             return
         try:
             spec = IsolationSpec.model_validate(payload["spec"])
-            session_id = UUID(str(payload["session_id"]))
+            agent_session_id = UUID(str(payload["agent_session_id"]))
         except KeyError, ValueError, ValidationError:
             await self._answer(item.id, refused="the prepare names no session or spec")
             return
@@ -408,7 +415,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             await self._answer(item.id, refused="this host refused it: " + differs)
             return
         org_id = item.org_id
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         if provider is None:
             await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")
             return
@@ -441,11 +448,15 @@ class ExecutorRelayImpl(ExecutorInterface):
                 return
         try:
             workspace = await provider.prepare(
-                org_id, session_id, spec, snapshot=restore, base=base
+                org_id, agent_session_id, spec, snapshot=restore, base=base
             )
         except InfraException as error:
-            lost_here = restore is not None and error.code == WorkspaceLost.code
-            if base is not None and error.code == WorkspaceLost.code and self._bases is not None:
+            lost_here = restore is not None and error.code == AgentWorkspaceLost.code
+            if (
+                base is not None
+                and error.code == AgentWorkspaceLost.code
+                and self._bases is not None
+            ):
                 # A base this host cannot bring in, such as one on an image
                 # it no longer holds, holds nothing of the session's: it is
                 # built again.
@@ -455,7 +466,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         held = await self._answer(item.id, location=workspace.location)
         if held is False:
             log.info("item %s: another host holds the workspace, so this one goes", item.id)
-            await provider.purge(org_id, session_id)
+            await provider.purge(org_id, agent_session_id)
 
     async def _release(self, item: ClaimedWorkView) -> None:
         """A release: the instance this host's provider made for the session
@@ -467,20 +478,22 @@ class ExecutorRelayImpl(ExecutorInterface):
         not answered: its lease runs out, and it is claimed again."""
         try:
             spec = IsolationSpec.model_validate(item.payload["spec"])
-            session_id = UUID(str(item.payload["session_id"]))
+            agent_session_id = UUID(str(item.payload["agent_session_id"]))
         except KeyError, ValueError, ValidationError:
             log.warning("item %s: the release names no session or spec", item.id)
             return
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         held = [] if provider is None else await provider.held_instances()
         for instance in held:
-            if instance.id == session_id and instance.org_id == item.org_id:
+            if instance.id == agent_session_id and instance.org_id == item.org_id:
                 assert provider is not None
-                workspace = Workspace(
-                    id=session_id, org_id=item.org_id, spec=spec, location=instance.location
+                workspace = AgentWorkspace(
+                    id=agent_session_id, org_id=item.org_id, spec=spec, location=instance.location
                 )
                 await provider.release(workspace)
-                log.info("item %s: the instance of session %s is released", item.id, session_id)
+                log.info(
+                    "item %s: the instance of session %s is released", item.id, agent_session_id
+                )
         try:
             async with self._client() as client:
                 await client.answer_release(item.id)
@@ -495,11 +508,11 @@ class ExecutorRelayImpl(ExecutorInterface):
         lease runs out, and it is claimed again."""
         try:
             spec = IsolationSpec.model_validate(item.payload["spec"])
-            instance_id = UUID(str(item.payload["session_id"]))
+            instance_id = UUID(str(item.payload["agent_session_id"]))
         except KeyError, ValueError, ValidationError:
             log.warning("item %s: the purge names no workspace or spec", item.id)
             return
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         if provider is not None:
             await provider.purge(item.org_id, instance_id)
         transport = self._transports.get(spec.mode)
@@ -556,14 +569,14 @@ class ExecutorRelayImpl(ExecutorInterface):
         digest, and its size, never its bytes, or by why none was kept."""
         try:
             spec = IsolationSpec.model_validate(item.payload["spec"])
-            session_id = UUID(str(item.payload["session_id"]))
+            agent_session_id = UUID(str(item.payload["agent_session_id"]))
             snapshot_id = UUID(str(item.payload["snapshot"]["id"]))
             kept_for = item.payload.get("kept_for")
-            owner = session_id if kept_for is None else UUID(str(kept_for))
+            owner = agent_session_id if kept_for is None else UUID(str(kept_for))
         except KeyError, TypeError, ValueError, ValidationError:
             await self._answer_snapshot(item.id, refused="the snapshot names no workspace")
             return
-        provider = self._workspaces.get(spec.mode)
+        provider = self._agent_workspaces.get(spec.mode)
         if provider is None or self._snapshots is None or spec.mode not in self._snapshot_modes():
             why = f"this host has not probed snapshots of a {spec.mode.value} workspace"
             await self._answer_snapshot(item.id, refused=why)
@@ -571,14 +584,14 @@ class ExecutorRelayImpl(ExecutorInterface):
         held = [
             instance
             for instance in await provider.held_instances()
-            if instance.id == session_id and instance.org_id == item.org_id
+            if instance.id == agent_session_id and instance.org_id == item.org_id
         ]
         if not held:
-            why = f"this host holds no live instance of session {session_id}'s workspace"
+            why = f"this host holds no live instance of session {agent_session_id}'s workspace"
             await self._answer_snapshot(item.id, refused=why)
             return
-        workspace = Workspace(
-            id=session_id, org_id=item.org_id, spec=spec, location=held[0].location
+        workspace = AgentWorkspace(
+            id=agent_session_id, org_id=item.org_id, spec=spec, location=held[0].location
         )
         try:
             if self._broker is not None:
@@ -601,7 +614,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             why = error.message if isinstance(error, InfraException) else str(error)
             await self._answer_snapshot(item.id, refused=why)
             return
-        log.info("item %s: session %s's snapshot is kept as %s", item.id, session_id, reference)
+        log.info(
+            "item %s: session %s's snapshot is kept as %s", item.id, agent_session_id, reference
+        )
         await self._answer_snapshot(item.id, reference=reference, digest=digest, size=size)
 
     async def _erase(self, item: ClaimedWorkView) -> None:
@@ -609,13 +624,13 @@ class ExecutorRelayImpl(ExecutorInterface):
         One that fails is not answered: its lease runs out, and it is
         claimed again."""
         try:
-            session_id = UUID(str(item.payload["session_id"]))
+            agent_session_id = UUID(str(item.payload["agent_session_id"]))
         except KeyError, ValueError:
             log.warning("item %s: the erase names no session", item.id)
             return
         if self._snapshots is not None:
-            await self._snapshots.erase(item.org_id, session_id)
-        log.info("item %s: the snapshots of session %s are erased", item.id, session_id)
+            await self._snapshots.erase(item.org_id, agent_session_id)
+        log.info("item %s: the snapshots of session %s are erased", item.id, agent_session_id)
         try:
             async with self._client() as client:
                 await client.answer_release(item.id)
@@ -718,7 +733,10 @@ class ExecutorRelayImpl(ExecutorInterface):
 
 
 async def _operate(
-    transport: TransportInterface, workspace: Workspace, detail: ExecDetailView, on_output: Sink
+    transport: TransportInterface,
+    workspace: AgentWorkspace,
+    detail: ExecDetailView,
+    on_output: Sink,
 ) -> dict[str, Any]:
     """The one operation the item names, through the host's transport."""
     request = detail.request

@@ -147,7 +147,7 @@ answer to a prepare binds it with `bind_workspace` (`prepared`). The
 evidence's executor makes an instance through
 `impl/instances.PlacedInstancesRelayedImpl`, which asks for it with
 `ask_instance`, reaches it through the exec relay's transport, and ends
-it with `ask_purge` and `purge_session`; the host answers a purge as it
+it with `ask_purge` and `purge_agent_session`; the host answers a purge as it
 answers a release (`released`). The runner's sweep reads the bindings
 (`bindings`), reaches a holding host through `holder`, and asks it to
 let an instance go with `ask_release`; the host answers with `released`.

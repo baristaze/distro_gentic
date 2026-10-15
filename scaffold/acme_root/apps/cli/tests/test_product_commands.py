@@ -76,8 +76,8 @@ PLATFORM_NAMES = sorted(typer.main.get_group(main.app).commands)
 
 
 def test_the_platform_holds_the_names_the_refusal_below_runs_over() -> None:
-    # A group, `session`, and a command, `login`: each name at the top is taken.
-    assert {"session", "agent-project", "agent-automation", "login", "listen"} <= set(
+    # A group, `agent-session`, and a command, `login`: each name at the top is taken.
+    assert {"agent-session", "agent-project", "agent-automation", "login", "listen"} <= set(
         PLATFORM_NAMES
     )
 
@@ -89,8 +89,8 @@ def test_a_group_reusing_a_platform_name_is_refused(name: str) -> None:
 
 
 def test_the_cli_refuses_to_start_on_a_group_reusing_a_platform_name(start: Start) -> None:
-    with pytest.raises(ValueError, match="command group session is the platform's"):
-        start(CommandGroup("session", reports))
+    with pytest.raises(ValueError, match="command group agent-session is the platform's"):
+        start(CommandGroup("agent-session", reports))
 
 
 def test_a_name_declared_twice_is_refused_and_nothing_is_mounted() -> None:

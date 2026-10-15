@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.work.types.tenant_cap import TenantCap
 from acme.om.work.types.work_item import WorkItem
 
@@ -71,6 +72,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def claim_next(
         self,
         lane: str,
@@ -82,7 +84,7 @@ class WorkStorageInterface(ABC):
         """Cross-tenant claim, one statement: the row on the lane that has been
         ready longest (the earliest `available_at`, then the lowest id),
         skipping locked ones, stamped with the claim, a freshly minted claim
-        token, and the lease. The claim is the platform's write, so it signs
+        token, and the lease. The claim is the system's write, so it signs
         `updated_by` with EMPTY_UUID.
 
         The same statement passes over every tenant that already holds its
@@ -156,6 +158,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def requeue_stale(
         self, now: datetime, stagger: timedelta, limit: int
     ) -> list[tuple[UUID, WorkItem]]:
@@ -169,11 +172,12 @@ class WorkStorageInterface(ABC):
         spread out as they did when the sweep ran per tenant. Returns each
         item it changed with its tenant, by id. The caller picks the bound:
         the sweep passes its batch size and calls again while a batch comes
-        back full. The requeue is the platform's write, like the claim, so it
+        back full. The requeue is the system's write, like the claim, so it
         signs `updated_by` with EMPTY_UUID and takes no principal."""
         ...
 
     @abstractmethod
+    @tenantless
     async def purge_items(self, before: datetime, limit: int) -> int:
         """Cross-tenant, for the sweep, in the system scope: deletes at most
         `limit` items done or failed whose last change was before `before`,
@@ -183,6 +187,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def oldest_ready_at(self, now: datetime) -> datetime | None:
         """Cross-tenant, for the sweep's backlog gauge, in the system scope:
         the `available_at` of the queued item that has been ready longest at
@@ -192,6 +197,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_failed_since(self, since: datetime) -> int:
         """Cross-tenant, for the sweep's dead-letter gauge, in the system
         scope: how many items are failed and were last changed after `since`,
@@ -200,6 +206,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_ready_by_lane(self, prefix: str, now: datetime) -> dict[str, int]:
         """Cross-tenant, for the sweep's gauge of the lanes' depth, in the
         system scope: the queued items ready at `now` on each lane whose name
@@ -207,6 +214,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_ready_ahead(self, item: WorkItem, now: datetime) -> int:
         """Cross-tenant, in the system scope, for the operator plane's read of
         one item's place in line: the queued items ready at `now` on its lane,

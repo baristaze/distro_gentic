@@ -8,6 +8,7 @@ from sqlalchemy.orm import aliased
 
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
+from acme.om.language_models.types.fill import ModelRole
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.storage.tables.benchmark_results import BenchmarkResults
 from acme.om.matrix.storage.tables.fill_overrides import FillOverrides
@@ -17,7 +18,6 @@ from acme.om.matrix.storage.tables.model_retirements import ModelRetirements
 from acme.om.matrix.types.matrix import MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOverride, MatrixPin
-from acme.om.models.types.fill import ModelRole
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
@@ -140,7 +140,7 @@ class MatrixTenantStoragePostgresImpl(PgStorageBase, MatrixTenantStorageInterfac
         )
         held = select(MatrixPins).where(
             MatrixPins.org_id == org_id,
-            MatrixPins.session_id == pin.session_id,
+            MatrixPins.agent_session_id == pin.agent_session_id,
             MatrixPins.fill_set_version == pin.fill_set_version,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
@@ -152,10 +152,10 @@ class MatrixTenantStoragePostgresImpl(PgStorageBase, MatrixTenantStorageInterfac
             raise PreconditionFailed(f"matrix pin {pin.id} is another tenant's")
         return to_model(row, MatrixPin)
 
-    async def read_pin(self, org_id: UUID, session_id: UUID) -> MatrixPin | None:
+    async def read_pin(self, org_id: UUID, agent_session_id: UUID) -> MatrixPin | None:
         stmt = (
             select(MatrixPins)
-            .where(MatrixPins.org_id == org_id, MatrixPins.session_id == session_id)
+            .where(MatrixPins.org_id == org_id, MatrixPins.agent_session_id == agent_session_id)
             .order_by(MatrixPins.fill_set_version.desc())
             .limit(1)
         )

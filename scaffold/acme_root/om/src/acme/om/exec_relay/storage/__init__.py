@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.exec_relay.types.exec import AgentWorkspaceBinding, ExecControl, ExecItem, ExecPart
 from acme.om.outbox.types.row import OutboxRow
 
@@ -23,13 +24,15 @@ class ExecRelayStorageInterface(ABC):
 
     @abstractmethod
     async def read_items_by_key(
-        self, org_id: UUID, session_id: UUID, key: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, key: UUID, limit: int
     ) -> list[ExecItem]:
         """The items of one call, oldest first, at most `limit`."""
         ...
 
     @abstractmethod
-    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+    async def read_running(
+        self, org_id: UUID, agent_session_id: UUID, limit: int
+    ) -> list[ExecItem]:
         """The session's items a host runs now, oldest first, at most
         `limit`."""
         ...
@@ -44,6 +47,7 @@ class ExecRelayStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_expired(self, now: datetime, limit: int) -> list[tuple[UUID, ExecItem]]:
         """Cross-tenant, for the sweep: running items whose lease ended
         before `now`, each with its tenant, at most `limit`."""
@@ -90,10 +94,11 @@ class ExecRelayStorageInterface(ABC):
 
     @abstractmethod
     async def read_binding(
-        self, org_id: UUID, session_id: UUID
+        self, org_id: UUID, agent_session_id: UUID
     ) -> AgentWorkspaceBinding | None: ...
 
     @abstractmethod
+    @tenantless
     async def read_bindings(
         self, after: UUID | None, limit: int
     ) -> list[tuple[UUID, AgentWorkspaceBinding]]:
@@ -103,7 +108,7 @@ class ExecRelayStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         """At most `limit` rows of each table that hold the session's: its
         items, their parts and controls, and its binding; returns how many
         went."""

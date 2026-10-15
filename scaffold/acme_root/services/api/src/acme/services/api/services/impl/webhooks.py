@@ -13,7 +13,7 @@ from acme.om.exceptions import ValidationFailed
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.rules import event_of
 from acme.services.api.services.webhooks import SignedDelivery, WebhooksServiceInterface
-from acme.services.api.types.webhooks import DeliveryReceivedView
+from acme.services.api.types.common import DeliveryReceivedView
 
 
 class WebhooksServiceImpl(WebhooksServiceInterface):

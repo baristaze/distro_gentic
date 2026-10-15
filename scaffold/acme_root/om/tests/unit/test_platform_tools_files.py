@@ -6,24 +6,25 @@ refused before it runs."""
 import json
 from pathlib import Path
 
-from contracts.doubles import context
-from contracts.factories import make_org
-from contracts.tools import HOST_SPEC, failure_of, result_text
 from unit.platform_tools import called, on_the_host
 
 from acme.om import base
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
 from acme.om.platform_agents.tools.files import MAX_MATCH_TEXT, SearchCodeImpl
-from acme.om.steps.types.header import ToolFailure
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import ToolInput
+
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.tools import HOST_SPEC, failure_of, result_text
 
 
 async def test_a_search_of_the_code_answers_within_its_bound(tmp_path: Path) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     root = Path(workspace.location)
     (root / "src").mkdir()
     for n in range(30):
@@ -65,7 +66,7 @@ async def test_a_search_of_the_code_answers_within_its_bound(tmp_path: Path) -> 
 async def test_a_search_of_the_code_reads_inside_the_workspace_alone(tmp_path: Path) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     (Path(workspace.location) / "kept.py").write_text("needle inside\n")
     (tmp_path / "beside.txt").write_text("needle outside\n")
     search = SearchCodeImpl()
@@ -80,7 +81,7 @@ async def test_a_search_of_the_code_reads_inside_the_workspace_alone(tmp_path: P
 async def test_a_search_of_one_file_answers_its_matching_line(tmp_path: Path) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     (Path(workspace.location) / "src").mkdir()
     (Path(workspace.location) / "src" / "cart.py").write_text("import os\nvalue = 'needle'\n")
     search = SearchCodeImpl()
@@ -99,7 +100,7 @@ class WatchedSearch(SearchCodeImpl):
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> base.Platform:
+    ) -> base.OmBase:
         self.runs += 1
         return await super().run(ctx, call_input, runtime)
 
@@ -109,7 +110,7 @@ async def test_a_pattern_of_more_than_one_line_is_refused_before_it_runs(
 ) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     (Path(workspace.location) / "kept.py").write_text("needle\nhaystack\n")
     search = WatchedSearch()
     for pattern in ("needle\n", "needle\r", "\nneedle", "needle\r\nhay"):

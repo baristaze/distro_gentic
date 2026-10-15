@@ -8,15 +8,18 @@ from acme.integrations.events import IntegrationInterface
 from acme.integrations.exceptions import DeliveryRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_steps import AgentStepsManagerInterface
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.header import Park, ParkReason
 from acme.om.agents import AgentsManagerInterface
-from acme.om.agents.impl.loop import HANDOVER_UNLOCK
+from acme.om.agents.impl.loop_take_over import HANDOVER_UNLOCK
 from acme.om.agents.loop_rules import open_loop
 from acme.om.attribution import AttributionManagerInterface, PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.base import OmBase, derived_id, new_id, utcnow
+from acme.om.change_events import ChangeEventsManagerInterface
+from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, RequestContext, TenantContext
-from acme.om.events import EventsManagerInterface
-from acme.om.events.manager import audit_event
 from acme.om.exceptions import Conflict, NotAuthorized, NotFound, ValidationFailed
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.rules import DELIVERED, Facts, effect_of, in_person, input_step
@@ -30,9 +33,6 @@ from acme.om.intake.types.link import (
     WorkBinding,
 )
 from acme.om.intake.types.route import Effect, Routed
-from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import Park, ParkReason
-from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 
@@ -48,7 +48,7 @@ called, so the id stays the one every release derived: an unlink run again
 writes no second entry."""
 
 
-class IntakeOptions(Platform):
+class IntakeOptions(OmBase):
     # The most rows of each kind one purge call takes.
     purge_batch: int = Field(default=1000, gt=0)
     # The most accounts one read of a user's links answers.
@@ -66,9 +66,9 @@ class IntakeManagerImpl(IntakeManagerInterface):
         sessions: AgentSessionsManagerInterface,
         agents: AgentsManagerInterface,
         attribution: AttributionManagerInterface,
-        steps: StepsManagerInterface,
+        steps: AgentStepsManagerInterface,
         tools: ToolsManagerInterface,
-        events: EventsManagerInterface,
+        events: ChangeEventsManagerInterface,
         tenancy: TenancyManagerInterface,
         principal_context: PrincipalContext,
         integrations: Callable[[str], IntegrationInterface],
@@ -82,7 +82,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         self._attribution = attribution
         self._steps = steps
         self._tools = tools
-        self._events = events
+        self._change_events = events
         self._tenancy = tenancy
         self._live = principal_context
         self._options = options
@@ -172,35 +172,43 @@ class IntakeManagerImpl(IntakeManagerInterface):
         return tuple(await self._storage.read_user_links(ctx.org_id, user_id, self._options.links))
 
     async def bind_work(
-        self, ctx: TenantContext, session_id: UUID, kind: HandleKind, handle: str
+        self, ctx: TenantContext, agent_session_id: UUID, kind: HandleKind, handle: str
     ) -> WorkBinding:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         binding = WorkBinding(
-            id=new_id(), created_at=self._clock(), session_id=session_id, kind=kind, handle=handle
+            id=new_id(),
+            created_at=self._clock(),
+            agent_session_id=agent_session_id,
+            kind=kind,
+            handle=handle,
         )
         held = await self._storage.create_binding(ctx.org_id, binding)
-        if held.session_id != session_id:
+        if held.agent_session_id != agent_session_id:
             raise Conflict(f"{kind.value} {handle} is another session's work")
         return held
 
-    async def get_work(self, ctx: TenantContext, session_id: UUID) -> tuple[WorkBinding, ...]:
+    async def get_work(self, ctx: TenantContext, agent_session_id: UUID) -> tuple[WorkBinding, ...]:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         bound = await self._storage.read_session_bindings(
-            ctx.org_id, session_id, self._options.work
+            ctx.org_id, agent_session_id, self._options.work
         )
         return tuple(bound)
 
     async def record_act(
-        self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
+        self, ctx: TenantContext, agent_session_id: UUID, integration: str, refs: Sequence[str]
     ) -> None:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
+        await self._sessions.get_agent_session(ctx, agent_session_id)
         now = self._clock()
         for ref in refs:
             act = PlatformAct(
-                id=new_id(), created_at=now, integration=integration, ref=ref, session_id=session_id
+                id=new_id(),
+                created_at=now,
+                integration=integration,
+                ref=ref,
+                agent_session_id=agent_session_id,
             )
             await self._storage.record_act(ctx.org_id, act)
 
@@ -224,7 +232,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         # With no act recorded, an event on a session's own work (its id,
         # its pull request, its branch) follows from that session, as a
         # check on its branch follows from its push.
-        cause = act.session_id if act is not None else None
+        cause = act.agent_session_id if act is not None else None
         if cause is None and session is not None:
             cause = session.id
         routed = routed.model_copy(
@@ -233,39 +241,39 @@ class IntakeManagerImpl(IntakeManagerInterface):
                 "platform": event.author.kind is AuthorKind.PLATFORM,
             }
         )
-        entry = audit_event(
+        entry = audit_change_event(
             ctx,
             derived_id(event.id, event.occurred_at, "intake:routed"),
             ROUTED,
             event.id,
             routed.model_dump(mode="json"),
         )
-        stored = await self._events.append_event(ctx, entry)
+        stored = await self._change_events.append_change_event(ctx, entry)
         # A redelivery meets the entry the first routing wrote, and answers it.
         return Routed.model_validate(stored.payload)
 
-    async def approve_from_chat(self, ctx: TenantContext, approval: ChatApproval) -> Step:
+    async def approve_from_chat(self, ctx: TenantContext, approval: ChatApproval) -> AgentStep:
         ctx.require(Permission.WRITE)
         member = await self._mapped(ctx, approval.integration, approval.external_id)
         facts = approval.model_dump(mode="json", exclude={"note"})
         if member is None:
-            await self._audit(ctx, REFUSED, approval.session_id, facts)
+            await self._audit(ctx, REFUSED, approval.agent_session_id, facts)
             raise NotAuthorized(
                 f"{approval.integration} account {approval.external_id} maps to no user"
             )
         try:
             decided = await self._tools.decide_call(
                 member,
-                approval.session_id,
+                approval.agent_session_id,
                 approval.request_seq,
                 approve=approval.approve,
                 note=approval.note,
             )
         except NotAuthorized:
-            await self._audit(member, REFUSED, approval.session_id, facts)
+            await self._audit(member, REFUSED, approval.agent_session_id, facts)
             raise
         # Audited as the mapped user: the entry's actor is theirs.
-        await self._audit(member, APPROVED, approval.session_id, facts)
+        await self._audit(member, APPROVED, approval.agent_session_id, facts)
         return decided
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -280,19 +288,19 @@ class IntakeManagerImpl(IntakeManagerInterface):
         """The session the event names: by its id, else its pull request,
         else its branch. One the tenant does not hold is none."""
         names = event.names
-        session_id = names.session_id
-        if session_id is None and names.pull_request is not None:
+        agent_session_id = names.agent_session_id
+        if agent_session_id is None and names.pull_request is not None:
             bound = await self._storage.read_binding(
                 ctx.org_id, HandleKind.PULL_REQUEST, names.pull_request
             )
-            session_id = None if bound is None else bound.session_id
-        if session_id is None and names.branch is not None:
+            agent_session_id = None if bound is None else bound.agent_session_id
+        if agent_session_id is None and names.branch is not None:
             bound = await self._storage.read_binding(ctx.org_id, HandleKind.BRANCH, names.branch)
-            session_id = None if bound is None else bound.session_id
-        if session_id is None:
+            agent_session_id = None if bound is None else bound.agent_session_id
+        if agent_session_id is None:
             return None
         try:
-            return await self._sessions.get_session(ctx, session_id)
+            return await self._sessions.get_agent_session(ctx, agent_session_id)
         except NotFound:
             return None
 
@@ -317,7 +325,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
             provenance=event.provenance,
             arrival=event.arrival.value,
             effect=effect,
-            session_id=session.id,
+            agent_session_id=session.id,
         )
         if effect is Effect.HAND_OVER:
             # The agent stands down, whoever pushed: its loop parks on a
@@ -340,7 +348,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         (stored,), _ = await self._sessions.receive(speaker, session.id, [step])
         return routed.model_copy(
             update={
-                "step_id": stored.id,
+                "agent_step_id": stored.id,
                 "principal_id": speaker.user_id if speaker is member else None,
             }
         )
@@ -369,37 +377,41 @@ class IntakeManagerImpl(IntakeManagerInterface):
             return False
         return True
 
-    async def _may_instruct(self, member: TenantContext, session_id: UUID) -> bool:
+    async def _may_instruct(self, member: TenantContext, agent_session_id: UUID) -> bool:
         """Whether a mapped member's word instructs the session: they steer
         it, and hold what each call it offers needs. A participant who does
         not steer it, or one who takes no part, speaks as data."""
         try:
-            await self._agents.require_instructor(member, session_id)
-            return await self._attribution.steers(member, session_id)
+            await self._agents.require_instructor(member, agent_session_id)
+            return await self._attribution.steers(member, agent_session_id)
         except NotAuthorized, NotFound:
             return False
 
-    async def _stand_down(self, ctx: TenantContext, session_id: UUID) -> None:
+    async def _stand_down(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         """The session's loop parks on a hand-over that names no holder: a
         new epoch fences the run that holds the loop, as a take-over's does,
         and a person who may write gives it back in person."""
-        epoch = await self._steps.begin_run(ctx, session_id)
-        history: list[Step] = []
+        epoch = await self._steps.begin_run(ctx, agent_session_id)
+        history: list[AgentStep] = []
         while True:
             after = history[-1].seq if history else 0
-            page = await self._steps.get_steps(ctx, session_id, after, self._options.page)
+            page = await self._steps.get_agent_steps(
+                ctx, agent_session_id, after, self._options.page
+            )
             history.extend(page.items)
             if not page.has_more or not page.items:
                 break
         loop = open_loop(history)
         loop_id = new_id() if loop is None else loop.loop_id
         park = Park(reason=ParkReason.HANDOVER, unlock=HANDOVER_UNLOCK)
-        await self._sessions.park(ctx, session_id, epoch, loop_id, park)
+        await self._sessions.park(ctx, agent_session_id, epoch, loop_id, park)
 
     async def _audit(
         self, ctx: TenantContext, kind: str, target: UUID, facts: dict[str, object]
     ) -> None:
-        await self._events.append_event(ctx, audit_event(ctx, new_id(), kind, target, facts))
+        await self._change_events.append_change_event(
+            ctx, audit_change_event(ctx, new_id(), kind, target, facts)
+        )
 
     async def _unlinked(self, ctx: TenantContext, link: IdentityLink) -> None:
         """A link's end, audited before its delete under an id the link
@@ -408,4 +420,6 @@ class IntakeManagerImpl(IntakeManagerInterface):
         An erasure is never without its record, nor recorded twice."""
         facts: dict[str, object] = {"integration": link.integration, "user_id": str(link.user_id)}
         entry_id = derived_id(link.id, link.created_at, UNLINK_SEED)
-        await self._events.append_event(ctx, audit_event(ctx, entry_id, UNLINKED, link.id, facts))
+        await self._change_events.append_change_event(
+            ctx, audit_change_event(ctx, entry_id, UNLINKED, link.id, facts)
+        )

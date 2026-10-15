@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionView, ExecutionView } from "@acme/client";
+import type { agent_sessions, evidence } from "@acme/client";
 import {
   allowed,
   composerOf,
@@ -15,7 +15,7 @@ import {
 
 const at = "2026-10-03T10:00:00Z";
 
-const session: AgentSessionView = {
+const session: agent_sessions.AgentSessionView = {
   id: "s1",
   root_id: "s1",
   parent_id: null,
@@ -51,9 +51,9 @@ describe("status and parks", () => {
 
 describe("runs, work product, and usage", () => {
   it("says a run's check, outcome, cases, and a twin's provenance beside it", () => {
-    const run: ExecutionView = {
+    const run: evidence.ExecutionView = {
       id: "r1",
-      step_id: "step-4",
+      agent_step_id: "step-4",
       validation_id: null,
       purpose: "work",
       check: "unit",

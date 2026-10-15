@@ -15,7 +15,7 @@ from acme.om.context import TenantContext
 
 class SessionAgentProjectsInterface(ABC):
     @abstractmethod
-    async def agent_project_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+    async def agent_project_of(self, ctx: TenantContext, agent_session_id: UUID) -> UUID | None:
         """The id of the agent project the session belongs to; None for a session
         of no agent project, never another agent project."""
         ...

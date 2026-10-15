@@ -2,10 +2,10 @@ from pydantic import ValidationError
 
 from acme.om.context import OperatorContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
+from acme.om.language_models.types.fill import Fill, ModelRole
 from acme.om.matrix import MatrixManagerInterface, MatrixOperatorManagerInterface
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow
 from acme.om.matrix.types.record import BenchmarkRun, ModelRef
-from acme.om.models.types.fill import Fill, ModelRole
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.types.matrix import (
     BenchmarkResultRequest,

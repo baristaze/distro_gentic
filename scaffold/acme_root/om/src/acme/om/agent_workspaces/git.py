@@ -11,7 +11,7 @@ so the transport refuses every command of a run that lost its claim."""
 
 from abc import ABC, abstractmethod
 
-from acme.infra.workspaces import Workspace
+from acme.infra.agent_workspaces import AgentWorkspace
 from acme.om.agent_workspaces.types.credential import FetchCredential
 from acme.om.agent_workspaces.types.source import (
     BranchState,
@@ -29,7 +29,7 @@ class WorkspaceGitInterface(ABC):
     async def sync(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
@@ -48,7 +48,7 @@ class WorkspaceGitInterface(ABC):
     async def cut(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         *,
@@ -62,7 +62,9 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
+    async def checkout(
+        self, ctx: TenantContext, workspace: AgentWorkspace, *, epoch: int
+    ) -> Checkout:
         """What the checkout says of itself: its HEAD and whether it holds
         uncommitted work. The agent can write all of it, so it tells only
         what was not delivered (`RepositoryReaderInterface`)."""
@@ -72,7 +74,7 @@ class WorkspaceGitInterface(ABC):
     async def snapshot(
         self,
         ctx: TenantContext,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         binding: RepositoryBinding,
         branch: str,
         ref: str,
@@ -89,7 +91,7 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def outgoing(
-        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, head: str, *, epoch: int
     ) -> bytes:
         """A git bundle the platform makes of the commit `head` and every
         commit it needs that the remote lacked when it was last brought in;
@@ -99,7 +101,7 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
+        self, ctx: TenantContext, workspace: AgentWorkspace, branch: str, head: str, *, epoch: int
     ) -> None:
         """Tells the checkout that the remote's `branch` is at `head` now, once
         source control pushed it, so a release keeps no snapshot of work the

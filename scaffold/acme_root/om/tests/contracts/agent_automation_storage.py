@@ -23,7 +23,11 @@ from acme.om.agent_automations.types.agent_automation import (
 )
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
+
 from contracts.racing import race
+
+INTERFACE = AgentAutomationStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -71,7 +75,7 @@ def make_agent_automation(limits: Limits = LIMITS) -> AgentAutomation:
     )
 
 
-def make_run(agent_automation_id: UUID, session_id: UUID | None = None) -> AgentAutomationRun:
+def make_run(agent_automation_id: UUID, agent_session_id: UUID | None = None) -> AgentAutomationRun:
     return AgentAutomationRun(
         id=new_id(),
         created_at=utcnow(),
@@ -80,7 +84,7 @@ def make_run(agent_automation_id: UUID, session_id: UUID | None = None) -> Agent
         status=RunStatus.REFUSED,
         refusal=Refusal.HOP_LIMIT,
         hop=1,
-        session_id=session_id,
+        agent_session_id=agent_session_id,
     )
 
 
@@ -201,9 +205,11 @@ class AgentAutomationStorageContract:
         agent_automation = make_agent_automation()
         await storage.create_agent_automation(org, agent_automation, ())
         now = utcnow()
-        session_id = new_id()
+        agent_session_id = new_id()
         started = await storage.admit(org, make_run(agent_automation.id), LIMITS, now)
-        with_session = started.model_copy(update={"session_id": session_id, "opened": True})
+        with_session = started.model_copy(
+            update={"agent_session_id": agent_session_id, "opened": True}
+        )
         await storage.write_run(org, with_session)
         refused = await storage.create_run(org, make_run(agent_automation.id))
         assert await storage.create_run(org, refused) == refused
@@ -212,7 +218,7 @@ class AgentAutomationStorageContract:
             started.id,
         ]
         assert await storage.read_open_runs(org, agent_automation.id, 10) == [with_session]
-        assert await storage.read_session_run(org, session_id) == with_session
+        assert await storage.read_session_run(org, agent_session_id) == with_session
         assert await storage.read_session_run(org, new_id()) is None
 
     async def test_an_agent_automation_is_written_in_place_and_never_brought_back(
@@ -322,9 +328,9 @@ class AgentAutomationStorageContract:
         agent_automation = make_agent_automation()
         await storage.create_agent_automation(org, agent_automation, ())
         run = await storage.admit(org, make_run(agent_automation.id), LIMITS, utcnow())
-        session_id = new_id()
-        await storage.write_run(org, run.model_copy(update={"session_id": session_id}))
-        assert await storage.read_session_run(new_id(), session_id) is None
+        agent_session_id = new_id()
+        await storage.write_run(org, run.model_copy(update={"agent_session_id": agent_session_id}))
+        assert await storage.read_session_run(new_id(), agent_session_id) is None
 
     async def test_a_run_reads_back_by_its_id_in_its_tenant_alone(
         self, storage: AgentAutomationStorageInterface

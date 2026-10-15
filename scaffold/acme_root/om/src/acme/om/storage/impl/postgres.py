@@ -25,6 +25,8 @@ from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_projects.storage.impl.postgres import AgentProjectStoragePostgresImpl
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
+from acme.om.agent_steps.storage import AgentStepStorageInterface
+from acme.om.agent_steps.storage.impl.postgres import AgentStepStoragePostgresImpl
 from acme.om.agent_workspaces.storage import AgentWorkspaceStorageInterface
 from acme.om.agent_workspaces.storage.impl.postgres import AgentWorkspaceStoragePostgresImpl
 from acme.om.agents.storage import AgentStorageInterface
@@ -33,17 +35,12 @@ from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.benchmarks.storage.impl.postgres import BenchmarkStoragePostgresImpl
-from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
-from acme.om.budgets.storage.impl.postgres import (
-    BudgetStoragePostgresImpl,
-    LedgerStoragePostgresImpl,
-)
+from acme.om.change_events.storage import ChangeEventStorageInterface
+from acme.om.change_events.storage.impl.postgres import ChangeEventStoragePostgresImpl
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.storage.impl.postgres import CloudPoolStoragePostgresImpl
 from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.connectors.storage.impl.postgres import ConnectorStoragePostgresImpl
-from acme.om.events.storage import EventStorageInterface
-from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
@@ -54,6 +51,8 @@ from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
+from acme.om.language_models.storage import FillSetStorageInterface
+from acme.om.language_models.storage.impl.postgres import FillSetStoragePostgresImpl
 from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.leases.storage.impl.postgres import LeasesStoragePostgresImpl
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
@@ -63,8 +62,6 @@ from acme.om.matrix.storage.impl.postgres import (
 )
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
-from acme.om.models.storage import FillSetStorageInterface
-from acme.om.models.storage.impl.postgres import FillSetStoragePostgresImpl
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.postgres import OrchestrationsStoragePostgresImpl
 from acme.om.outbox.storage import OutboxStorageInterface
@@ -79,8 +76,11 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
-from acme.om.steps.storage import StepStorageInterface
-from acme.om.steps.storage.impl.postgres import StepStoragePostgresImpl
+from acme.om.spend_budgets.storage import LedgerStorageInterface, SpendBudgetStorageInterface
+from acme.om.spend_budgets.storage.impl.postgres import (
+    LedgerStoragePostgresImpl,
+    SpendBudgetStoragePostgresImpl,
+)
 from acme.om.storage.impl.pg_base import LoginSessions, ScopedConnection, SessionFactory
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.root import StorageInterface
@@ -219,28 +219,29 @@ class StoragePostgresImpl(StorageInterface):
         )
         self._engines = engines
         self._sessions = sessions
+        self._change_events = ChangeEventStoragePostgresImpl(sessions)
+        self._idempotency = IdempotencyStoragePostgresImpl(sessions)
+        self._leases = LeasesStoragePostgresImpl(sessions)
+        self._media = MediaStoragePostgresImpl(sessions)
+        self._orchestrations = OrchestrationsStoragePostgresImpl(sessions)
+        self._outbox = OutboxStoragePostgresImpl(sessions)
         self._tenancy = TenancyStoragePostgresImpl(sessions)
         self._work = WorkStoragePostgresImpl(sessions)
-        self._media = MediaStoragePostgresImpl(sessions)
-        self._idempotency = IdempotencyStoragePostgresImpl(sessions)
-        self._events = EventStoragePostgresImpl(sessions)
-        self._outbox = OutboxStoragePostgresImpl(sessions)
-        self._orchestrations = OrchestrationsStoragePostgresImpl(sessions)
-        self._leases = LeasesStoragePostgresImpl(sessions)
-        self._steps = StepStoragePostgresImpl(sessions)
+        # A copy adds its entries below this line.
+        self._agent_steps = AgentStepStoragePostgresImpl(sessions)
         self._agent_sessions = AgentSessionStoragePostgresImpl(sessions)
         self._agents = AgentStoragePostgresImpl(sessions)
         self._attribution = AttributionStoragePostgresImpl(sessions)
         self._privacy = PrivacyStoragePostgresImpl(sessions)
-        self._agent_projects = AgentProjectStoragePostgresImpl(sessions)
-        self._retention = RetentionStoragePostgresImpl(sessions)
-        self._budgets = BudgetStoragePostgresImpl(sessions)
+        self._spend_budgets = SpendBudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
-        self._spend_accounts = SpendAccountStoragePostgresImpl(sessions)
-        self._money_ledger = SpendLedgerStoragePostgresImpl(sessions)
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
+        self._agent_projects = AgentProjectStoragePostgresImpl(sessions)
+        self._retention = RetentionStoragePostgresImpl(sessions)
+        self._spend_accounts = SpendAccountStoragePostgresImpl(sessions)
+        self._money_ledger = SpendLedgerStoragePostgresImpl(sessions)
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
@@ -259,32 +260,55 @@ class StoragePostgresImpl(StorageInterface):
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
 
+    async def healthcheck(self) -> bool:
+        """A connect and a `SELECT 1` on every engine, each under the bounds its
+        own pool declares: a checkout waits at most the checkout bound and the
+        statement at most its deadline, so a saturated or unreachable pool
+        answers false instead of holding the caller. The deadline here is the
+        sum of the two, the worst a healthy answer can cost, and it is not a
+        knob: the bounds it is made of already are."""
+        try:
+            for (_, pool), engine in self._engines.items():
+                deadline = pool.checkout_timeout_seconds + pool.statement_timeout_seconds
+                async with asyncio.timeout(deadline):
+                    async with engine.connect() as connection:
+                        await connection.execute(text("SELECT 1"))
+        except Exception:
+            return False
+        return True
+
+    async def close(self) -> None:
+        for engine in self._engines.values():
+            await engine.dispose()
+
+    def get_change_event_storage(self) -> ChangeEventStorageInterface:
+        return self._change_events
+
+    def get_idempotency_storage(self) -> IdempotencyStorageInterface:
+        return self._idempotency
+
+    def get_lease_storage(self) -> LeasesStorageInterface:
+        return self._leases
+
+    def get_media_storage(self) -> MediaStorageInterface:
+        return self._media
+
+    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
+        return self._orchestrations
+
+    def get_outbox_storage(self) -> OutboxStorageInterface:
+        return self._outbox
+
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
 
     def get_work_storage(self) -> WorkStorageInterface:
         return self._work
 
-    def get_media_storage(self) -> MediaStorageInterface:
-        return self._media
+    # A copy adds its entries below this line.
 
-    def get_idempotency_storage(self) -> IdempotencyStorageInterface:
-        return self._idempotency
-
-    def get_event_storage(self) -> EventStorageInterface:
-        return self._events
-
-    def get_outbox_storage(self) -> OutboxStorageInterface:
-        return self._outbox
-
-    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
-        return self._orchestrations
-
-    def get_lease_storage(self) -> LeasesStorageInterface:
-        return self._leases
-
-    def get_step_storage(self) -> StepStorageInterface:
-        return self._steps
+    def get_agent_step_storage(self) -> AgentStepStorageInterface:
+        return self._agent_steps
 
     def get_agent_session_storage(self) -> AgentSessionStorageInterface:
         return self._agent_sessions
@@ -298,23 +322,11 @@ class StoragePostgresImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
-    def get_agent_project_storage(self) -> AgentProjectStorageInterface:
-        return self._agent_projects
-
-    def get_retention_storage(self) -> RetentionStorageInterface:
-        return self._retention
-
-    def get_budget_storage(self) -> BudgetStorageInterface:
-        return self._budgets
+    def get_spend_budget_storage(self) -> SpendBudgetStorageInterface:
+        return self._spend_budgets
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
-
-    def get_spend_account_storage(self) -> SpendAccountStorageInterface:
-        return self._spend_accounts
-
-    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface:
-        return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets
@@ -324,6 +336,18 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
+
+    def get_agent_project_storage(self) -> AgentProjectStorageInterface:
+        return self._agent_projects
+
+    def get_retention_storage(self) -> RetentionStorageInterface:
+        return self._retention
+
+    def get_spend_account_storage(self) -> SpendAccountStorageInterface:
+        return self._spend_accounts
+
+    def get_spend_ledger_storage(self) -> SpendLedgerStorageInterface:
+        return self._money_ledger
 
     def get_evidence_storage(self) -> EvidenceStorageInterface:
         return self._evidence
@@ -375,24 +399,3 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface:
         return self._matrix_tenants
-
-    async def healthcheck(self) -> bool:
-        """A connect and a `SELECT 1` on every engine, each under the bounds its
-        own pool declares: a checkout waits at most the checkout bound and the
-        statement at most its deadline, so a saturated or unreachable pool
-        answers false instead of holding the caller. The deadline here is the
-        sum of the two, the worst a healthy answer can cost, and it is not a
-        knob: the bounds it is made of already are."""
-        try:
-            for (_, pool), engine in self._engines.items():
-                deadline = pool.checkout_timeout_seconds + pool.statement_timeout_seconds
-                async with asyncio.timeout(deadline):
-                    async with engine.connect() as connection:
-                        await connection.execute(text("SELECT 1"))
-        except Exception:
-            return False
-        return True
-
-    async def close(self) -> None:
-        for engine in self._engines.values():
-            await engine.dispose()

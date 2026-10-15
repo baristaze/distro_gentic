@@ -60,19 +60,19 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.infra.exceptions import InfraException
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
-from acme.infra.workspaces import (
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceProviderInterface,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
     ResourceLimits,
-    Workspace,
-    WorkspaceProviderInterface,
 )
+from acme.infra.exceptions import InfraException
+from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
 from acme.om.agent_workspaces.placed import PlacedInstancesInterface
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface
@@ -144,14 +144,14 @@ isolation, whose checks run as the executor's own."""
 Bases = Callable[[TenantContext, IsolationSpec], Awaitable[bytes]]
 """The snapshot of the base a spec names, as its provider starts a
 workspace from it: read where the tenant keeps it, or built once
-(`WorkspaceBases.archive`)."""
+(`AgentWorkspaceBases.archive`)."""
 PLACED = "pool"
 """What a record names as the host and the image of an instance a host of
 a pinned session's pool made: the pool's, which the executor does not
 choose. On a base, the image is the base's, which the executor asked for."""
 
 
-class ExecutorOptions(Platform):
+class ExecutorOptions(OmBase):
     # The isolation each instance of the cloud's is made at: a container
     # with no egress, as the cloud's executors are. One on a host of a pinned
     # session's pool is made to the session's own isolation instead.
@@ -183,7 +183,7 @@ SEAL = RecordSeal(seal=_kept_nowhere, open=_kept_nowhere)
 class ExecutorAgentWorkspacesImpl(ExecutorInterface):
     def __init__(
         self,
-        provider: WorkspaceProviderInterface,
+        provider: AgentWorkspaceProviderInterface,
         transport: TransportInterface,
         tree: Tree,
         pinned: Pinned,
@@ -206,11 +206,11 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         return Offer(capabilities=self._options.capabilities, schemas=SCHEMAS)
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
-        pin = await self._pinned(ctx, request.session_id)
+        pin = await self._pinned(ctx, request.agent_session_id)
         walled = pin is not None and pin.walled
         if walled and self._placed is None:
             raise Unavailable(
-                f"session {request.session_id} runs inside its tenant's wall, and this "
+                f"session {request.agent_session_id} runs inside its tenant's wall, and this "
                 "process reaches no host of its pool, so its checks never run here"
             )
         base = None if pin is None else pin.spec.base
@@ -218,7 +218,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         built = not walled and base is not None and bool(base.setup)
         if built and self._bases is None:
             raise Unavailable(
-                f"session {request.session_id} is pinned to a base with setup, and this "
+                f"session {request.agent_session_id} is pinned to a base with setup, and this "
                 "process reads no base, so its checks never run on the bare image"
             )
         named = (request.agent_project, request.source_agent_project or request.agent_project)
@@ -275,7 +275,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
             try:
                 workspace, transport = await self._placed.make(
                     ctx,
-                    request.session_id,
+                    request.agent_session_id,
                     instance,
                     spec,
                     self._clock() + self._options.setup_time,
@@ -298,7 +298,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
     async def _checks(
         self,
         transport: TransportInterface,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: ExecutionRequest,
         tree: bytes,
         prepared: Prepared,
@@ -365,7 +365,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
     async def _trial(
         self,
         transport: TransportInterface,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         request: ExecutionRequest,
         check: CheckDeclaration,
         prepared: Prepared,
@@ -410,7 +410,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                 records = collect(
                     stream,
                     executor="executor",
-                    session_id=request.session_id,
+                    agent_session_id=request.agent_session_id,
                     agent_project=request.agent_project,
                     purpose=request.purpose,
                     validation_id=new_id(),
@@ -426,14 +426,14 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         log.warning(
             "a trial of %s for session %s ran to no verdict: %s",
             check.name,
-            request.session_id,
+            request.agent_session_id,
             why[:300],
         )
         stream = _errored(check, request.version, prepared, started, self._clock())
         (record,) = collect(
             stream,
             executor="executor",
-            session_id=request.session_id,
+            agent_session_id=request.agent_session_id,
             agent_project=request.agent_project,
             purpose=request.purpose,
             validation_id=new_id(),
@@ -445,7 +445,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
     async def _command(
         self,
         transport: TransportInterface,
-        workspace: Workspace,
+        workspace: AgentWorkspace,
         argv: tuple[str, ...],
         cwd: str,
         time: timedelta,
@@ -462,7 +462,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         return await transport.run(workspace, command, seal=SEAL)
 
     async def _seen(
-        self, transport: TransportInterface, workspace: Workspace, paths: tuple[str, ...]
+        self, transport: TransportInterface, workspace: AgentWorkspace, paths: tuple[str, ...]
     ) -> str | None:
         """The digest `SEEN` answers for `paths`, in the tree; None when there
         are none, or when one is gone or the instance cannot tell."""

@@ -6,13 +6,13 @@ from sqlalchemy import Update, case, delete, exists, func, literal, or_, select,
 
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.tables.agent_sessions import AgentSessions
-from acme.om.agent_sessions.types.agent_session import AgentSession, Among, SessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus, Among
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.attribution.types.authority import Visibility
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.steps.types.header import ParkReason
 from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
@@ -35,14 +35,14 @@ def cas_statement(org_id: UUID, session: AgentSession, expected_version: int) ->
 
 
 class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterface):
-    async def create_session(
+    async def create_agent_session(
         self, org_id: UUID, session: AgentSession, outbox_rows: tuple[OutboxRow, ...]
     ) -> bool:
         return await self._insert(AgentSessions, org_id, session, outbox_rows)
 
-    async def read_session(self, org_id: UUID, session_id: UUID) -> AgentSession | None:
+    async def read_agent_session(self, org_id: UUID, agent_session_id: UUID) -> AgentSession | None:
         stmt = select(AgentSessions).where(
-            AgentSessions.org_id == org_id, AgentSessions.id == session_id
+            AgentSessions.org_id == org_id, AgentSessions.id == agent_session_id
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -60,10 +60,10 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         async with self._session_for(stmt, org_id=org_id) as session:
             return [to_model(row, AgentSession) for row in (await session.execute(stmt)).scalars()]
 
-    async def read_sessions(
+    async def read_agent_sessions(
         self,
         org_id: UUID,
-        status: SessionStatus | None,
+        status: AgentSessionStatus | None,
         after: UUID | None,
         limit: int,
         *,
@@ -91,7 +91,7 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         async with self._session_for(stmt, org_id=org_id) as session:
             return [to_model(row, AgentSession) for row in (await session.execute(stmt)).scalars()]
 
-    async def write_session(
+    async def write_agent_session(
         self,
         org_id: UUID,
         session: AgentSession,
@@ -135,7 +135,7 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         stmt = (
             select(reason, age, func.count())
             .where(
-                AgentSessions.status == SessionStatus.PARKED.value,
+                AgentSessions.status == AgentSessionStatus.PARKED.value,
                 AgentSessions.deleted_at.is_(None),
             )
             .group_by(reason, age)
@@ -153,7 +153,7 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         stmt = (
             select(AgentSessions)
             .where(
-                AgentSessions.status == SessionStatus.PENDING.value,
+                AgentSessions.status == AgentSessionStatus.PENDING.value,
                 AgentSessions.deleted_at.is_(None),
                 AgentSessions.updated_at >= after,
                 AgentSessions.updated_at < before,
@@ -168,21 +168,21 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
                 for row in (await session.execute(stmt)).scalars()
             ]
 
-    async def tree_holds_others(self, org_id: UUID, root_id: UUID, session_id: UUID) -> bool:
+    async def tree_holds_others(self, org_id: UUID, root_id: UUID, agent_session_id: UUID) -> bool:
         stmt = select(
             exists().where(
                 AgentSessions.org_id == org_id,
                 AgentSessions.root_id == root_id,
-                AgentSessions.id != session_id,
+                AgentSessions.id != agent_session_id,
             )
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             return bool((await session.execute(stmt)).scalar_one())
 
-    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+    async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
         stmt = delete(AgentSessions).where(
             AgentSessions.org_id == org_id,
-            AgentSessions.id == session_id,
+            AgentSessions.id == agent_session_id,
             AgentSessions.purge_started_at.is_not(None),
         )
         async with self._purge_session_for(stmt, org_id=org_id) as session:
@@ -190,18 +190,18 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
             await session.commit()
             return purged > 0
 
-    async def read_tenant_sessions(self, org_id: UUID, limit: int) -> list[UUID]:
+    async def read_tenant_agent_sessions(self, org_id: UUID, limit: int) -> list[UUID]:
         stmt = select(AgentSessions.id).where(AgentSessions.org_id == org_id).limit(limit)
         async with self._session_for(stmt, org_id=org_id) as session:
             return list((await session.execute(stmt)).scalars())
 
-    async def purge_tenant(self, org_id: UUID, session_ids: Sequence[UUID]) -> int:
-        if not session_ids:
+    async def purge_tenant(self, org_id: UUID, agent_session_ids: Sequence[UUID]) -> int:
+        if not agent_session_ids:
             return 0
         # The funnel holds the tenant's purge lock, so two workers' deletes
         # of one tenant take turns (`hold_purge`).
         stmt = delete(AgentSessions).where(
-            AgentSessions.org_id == org_id, AgentSessions.id.in_(session_ids)
+            AgentSessions.org_id == org_id, AgentSessions.id.in_(agent_session_ids)
         )
         async with self._purge_session_for(stmt, org_id=org_id) as session:
             purged = deleted(await session.execute(stmt))

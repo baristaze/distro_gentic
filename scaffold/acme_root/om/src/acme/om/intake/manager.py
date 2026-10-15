@@ -11,11 +11,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.context import RequestContext, TenantContext
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.context import RequestContext, TenantContext, transition
 from acme.om.intake.types.event import ChatApproval, FeedbackEvent
 from acme.om.intake.types.link import HandleKind, IdentityLink, Installation, WorkBinding
 from acme.om.intake.types.route import Routed
-from acme.om.steps.types.step import Step
 
 
 class IntakeManagerInterface(ABC):
@@ -34,10 +34,11 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def tenant_of(
         self, rctx: RequestContext, integration: str, installation: str
     ) -> UUID | None:
-        """Platform-internal: a system's delivery names no tenant, so the
+        """System-internal: a system's delivery names no tenant, so the
         ingress reads the one that connected the installation it came
         through, before any tenant is known, and places the delivery there.
         None when no tenant did."""
@@ -65,7 +66,7 @@ class IntakeManagerInterface(ABC):
 
     @abstractmethod
     async def forget_member(self, ctx: TenantContext, user_id: UUID) -> int:
-        """Platform-internal: `MEMBER_LEFT`'s. Every account linked to a user
+        """System-internal: `MEMBER_LEFT`'s. Every account linked to a user
         who holds no place in the tenant any more gone, each audited as
         unlinked, so an erased person's outside ids stay linked nowhere and
         the account is free to link again. Each audit is written before its
@@ -81,7 +82,7 @@ class IntakeManagerInterface(ABC):
 
     @abstractmethod
     async def bind_work(
-        self, ctx: TenantContext, session_id: UUID, kind: HandleKind, handle: str
+        self, ctx: TenantContext, agent_session_id: UUID, kind: HandleKind, handle: str
     ) -> WorkBinding:
         """Records that a pull request or a branch is the session's work, so
         the events that name it find the session. One session a handle: one
@@ -90,7 +91,7 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_work(self, ctx: TenantContext, session_id: UUID) -> tuple[WorkBinding, ...]:
+    async def get_work(self, ctx: TenantContext, agent_session_id: UUID) -> tuple[WorkBinding, ...]:
         """The pull requests and branches bound to a session as its work,
         oldest first, at most the options' bound. A session the tenant does
         not hold is `NotFound`."""
@@ -98,7 +99,7 @@ class IntakeManagerInterface(ABC):
 
     @abstractmethod
     async def record_act(
-        self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
+        self, ctx: TenantContext, agent_session_id: UUID, integration: str, refs: Sequence[str]
     ) -> None:
         """Records an act a session made through the platform's account, by
         the integration's names for what it made (a comment's id, a commit),
@@ -122,7 +123,7 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def approve_from_chat(self, ctx: TenantContext, approval: ChatApproval) -> Step:
+    async def approve_from_chat(self, ctx: TenantContext, approval: ChatApproval) -> AgentStep:
         """A person's decision on a call, clicked in chat: it counts only when
         the chat account maps to a user of the tenant whose role may decide
         the call's class, and it is decided, and audited, as that user. An

@@ -1,10 +1,11 @@
 """The platform's case of the ledger contract, over the memory impl."""
 
 import pytest
-from contracts.platform_ledger_storage import PlatformLedgerStorageContract
 
-from acme.om.budgets.storage import LedgerStorageInterface
-from acme.om.budgets.storage.impl.memory import LedgerStorageMemoryImpl
+from acme.om.spend_budgets.storage import LedgerStorageInterface
+from acme.om.spend_budgets.storage.impl.memory import LedgerStorageMemoryImpl
+
+from contracts.platform_ledger_storage import PlatformLedgerStorageContract
 
 
 class TestPlatformLedgerStorageMemory(PlatformLedgerStorageContract):

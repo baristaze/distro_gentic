@@ -1,0 +1,1132 @@
+{
+  "components": {
+    "schemas": {
+      "ControlKind": {
+        "description": "What one line of a host's control stream says.",
+        "enum": [
+          "wake",
+          "ping",
+          "cancel",
+          "interrupt",
+          "deadline",
+          "revoke"
+        ],
+        "title": "ControlKind",
+        "type": "string"
+      },
+      "ControlView": {
+        "description": "One line of a host's control stream. `wake` asks it to claim now,\n`ping` keeps the stream open, and the rest end the item named at once.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ControlKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ControlView",
+        "type": "object"
+      },
+      "CrossingBody": {
+        "additionalProperties": false,
+        "description": "What the sender declares of the bytes it sends: what they are, their\nSHA-256 in hex, and their size.",
+        "properties": {
+          "kind": {
+            "$ref": "retention.json#/components/schemas/CrossingKind"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "sha256",
+          "size"
+        ],
+        "title": "CrossingBody",
+        "type": "object"
+      },
+      "ExecDetailView": {
+        "description": "An item the host holds: the call, the workspace, and the operation.",
+        "properties": {
+          "agent_session_id": {
+            "format": "uuid",
+            "title": "Agent Session Id",
+            "type": "string"
+          },
+          "call_id": {
+            "format": "uuid",
+            "title": "Call Id",
+            "type": "string"
+          },
+          "deadline": {
+            "format": "date-time",
+            "title": "Deadline",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "item_id",
+          "call_id",
+          "org_id",
+          "agent_session_id",
+          "effect",
+          "deadline",
+          "epoch",
+          "spec",
+          "location",
+          "request"
+        ],
+        "title": "ExecDetailView",
+        "type": "object"
+      },
+      "ExecLeaseView": {
+        "properties": {
+          "lease_expires_at": {
+            "format": "date-time",
+            "title": "Lease Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_expires_at"
+        ],
+        "title": "ExecLeaseView",
+        "type": "object"
+      },
+      "ExecState": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "interrupted"
+        ],
+        "title": "ExecState",
+        "type": "string"
+      },
+      "OutputStream": {
+        "enum": [
+          "stdout",
+          "stderr"
+        ],
+        "title": "OutputStream",
+        "type": "string"
+      },
+      "PartRequest": {
+        "additionalProperties": false,
+        "description": "One part of an item's output, in the order the host read it.",
+        "properties": {
+          "crossing": {
+            "$ref": "#/components/schemas/CrossingBody"
+          },
+          "data": {
+            "maxLength": 90000,
+            "title": "Data",
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 0.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "stream": {
+            "$ref": "#/components/schemas/OutputStream"
+          }
+        },
+        "required": [
+          "seq",
+          "stream",
+          "data",
+          "crossing"
+        ],
+        "title": "PartRequest",
+        "type": "object"
+      },
+      "PrepareRequest": {
+        "additionalProperties": false,
+        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two. A refusal is\n`lost` when the snapshot the host was asked to start it from is not in\nits store, or is altered there, and `unbuilt` when the base the\nworkspace starts from failed to build on the host.",
+        "properties": {
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "lost": {
+            "default": false,
+            "title": "Lost",
+            "type": "boolean"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          },
+          "unbuilt": {
+            "default": false,
+            "title": "Unbuilt",
+            "type": "boolean"
+          }
+        },
+        "title": "PrepareRequest",
+        "type": "object"
+      },
+      "PreparedView": {
+        "description": "Whether the session's workspace is now the one this host made. When\nit is not, another host of the pool holds it, and this host lets its\nown go.",
+        "properties": {
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "held"
+        ],
+        "title": "PreparedView",
+        "type": "object"
+      },
+      "ResultRequest": {
+        "additionalProperties": false,
+        "description": "How an item ended: the JSON of an exec result, in base64.",
+        "properties": {
+          "crossing": {
+            "$ref": "#/components/schemas/CrossingBody"
+          },
+          "data": {
+            "maxLength": 16000000,
+            "title": "Data",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "crossing"
+        ],
+        "title": "ResultRequest",
+        "type": "object"
+      },
+      "SnapshotRequest": {
+        "additionalProperties": false,
+        "description": "A host's answer to a snapshot it claimed: kept in its own store, under\nthe reference the store knows it by, with the SHA-256 of its bytes and\ntheir size, never the bytes; or why it kept none. Exactly one of the\ntwo.",
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "title": "SnapshotRequest",
+        "type": "object"
+      },
+      "StopKind": {
+        "description": "What the control stream tells a host about one item it holds. Each\nends the command at once.",
+        "enum": [
+          "cancel",
+          "interrupt",
+          "deadline",
+          "revoke"
+        ],
+        "title": "StopKind",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "Acme API: exec_relay",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/hosts/me/control": {
+      "get": {
+        "description": "The host's control stream, after the message `after` names.",
+        "operationId": "control",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlView"
+                }
+              },
+              "application/x-ndjson": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}": {
+      "get": {
+        "description": "What the host runs for an item it holds: the command or the file\noperation, opened, with its deadline, its writer epoch, and where the\nworkspace is.",
+        "operationId": "detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecDetailView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/lease": {
+      "post": {
+        "description": "Renews the host's lease on the item while it runs.",
+        "operationId": "extend",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecLeaseView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extend",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/parts": {
+      "post": {
+        "description": "One part of the item's output. A part sent again lands once.",
+        "operationId": "push_part",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push Part",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/result": {
+      "post": {
+        "description": "How the item ended, stored under its call's key. The first\nsettlement wins: one its lease or a stop settled already is refused.",
+        "operationId": "push_result",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push Result",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/workspaces/{item_id}": {
+      "post": {
+        "description": "The host's answer to a prepare it claimed: where the workspace it made\nis, which binds the session to it, or why it made none, which hands the\nwork back to its pool after a wait.",
+        "operationId": "prepared",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prepared",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/workspaces/{item_id}/released": {
+      "post": {
+        "description": "The host's answer to a release, a purge, or an erase it claimed: what\nit names is gone. A release keeps the workspace's files on the host; a\npurge keeps none, and an erase lets the session's snapshots go from the\nhost's store.",
+        "operationId": "released",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Released",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/workspaces/{item_id}/snapshot": {
+      "post": {
+        "description": "The host's answer to a snapshot it claimed: kept in its own store, by\nthe reference the store knows it by and the digest of its bytes, which\nthe platform records, never the bytes; or why it kept none.",
+        "operationId": "snapshotted",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Snapshotted",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "The exec relay's routes: a host's own calls about the `exec` items it holds,\nand its answers to a workspace it was asked to prepare or to release.\nEach is a request the host opens from inside its wall with its own\ncredential; the platform calls into no host. Its control stream, the one\nlong-lived connection it holds, is `realtime/control.py`. Each function is\none call into the exec relay service.",
+      "name": "exec_relay"
+    }
+  ]
+}

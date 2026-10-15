@@ -162,7 +162,9 @@ jobs:
         run: |
           git rev-parse -q --verify HEAD > /dev/null || { git add -A && git commit -qm "the copy"; }
           base="$(git rev-parse HEAD)"
-          down="$(basename "$(ls om/migrations/versions/queue/*.py | sort | tail -1)" | cut -d_ -f1)"
+          # The head by the chain's parents: a stamp orders nothing, and the
+          # platform's folded revision sorts below the engine's it follows.
+          down="$(uv run --package distro-om python -c 'from distro.om.storage.migrate import head; from distro.om.storage.roles import DatabaseRole; print(head(DatabaseRole.QUEUE))')"
           printf 'revision = "209912310000"\ndown_revision = "%s"\nbranch_labels = None\ndepends_on = None\n\n\ndef upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n' "$down" \
             > om/migrations/versions/queue/209912310000_nothing.py
           git add om/migrations && git commit -qm "a revision that changes nothing"
@@ -184,13 +186,22 @@ jobs:
       fail-fast: false
       matrix:
         # The list in scaffold/acme_root/.github/workflows/ci.yml.
-        image: [api, maintenance, session-runner, portal]
+        image: [api, maintenance, agent-session-runner, portal]
     env:
       COPY: ${{ github.workspace }}/../distro
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # new.py formats the copy by the ruff its uv.lock names, through uv.
+      - name: read the tool pins
+        id: pins
+        run: echo "uv=$(sed -n 's|^uv==||p' .github/pins/requirements.txt)" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ steps.pins.outputs.uv }}
+          enable-cache: true
+          cache-dependency-glob: scaffold/acme_root/uv.lock
       - name: copy the scaffold under a name of its own
         run: python3 scaffold/new.py "$COPY"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

@@ -9,10 +9,10 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from acme.om.agent_steps.types.content import MAX_NAME, Stored
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.base import Created, Identifiable, OmBase, Trackable
 from acme.om.levers.types.lever import LeverFinding
-from acme.om.steps.types.content import MAX_NAME, Stored
 from acme.om.tools.types.policy import Decision
 from acme.om.tools.types.tool import CLASS_NAME, TOOL_NAME
 
@@ -25,7 +25,7 @@ MAX_DESCRIPTION = 1024
 MAX_BODY = 50_000
 
 
-class AgentPlaybookGate(Platform):
+class AgentPlaybookGate(OmBase):
     """One gate: the calls it selects, by tool or by class, and what they
     need. A gate asks for a person's approval or denies; it never allows,
     so it can only narrow what the session's policy lets run."""
@@ -43,7 +43,7 @@ class AgentPlaybookGate(Platform):
         return self
 
 
-class AgentPlaybookDraft(Platform):
+class AgentPlaybookDraft(OmBase):
     """What a person publishes: the brief's name and description, its body
     (what is needed, the steps, the safety requirements, the success
     measures, what is forbidden), and its gates."""
@@ -77,7 +77,7 @@ class AgentPlaybookInvocation(Identifiable, Created):
     with, its kind's pin, whose text is the session's standing text; every
     other invocation's brief arrived as its invoker's message."""
 
-    session_id: UUID
+    agent_session_id: UUID
     agent_playbook_id: UUID
     name: Stored = Field(min_length=1, max_length=MAX_NAME)
     version: int = Field(ge=1)

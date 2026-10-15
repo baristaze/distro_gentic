@@ -32,14 +32,14 @@ a workspace. `code` edits and writes its files and runs commands.
 `agent_knowledge` searches and reads what the team knows. `work_product`
 validates, opens the pull request, and submits the result. `sub_agents`
 starts sub-agents and waits for them. `records` holds the assistant's
-readers, `handoff` the hand-off to a software engineer, and `artifacts`
+readers, `handoff` the hand-off to a software engineer, and `tool_outputs`
 the read of a result kept outside the window.
 
 **Every shipped kind is rebuilt from them, at every version.** A kind
 names alone a tool whose toolset would give it more than it may call.
 Analysis runs commands and edits nothing, so it names `run_command`
 alone. The software engineer names `suggest_agent_knowledge` alone, the
-planner `read_session`, and the assistant its corpus search and its
+planner `read_agent_session`, and the assistant its corpus search and its
 policy draft. Each version's tools are the same set as before, and the
 registry renders by name, so each renders the same tool definitions,
 byte for byte, and keeps its version. A kind whose tools change is a new
@@ -62,10 +62,8 @@ tier, workload.
 
 - A question asks its size only of a version that holds a row that
   names that size. Of a version that holds none, it is asked with no
-  size, and resolves as a question that asks none. A version published
-  before this holds no such row, so it answers every question as it did;
-  one published since holds a row for each size a kind asks, so its
-  asks take the order below.
+  size, and resolves as a question that asks none. A version that holds
+  a row for each size a kind asks takes the order below.
 - A question that asks a size of a version that holds a row for it
   takes a row that names its kind first, whatever else either row
   names. An operator's row for a kind is never passed over for a size's
@@ -118,7 +116,7 @@ stored without a size reads as one that names none.
   and a deploy alone moves no kind to another model.
 - In a version with those rows, a row an operator writes for a kind,
   naming no role, answers each role the kind asks a size of before the
-  role's row, which it lost to before. A role the kind asks nothing of
-  ranks it as it did.
+  role's row. A role the kind asks nothing of ranks it as a question
+  with no size does.
 - An idle workspace is held for its kind's grace, never past the cache's
-  life. A runner's grace is no longer set per runner.
+  life. No runner sets a grace of its own.

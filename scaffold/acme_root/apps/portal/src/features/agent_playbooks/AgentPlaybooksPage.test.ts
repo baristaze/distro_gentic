@@ -5,7 +5,7 @@
 // the lever checks found in a version shows beside it, and never stops it;
 // a version they never read says so.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { AgentPlaybookView } from "@acme/client";
+import type { agent_playbooks } from "@acme/client";
 import { buttons, container, enter, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AgentPlaybooksPage } from "./AgentPlaybooksPage";
 
@@ -13,7 +13,7 @@ const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
 vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(net));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-const agentPlaybook = (org: "a" | "b", name: string): AgentPlaybookView => ({
+const agentPlaybook = (org: "a" | "b", name: string): agent_playbooks.AgentPlaybookView => ({
   id: `pb${org}`,
   name,
   version: 2,
@@ -24,7 +24,7 @@ const agentPlaybook = (org: "a" | "b", name: string): AgentPlaybookView => ({
   created_at: "2026-10-03T10:00:00Z",
   findings: [{ check: "unknown_name", detail: "names the tool “git_push”, which no kind it reaches holds", excerpt: "git_push" }],
 });
-const HELD: Record<"a" | "b", AgentPlaybookView> = { a: agentPlaybook("a", "ajax-release"), b: agentPlaybook("b", "beta-release") };
+const HELD: Record<"a" | "b", agent_playbooks.AgentPlaybookView> = { a: agentPlaybook("a", "ajax-release"), b: agentPlaybook("b", "beta-release") };
 
 function answer(call: Call): unknown {
   const held = HELD[net.org];

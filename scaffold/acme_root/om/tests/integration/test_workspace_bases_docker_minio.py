@@ -31,10 +31,18 @@ from uuid import UUID
 
 import aioboto3
 import pytest
-from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, Loop
-from contracts.platform_loops import platform_loop_over
 
+from acme.infra.agent_workspaces import (
+    AgentWorkspace,
+    AgentWorkspaceBase,
+    AgentWorkspaceProviderInterface,
+    BaseSetupFailed,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+)
+from acme.infra.agent_workspaces.container import AgentWorkspaceContainerImpl
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.s3 import BucketsS3Impl
 from acme.infra.docker import docker
@@ -42,20 +50,13 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.workspaces import (
-    BaseSetupFailed,
-    EgressMode,
-    EgressPolicy,
-    IsolationMode,
-    IsolationSpec,
-    Workspace,
-    WorkspaceBase,
-    WorkspaceProviderInterface,
-)
-from acme.infra.workspaces.container import WorkspaceContainerImpl
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
+
+from contracts.agent_workspaces import AgentProjectsTwin
+from contracts.loops import ASSISTANT, Loop
+from contracts.platform_loops import platform_loop_over
 
 IMAGE = "python:3.14-slim"
 TOKEN = "SERVICE_TOKEN"
@@ -152,7 +153,7 @@ workspace base: the software engineer at version 8, here with the assistant's lo
 a container with no egress."""
 
 
-class Spied(WorkspaceContainerImpl):
+class Spied(AgentWorkspaceContainerImpl):
     """The container provider, with the hash of the base each workspace
     started from."""
 
@@ -163,16 +164,18 @@ class Spied(WorkspaceContainerImpl):
     async def prepare(
         self,
         org_id: UUID,
-        workspace_id: UUID,
+        agent_workspace_id: UUID,
         spec: IsolationSpec,
         snapshot: bytes | None = None,
         base: bytes | None = None,
         *,
         building: bool = False,
-    ) -> Workspace:
+    ) -> AgentWorkspace:
         if base is not None:
-            self.started_from[workspace_id] = hashlib.sha256(base).hexdigest()
-        return await super().prepare(org_id, workspace_id, spec, snapshot, base, building=building)
+            self.started_from[agent_workspace_id] = hashlib.sha256(base).hexdigest()
+        return await super().prepare(
+            org_id, agent_workspace_id, spec, snapshot, base, building=building
+        )
 
 
 class InfraOnDocker(InfraLocalImpl):
@@ -184,7 +187,7 @@ class InfraOnDocker(InfraLocalImpl):
         )
         self.buckets = buckets
 
-    def get_workspaces(self) -> WorkspaceProviderInterface:
+    def get_agent_workspaces(self) -> AgentWorkspaceProviderInterface:
         return self.workspaces
 
     def get_transport(self) -> TransportInterface:
@@ -248,21 +251,25 @@ class OnDocker:
     async def start(self, spec: IsolationSpec) -> UUID:
         """A session of the agent project once it names `spec`'s base as its
         workspace base: the session pins it."""
-        self.agent_projects.workspace_base = spec.base
-        session_id = await self.loop.start(TAKES.name)
-        self.sessions.append(session_id)
-        return session_id
+        self.agent_projects.agent_workspace_base = spec.base
+        agent_session_id = await self.loop.start(TAKES.name)
+        self.sessions.append(agent_session_id)
+        return agent_session_id
 
-    async def prepare(self, spec: IsolationSpec) -> Workspace:
-        session_id = await self.start(spec)
-        return await self.loop.managers.tools.prepare_workspace(self.loop.owner, session_id, spec)
+    async def prepare(self, spec: IsolationSpec) -> AgentWorkspace:
+        agent_session_id = await self.start(spec)
+        return await self.loop.managers.tools.prepare_agent_workspace(
+            self.loop.owner, agent_session_id, spec
+        )
 
     async def kept(self) -> list[str]:
         return await self.infra.buckets.list(self.loop.owner.org_id, BUCKET, PREFIX, 100)
 
     async def close(self) -> None:
-        for session_id in self.sessions:
-            await self.loop.managers.tools.purge_workspace(self.loop.owner.org_id, session_id)
+        for agent_session_id in self.sessions:
+            await self.loop.managers.tools.purge_agent_workspace(
+                self.loop.owner.org_id, agent_session_id
+            )
         left = await docker(
             "ps",
             "--all",
@@ -283,14 +290,14 @@ async def on_docker(tmp_path: Path, minio: BucketsS3Impl) -> AsyncIterator[OnDoc
         await case.close()
 
 
-async def inside(workspace: Workspace, *argv: str) -> tuple[int | None, str]:
+async def inside(workspace: AgentWorkspace, *argv: str) -> tuple[int | None, str]:
     reply = await docker("exec", workspace.location, *argv, bound=timedelta(seconds=120))
     return reply.code, reply.stdout.decode()
 
 
 def on_base(*setup: str) -> IsolationSpec:
     """A workspace with no egress, on a base whose setup has open egress."""
-    base = WorkspaceBase(image=IMAGE, setup=setup, egress=EgressPolicy(mode=EgressMode.OPEN))
+    base = AgentWorkspaceBase(image=IMAGE, setup=setup, egress=EgressPolicy(mode=EgressMode.OPEN))
     return IsolationSpec(
         mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE), base=base
     )
@@ -344,15 +351,17 @@ async def test_the_setups_environment_holds_no_credential_and_no_session_content
     loop = on_docker.loop
     await on_docker.infra.get_secrets().put(loop.owner.org_id, TOKEN, secret)
     spec = on_base("env > /opt/setup-env")
-    session_id = await on_docker.start(spec)
-    await loop.say(session_id, content)
+    agent_session_id = await on_docker.start(spec)
+    await loop.say(agent_session_id, content)
 
-    workspace = await loop.managers.tools.prepare_workspace(loop.owner, session_id, spec)
+    workspace = await loop.managers.tools.prepare_agent_workspace(
+        loop.owner, agent_session_id, spec
+    )
 
     code, environment = await inside(workspace, "cat", "/opt/setup-env")
     assert code == 0 and "PATH=" in environment, "the image's own environment"
     agent_project = str(on_docker.agent_projects.agent_project_id)
-    for held in (credential, secret, content, "ACME_", TOKEN, agent_project, str(session_id)):
+    for held in (credential, secret, content, "ACME_", TOKEN, agent_project, str(agent_session_id)):
         assert held not in environment
 
 

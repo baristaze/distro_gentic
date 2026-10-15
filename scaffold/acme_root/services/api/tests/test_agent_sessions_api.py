@@ -14,29 +14,30 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
-from contracts.step_storage import (
+
+from acme.om.agent_sessions.kinds import AgentSessionWorkKind
+from acme.om.agent_steps.types.agent_step import AgentStep
+from acme.om.agent_steps.types.content import Content, TextBlock, ToolUseBlock
+from acme.om.agent_steps.types.header import LoopOutcome
+from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.report import Report
+from acme.om.agents.types.request import Spawn
+from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.context import Role
+from acme.om.intake.tools import COMMENT
+from acme.om.spend_budgets.types.amount import Amount
+from acme.om.tools.types.tool import ToolClass
+from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
+from acme.services.api.container import AppContainer
+from acme.services.api.types.agent_sessions import MAX_SHOWN
+
+from contracts.agent_step_storage import (
     make_request,
     make_response,
     make_tool_request,
     make_tool_response,
 )
 from contracts.tools import Command
-
-from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
-from acme.om.agents.types.report import Report
-from acme.om.agents.types.request import Spawn
-from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.budgets.types.amount import Amount
-from acme.om.context import Role
-from acme.om.intake.tools import COMMENT
-from acme.om.steps.types.content import Content, TextBlock, ToolUseBlock
-from acme.om.steps.types.header import LoopOutcome
-from acme.om.steps.types.step import Step
-from acme.om.tools.types.tool import ToolClass
-from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import WorkKind
-from acme.services.api.container import AppContainer
-from acme.services.api.types.agent_sessions import MAX_SHOWN
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -110,24 +111,32 @@ async def said_whole_turn(
     )
     call = make_tool_request(sid, loop_id, response.id)
     answer = make_tool_response(sid, loop_id, call.id)
-    epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_steps(ctx, sid, epoch, [request, response, call, answer])
+    epoch = await managers.agent_steps.begin_run(ctx, sid)
+    await managers.agent_steps.append_agent_steps(
+        ctx, sid, epoch, [request, response, call, answer]
+    )
 
 
-def asked_with(response: Step, given: dict[str, Any]) -> Step:
+def asked_with(response: AgentStep, given: dict[str, Any]) -> AgentStep:
     """The response, its one tool use asking for `given`."""
     blocks = (
         TextBlock(text="reading the import log"),
         ToolUseBlock(id="call_1", name="read_log", input=given),
     )
-    return Step.model_validate({**response.model_dump(), "content": Content(blocks=blocks)})
+    return AgentStep.model_validate({**response.model_dump(), "content": Content(blocks=blocks)})
 
 
-def runs_of(container: AppContainer, session_id: str) -> int:
+def runs_of(container: AppContainer, agent_session_id: str) -> int:
     work = container.storage.get_work_storage()
     assert isinstance(work, WorkStorageMemoryImpl)
     items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-    return len([i for i in items if i.kind == WorkKind.LOOP and str(i.target_id) == session_id])
+    return len(
+        [
+            i
+            for i in items
+            if i.kind == AgentSessionWorkKind.LOOP and str(i.target_id) == agent_session_id
+        ]
+    )
 
 
 async def test_a_session_is_started_spoken_to_steered_and_read(
@@ -234,11 +243,11 @@ async def test_a_message_an_agent_wrote_names_it_and_a_persons_names_none(
         ("control", "person"),
     ]
     assert items[0]["agent"] is None
-    assert items[1]["agent"] == {"kind": "helper", "session_id": str(child.id)}
+    assert items[1]["agent"] == {"kind": "helper", "agent_session_id": str(child.id)}
     assert items[2]["agent"] is None
     objective = child_read.json()["items"][0]
     assert (objective["origin"], objective["text"]) == ("parent", "Report what timed out.")
-    assert objective["agent"] == {"kind": "lead", "session_id": parent["id"]}
+    assert objective["agent"] == {"kind": "lead", "agent_session_id": parent["id"]}
 
 
 async def test_a_kind_that_names_the_comment_tool_starts_and_is_spoken_to(

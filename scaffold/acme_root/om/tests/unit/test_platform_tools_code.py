@@ -6,15 +6,16 @@ changes nothing."""
 import json
 from pathlib import Path
 
-from contracts.doubles import context
-from contracts.factories import make_org
-from contracts.tools import HOST_SPEC, failure_of, result_text
 from unit.platform_tools import called, on_the_host, unbound
 
+from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id
 from acme.om.context import Role
 from acme.om.platform_agents.tools.code import MAX_EDIT, EditFileImpl
-from acme.om.steps.types.header import ToolFailure
+
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.tools import HOST_SPEC, failure_of, result_text
 
 SOURCE = (
     "def total(cart):\n"
@@ -31,7 +32,7 @@ SOURCE = (
 async def test_an_edit_changes_exactly_the_place_it_names(tmp_path: Path) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     cart = Path(workspace.location) / "cart.py"
     cart.write_text(SOURCE)
     edit = EditFileImpl(unbound)  # pyright: ignore[reportArgumentType]
@@ -83,7 +84,7 @@ async def test_an_edit_that_is_not_one_place_is_refused_and_changes_nothing(
 ) -> None:
     ctx = context(Role.SERVICE, make_org())
     tools = on_the_host(tmp_path)
-    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    workspace = await tools.manager.prepare_agent_workspace(ctx, new_id(), HOST_SPEC)
     root = Path(workspace.location)
     (root / "cart.py").write_text(SOURCE)
     (root / "aaa.txt").write_text("aaa\n")

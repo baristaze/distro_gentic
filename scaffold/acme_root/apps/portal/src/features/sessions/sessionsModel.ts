@@ -2,12 +2,12 @@
 // own, and the org's to explore and join), the filters it offers and keeps
 // in the address bar, and what a new session needs before it may start. No
 // React, no fetch.
-import type { AgentSessionView, Among, AgentProjectView, SessionStatus, StartSessionRequest, Visibility } from "@acme/client";
+import type { agent_projects, agent_sessions, attribution } from "@acme/client";
 import { listedFor } from "../../app/shell/supportModel";
 import { standingOf, statusLine, type Standing, type Tone } from "../session/sessionModel";
 
 /** A status, or the parked sessions that wait on a person: "Needs you". */
-export type StatusFilter = SessionStatus | "any" | "needs_you";
+export type StatusFilter = agent_sessions.AgentSessionStatus | "any" | "needs_you";
 
 export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
   { value: "any", label: "All" },
@@ -24,7 +24,7 @@ export function statusFilter(value: string | null): StatusFilter {
 }
 
 /** The status the server is asked for: "Needs you" reads the parked ones. */
-export function serverStatus(filter: StatusFilter): SessionStatus | null {
+export function serverStatus(filter: StatusFilter): agent_sessions.AgentSessionStatus | null {
   if (filter === "any") return null;
   return filter === "needs_you" ? "parked" : filter;
 }
@@ -39,7 +39,7 @@ export const VIEWS: readonly { value: SessionsView; label: string }[] = [
 ];
 
 /** The list the server is asked for: the person's own, or every one they see. */
-export function amongOf(view: SessionsView): Among {
+export function amongOf(view: SessionsView): agent_sessions.Among {
   return view === "org" ? "visible" : "mine";
 }
 
@@ -86,12 +86,12 @@ export function narrowed(filter: ListFilter): boolean {
  * member. A private one never does, not even to one whose role lets them see
  * it for an audit: its creator keeps it on their own list, and its address
  * opens it. */
-export function orgWide(session: Pick<AgentSessionView, "visibility">): boolean {
+export function orgWide(session: Pick<agent_sessions.AgentSessionView, "visibility">): boolean {
   return session.visibility === "org_wide";
 }
 
 /** The roots whose tree holds a sub-agent parked on a person. */
-export function treesNeedingYou(beneath: readonly AgentSessionView[]): Set<string> {
+export function treesNeedingYou(beneath: readonly agent_sessions.AgentSessionView[]): Set<string> {
   return new Set(beneath.filter((session) => session.parent_id !== null && session.archived_at === null && session.status === "parked" && session.park?.reason === "person").map((session) => session.root_id));
 }
 
@@ -101,7 +101,7 @@ export function treesNeedingYou(beneath: readonly AgentSessionView[]): Set<strin
  * you" keeps one parked on a person, or whose tree holds a sub-agent that
  * is (`asking`, by root). A support conversation shows only under the
  * platform assistant's filter. */
-export function listed(sessions: readonly AgentSessionView[], filter: ListFilter, asking: ReadonlySet<string> = new Set()): AgentSessionView[] {
+export function listed(sessions: readonly agent_sessions.AgentSessionView[], filter: ListFilter, asking: ReadonlySet<string> = new Set()): agent_sessions.AgentSessionView[] {
   const words = filter.query.trim().toLowerCase();
   return sessions.filter(
     (session) =>
@@ -123,11 +123,11 @@ export interface SessionRow {
   /** A sub-agent names the session that started it. */
   parentId: string | null;
   createdBy: string;
-  visibility: Visibility;
+  visibility: attribution.Visibility;
   standing: Standing;
 }
 
-export function sessionRow(session: AgentSessionView, me: string | null = null): SessionRow {
+export function sessionRow(session: agent_sessions.AgentSessionView, me: string | null = null): SessionRow {
   const status = statusLine(session);
   return {
     id: session.id,
@@ -170,7 +170,7 @@ export interface AgentProjectChoice {
 /** The agent projects the form offers: a choice of one where an agent project is
  * required, with none to choose said as the reason nothing starts; locally,
  * "No agent project" as well. Null agent projects are not read yet. */
-export function agentProjectChoice(agentProjects: readonly Pick<AgentProjectView, "id" | "name">[] | null, required: boolean): AgentProjectChoice {
+export function agentProjectChoice(agentProjects: readonly Pick<agent_projects.AgentProjectView, "id" | "name">[] | null, required: boolean): AgentProjectChoice {
   if (agentProjects === null) return { options: [], problem: null };
   const options = agentProjects.map((agentProject) => ({ value: agentProject.id, label: agentProject.name }));
   if (!required) return { options: [{ value: "", label: "No agent project" }, ...options], problem: null };
@@ -182,7 +182,7 @@ export function agentProjectChoice(agentProjects: readonly Pick<AgentProjectView
 export function startRequest(
   draft: NewSessionDraft,
   agentProject: { required: boolean; count: number },
-): { request: StartSessionRequest } | { problem: string } {
+): { request: agent_sessions.StartAgentSessionRequest } | { problem: string } {
   const title = draft.title.trim();
   const kind = draft.kind.trim();
   if (!title) return { problem: "Give the session a title." };

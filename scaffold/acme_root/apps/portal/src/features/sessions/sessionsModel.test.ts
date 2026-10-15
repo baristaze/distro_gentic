@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionView } from "@acme/client";
+import type { agent_sessions } from "@acme/client";
 import { standingOf } from "../session/sessionModel";
 import {
   amongOf,
@@ -16,7 +16,7 @@ import {
   TITLE_MAX,
 } from "./sessionsModel";
 
-const session: AgentSessionView = {
+const session: agent_sessions.AgentSessionView = {
   id: "s1",
   root_id: "s0",
   parent_id: "s0",
@@ -62,7 +62,7 @@ describe("sessions model", () => {
   });
 
   it("keeps a private session out of the org's view, though the server listed it, as it does for one who may audit", () => {
-    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, parent_id: null, ...over });
+    const one = (id: string, over: Partial<agent_sessions.AgentSessionView>): agent_sessions.AgentSessionView => ({ ...session, id, title: id, parent_id: null, ...over });
     const read = [
       one("Mine, private", { created_by: "u1", visibility: "private" }),
       one("Mine, org-wide", { created_by: "u1", visibility: "org_wide" }),
@@ -78,7 +78,7 @@ describe("sessions model", () => {
   });
 
   it("narrows the sessions read to the agent, the archived, the title's words, and those that need a person", () => {
-    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, ...over });
+    const one = (id: string, over: Partial<agent_sessions.AgentSessionView>): agent_sessions.AgentSessionView => ({ ...session, id, title: id, ...over });
     const sessions = [
       one("Flaky test", { created_by: "u1", kind: "software_engineer" }),
       one("Docs", { created_by: "u2", kind: "analysis" }),
@@ -96,7 +96,7 @@ describe("sessions model", () => {
   });
 
   it("leaves support conversations out, and shows them under the platform assistant's filter", () => {
-    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, ...over });
+    const one = (id: string, over: Partial<agent_sessions.AgentSessionView>): agent_sessions.AgentSessionView => ({ ...session, id, ...over });
     const sessions = [
       one("work", { title: "Fix the flaky test", kind: "software_engineer" }),
       one("support", { title: "Support", kind: "platform_assistant", created_by: "u1" }),

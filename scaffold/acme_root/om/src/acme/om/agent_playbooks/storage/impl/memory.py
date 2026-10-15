@@ -47,8 +47,8 @@ class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInte
     ) -> AgentPlaybookInvocation:
         async with self._lock:
             for held in self._rows(self._invocations, org_id):
-                if (held.session_id, held.agent_playbook_id) == (
-                    invocation.session_id,
+                if (held.agent_session_id, held.agent_playbook_id) == (
+                    invocation.agent_session_id,
                     invocation.agent_playbook_id,
                 ):
                     return held
@@ -56,9 +56,13 @@ class AgentPlaybookStorageMemoryImpl(MemoryStorageBase, AgentPlaybookStorageInte
             return invocation
 
     async def read_invocations(
-        self, org_id: UUID, session_id: UUID, limit: int
+        self, org_id: UUID, agent_session_id: UUID, limit: int
     ) -> list[AgentPlaybookInvocation]:
-        rows = [i for i in self._rows(self._invocations, org_id) if i.session_id == session_id]
+        rows = [
+            i
+            for i in self._rows(self._invocations, org_id)
+            if i.agent_session_id == agent_session_id
+        ]
         return sorted(rows, key=lambda i: (i.created_at, i.id))[:limit]
 
     async def put_pin(

@@ -34,11 +34,8 @@ from acme.om.agent_billing.types.spend_ledger import (
 )
 from acme.om.agent_billing.types.unit_plan import SpendUnitScale, UnitPlanCatalog
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_steps.types.header import ParkReason
 from acme.om.base import EMPTY_UUID, new_id, utcnow
-from acme.om.budgets import BudgetsManagerInterface
-from acme.om.budgets.rules import window_bounds
-from acme.om.budgets.types.amount import Amount
-from acme.om.budgets.types.hold import HoldLine, Tally
 from acme.om.context import OperatorContext, OperatorPermission, Permission, TenantContext
 from acme.om.exceptions import (
     InvalidCredential,
@@ -49,7 +46,10 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.steps.types.header import ParkReason
+from acme.om.spend_budgets import SpendBudgetsManagerInterface
+from acme.om.spend_budgets.rules import window_bounds
+from acme.om.spend_budgets.types.amount import Amount
+from acme.om.spend_budgets.types.spend_hold import SpendHoldLine, SpendTally
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import check_time_zone
 
@@ -71,7 +71,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         self,
         spend_accounts: SpendAccountStorageInterface,
         ledger: SpendLedgerStorageInterface,
-        budgets: BudgetsManagerInterface,
+        budgets: SpendBudgetsManagerInterface,
         sessions: AgentSessionsManagerInterface,
         tenancy: TenancyManagerInterface,
         payments: PaymentProviderInterface,
@@ -179,7 +179,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         )
         # Credit is room in a bucket, never a limit: the sessions parked on
         # the budget ask their gates again, and a limit still binds.
-        await self._sessions.wake_parked(tenant, ParkReason.BUDGET)
+        await self._sessions.wake_parked(tenant, ParkReason.SPEND_BUDGET)
         return credit
 
     async def grant_units(
@@ -209,7 +209,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         log.info("operator %s granted org %s %d units", ctx.identity_id, org_id, granted.units)
         # Granted units are room in a bucket, never a limit: the sessions
         # parked on the funds ask their gates again.
-        await self._sessions.wake_parked(tenant, ParkReason.BUDGET, FUNDS_UNLOCK)
+        await self._sessions.wake_parked(tenant, ParkReason.SPEND_BUDGET, FUNDS_UNLOCK)
         return granted
 
     async def get_entries(
@@ -218,15 +218,19 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         org_id: UUID,
         *,
         kind: EntryKind | None = None,
-        hold_id: UUID | None = None,
-        session_id: UUID | None = None,
+        spend_hold_id: UUID | None = None,
+        agent_session_id: UUID | None = None,
         limit: int,
     ) -> EntryPage:
         ctx.require(OperatorPermission.READ)
         bounded = max(1, min(limit, MAX_ENTRIES))
         # One more than the page: it says whether the read was cut, and stays out.
         entries = await self._ledger.read_entries(
-            org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=bounded + 1
+            org_id,
+            kind=kind,
+            spend_hold_id=spend_hold_id,
+            agent_session_id=agent_session_id,
+            limit=bounded + 1,
         )
         log.info("operator %s read the ledger of org %s", ctx.identity_id, org_id)
         return EntryPage(items=tuple(entries[:bounded]), has_more=len(entries) > bounded)
@@ -234,13 +238,13 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
     async def raise_once(
         self,
         ctx: TenantContext,
-        budget_id: UUID,
+        spend_budget_id: UUID,
         amount: Amount,
         *,
         raise_id: UUID | None = None,
     ) -> WindowRaise:
         ctx.require(SETS_AGENT_BILLING)
-        budget = await self._budgets.get_budget(ctx, budget_id)
+        budget = await self._budgets.get_spend_budget(ctx, spend_budget_id)
         spend_account = await self._read(ctx.org_id)
         now = self._clock()
         start, _ = window_of(budget.window, spend_account, now)
@@ -249,42 +253,42 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
             WindowRaise(
                 id=raise_id or new_id(),
                 created_at=now,
-                budget_id=budget.id,
+                spend_budget_id=budget.id,
                 window_start=start,
                 cost_micros=amount.cost_micros or 0,
                 tokens=amount.tokens or 0,
                 raised_by=ctx.user_id,
             ),
         )
-        await self._sessions.wake_parked(ctx, ParkReason.BUDGET)
+        await self._sessions.wake_parked(ctx, ParkReason.SPEND_BUDGET)
         return raised
 
     async def approve_call(
         self,
         ctx: TenantContext,
-        session_id: UUID,
+        agent_session_id: UUID,
         up_to_micros: int,
         *,
         approval_id: UUID | None = None,
     ) -> Approval:
         ctx.require(SETS_AGENT_BILLING)
-        session = await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
         approval = await self._ledger.post_approval(
             ctx.org_id,
             Approval(
                 id=approval_id or new_id(),
                 created_at=self._clock(),
-                session_id=session.id,
+                agent_session_id=session.id,
                 up_to_micros=up_to_micros,
                 approved_by=ctx.user_id,
             ),
         )
-        await self._sessions.wake_session(ctx, session.id, anomaly_park())
+        await self._sessions.wake_agent_session(ctx, session.id, anomaly_park())
         return approval
 
-    async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
+    async def get_spend(self, ctx: TenantContext, spend_budget_id: UUID) -> SpendTally:
         ctx.require(Permission.READ)
-        budget = await self._budgets.get_budget(ctx, budget_id)
+        budget = await self._budgets.get_spend_budget(ctx, spend_budget_id)
         spend_account = await self._spend_accounts.read_spend_account(ctx.org_id)
         if spend_account is None:
             # No call is held before a spend account is opened: its windows are
@@ -294,8 +298,8 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
             raise TenantMismatch(f"spend account {spend_account.id} is not {ctx.org_id}'s")
         else:
             start, resets_at = window_of(budget.window, spend_account, self._clock())
-        line = HoldLine(
-            budget_id=budget.id,
+        line = SpendHoldLine(
+            spend_budget_id=budget.id,
             scope=budget.scope,
             window_start=start,
             resets_at=resets_at,
