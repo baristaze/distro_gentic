@@ -196,7 +196,7 @@ async def test_the_cost_cap_stops_a_firing_and_each_runs_budget_stops_its_spendi
     assert sum(r.reserved_micros for r in runs) <= capped.limits.cost_cap_micros
     started = runs[0]
     assert started.spend_budget_id is not None and started.agent_session_id is not None
-    budget = await platform.managers.budgets.get_spend_budget(
+    budget = await platform.managers.spend_budgets.get_spend_budget(
         platform.owner, started.spend_budget_id
     )
     assert (budget.scope_kind, budget.window_kind, budget.cost_micros) == (
@@ -209,7 +209,7 @@ async def test_the_cost_cap_stops_a_firing_and_each_runs_budget_stops_its_spendi
     platform.anthropic.add(reply(said("On it.")))
     run = await platform.loops.run(platform.owner, started.agent_session_id)
     assert run.end is RunEnd.PARKED and run.park is not None
-    assert run.park.reason is ParkReason.BUDGET
+    assert run.park.reason is ParkReason.SPEND_BUDGET
     assert platform.anthropic.calls == []
 
 
@@ -485,8 +485,8 @@ async def test_an_agent_automations_session_starts_in_its_agent_project_under_it
         await platform.managers.agent_projects.create_agent_project(creator, make_agent_project())
     ).id
     await platform.managers.evidence.write_policy(creator, make_policy(policy_key(agent_project)))
-    budget = make_spend_budget(SpendBudgetScopeKind.PROJECT, str(agent_project), cost_micros=1)
-    await platform.managers.budgets.create_spend_budget(creator, budget)
+    budget = make_spend_budget(SpendBudgetScopeKind.AGENT_PROJECT, str(agent_project), cost_micros=1)
+    await platform.managers.spend_budgets.create_spend_budget(creator, budget)
     await made(platform, creator, action=started_in(agent_project))
     (run,) = await fired(platform, comment())
     assert run.status is RunStatus.STARTED and run.agent_session_id is not None
@@ -502,10 +502,10 @@ async def test_an_agent_automations_session_starts_in_its_agent_project_under_it
         platform.managers.spend_budget_gate,
         platform.managers.pricing,
         platform.managers.agent_sessions,
-        platform.managers.budgets,
+        platform.managers.spend_budgets,
         SessionAgentProjectsBoundImpl(platform.storage.get_agent_project_storage()),
     )
-    fills = await platform.managers.models.resolve_fill_set(
+    fills = await platform.managers.language_models.resolve_fill_set(
         platform.owner, run.agent_session_id, ASSISTANT.roles, Eligibility()
     )
     fill = fills.fill_for(MAIN)
@@ -518,7 +518,7 @@ async def test_an_agent_automations_session_starts_in_its_agent_project_under_it
         )
     (breach,) = refused.value.refusal.breaches
     assert breach.scope == SpendBudgetScope(
-        kind=SpendBudgetScopeKind.PROJECT, key=str(agent_project)
+        kind=SpendBudgetScopeKind.AGENT_PROJECT, key=str(agent_project)
     )
 
 

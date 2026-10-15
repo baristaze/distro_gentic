@@ -360,7 +360,7 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
         loop.managers.privacy,
         loop.managers.agent_sessions,
         loop.managers.tenancy,
-        loop.managers.events,
+        loop.managers.change_events,
         loop.managers.outbox,
         SessionAgentProjectBoundImpl(loop.storage.get_agent_project_storage()),
         RetentionOptions(),
@@ -454,7 +454,7 @@ def on_host(
         ToolsManagerAgentWorkspacesImpl(
             inner,
             loop.platform.agent_workspaces,
-            loop.managers.steps,
+            loop.managers.agent_steps,
             HostOffer(),
             local=True,
             placed=placed,
@@ -476,7 +476,7 @@ async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_
     placed = Placed(tools, new_id())
     on_host(loop, placed, tools)
     agent_session_id = await loop.start(KEEPER.name)
-    epoch = await loop.managers.steps.begin_run(loop.owner, agent_session_id)
+    epoch = await loop.managers.agent_steps.begin_run(loop.owner, agent_session_id)
     workspace = await tools[0].prepare_agent_workspace(loop.owner, agent_session_id, KEPT)
     assert placed.restores == [None]
 
@@ -515,7 +515,7 @@ async def test_a_hosts_refusal_keeps_no_snapshot_and_a_bucket_snapshot_never_rea
     tools: list[ToolsManagerAgentWorkspacesImpl] = []
     placed = Placed(tools, new_id())
     on_host(loop, placed, tools)
-    epoch = await loop.managers.steps.begin_run(loop.owner, agent_session_id)
+    epoch = await loop.managers.agent_steps.begin_run(loop.owner, agent_session_id)
 
     with pytest.raises(AgentWorkspaceLost, match="never crosses into the wall"):
         await tools[0].prepare_agent_workspace(

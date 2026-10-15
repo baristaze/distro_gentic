@@ -159,7 +159,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                     )
                 )
             return asks
-        budget = as_budget(park.unlock) if park.reason is ParkReason.BUDGET else None
+        budget = as_budget(park.unlock) if park.reason is ParkReason.SPEND_BUDGET else None
         if budget is not None:
             return [
                 Ask(
@@ -169,7 +169,7 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                     recipients=holding_permission(members, SETS_SPEND_BUDGETS),
                 )
             ]
-        if park.reason is ParkReason.BUDGET and park.unlock == FUNDS_UNLOCK:
+        if park.reason is ParkReason.SPEND_BUDGET and park.unlock == FUNDS_UNLOCK:
             return [
                 Ask(
                     action="top_up",

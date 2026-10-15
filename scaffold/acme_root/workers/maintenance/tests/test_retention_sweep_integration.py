@@ -91,16 +91,16 @@ async def test_one_pass_destroys_an_expired_sessions_key_and_audits_the_report(
             update={"policy": RetentionPolicy(content_lifetime=timedelta(milliseconds=1))}
         ),
     )
-    session = await managers.agent_sessions.create_session(owner, a_session())
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
     said = "the pump log shows a pressure spike at 14:02"
-    await managers.steps.append_inputs(owner, session.id, [a_message(session.id, said)])
+    await managers.agent_steps.append_inputs(owner, session.id, [a_message(session.id, said)])
 
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
 
-    steps = (await managers.steps.get_agent_steps(owner, session.id, 0, 10)).items
+    steps = (await managers.agent_steps.get_agent_steps(owner, session.id, 0, 10)).items
     assert [step.content.state for step in steps] == [ContentState.ABSENT]
     (entry,) = [
-        e for e in await managers.events.get_change_events(owner, 0, 100) if e.kind == KEY_DESTROYED
+        e for e in await managers.change_events.get_change_events(owner, 0, 100) if e.kind == KEY_DESTROYED
     ]
     assert entry.payload["reported"] is True
     assert entry.payload["service"] == "keys=local"

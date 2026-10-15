@@ -127,8 +127,8 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
 ) -> None:
     managers = container.managers
     owner = await an_owner(container)
-    session = await managers.agent_sessions.create_session(owner, a_session())
-    (message,) = await managers.steps.append_inputs(owner, session.id, [a_message(session.id)])
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
+    (message,) = await managers.agent_steps.append_inputs(owner, session.id, [a_message(session.id)])
     # The loop's item on a lane of this test's own, claimed by a runner that
     # then dies: its lease runs out with nobody to renew it.
     lane, now = f"loop:agent_fleet-{new_id().hex[-8:]}", utcnow()
@@ -152,7 +152,7 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     )
     assert claimed is not None and claimed[1].id == item.id
     dead_ctx, _ = claimed
-    lost = await managers.steps.begin_run(dead_ctx, session.id)
+    lost = await managers.agent_steps.begin_run(dead_ctx, session.id)
     await asyncio.sleep(0.05)
 
     await build_loop(container)._sweep_once()  # pyright: ignore[reportPrivateUsage]
@@ -163,11 +163,11 @@ async def test_an_expired_loop_is_requeued_and_its_next_run_takes_a_new_epoch(
     assert again is not None, "the sweep put the loop back in its lane"
     ctx, requeued = again
     assert (requeued.id, requeued.status) == (item.id, WorkStatus.CLAIMED)
-    epoch = await managers.steps.begin_run(ctx, session.id)
+    epoch = await managers.agent_steps.begin_run(ctx, session.id)
     assert epoch > lost
     # The run that died writes nothing more.
     with pytest.raises(StaleWriter):
-        await managers.steps.append_agent_steps(
+        await managers.agent_steps.append_agent_steps(
             dead_ctx, session.id, lost, [resumed_step(new_id(), session.id, message.id, utcnow())]
         )
 
@@ -195,7 +195,7 @@ def a_hold(org_line: SpendHoldLine, opened: datetime, cost: int = 600) -> Funded
 def a_line() -> SpendHoldLine:
     return SpendHoldLine(
         spend_budget_id=new_id(),
-        scope=SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key="s-1"),
+        scope=SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key="s-1"),
         window_start=DAY,
         resets_at=DAY + timedelta(days=1),
         amount=Amount(cost_micros=1_000_000),
@@ -373,8 +373,8 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     nothing more. A session pending for less, or idle, is left alone."""
     managers = container.managers
     owner = await an_owner_on_its_own_lane(container)
-    stuck = await managers.agent_sessions.create_session(owner, a_session())
-    idle = await managers.agent_sessions.create_session(owner, a_session())
+    stuck = await managers.agent_sessions.create_agent_session(owner, a_session())
+    idle = await managers.agent_sessions.create_agent_session(owner, a_session())
     _, stuck = await managers.agent_sessions.receive(owner, stuck.id, [a_message(stuck.id)])
     assert stuck.status is AgentSessionStatus.PENDING
     ctx, loop = await its_loop(container, owner)
@@ -415,7 +415,7 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     passes."""
     managers = container.managers
     owner = await an_owner_on_its_own_lane(container)
-    session = await managers.agent_sessions.create_session(owner, a_session())
+    session = await managers.agent_sessions.create_agent_session(owner, a_session())
     (message,), session = await managers.agent_sessions.receive(
         owner, session.id, [a_message(session.id)]
     )
@@ -423,10 +423,10 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     # projection at its start, then a model request 21 minutes after the input.
     ctx, loop = await its_loop(container, owner)
     assert loop.target_id == session.id
-    epoch = await managers.steps.begin_run(ctx, session.id)
+    epoch = await managers.agent_steps.begin_run(ctx, session.id)
     await managers.agent_sessions.project_status(ctx, session.id)
     written = session.updated_at + timedelta(minutes=21)
-    await managers.steps.append_agent_steps(
+    await managers.agent_steps.append_agent_steps(
         ctx, session.id, epoch, [a_model_request(message, written)]
     )
     row = await managers.agent_sessions.get_agent_session(owner, session.id)

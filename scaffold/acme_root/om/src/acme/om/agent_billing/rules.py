@@ -552,7 +552,7 @@ def price_park(now: datetime, price_retry: timedelta = PRICE_RETRY) -> Park:
     after a wait: an operator prices the model in a release, and the next
     try reads the price. Its cause says who acts."""
     return Park(
-        reason=ParkReason.BUDGET,
+        reason=ParkReason.SPEND_BUDGET,
         unlock=PRICE_UNLOCK,
         retry_at=now + price_retry,
         cause=f"the call's model has no price: {OPERATOR} prices it",
@@ -576,8 +576,8 @@ def shortfall_park(shortfall: Shortfall, now: datetime, hold_retry: timedelta = 
     if shortfall.short <= shortfall.reserved:
         soon = now + hold_retry
         retry_at = soon if shortfall.resets_at is None else min(soon, shortfall.resets_at)
-        return Park(reason=ParkReason.BUDGET, unlock=HELD_UNLOCK, retry_at=retry_at)
-    return Park(reason=ParkReason.BUDGET, unlock=FUNDS_UNLOCK, retry_at=shortfall.resets_at)
+        return Park(reason=ParkReason.SPEND_BUDGET, unlock=HELD_UNLOCK, retry_at=retry_at)
+    return Park(reason=ParkReason.SPEND_BUDGET, unlock=FUNDS_UNLOCK, retry_at=shortfall.resets_at)
 
 
 def anomaly_park() -> Park:
@@ -620,13 +620,13 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again on its own; adding credit does not change it."
                 ),
             )
-        case ParkReason.BUDGET if park.unlock == FUNDS_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == FUNDS_UNLOCK:
             when = "a person adds credit" if park.retry_at is None else "the next billing period"
             return Notice(
                 limit=LimitKind.SPEND,
                 text=f"The spend account's balance does not cover this call. It waits until {when}.",
             )
-        case ParkReason.BUDGET if park.unlock == HELD_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == HELD_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=(
@@ -634,7 +634,7 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again when they settle."
                 ),
             )
-        case ParkReason.BUDGET if park.unlock == PRICE_UNLOCK:
+        case ParkReason.SPEND_BUDGET if park.unlock == PRICE_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=(
@@ -642,7 +642,7 @@ def notice_of(park: Park) -> Notice:
                     "The session tries again on its own, and takes the price at its next try."
                 ),
             )
-        case ParkReason.BUDGET:
+        case ParkReason.SPEND_BUDGET:
             when = "a person raises it" if park.retry_at is None else "its window resets"
             return Notice(
                 limit=LimitKind.SPEND,

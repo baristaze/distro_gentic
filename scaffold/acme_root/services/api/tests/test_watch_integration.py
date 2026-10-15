@@ -42,11 +42,11 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         # the names `make_session` gives, and a control is checked against
         # the class of every tool the session offers.
         offers_none = make_session().model_copy(update={"tools": ()})
-        session = await managers.agent_sessions.create_session(ctx, offers_none)
+        session = await managers.agent_sessions.create_agent_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
         await managers.exec_relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
         await managers.agent_workspaces.pinned(ctx, session.id, SPEC)
-        agents_epoch = await managers.steps.begin_run(ctx, session.id)
+        agents_epoch = await managers.agent_steps.begin_run(ctx, session.id)
 
         step = new_id()
         container.stream.emit(
@@ -62,7 +62,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         assert (await client.post(control, headers=owner)).status_code == 200
         note = message_step(new_id(), session.created_at, session.id, ctx, "still mine")
         with pytest.raises(StaleWriter):
-            await managers.steps.append_agent_steps(ctx, session.id, agents_epoch, [note])
+            await managers.agent_steps.append_agent_steps(ctx, session.id, agents_epoch, [note])
 
         sent = await client.post(
             f"{control}/commands", headers=created(owner), json={"argv": ["make", "test"]}
@@ -94,7 +94,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
 
         ended = await client.get(f"{control}/commands/{run['command_key']}", headers=owner)
         assert (ended.json()["state"], ended.json()["stdout"]) == ("done", "ok\n")
-        events = await managers.events.get_change_events(ctx, 0, 200)
+        events = await managers.change_events.get_change_events(ctx, 0, 200)
         (record,) = [event for event in events if event.kind == SENT]
         assert (record.actor_id, str(record.target_id)) == (ctx.user_id, item_id)
 
@@ -111,8 +111,8 @@ async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_c
     async with over_the_stack(tmp_path, live_read_key=KEY) as (container, client, owner):
         assert container.infra.get_streams().describe().startswith("streams=valkey")
         ctx = await tenant_of(container, owner)
-        mine = await container.managers.agent_sessions.create_session(ctx, make_session())
-        theirs = await container.managers.agent_sessions.create_session(ctx, make_session())
+        mine = await container.managers.agent_sessions.create_agent_session(ctx, make_session())
+        theirs = await container.managers.agent_sessions.create_agent_session(ctx, make_session())
         my_step, their_step = new_id(), new_id()
         for n in range(3):
             container.stream.emit(

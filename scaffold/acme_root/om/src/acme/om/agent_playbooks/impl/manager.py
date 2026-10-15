@@ -270,7 +270,7 @@ class AgentPlaybooksManagerImpl(AgentPlaybooksManagerInterface):
         while at is not None:
             # The row as stored: a session marked deleted still lends its
             # gates, and the walk goes on above it.
-            session = await self._session_rows.read_session(ctx.org_id, at)
+            session = await self._session_rows.read_agent_session(ctx.org_id, at)
             if session is None:
                 raise NotFound(f"agent session {at} cannot be read, nor the gates it invoked")
             invocations = await self._storage.read_invocations(

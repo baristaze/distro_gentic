@@ -117,7 +117,7 @@ async def test_an_event_from_outside_is_routed_and_fires_agent_automations_once(
     consumer = consumer_of(container)
     for _ in range(2):
         assert await consumer.handle(await queued(container, feedback_body(str(ctx.org_id), event)))
-    events = await container.managers.events.get_change_events(ctx, after_seq=0, limit=100)
+    events = await container.managers.change_events.get_change_events(ctx, after_seq=0, limit=100)
     (routed,) = [e for e in events if e.kind == ROUTED]
     assert routed.payload["effect"] == "unrouted"
     # The agent automation fired once on the event, and its run is recorded,

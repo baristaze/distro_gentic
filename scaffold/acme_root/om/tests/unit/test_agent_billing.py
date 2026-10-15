@@ -170,7 +170,7 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
     await money.open(unit_plan="team")
     owner = money.loop.owner
     agent_session_id = await money.loop.start()
-    fills = await money.loop.managers.models.resolve_fill_set(
+    fills = await money.loop.managers.language_models.resolve_fill_set(
         owner, agent_session_id, ASSISTANT.roles, Eligibility()
     )
     fill = fills.fill_for(MAIN)
@@ -198,7 +198,7 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
         money.gate,
         book,
         money.loop.managers.agent_sessions,
-        money.loop.managers.budgets,
+        money.loop.managers.spend_budgets,
         SessionAgentProjectsBoundImpl(money.loop.storage.get_agent_project_storage()),
     )
     usage = Usage(input=120_000, output=3_000)
@@ -311,7 +311,7 @@ async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_on
     assert hold.draw.included == 3 and hold.draw.granted == 0 and hold.draw.credits == 2_000
     with pytest.raises(GateParked) as parked:
         await money.gate.authorize(owner, tenant_request(owner, 1_000))
-    assert parked.value.park.reason is ParkReason.BUDGET
+    assert parked.value.park.reason is ParkReason.SPEND_BUDGET
     assert parked.value.park.unlock == FUNDS_UNLOCK
     assert parked.value.park.retry_at is not None, "the next billing period refills the unit plan"
 
@@ -335,7 +335,7 @@ async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
         await money.gate.authorize_priced(owner, tenant_request(owner, 5_000), None)
 
     park = parked.value.park
-    assert park.reason is ParkReason.BUDGET and park.unlock == HELD_UNLOCK
+    assert park.reason is ParkReason.SPEND_BUDGET and park.unlock == HELD_UNLOCK
     assert park.retry_at is not None
     assert park.retry_at - money.loop.clock() <= timedelta(seconds=30), (
         "soon, never the period's end"
@@ -366,7 +366,7 @@ async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
             loop.managers.spend_budget_gate,
             loop.managers.pricing,
             loop.managers.agent_sessions,
-            loop.managers.budgets,
+            loop.managers.spend_budgets,
             SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
         )
     ours, loose = await loop.start(), await loop.start()
@@ -375,12 +375,12 @@ async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
     )
     for kind, key, cap in (
         (SpendBudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
-        (SpendBudgetScopeKind.PROJECT, str(agent_project), 1),
+        (SpendBudgetScopeKind.AGENT_PROJECT, str(agent_project), 1),
     ):
-        await loop.managers.budgets.create_spend_budget(
+        await loop.managers.spend_budgets.create_spend_budget(
             owner, make_spend_budget(kind, key, cost_micros=cap)
         )
-    fills = await loop.managers.models.resolve_fill_set(owner, ours, ASSISTANT.roles, Eligibility())
+    fills = await loop.managers.language_models.resolve_fill_set(owner, ours, ASSISTANT.roles, Eligibility())
     fill = fills.fill_for(MAIN)
     assert fill is not None
     call = ModelCall(model=fill.model, messages=(), max_output_tokens=4_000)
@@ -389,7 +389,7 @@ async def test_an_agent_projects_budget_refuses_a_call_its_tenants_has_room_for(
         await calls.authorize(owner, ours, spender(owner), MAIN, fill, call, credential="platform")
     (breach,) = refused.value.refusal.breaches
     assert breach.scope == SpendBudgetScope(
-        kind=SpendBudgetScopeKind.PROJECT, key=str(agent_project)
+        kind=SpendBudgetScopeKind.AGENT_PROJECT, key=str(agent_project)
     )
 
     held = await calls.authorize(
@@ -418,7 +418,7 @@ async def test_an_agent_projects_budget_refuses_a_job_its_tenants_has_room_for(
             loop.managers.spend_budget_gate,
             loop.managers.pricing,
             loop.managers.agent_sessions,
-            loop.managers.budgets,
+            loop.managers.spend_budgets,
             SessionAgentProjectsBoundImpl(loop.storage.get_agent_project_storage()),
             clock=loop.clock,
         )
@@ -428,9 +428,9 @@ async def test_an_agent_projects_budget_refuses_a_job_its_tenants_has_room_for(
     )
     for kind, key, cap in (
         (SpendBudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
-        (SpendBudgetScopeKind.PROJECT, str(agent_project), 1),
+        (SpendBudgetScopeKind.AGENT_PROJECT, str(agent_project), 1),
     ):
-        await loop.managers.budgets.create_spend_budget(
+        await loop.managers.spend_budgets.create_spend_budget(
             owner, make_spend_budget(kind, key, cost_micros=cap)
         )
     deadline = loop.clock() + timedelta(hours=2)
@@ -439,7 +439,7 @@ async def test_an_agent_projects_budget_refuses_a_job_its_tenants_has_room_for(
         await calls.authorize_job(owner, ours, spender(owner), "compute", 3_600_000, deadline)
     (breach,) = refused.value.refusal.breaches
     assert breach.scope == SpendBudgetScope(
-        kind=SpendBudgetScopeKind.PROJECT, key=str(agent_project)
+        kind=SpendBudgetScopeKind.AGENT_PROJECT, key=str(agent_project)
     )
 
     held = await calls.authorize_job(owner, loose, spender(owner), "compute", 3_600_000, deadline)
@@ -516,7 +516,7 @@ async def test_a_spending_job_the_money_gate_parks_starts_nothing_and_holds_noth
 
     assert parked.end is RunEnd.PARKED and parked.park is not None
     if refusal == "funds":
-        assert parked.park.reason is ParkReason.BUDGET
+        assert parked.park.reason is ParkReason.SPEND_BUDGET
         assert parked.park.unlock in (FUNDS_UNLOCK, HELD_UNLOCK)
     else:
         assert parked.park.reason is ParkReason.PERSON and parked.park.unlock == SPENDER_UNLOCK
@@ -757,7 +757,7 @@ async def test_moving_the_time_zone_never_yields_a_second_days_budget_inside_one
     clock.now = at("2026-10-05T08:00:00")  # 22:00 on 5 October in UTC+14
     await money.open(unit_plan="team", zone=KIRITIMATI)
     budget = make_spend_budget(SpendBudgetScopeKind.TENANT, str(owner.org_id), cost_micros=1_000)
-    await money.loop.managers.budgets.create_spend_budget(owner, budget)
+    await money.loop.managers.spend_budgets.create_spend_budget(owner, budget)
 
     first = await spend(money, 1_000)
     assert first.hold.lines[0].window_start == at("2026-10-04T10:00:00")
@@ -872,13 +872,13 @@ async def test_a_top_up_leaves_every_limit_as_it_was(tmp_path: Path) -> None:
     owner = money.loop.owner
     await money.top_up(5_000)
     budget = make_spend_budget(SpendBudgetScopeKind.TENANT, str(owner.org_id), cost_micros=2_000)
-    budget = await money.loop.managers.budgets.create_spend_budget(owner, budget)
+    budget = await money.loop.managers.spend_budgets.create_spend_budget(owner, budget)
     await spend(money, 2_000)
     before = await money.agent_billing.get_spend(owner, budget.id)
 
     await money.top_up(1_000_000)
 
-    after = await money.loop.managers.budgets.get_spend_budget(owner, budget.id)
+    after = await money.loop.managers.spend_budgets.get_spend_budget(owner, budget.id)
     assert after.amount == budget.amount and after.version == budget.version
     assert await money.agent_billing.get_spend(owner, budget.id) == before
     refused = await money.gate.authorize(owner, tenant_request(owner, 1_000))
@@ -998,7 +998,7 @@ async def test_a_spend_limit_parks_on_its_budget_and_is_told_as_a_spend_limit(
     if by == "limit":
         await money.top_up(10_000_000)
         budget = make_spend_budget(SpendBudgetScopeKind.TENANT, str(owner.org_id), cost_micros=1)
-        await money.loop.managers.budgets.create_spend_budget(owner, budget)
+        await money.loop.managers.spend_budgets.create_spend_budget(owner, budget)
     agent_session_id = await money.loop.start()
     await money.loop.say(agent_session_id, "What is the total?")
     money.loop.anthropic.add(reply(said("The total is 12.")))
@@ -1006,7 +1006,7 @@ async def test_a_spend_limit_parks_on_its_budget_and_is_told_as_a_spend_limit(
     parked = await money.loop.loops.run(owner, agent_session_id)
 
     assert parked.end is RunEnd.PARKED and parked.park is not None
-    assert parked.park.reason is ParkReason.BUDGET, "a spend limit is the budget's"
+    assert parked.park.reason is ParkReason.SPEND_BUDGET, "a spend limit is the budget's"
     if by == "funds":
         assert parked.park.unlock == FUNDS_UNLOCK
     assert money.loop.anthropic.calls == []
@@ -1053,7 +1053,7 @@ async def test_a_call_no_price_covers_parks_until_a_release_prices_its_model(
     await money.open(unit_plan="team")
     owner = money.loop.owner
     agent_session_id = await money.loop.start()
-    fills = await money.loop.managers.models.resolve_fill_set(
+    fills = await money.loop.managers.language_models.resolve_fill_set(
         owner, agent_session_id, ASSISTANT.roles, Eligibility()
     )
     fill = fills.fill_for(MAIN)
@@ -1064,14 +1064,14 @@ async def test_a_call_no_price_covers_parks_until_a_release_prices_its_model(
         budget = make_spend_budget(
             SpendBudgetScopeKind.TENANT, str(owner.org_id), cost_micros=10**9
         )
-        await money.loop.managers.budgets.create_spend_budget(owner, budget)
+        await money.loop.managers.spend_budgets.create_spend_budget(owner, budget)
     await money.loop.say(agent_session_id, "What is the total?")
 
     parked = await money.loop.loops.run(owner, agent_session_id)
 
     park = parked.park
     assert parked.end is RunEnd.PARKED and park is not None
-    assert (park.reason, park.unlock) == (ParkReason.BUDGET, PRICE_UNLOCK)
+    assert (park.reason, park.unlock) == (ParkReason.SPEND_BUDGET, PRICE_UNLOCK)
     assert park.retry_at is not None
     assert park.retry_at == money.loop.clock() + PRICE_RETRY, "it tries again by itself"
     assert park.cause is not None and "an operator of the platform prices it" in park.cause

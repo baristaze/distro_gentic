@@ -97,7 +97,7 @@ def sweeper(
         managers.privacy,
         managers.agent_sessions,
         managers.tenancy,
-        managers.events,
+        managers.change_events,
         managers.outbox,
         SessionAgentProjectNullImpl(),
         RetentionOptions(),
@@ -130,8 +130,8 @@ async def declare(managers: PlatformManagers, ctx: TenantContext, policy: Retent
 
 
 async def a_session_saying(managers: PlatformManagers, ctx: TenantContext) -> UUID:
-    session = await managers.agent_sessions.create_session(ctx, make_session())
-    await managers.steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
+    session = await managers.agent_sessions.create_agent_session(ctx, make_session())
+    await managers.agent_steps.append_inputs(ctx, session.id, [make_message(session.id, SAID)])
     return session.id
 
 
@@ -174,7 +174,7 @@ async def test_expired_content_leaves_no_key_and_the_audit_row_holds_the_report(
         session=session,
     )
     assert len(history) == 1 and SAID not in history[0]["content"]
-    steps = (await managers.steps.get_agent_steps(owner, session, 0, 10)).items
+    steps = (await managers.agent_steps.get_agent_steps(owner, session, 0, 10)).items
     assert [step.content.state.value for step in steps] == ["absent"]
 
     (report,) = keys.log(org)
@@ -253,5 +253,5 @@ async def test_a_session_deleted_before_its_content_expires_has_its_key_rows_emp
     )
     assert gone["wrapped"] is None and gone["destroyed_at"] is not None
     await managers.agent_sessions.restore_agent_session(owner, session)
-    steps = (await managers.steps.get_agent_steps(owner, session, 0, 10)).items
+    steps = (await managers.agent_steps.get_agent_steps(owner, session, 0, 10)).items
     assert [step.content.state.value for step in steps] == ["absent"]

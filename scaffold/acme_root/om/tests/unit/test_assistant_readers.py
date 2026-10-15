@@ -302,11 +302,11 @@ async def test_a_list_of_sessions_holds_the_sub_agents_under_each_root_it_reads(
     platform = platform_over(tmp_path, kinds=(CLERK,))
     sessions, steps, owner = (
         platform.managers.agent_sessions,
-        platform.managers.steps,
+        platform.managers.agent_steps,
         platform.owner,
     )
     root = await sessions.get_agent_session(owner, await platform.start(kinds.SOFTWARE_ENGINEER))
-    child = await sessions.create_session(owner, make_session(parent=root))
+    child = await sessions.create_agent_session(owner, make_session(parent=root))
     asker = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     (message,) = await steps.append_inputs(
         owner, child.id, [make_message(child.id, principal=asker)]

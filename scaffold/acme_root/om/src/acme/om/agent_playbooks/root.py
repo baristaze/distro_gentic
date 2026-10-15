@@ -76,7 +76,7 @@ class AgentPlaybooksLayer:
                 SessionAgentProjectsBoundImpl(self._storage.get_agent_project_storage()),
                 self._clock,
             )
-            self._built = (agent_playbooks, managers.steps)
+            self._built = (agent_playbooks, managers.agent_steps)
         return self._built[0]
 
     def _managers(self) -> tuple[AgentPlaybooksManagerInterface, AgentStepsManagerInterface]:

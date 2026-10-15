@@ -325,7 +325,7 @@ async def test_a_redelivered_event_is_routed_once(platform: Wired) -> None:
     first = await platform.intake.route(platform.service, comment)
     assert await platform.intake.route(platform.service, comment) == first
     assert len(await inputs(platform, agent_session_id)) == 1
-    entries = await platform.managers.events.get_change_events(platform.owner, 0, 100)
+    entries = await platform.managers.change_events.get_change_events(platform.owner, 0, 100)
     assert [Routed.model_validate(e.payload) for e in entries if e.kind == ROUTED] == [first]
 
 
@@ -336,7 +336,7 @@ async def test_every_record_of_a_twins_event_names_the_twin(platform: Wired) -> 
     agent_session_id = await bound(platform)
     twins = event(Arrival.COMMENT)
     routed = await platform.intake.route(platform.service, twins)
-    entries = await platform.managers.events.get_change_events(platform.owner, 0, 100)
+    entries = await platform.managers.change_events.get_change_events(platform.owner, 0, 100)
     (entry,) = [e for e in entries if e.kind == ROUTED]
     assert entry.payload["provenance"] == "twin" and routed.provenance is Provenance.TWIN
     (step,) = await inputs(platform, agent_session_id)
@@ -394,7 +394,7 @@ async def test_an_unlink_stopped_after_its_audit_writes_it_once_when_run_again(
     link, and the unlink run again deletes it and writes no second entry."""
     person = await mapped(platform, Role.MEMBER)
     (link,) = await platform.intake.get_links(platform.owner, person.user_id)
-    events = platform.managers.events
+    events = platform.managers.change_events
     append = events.append_change_event
 
     async def appended_then_stopped(ctx: TenantContext, entry: ChangeEvent) -> ChangeEvent:
@@ -421,7 +421,7 @@ async def test_an_unlinks_entry_keeps_the_id_the_release_before_derived(
     person = await mapped(platform, Role.MEMBER)
     (link,) = await platform.intake.get_links(platform.owner, person.user_id)
     await platform.intake.unlink_account(person, "chat", "U-ANN")
-    entries = await platform.managers.events.get_change_events(platform.owner, 0, 100)
+    entries = await platform.managers.change_events.get_change_events(platform.owner, 0, 100)
     (entry,) = [e for e in entries if e.kind == UNLINKED]
     assert entry.id == derived_id(link.id, link.created_at, "intake.account_link.deleted")
 
@@ -511,7 +511,7 @@ async def test_a_chat_approval_counts_only_from_a_mapped_approver_and_as_them(
         admin.user_id,
         Role.ADMIN,
     )
-    entries = await platform.managers.events.get_change_events(platform.owner, 0, 100)
+    entries = await platform.managers.change_events.get_change_events(platform.owner, 0, 100)
     audited = [(e.kind, e.actor_id) for e in entries if e.kind in (APPROVED, REFUSED)]
     assert audited[-1] == (APPROVED, admin.user_id)
     assert [kind for kind, _ in audited].count(REFUSED) == 2

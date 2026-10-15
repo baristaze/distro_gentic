@@ -121,7 +121,7 @@ async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
     container = build_container(tmp_path)
     intake, events, work = (
         container.platform.intake,
-        container.managers.events,
+        container.managers.change_events,
         container.managers.work,
     )
     ann = await sign_in(container)

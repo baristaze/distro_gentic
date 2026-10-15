@@ -132,7 +132,7 @@ class Roots:
             self.managers.privacy,
             self.managers.agent_sessions,
             self.managers.tenancy,
-            self.managers.events,
+            self.managers.change_events,
             self.managers.outbox,
             self.agent_projects,
             self.options,
@@ -169,16 +169,16 @@ class Roots:
         )
 
     async def session_saying(self, ctx: TenantContext, text: str = SAID) -> AgentSession:
-        session = await self.managers.agent_sessions.create_session(ctx, make_session())
-        await self.managers.steps.append_inputs(ctx, session.id, [make_message(session.id, text)])
+        session = await self.managers.agent_sessions.create_agent_session(ctx, make_session())
+        await self.managers.agent_steps.append_inputs(ctx, session.id, [make_message(session.id, text)])
         return session
 
     async def said(self, ctx: TenantContext, agent_session_id: UUID) -> list[str]:
-        steps = (await self.managers.steps.get_agent_steps(ctx, agent_session_id, 0, 50)).items
+        steps = (await self.managers.agent_steps.get_agent_steps(ctx, agent_session_id, 0, 50)).items
         return [step.as_text() for step in steps if step.content.state is ContentState.PLAIN]
 
     async def audited(self, ctx: TenantContext) -> list[dict[str, object]]:
-        events = await self.managers.events.get_change_events(ctx, 0, 100)
+        events = await self.managers.change_events.get_change_events(ctx, 0, 100)
         return [dict(e.payload) for e in events if e.kind == KEY_DESTROYED]
 
 
@@ -229,7 +229,7 @@ async def test_expired_content_is_unreadable_its_key_destroyed_and_audited_as_re
     assert await roots.said(owner, session.id) == [SAID]
 
     assert await roots.sweep(WEEK + DAY) == 1
-    steps = (await roots.managers.steps.get_agent_steps(owner, session.id, 0, 50)).items
+    steps = (await roots.managers.agent_steps.get_agent_steps(owner, session.id, 0, 50)).items
     assert [step.content.state for step in steps] == [ContentState.ABSENT]
     assert SAID not in json.dumps([step.model_dump(mode="json") for step in steps])
     ring = await roots.storage.get_privacy_storage().read_keys(owner.org_id, session.id)
@@ -554,7 +554,7 @@ async def test_a_memory_only_policy_chooses_the_engines_storage_before_the_histo
 ) -> None:
     owner = await roots.tenant()
     await roots.declare(owner, RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY))
-    session = await roots.managers.agent_sessions.create_session(owner, make_session())
+    session = await roots.managers.agent_sessions.create_agent_session(owner, make_session())
     privacy = await roots.managers.privacy.get_privacy(owner, session.id)
     assert privacy.policy.mode is StorageMode.MEMORY_ONLY
     assert not (await roots.managers.retention.get_snapshot(owner, session.id)).at_rest
@@ -601,9 +601,9 @@ async def test_a_child_session_belongs_to_its_parents_agent_project(tmp_path: Pa
         agent_project_id=agent_project.agent_project_id, policy=a_policy(WEEK)
     )
     await roots.declare(owner, a_policy(MONTH), (narrowing,))
-    parent = await roots.managers.agent_sessions.create_session(owner, make_session())
+    parent = await roots.managers.agent_sessions.create_agent_session(owner, make_session())
     agent_project.agent_project_id = new_id()
-    child = await roots.managers.agent_sessions.create_session(owner, make_session(parent=parent))
+    child = await roots.managers.agent_sessions.create_agent_session(owner, make_session(parent=parent))
     snapshot = await roots.managers.retention.get_snapshot(owner, child.id)
     assert snapshot.agent_project_id == narrowing.agent_project_id
     assert snapshot.policy.content_lifetime == WEEK
@@ -635,7 +635,7 @@ async def test_a_session_parked_on_a_person_past_its_shapes_life_is_cancelled_th
     and the next pass marks it deleted."""
     owner = await roots.tenant()
     await roots.declare(owner, a_policy(WEEK, MONTH))
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     start = Start(id=new_id(), kind=KIND.name, title="the weekly report")
     session = await roots.managers.agents.start_agent_session(owner, start)
     (message,) = await steps.append_inputs(owner, session.id, [make_message(session.id)])
@@ -677,7 +677,7 @@ async def at_work_below(
     that carries its objective, and the run's epoch. Its shape outlives its
     parent's by a month, as one spawned a month later does, so no pass of
     its own reaches it before its parent's shape expires."""
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     spawn = Spawn(id=new_id(), kind=KIND.name, title="the pump log", objective="read it")
     child = await roots.managers.agents.spawn(owner, parent.id, spawn)
     (objective,) = (await steps.get_agent_steps(owner, child.id, 0, 1)).items
@@ -727,7 +727,7 @@ async def end_loop(
         header=LoopEndedHeader(outcome=LoopOutcome.SUCCEEDED),
     )
     done = [make_response(agent_session_id, request.loop_id, request.id), ended]
-    await roots.managers.steps.append_agent_steps(owner, agent_session_id, epoch, done)
+    await roots.managers.agent_steps.append_agent_steps(owner, agent_session_id, epoch, done)
 
 
 def cancels_of(history: tuple[AgentStep, ...]) -> list[tuple[ControlCommand, Actor]]:
@@ -744,7 +744,7 @@ async def test_a_sub_agent_parked_below_a_session_past_its_shapes_life_is_cancel
     before the sub-agent's own pass."""
     owner = await roots.tenant()
     await roots.declare(owner, a_policy(WEEK, MONTH))
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     root, child, request, epoch = await a_tree(roots, owner)
     person = Park(reason=ParkReason.PERSON, unlock="approval")
     parked = await sessions.park(owner, child.id, epoch, request.loop_id, person)
@@ -776,7 +776,7 @@ async def test_a_sub_agent_at_work_below_a_session_past_its_shapes_life_ends_by_
     marked at the first pass after the sub-agent's loop ends."""
     owner = await roots.tenant()
     await roots.declare(owner, a_policy(WEEK, MONTH))
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     root, child, request, epoch = await a_tree(roots, owner)
 
     await roots.sweep(MONTH + DAY)
@@ -806,7 +806,7 @@ async def test_a_cancelled_sub_agents_report_over_the_bound_is_dropped_and_its_l
     pass marks the session above."""
     owner = await roots.tenant()
     await roots.declare(owner, a_policy(WEEK, MONTH))
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     root, child, request, epoch = await a_tree(roots, owner)
     said = make_response(child.id, request.loop_id, request.id)
     long = TextBlock(text="x" * (CompactionPolicy().result_bound + 1))
@@ -835,7 +835,7 @@ async def test_the_cancel_of_a_sub_agent_parked_two_levels_down_wakes_no_session
     so no loop opens above, and the next pass marks the root."""
     owner = await roots.tenant()
     await roots.declare(owner, a_policy(WEEK, MONTH))
-    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    sessions, steps = roots.managers.agent_sessions, roots.managers.agent_steps
     root, middle, request, epoch = await a_tree(roots, owner)
     await end_loop(roots, owner, middle.id, request, epoch)
     below, request, epoch = await at_work_below(roots, owner, middle)
@@ -873,9 +873,9 @@ async def test_a_revoked_tenant_key_makes_its_content_unreadable_and_nothing_els
     with pytest.raises(KeyRefused):
         await roots.said(revoking, gone.id)
     with pytest.raises(KeyRefused):
-        await roots.managers.steps.append_inputs(revoking, gone.id, [make_message(gone.id, "more")])
+        await roots.managers.agent_steps.append_inputs(revoking, gone.id, [make_message(gone.id, "more")])
     assert await roots.said(other, kept.id) == ["the other tenant's notes"]
-    await roots.managers.steps.append_inputs(other, kept.id, [make_message(kept.id, "more")])
+    await roots.managers.agent_steps.append_inputs(other, kept.id, [make_message(kept.id, "more")])
     assert await roots.said(other, kept.id) == ["the other tenant's notes", "more"]
     fresh = await roots.session_saying(other, "a new session")
     assert await roots.said(other, fresh.id) == ["a new session"]
@@ -905,7 +905,7 @@ async def test_an_admins_erasure_is_the_sweeps_destruction_audited_once_under_th
     assert ring.keys and ring.revoked and all(key.is_destroyed() for key in ring.keys)
     (report,) = roots.platform.log(owner.org_id)
     assert erased.destruction == report and erased.content_expired_at is not None
-    events = await roots.managers.events.get_change_events(owner, 0, 100)
+    events = await roots.managers.change_events.get_change_events(owner, 0, 100)
     (entry,) = [event for event in events if event.kind == KEY_DESTROYED]
     assert entry.actor_id == admin.user_id and entry.payload["receipt"] == report.receipt
     assert await roots.managers.agent_sessions.get_agent_session(owner, session.id), (

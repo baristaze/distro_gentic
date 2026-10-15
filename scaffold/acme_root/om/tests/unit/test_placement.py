@@ -208,7 +208,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
     await managers.placement_operator.set_share(
         operator(), owner.org_id, plan_tier="pro", own_lane=False, concurrency=4
     )
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_session())
     said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does checkout time out?")
     await managers.agent_sessions.receive(owner, session.id, [said_now])
     (loop,) = [i for i in items_of(storage) if i.kind == WorkKind.LOOP]
@@ -298,7 +298,7 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     assert await managers.placement.claim_for(request(), walled, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
     assert failed is None, "never claimed again"
-    events = await managers.events.get_change_events(beta, after_seq=0, limit=10)
+    events = await managers.change_events.get_change_events(beta, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
     assert dead.target_id == stray.id and "another tenant" in str(dead.payload["last_error"])
 
@@ -326,7 +326,7 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     assert await managers.placement.claim_for(request(), machine, LEASE) is None
     failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
     assert failed is None, "never claimed again"
-    events = await managers.events.get_change_events(ajax, after_seq=0, limit=10)
+    events = await managers.change_events.get_change_events(ajax, after_seq=0, limit=10)
     (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
     assert dead.target_id == stray.id and "another session" in str(dead.payload["last_error"])
 
@@ -445,14 +445,14 @@ async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loo
         request(), tier, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(tier)
     )
     assert running is not None
-    before = await managers.agent_sessions.create_session(owner, make_session())
+    before = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.work.enqueue(
         owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": before.id})
     )
     await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
     )
-    after = await managers.agent_sessions.create_session(owner, make_session())
+    after = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.work.enqueue(
         owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": after.id})
     )
@@ -518,7 +518,7 @@ async def test_an_operator_sets_a_share_in_versions_and_the_stream_names_them(
     ).share
     assert (first.version, second.version, second.id) == (1, 2, first.id)
     assert second.created_by == second.updated_by == admin.identity_id
-    events = await managers.events.get_change_events(owner, after_seq=0, limit=10)
+    events = await managers.change_events.get_change_events(owner, after_seq=0, limit=10)
     assert [(e.kind, e.actor_id, e.payload["version"]) for e in events] == [
         (SHARE_SET_KIND, admin.identity_id, 1),
         (SHARE_SET_KIND, admin.identity_id, 2),
@@ -547,7 +547,7 @@ async def test_a_share_is_refused_to_a_reader_an_unknown_org_and_bad_terms(
             await managers.placement_operator.set_share(
                 operator(), owner.org_id, **{**terms, **bad}
             )
-    assert await managers.events.get_change_events(owner, after_seq=0, limit=10) == []
+    assert await managers.change_events.get_change_events(owner, after_seq=0, limit=10) == []
     with pytest.raises(NotFound):
         await managers.work_operator.read_tenant_cap(operator(), owner.org_id, tier_lane("pro"))
 

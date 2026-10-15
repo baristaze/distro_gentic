@@ -120,7 +120,7 @@ async def parked(
     assert started.status_code == 201, started.text
     agent_session_id = UUID(started.json()["id"])
     ctx = await context_of(container, tenant[Role.MEMBER])
-    sessions, steps = container.managers.agent_sessions, container.managers.steps
+    sessions, steps = container.managers.agent_sessions, container.managers.agent_steps
     member = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
     (message,) = await steps.append_inputs(
         ctx, agent_session_id, [make_message(agent_session_id, principal=member)]
@@ -231,7 +231,7 @@ async def test_a_budgets_link_answers_who_sets_budgets_alone(
 ) -> None:
     owner = await context_of(container, ajax[Role.OWNER])
     now = utcnow()
-    budget = await container.managers.budgets.create_spend_budget(
+    budget = await container.managers.spend_budgets.create_spend_budget(
         owner,
         SpendBudget(
             id=new_id(),
@@ -246,7 +246,7 @@ async def test_a_budgets_link_answers_who_sets_budgets_alone(
         ),
     )
     run = await parked(
-        client, container, ajax, Park(reason=ParkReason.BUDGET, unlock=str(budget.id))
+        client, container, ajax, Park(reason=ParkReason.SPEND_BUDGET, unlock=str(budget.id))
     )
     notified = await told(container, ajax, run)
     assert await recipients(container, ajax, notified) == {Role.OWNER, Role.ADMIN}

@@ -111,8 +111,8 @@ async def said_whole_turn(
     )
     call = make_tool_request(sid, loop_id, response.id)
     answer = make_tool_response(sid, loop_id, call.id)
-    epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_agent_steps(ctx, sid, epoch, [request, response, call, answer])
+    epoch = await managers.agent_steps.begin_run(ctx, sid)
+    await managers.agent_steps.append_agent_steps(ctx, sid, epoch, [request, response, call, answer])
 
 
 def asked_with(response: AgentStep, given: dict[str, Any]) -> AgentStep:

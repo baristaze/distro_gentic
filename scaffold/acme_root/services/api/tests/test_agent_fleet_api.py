@@ -275,7 +275,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
 
     # The session's loop parks on the gate; the standing reads the park.
     sessions = container.storage.get_agent_session_storage()
-    stored = await sessions.read_session(UUID(org_id), UUID(agent_session_id))
+    stored = await sessions.read_agent_session(UUID(org_id), UUID(agent_session_id))
     assert stored is not None
     await sessions.write_session(
         UUID(org_id), parked(stored, stored.version + 1), stored.version, ()

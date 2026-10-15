@@ -241,7 +241,7 @@ class MatrixResolverImpl(MatrixResolverInterface):
     ) -> Callable[[ModelRole, ModelAsk | None], MatrixQuery]:
         """The question the session asks for each model role, with the size
         its kind asks of it, if any."""
-        session = await self._sessions.read_session(ctx.org_id, agent_session_id)
+        session = await self._sessions.read_agent_session(ctx.org_id, agent_session_id)
         if session is None:
             raise NotFound(f"agent session {agent_session_id} not found")
         share = await self._shares.read_share(ctx.org_id)

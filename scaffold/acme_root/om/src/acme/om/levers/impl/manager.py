@@ -66,7 +66,7 @@ class LeversManagerImpl(LeversManagerInterface):
         # Newest first, from the window's end: ids are minted in time order.
         after: UUID | None = id_floor(until)
         while after is not None:
-            page = await self._sessions.read_sessions(org_id, None, after, self._options.page)
+            page = await self._sessions.read_agent_sessions(org_id, None, after, self._options.page)
             after = page[-1].id if len(page) == self._options.page else None
             for session in page:
                 if session.created_at < since:

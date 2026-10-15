@@ -91,7 +91,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         managers.tools,
         managers.agent_workspaces,
         managers.agent_sessions,
-        managers.steps,
+        managers.agent_steps,
         managers.work,
         managers.tenancy,
         container.platform.kinds.warm_grace,

@@ -455,7 +455,7 @@ async def test_a_backend_that_closes_egress_holds_a_session_that_reaches_nothing
     await pool.prepare(ctx, new_id(), closed)
     (row,) = await pool.rows()
     assert row.egress_open is False
-    assert pool.machines.machines[row.name].spec.egress_open is False
+    assert pool.machines.vms[row.name].spec.egress_open is False
 
 
 # Every machine started is let go.

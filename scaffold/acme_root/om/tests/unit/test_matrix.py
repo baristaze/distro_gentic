@@ -396,7 +396,7 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
     assert parked is RunEnd.PARKED, "its last eligible fallback failed too"
     (fell,) = await switches(agent_fleet, agent_session_id)
     assert (fell.from_fill, fell.to_fill) == (sol_eu, sonnet_eu)
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert fills.eligibility == EU, "the fill set holds what the tenant requires"
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (sonnet_eu, ())
     assert (fills.roles[1].fill, fills.roles[1].fallbacks) == (haiku_eu, ())
@@ -410,10 +410,10 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
         other, SpendAccountRequest(funding=FundingMode.PLATFORM, unit_plan_id="starter", zone="UTC")
     )
     unkept = await agent_fleet.loop.managers.agents.start_agent_session(other, a_start())
-    await agent_fleet.loop.managers.models.resolve_fill_set(
+    await agent_fleet.loop.managers.language_models.resolve_fill_set(
         other, unkept.id, (MAIN, SUMMARIZER), Eligibility()
     )
-    theirs = await agent_fleet.loop.managers.models.get_fill_set(other, unkept.id)
+    theirs = await agent_fleet.loop.managers.language_models.get_fill_set(other, unkept.id)
     assert theirs.roles[0].fill == OPUS, "a tenant that requires nothing takes the kind's row"
 
 
@@ -666,10 +666,10 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     pin = await agent_fleet.matrix.matrix.get_pin(agent_fleet.owner, agent_session_id)
     assert (pin.fill_set_version, pin.matrix_version) == (2, second.number)
     fresh = await agent_fleet.loop.start()
-    await agent_fleet.loop.managers.models.resolve_fill_set(
+    await agent_fleet.loop.managers.language_models.resolve_fill_set(
         agent_fleet.owner, fresh, (MAIN, SUMMARIZER), Eligibility()
     )
-    assert (await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, fresh)).fill_for(
+    assert (await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, fresh)).fill_for(
         MAIN
     ) == OPUS
 
@@ -693,7 +693,7 @@ async def test_a_kinds_ask_is_answered_by_its_sizes_row_at_the_effort_a_fill_lis
     agent_fleet.loop.anthropic.add(reply(said("The total is 12.")))
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
     main, summarizer = fills.roles
     assert served(main) == [(SONNET.name, Effort.XHIGH), (SOL.name, SOL.effort)], (
         "the size's row, each fill at the effort asked where it lists it"
@@ -767,7 +767,7 @@ async def test_a_products_kind_takes_the_row_of_the_size_it_asks_until_a_row_nam
     agent_fleet.loop.anthropic.add(reply(said("Three of them."), model=HAIKU.model))
     assert await loop_once(agent_fleet, second) is RunEnd.ENDED
     assert agent_fleet.loop.anthropic.calls[-1].model == HAIKU.model, "its own row"
-    kept = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, first)
+    kept = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, first)
     assert kept.fill_for(MAIN) == OPUS, "a running session keeps its version"
 
 
@@ -831,7 +831,7 @@ async def test_an_own_key_tenants_calls_go_out_on_its_key_reference(tmp_path: Pa
 
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
 
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert fills.roles[0].fallbacks == (), "no fallback on a provider it holds no key for"
     assert len(agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).calls) == 1
     assert agent_fleet.loop.anthropic.calls == [] and agent_fleet.loop.openai.calls == [], (
@@ -1076,7 +1076,7 @@ async def test_a_compactions_failure_refuses_the_key_its_call_carried_and_no_oth
     assert await loop_once(agent_fleet, agent_session_id, "And the average?") is RunEnd.ENDED
     client.add(ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=401))
     compact = History(agent_session_id).control(ControlCommand.COMPACT)
-    await agent_fleet.loop.managers.steps.append_inputs(
+    await agent_fleet.loop.managers.agent_steps.append_inputs(
         agent_fleet.owner, agent_session_id, [compact]
     )
 
@@ -1150,7 +1150,7 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
         reply(said("The total is 12."), model=OPUS.model)
     )
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
-    fills = await agent_fleet.loop.managers.models.get_fill_set(agent_fleet.owner, agent_session_id)
+    fills = await agent_fleet.loop.managers.language_models.get_fill_set(agent_fleet.owner, agent_session_id)
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (OPUS, (SONNET,))
 
     platform, _ = await platform_tenant(agent_fleet)
@@ -1170,7 +1170,7 @@ async def test_a_purged_tenants_pins_and_choices_go_with_its_fill_sets(
     agent_session_id = await agent_fleet.loop.start()
     agent_fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).add(reply(said("The total is 12.")))
     assert await loop_once(agent_fleet, agent_session_id) is RunEnd.ENDED
-    models = agent_fleet.loop.managers.models
+    models = agent_fleet.loop.managers.language_models
     assert await models.purge_tenant(agent_fleet.owner) == 0, "a living tenant keeps everything"
 
     async def expired(ctx: object) -> bool:

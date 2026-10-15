@@ -172,7 +172,7 @@ class Checkout:
 
     async def session(self) -> UUID:
         made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
-        created = await self.managers.agent_sessions.create_session(self.ctx, made)
+        created = await self.managers.agent_sessions.create_agent_session(self.ctx, made)
         return created.id
 
     async def prepare(self, agent_session_id: UUID) -> AgentWorkspace:
@@ -286,10 +286,10 @@ async def a_dead_run_then_a_parked_loop(
     not yet released."""
     agent_session_id = await checkout.session()
     host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
-    await host_a.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_a.agent_steps.begin_run(checkout.ctx, agent_session_id)
     on_a = await host_a.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
     (Path(on_a.location) / "notes.txt").write_text("the dead run's draft\n")
-    await host_b.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_b.agent_steps.begin_run(checkout.ctx, agent_session_id)
     on_b = await host_b.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
     (Path(on_b.location) / "notes.txt").write_text("the parked loop's draft\n")
     return agent_session_id, host_a, on_a, host_b, on_b
@@ -324,7 +324,7 @@ async def told_both(checkout: Checkout, host: PlatformManagers, agent_session_id
     assert len(held.notices) == 2, "neither notice is written over"
     assert all(any(ref in told for told in held.notices) for ref in (parked, dead))
     assert all("let go at" in told for told in held.notices), "each says when it was let go"
-    await host.steps.begin_run(checkout.ctx, agent_session_id)
+    await host.agent_steps.begin_run(checkout.ctx, agent_session_id)
     following = await host.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
     assert following.changed is not None
     assert parked in following.changed and dead in following.changed, "told of both"
@@ -355,8 +355,8 @@ async def test_a_stale_run_that_attaches_after_the_next_run_began_loses_no_notic
     B parks, and A's runner, never restarted, lets A's instance go."""
     agent_session_id = await checkout.session()
     host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
-    await host_a.steps.begin_run(checkout.ctx, agent_session_id)
-    await host_b.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_a.agent_steps.begin_run(checkout.ctx, agent_session_id)
+    await host_b.agent_steps.begin_run(checkout.ctx, agent_session_id)
     on_a = await host_a.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
     (Path(on_a.location) / "notes.txt").write_text("the dead run's draft\n")
     on_b = await host_b.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
@@ -390,11 +390,11 @@ async def test_a_notice_written_while_an_attach_syncs_outlives_that_attach(
     agent_session_id = await checkout.session()
     branch = session_branch(agent_session_id)
     host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
-    await host_a.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_a.agent_steps.begin_run(checkout.ctx, agent_session_id)
     on_a = await host_a.tools.prepare_agent_workspace(checkout.ctx, agent_session_id, DIRECTORY)
     git(Path(on_a.location), "push", "-q", "origin", branch)
     (Path(on_a.location) / "notes.txt").write_text("the late run's draft\n")
-    await host_b.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_b.agent_steps.begin_run(checkout.ctx, agent_session_id)
     git_b = host_b.agent_workspaces._git  # type: ignore[attr-defined]
     synced = git_b.sync
 
@@ -412,7 +412,7 @@ async def test_a_notice_written_while_an_attach_syncs_outlives_that_attach(
     held = await checkout.managers.agent_workspaces.get_workspace(checkout.ctx, agent_session_id)
     assert len(held.notices) == 1 and late in held.notices[0], "the late notice survives"
     await host_b.tools.release_agent_workspace(checkout.ctx, on_b)
-    await host_b.steps.begin_run(checkout.ctx, agent_session_id)
+    await host_b.agent_steps.begin_run(checkout.ctx, agent_session_id)
     following = await host_b.tools.prepare_agent_workspace(
         checkout.ctx, agent_session_id, DIRECTORY
     )
@@ -430,7 +430,7 @@ async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
     checkout = Checkout(tmp_path, infra=infra)
     agent_session_id = await checkout.session()
     branch = session_branch(agent_session_id)
-    await checkout.managers.steps.begin_run(checkout.ctx, agent_session_id)
+    await checkout.managers.agent_steps.begin_run(checkout.ctx, agent_session_id)
     workspace = await checkout.prepare(agent_session_id)
     (Path(workspace.location) / "notes.txt").write_text("the stale run's draft\n")
     binding_of = checkout.agent_projects.binding_of
@@ -438,7 +438,7 @@ async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
     async def claimed_meanwhile(*args: Any, **kwargs: Any) -> object:
         # The session's next run claims it, and its first command lands.
         found = await binding_of(*args, **kwargs)
-        epoch = await checkout.managers.steps.begin_run(checkout.ctx, agent_session_id)
+        epoch = await checkout.managers.agent_steps.begin_run(checkout.ctx, agent_session_id)
         await infra.get_transport().write_file(workspace, ".claimed", b"", epoch)
         return found
 
@@ -812,7 +812,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     )
     holder = await managers.hosts.authenticate(request(), enrolled.credential)
     made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
-    session = await managers.agent_sessions.create_session(owner, made)
+    session = await managers.agent_sessions.create_agent_session(owner, made)
     await managers.hosts.place_session(owner, session.id, pool.id)
     # The host prepared its workspace, an empty directory, and holds it.
     here = tmp_path / "host" / session.id.hex

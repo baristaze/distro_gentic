@@ -78,7 +78,7 @@ class AgentSessionsInAgentProjectImpl(AgentSessionsManagerInterface):
                     f"agent session {session.id} belongs to agent project {own.agent_project_id},"
                     f" and the session it came from to none"
                 )
-        return await self._inner.create_session(ctx, session)
+        return await self._inner.create_agent_session(ctx, session)
 
     async def get_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession:
         return await self._inner.get_agent_session(ctx, agent_session_id)
@@ -106,7 +106,7 @@ class AgentSessionsInAgentProjectImpl(AgentSessionsManagerInterface):
         limit: int,
         among: Among = Among.VISIBLE,
     ) -> AgentSessionPage:
-        return await self._inner.get_sessions(ctx, status, after, limit, among)
+        return await self._inner.get_agent_sessions(ctx, status, after, limit, among)
 
     async def is_visible(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         return await self._inner.is_visible(ctx, agent_session_id)

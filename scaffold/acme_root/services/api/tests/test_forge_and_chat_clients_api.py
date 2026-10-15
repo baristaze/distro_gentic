@@ -162,7 +162,7 @@ async def test_a_delivery_naming_its_repository_in_capitals_routes_to_the_sessio
         container.storage, container.managers, integrations=container.integrations
     )
     ctx = await container.managers.tenancy.service_context(seed_request(), ajax, EMPTY_UUID)
-    session = await container.managers.agent_sessions.create_session(ctx, make_session())
+    session = await container.managers.agent_sessions.create_agent_session(ctx, make_session())
     kept = Repository(host="github.com", path="Octo-Org/Widgets").path
     await intake.bind_work(ctx, session.id, HandleKind.PULL_REQUEST, f"{kept}#12")
     (only,) = await queued(container)

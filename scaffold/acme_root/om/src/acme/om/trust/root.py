@@ -113,8 +113,8 @@ class TrustLayer:
         storage = self._storage
         trust = TrustManagerImpl(
             storage.get_trust_storage(),
-            managers.steps,
-            managers.events,
+            managers.agent_steps,
+            managers.change_events,
             managers.attribution,
             managers.agent_sessions,
             managers.tenancy,

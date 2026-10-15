@@ -157,7 +157,7 @@ class Host:
             managers.tools,
             managers.agent_workspaces,
             managers.agent_sessions,
-            managers.steps,
+            managers.agent_steps,
             managers.work,
             managers.tenancy,
             graces,
@@ -176,7 +176,7 @@ class Host:
         """What a run killed mid-loop leaves: its loop item claimed, its
         writer epoch taken, and its workspace prepared, never released."""
         managers, owner = self.managers, self.owner
-        session = await managers.agent_sessions.create_session(
+        session = await managers.agent_sessions.create_agent_session(
             owner, make_session().model_copy(update={"kind": kind, "tools": ()})
         )
         now = utcnow()
@@ -199,7 +199,7 @@ class Host:
             request(), queued.lane, [WorkKind.LOOP], "runner-1", timedelta(minutes=1)
         )
         assert claimed is not None and claimed[1].target_id == session.id
-        await managers.steps.begin_run(owner, session.id)
+        await managers.agent_steps.begin_run(owner, session.id)
         workspace = await managers.tools.prepare_agent_workspace(owner, session.id, spec)
         return session.id, claimed[1], Path(workspace.location)
 
@@ -382,7 +382,7 @@ async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
     assert await host.held() == {agent_session_id}, "its instance and its work stay"
 
     # The session's next loop moves its head: its work is pushed again.
-    await managers.steps.append_inputs(
+    await managers.agent_steps.append_inputs(
         host.owner, agent_session_id, [make_message(agent_session_id)]
     )
     monkeypatch.setattr(source, "snapshot", snapshot)
@@ -423,12 +423,12 @@ async def test_a_kept_sessions_instance_that_no_snapshot_holds_stays_until_one_d
     assert len(kept) == 1, "logged once for its head"
 
     # A snapshot taken of it as it stands: the next pass lets it go.
-    epoch = (await managers.steps.get_cursor(host.owner, agent_session_id)).epoch
+    epoch = (await managers.agent_steps.get_cursor(host.owner, agent_session_id)).epoch
     taken = AgentWorkspaceSnapshot(
         id=new_id(), hash=HASH_SCHEME + "0" * 64, size=0, agent_workspace_id=agent_session_id
     )
     step = snapshotted_step(new_id(), utcnow(), agent_session_id, new_id(), taken)
-    await managers.steps.append_agent_steps(host.owner, agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(host.owner, agent_session_id, epoch, [step])
     assert await host.passes() == 1
     assert await host.held() == set()
 
@@ -509,7 +509,7 @@ async def test_an_instance_this_database_holds_no_record_of_is_left_alone(
     unknown_session = await provider.prepare(host.owner.org_id, new_id(), TWIN)
     agent_session_id, item, _ = await host.run_left(TWIN)
     await managers.work.complete(host.owner, item)
-    gone = await managers.steps.purge_histories([(host.owner.org_id, agent_session_id)])
+    gone = await managers.agent_steps.purge_histories([(host.owner.org_id, agent_session_id)])
     assert gone == [(host.owner.org_id, agent_session_id)], "its history went with its retention"
 
     with caplog.at_level(logging.WARNING):

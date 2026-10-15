@@ -142,7 +142,7 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
                 ctx.org_id, recorded[0].agent_playbook_id
             )
             return "" if agent_playbook is None else skill_md(agent_playbook)
-        if await self._session_rows.read_session(ctx.org_id, agent_session_id) is not None:
+        if await self._session_rows.read_agent_session(ctx.org_id, agent_session_id) is not None:
             return ""
         agent_playbook = await self._pinned(ctx, kind, origin)
         if agent_playbook is None:

@@ -189,7 +189,7 @@ async def driven(host: HostAgent, work: Coroutine[Any, Any, LoopRun]) -> LoopRun
 
 
 async def steps_of(runner: RunnerContainer, owner: Any, agent_session_id: UUID) -> list[AgentStep]:
-    page = await runner.managers.steps.get_agent_steps(owner, agent_session_id, 0, 200)
+    page = await runner.managers.agent_steps.get_agent_steps(owner, agent_session_id, 0, 200)
     return list(page.items)
 
 

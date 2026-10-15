@@ -192,7 +192,7 @@ def build_runner_platform(
     # Every part the loop streams goes to the shared cache, where the API
     # reads it live; a stream's opening and its completion are recorded,
     # in the managers' event stream, and hinted.
-    stream = build_stream(infra, lambda: built[0].events, product_kinds=ports.kinds)
+    stream = build_stream(infra, lambda: built[0].change_events, product_kinds=ports.kinds)
     managers = build_platform_managers(
         storage,
         infra,

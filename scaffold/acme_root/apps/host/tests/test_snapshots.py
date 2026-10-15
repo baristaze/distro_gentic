@@ -155,7 +155,7 @@ async def claimed(host: HostAgent) -> None:
 
 async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
     managers = api.container.managers
-    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
     await managers.hosts.place_session(api.owner, session.id, pool_id)
     return session.id
 
@@ -388,12 +388,12 @@ async def test_taking_control_of_a_released_kept_workspace_restores_its_latest_s
     await claimed(host)
     record = await managers.agent_workspaces.kept_snapshot(api.owner, snapshot_id)
     assert record is not None
-    epoch = await managers.steps.begin_run(api.owner, agent_session_id)
+    epoch = await managers.agent_steps.begin_run(api.owner, agent_session_id)
     taken = AgentWorkspaceSnapshot(
         id=record.id, hash=record.hash, size=record.size, agent_workspace_id=agent_session_id
     )
     step = snapshotted_step(new_id(), record.created_at, agent_session_id, new_id(), taken)
-    await managers.steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
     twin.live.discard(agent_session_id)  # let go past its grace
     twin.files[agent_session_id] = b"its files alone"
 
@@ -446,12 +446,12 @@ async def offline(api: Stack, host: HostAgent) -> None:
 async def with_snapshot_step(api: Stack, agent_session_id: UUID, record: KeptSnapshot) -> int:
     """A run's end that named `record` in the history; the run's epoch."""
     managers = api.container.managers
-    epoch = await managers.steps.begin_run(api.owner, agent_session_id)
+    epoch = await managers.agent_steps.begin_run(api.owner, agent_session_id)
     taken = AgentWorkspaceSnapshot(
         id=record.id, hash=record.hash, size=record.size, agent_workspace_id=agent_session_id
     )
     step = snapshotted_step(new_id(), record.created_at, agent_session_id, new_id(), taken)
-    await managers.steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
     return epoch
 
 
@@ -476,7 +476,7 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     assert waits.value.clears
     session = await managers.agent_sessions.get_agent_session(api.owner, agent_session_id)
     assert session.park is None or session.park.reason is not ParkReason.HANDOVER
-    events = await managers.events.get_change_events(api.owner, 0, 500)
+    events = await managers.change_events.get_change_events(api.owner, 0, 500)
     assert [event for event in events if event.kind == TAKEN] == [], "no take to audit"
     command = HandCommand(key=new_id(), argv=("ls",))
     with pytest.raises(NotHandedOver):
@@ -493,7 +493,7 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     taken = await taking
     assert taken.park is not None and taken.park.reason is ParkReason.HANDOVER
     assert twin.files[agent_session_id] == b"the snapshot"
-    events = await managers.events.get_change_events(api.owner, 0, 500)
+    events = await managers.change_events.get_change_events(api.owner, 0, 500)
     assert len([event for event in events if event.kind == TAKEN]) == 1, "audited once"
 
     # The person works by hand; a take again restores nothing over it.
@@ -517,7 +517,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     epoch = await with_snapshot_step(api, agent_session_id, record)
     # The next run changed the workspace and died before its end's snapshot.
     step = changed_step(new_id(), utcnow(), agent_session_id, new_id())
-    await managers.steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(api.owner, agent_session_id, epoch, [step])
     twin.files[agent_session_id] = b"the snapshot, and what the run installed since"
     now = [utcnow()]
     sweep = HeldWorkspacesSweep(
@@ -525,7 +525,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
         managers.tools,
         managers.agent_workspaces,
         managers.agent_sessions,
-        managers.steps,
+        managers.agent_steps,
         managers.work,
         managers.tenancy,
         ProductKinds().warm_grace,

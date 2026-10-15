@@ -177,7 +177,7 @@ async def test_a_spawned_or_handed_over_session_belongs_where_it_came_from(
     source = await managers.agent_projects.start_agent_session(
         member, agent_project.id, a_start("assistant")
     )
-    (said,) = await managers.steps.append_inputs(member, source.id, [make_message(source.id)])
+    (said,) = await managers.agent_steps.append_inputs(member, source.id, [make_message(source.id)])
     await model_request(managers, member, source.id, [said])
     handoff = Handoff(id=new_id(), kind="delivery", title="fix it", objective="fix the drop")
     handed = await managers.agents.hand_off(member, source.id, handoff)

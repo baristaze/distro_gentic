@@ -175,7 +175,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         self, admin: OperatorContext, org_id: UUID, agent_session_id: UUID
     ) -> SessionStanding:
         admin.require(OperatorPermission.READ)
-        session = await self._sessions.read_session(org_id, agent_session_id)
+        session = await self._sessions.read_agent_session(org_id, agent_session_id)
         if session is None:
             raise NotFound(f"agent session {agent_session_id} is not in {org_id}")
         self._trail(admin, org_id, "a session's standing")

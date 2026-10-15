@@ -289,7 +289,7 @@ class ListSessionsImpl(NativeToolImpl):
         assert isinstance(call_input, SessionsQuery)
         # A sub-agent waits under a root in any status, an idle one included,
         # so the scan reads every root, and the filter reads each session.
-        page = await self._sessions().get_sessions(ctx, None, call_input.before, SESSION_SCAN)
+        page = await self._sessions().get_agent_sessions(ctx, None, call_input.before, SESSION_SCAN)
         found: list[SessionLine] = []
         listed: UUID | None = None  # the last root whose tree the answer holds
         for root in page.items:

@@ -220,7 +220,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
 
         # The loop's end kept the machine whole, and let it go.
-        page = await managers.steps.get_agent_steps(owner, session.id, 0, 200)
+        page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 200)
         snapshotted = [s for s in page.items if s.type is AgentStepType.SNAPSHOTTED]
         assert len(snapshotted) == 1
         (record,) = await managers.agent_workspaces.kept_snapshots(owner, session.id)
@@ -241,7 +241,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
             # The session read what its first command printed, and its
             # egress is open: a person approves the call, and the loop goes
             # on, on a machine started from the snapshot its park kept.
-            page = await managers.steps.get_agent_steps(owner, session.id, 0, 200)
+            page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 200)
             requests = [s for s in page.items if s.type is AgentStepType.TOOL_REQUEST]
             await managers.tools.decide_call(owner, session.id, requests[-1].seq, approve=True)
             second = await managers.loop.run(owner, session.id)

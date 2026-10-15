@@ -99,7 +99,7 @@ async def spawn(container: AppContainer, headers: dict[str, str], parent_id: str
     ctx = await context_of(container, headers)
     sessions = container.managers.agent_sessions
     parent = await sessions.get_agent_session(ctx, UUID(parent_id))
-    child = await sessions.create_session(ctx, make_session(parent=parent))
+    child = await sessions.create_agent_session(ctx, make_session(parent=parent))
     return str(child.id)
 
 
@@ -144,8 +144,8 @@ async def a_loop(
             if accepted is not None and index == answered - 1:
                 answer = answer.model_copy(update={"header": ToolResponseHeader(accepted=accepted)})
             steps.append(answer)
-    epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_agent_steps(ctx, sid, epoch, steps)
+    epoch = await managers.agent_steps.begin_run(ctx, sid)
+    await managers.agent_steps.append_agent_steps(ctx, sid, epoch, steps)
     if park is not None:
         await managers.agent_sessions.park(ctx, sid, epoch, loop_id, park)
     return session
@@ -333,11 +333,11 @@ async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_al
     nor to another tenant, until its creator makes it org-wide."""
     root = await start(client, owner, "the dropped object")
     ctx = await context_of(container, owner)
-    sessions, steps = container.managers.agent_sessions, container.managers.steps
-    parent = await sessions.create_session(
+    sessions, steps = container.managers.agent_sessions, container.managers.agent_steps
+    parent = await sessions.create_agent_session(
         ctx, make_session(parent=await sessions.get_agent_session(ctx, UUID(root["id"])))
     )
-    held = await sessions.create_session(ctx, make_session(parent=parent))
+    held = await sessions.create_agent_session(ctx, make_session(parent=parent))
     asker = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
     (message,) = await steps.append_inputs(ctx, held.id, [make_message(held.id, principal=asker)])
     epoch = await steps.begin_run(ctx, held.id)
@@ -580,7 +580,7 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
         SpendBudgetScopeKind.PERSON: str(new_id()),
     }
     budgets = [
-        await container.managers.budgets.create_spend_budget(
+        await container.managers.spend_budgets.create_spend_budget(
             ctx,
             SpendBudget(
                 id=new_id(),

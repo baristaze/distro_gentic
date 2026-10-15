@@ -198,14 +198,14 @@ class Trusted:
         ctx = ctx or self.owner
         person = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
         message = make_message(agent_session_id, text, principal=person)
-        (stored,) = await self.managers.steps.append_inputs(ctx, agent_session_id, [message])
+        (stored,) = await self.managers.agent_steps.append_inputs(ctx, agent_session_id, [message])
         return stored
 
     async def history(self, agent_session_id: UUID) -> list[AgentStep]:
         steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_agent_steps(
+            page = await self.managers.agent_steps.get_agent_steps(
                 self.owner, agent_session_id, after, 200
             )
             steps.extend(page.items)
@@ -269,19 +269,19 @@ def trusted(
 
     sink = StreamSinkMemoryImpl()
     loops = LoopManagerImpl(
-        managers.steps,
+        managers.agent_steps,
         managers.agent_sessions,
         managers.agents,
         AgentKindCatalog(kinds=(STEADY,)),
         managers.attribution,
-        managers.models,
+        managers.language_models,
         managers.windows,
         managers.tools,
         CallGateSpendBudgetImpl(
             managers.spend_budget_gate,
             managers.pricing,
             managers.agent_sessions,
-            managers.budgets,
+            managers.spend_budgets,
             SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         CallCredentialsPlatformImpl(providers),

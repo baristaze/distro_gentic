@@ -608,7 +608,7 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
             workspace_reader=ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",)),
         ),
     )
-    tools, steps = loop.managers.tools, loop.managers.steps
+    tools, steps = loop.managers.tools, loop.managers.agent_steps
     products = loop.platform.evidence._work_product  # pyright: ignore[reportAttributeAccessIssue]
     assert isinstance(products, WorkProductAgentWorkspacesImpl)
     agent_session_id = await loop.start("twinned")
@@ -658,7 +658,7 @@ async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_
             workspace_agent_projects=agent_projects, workspace_git=git, workspace_reader=reader
         ),
     )
-    steps = host_a.managers.steps
+    steps = host_a.managers.agent_steps
     agent_session_id = await host_a.start("twinned")
     await steps.begin_run(host_a.owner, agent_session_id)
     parked = await host_a.managers.tools.prepare_agent_workspace(

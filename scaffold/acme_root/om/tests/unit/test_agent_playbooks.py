@@ -378,7 +378,7 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
                 managers.spend_budget_gate,
                 managers.pricing,
                 managers.agent_sessions,
-                managers.budgets,
+                managers.spend_budgets,
                 SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
                 clock=clock,
             )
@@ -394,10 +394,10 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
     )
     agent_playbooks = layer.build(loop.platform)
     agent_session_id = await loop.start("builder")
-    line = await loop.managers.budgets.create_spend_budget(
+    line = await loop.managers.spend_budgets.create_spend_budget(
         loop.owner,
         make_spend_budget(
-            SpendBudgetScopeKind.SESSION, str(agent_session_id), cost_micros=50_000_000
+            SpendBudgetScopeKind.AGENT_SESSION, str(agent_session_id), cost_micros=50_000_000
         ),
     )
     await agent_playbooks.publish(loop.owner, draft(gate(Decision.DENY, tool="compute")))
@@ -420,6 +420,6 @@ async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_i
     ]
     assert isinstance(answer.header, ToolResponseHeader)
     assert answer.header.failure is ToolFailure.DENIED
-    spend = await loop.managers.budgets.get_spend(loop.owner, line.id)
+    spend = await loop.managers.spend_budgets.get_spend(loop.owner, line.id)
     assert spend.held_cost_micros == 0, "the hold settled"
     assert spend.spent_cost_micros < 7_200_000, "released: the model's calls alone count"

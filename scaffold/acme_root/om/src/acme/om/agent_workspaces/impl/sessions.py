@@ -44,7 +44,7 @@ class AgentSessionsPinnedImpl(AgentSessionsManagerInterface):
     async def create_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
         at_rest = True if self._at_rest is None else await self._at_rest(ctx, session)
         await self._agent_workspaces.pin(ctx, session, at_rest=at_rest)
-        return await self._inner.create_session(ctx, session)
+        return await self._inner.create_agent_session(ctx, session)
 
     async def get_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession:
         return await self._inner.get_agent_session(ctx, agent_session_id)
@@ -72,7 +72,7 @@ class AgentSessionsPinnedImpl(AgentSessionsManagerInterface):
         limit: int,
         among: Among = Among.VISIBLE,
     ) -> AgentSessionPage:
-        return await self._inner.get_sessions(ctx, status, after, limit, among)
+        return await self._inner.get_agent_sessions(ctx, status, after, limit, among)
 
     async def is_visible(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         return await self._inner.is_visible(ctx, agent_session_id)

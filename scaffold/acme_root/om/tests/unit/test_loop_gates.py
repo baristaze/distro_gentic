@@ -50,7 +50,7 @@ class Parking(CallGateSpendBudgetImpl):
             managers.spend_budget_gate,
             managers.pricing,
             managers.agent_sessions,
-            managers.budgets,
+            managers.spend_budgets,
             agent_projects,
             clock=clock,
         )

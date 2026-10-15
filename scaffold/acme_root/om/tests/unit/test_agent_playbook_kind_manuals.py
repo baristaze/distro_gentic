@@ -133,7 +133,7 @@ async def test_a_pinned_kind_manual_renders_whole_in_every_request_through_a_com
         loop, agent_session_id, "What is the total?", reply(use("lookup")), reply(said("12."))
     )
     compact = History(agent_session_id).control(ControlCommand.COMPACT)
-    await loop.managers.steps.append_inputs(loop.owner, agent_session_id, [compact])
+    await loop.managers.agent_steps.append_inputs(loop.owner, agent_session_id, [compact])
     await asked(
         loop,
         agent_session_id,

@@ -202,7 +202,7 @@ async def a_host(
 
 async def a_pinned_session(api: Stack, pool_id: UUID) -> UUID:
     managers = api.container.managers
-    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
     await managers.hosts.place_session(api.owner, session.id, pool_id)
     return session.id
 
@@ -302,7 +302,7 @@ async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keep
     assert await managers.exec_relay.binding_of(api.owner, agent_session_id) is not None
     host.twin.started_from.clear()
 
-    epoch = await managers.steps.begin_run(api.owner, agent_session_id)
+    epoch = await managers.agent_steps.begin_run(api.owner, agent_session_id)
     workspace = AgentWorkspace(id=agent_session_id, org_id=api.owner.org_id, spec=ON_BASE, location="")
     runner = runner_of(api)
     # A checkout's attach brings its bundle in, then runs git over it.

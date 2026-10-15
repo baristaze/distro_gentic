@@ -150,7 +150,7 @@ class TrustOperatorManagerImpl(TrustOperatorManagerInterface):
     async def _held(self, org_id: UUID, agent_session_id: UUID) -> None:
         """A session the tenant holds, deleted or not: an operator reads what
         the tenant still keeps."""
-        if await self._sessions.read_session(org_id, agent_session_id) is None:
+        if await self._sessions.read_agent_session(org_id, agent_session_id) is None:
             raise NotFound(f"agent session {agent_session_id} is not in {org_id}")
 
     async def _audit(

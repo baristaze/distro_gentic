@@ -163,15 +163,15 @@ async def watched(tmp_path: Path) -> Watched:
         request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
     )
     host = await managers.hosts.authenticate(request(), credential.credential)
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, host.host_id, "/srv/work/session")
     await managers.agent_workspaces.pinned(owner, session.id, CONTAINER)
-    epoch = await managers.steps.begin_run(owner, session.id)
+    epoch = await managers.agent_steps.begin_run(owner, session.id)
     clock = Clock()
     infra = InfraLocalImpl(tmp_path / "streams")
     stream = StreamServiceImpl(
-        StreamsMemoryImpl(clock), infra.get_topics(), lambda: managers.events, EACH_PART
+        StreamsMemoryImpl(clock), infra.get_topics(), lambda: managers.change_events, EACH_PART
     )
     watch = build_watch(managers, stream, WatchOptions(live_read_key=KEY), clock=clock)
     return Watched(managers, owner, in_person(owner), host, session.id, epoch, stream, watch, clock)
@@ -212,7 +212,7 @@ def service(options: StreamOptions | None = None, clock: Clock | None = None) ->
 async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part_seen(
     watched: Watched,
 ) -> None:
-    other = await watched.managers.agent_sessions.create_session(watched.owner, make_session())
+    other = await watched.managers.agent_sessions.create_agent_session(watched.owner, make_session())
     mine, theirs = new_id(), new_id()
     for n in range(3):
         watched.stream.emit(text(watched.agent_session_id, mine, n))
@@ -472,7 +472,7 @@ async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
     stream = StreamServiceImpl(
         StreamsMemoryImpl(),
         loop.infra.get_topics(),
-        lambda: loop.managers.events,
+        lambda: loop.managers.change_events,
         StreamOptions(max_parts=2, window=timedelta(0)),
     )
     stream.opened(loop.owner, agent_session_id, response.id)
@@ -486,7 +486,7 @@ async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
     await stream.flush()
     assert await stream.read(agent_session_id, ()) == (), "a completed stream is gone"
     assert response.id == live.agent_step_id and response.as_text() == answer
-    events = await loop.managers.events.get_change_events(loop.owner, 0, 200)
+    events = await loop.managers.change_events.get_change_events(loop.owner, 0, 200)
     changes = [
         (e.kind, e.target_id, e.payload["agent_step_id"])
         for e in events
@@ -527,7 +527,7 @@ async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_i
     )
     loop = platform_loop_over(tmp_path, sink=told, kinds=(worked,), extra=(Counting(),))
     told.then = stream = StreamServiceImpl(
-        StreamsMemoryImpl(), loop.infra.get_topics(), lambda: loop.managers.events
+        StreamsMemoryImpl(), loop.infra.get_topics(), lambda: loop.managers.change_events
     )
     transport = loop.infra.get_transport()
     assert isinstance(transport, TransportTwinImpl)
@@ -554,7 +554,7 @@ async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_i
     ]
     await stream.flush()
     assert await stream.read(agent_session_id, ()) == (), "every stream of the run is gone"
-    events = await loop.managers.events.get_change_events(loop.owner, 0, 200)
+    events = await loop.managers.change_events.get_change_events(loop.owner, 0, 200)
     hints = [
         (e.kind, e.target_id)
         for e in events
@@ -588,14 +588,14 @@ async def finish(watched: Watched, payload: ExecPayload, stdout: str) -> None:
 async def test_under_take_control_the_agent_writes_nothing(watched: Watched) -> None:
     taken = await watched.watch.take_control(watched.person, watched.agent_session_id)
     assert taken.park is not None and taken.park.reason is ParkReason.HANDOVER
-    before = await watched.managers.steps.get_cursor(watched.owner, watched.agent_session_id)
+    before = await watched.managers.agent_steps.get_cursor(watched.owner, watched.agent_session_id)
 
     # The run that held the loop is fenced in the history and in the wall.
     note = message_step(
         new_id(), utcnow(), watched.agent_session_id, watched.owner, "still working"
     )
     with pytest.raises(StaleWriter):
-        await watched.managers.steps.append_agent_steps(
+        await watched.managers.agent_steps.append_agent_steps(
             watched.owner, watched.agent_session_id, watched.epoch, [note]
         )
     transport = TransportRelayImpl(
@@ -616,7 +616,7 @@ async def test_under_take_control_the_agent_writes_nothing(watched: Watched) -> 
     # A run woken while it is handed over takes nothing up.
     woken = await watched.managers.loop.run(watched.owner, watched.agent_session_id)
     assert woken.end is RunEnd.IDLE
-    after = await watched.managers.steps.get_cursor(watched.owner, watched.agent_session_id)
+    after = await watched.managers.agent_steps.get_cursor(watched.owner, watched.agent_session_id)
     assert after.head == before.head, "the agent appended nothing"
     assert await claim(watched) is None, "no command of the agent's reached the host"
 
@@ -651,7 +651,7 @@ async def test_every_command_by_hand_is_a_recorded_run_attributed_to_the_person(
     assert ended.outcome.exit_code == 0 and ended.output is not None
     assert ended.output.stdout == "12 passed\n"
 
-    events = await watched.managers.events.get_change_events(watched.owner, 0, 100)
+    events = await watched.managers.change_events.get_change_events(watched.owner, 0, 100)
     (sent,) = [event for event in events if event.kind == SENT]
     assert (sent.actor_id, sent.target_id) == (watched.person.user_id, run.item_id)
     (taken,) = [event for event in events if event.kind == TAKEN]
@@ -669,7 +669,7 @@ async def test_giving_back_hands_over_the_summary_and_fences_a_command_no_host_t
         watched.person, watched.agent_session_id, "I fixed the checkout config by hand."
     )
     assert back.park is None and back.status is not AgentSessionStatus.PARKED
-    steps = await watched.managers.steps.get_agent_steps(
+    steps = await watched.managers.agent_steps.get_agent_steps(
         watched.owner, watched.agent_session_id, 0, 100
     )
     (summary,) = [s for s in steps.items if s.type is AgentStepType.MESSAGE]

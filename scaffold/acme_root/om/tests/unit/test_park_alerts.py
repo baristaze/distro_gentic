@@ -143,7 +143,7 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
         platform.owner, agent_session_id
     )
     now = utcnow()
-    budget = await platform.managers.budgets.create_spend_budget(
+    budget = await platform.managers.spend_budgets.create_spend_budget(
         found[Role.OWNER],
         SpendBudget(
             id=new_id(),
@@ -159,7 +159,7 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     )
     platform.anthropic.add(reply(said("On it.")))
     run = await run_after(platform, requester, agent_session_id)
-    assert run.park == Park(reason=ParkReason.BUDGET, unlock=str(budget.id))
+    assert run.park == Park(reason=ParkReason.SPEND_BUDGET, unlock=str(budget.id))
     notified = await platform.park_alerts.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
@@ -318,7 +318,7 @@ async def test_every_link_a_park_alert_carries_is_a_route_of_the_api(
     requester = found[Role.MEMBER]
     unlocks = {
         ParkReason.PERSON: ("deadline", ANOMALY_UNLOCK),
-        ParkReason.BUDGET: (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK, str(new_id())),
+        ParkReason.SPEND_BUDGET: (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK, str(new_id())),
         ParkReason.PROVIDER: ("anthropic:key",),
     }
     notified: list[ParkAlert] = []
@@ -427,7 +427,7 @@ async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> Non
     ended = await run_after(platform, platform.owner, agent_session_id)
     assert await platform.park_alerts.notify_park(platform.service, ended) == ()
     retries = (
-        Park(reason=ParkReason.BUDGET, unlock="held", retry_at=utcnow()),
+        Park(reason=ParkReason.SPEND_BUDGET, unlock="held", retry_at=utcnow()),
         # A price, and a key the platform's operator fixes, wait for no one
         # of the tenant's, and try again by themselves.
         price_park(utcnow()),

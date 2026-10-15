@@ -818,7 +818,7 @@ async def test_one_session_in_an_agent_project_meets_every_gate_on_its_way_to_a_
     }
 
     # Its success was decided by the result gate, at its pushed head.
-    opened = (await stack.container.managers.steps.get_agent_steps(person.ctx, sid, 0, 200)).items
+    opened = (await stack.container.managers.agent_steps.get_agent_steps(person.ctx, sid, 0, 200)).items
     accepted = [
         step.header.accepted
         for step in opened
@@ -964,7 +964,7 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     changes: list[tuple[str, str, Any]] = []
     deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
     while asyncio.get_running_loop().time() < deadline:
-        events = await stack.container.managers.events.get_change_events(person.ctx, 0, 500)
+        events = await stack.container.managers.change_events.get_change_events(person.ctx, 0, 500)
         changes = [
             (event.kind, str(event.target_id), event.payload["agent_step_id"])
             for event in events

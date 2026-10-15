@@ -78,7 +78,7 @@ async def test_read_sees_a_sessions_shape_and_is_refused_its_content(tmp_path: P
         await plane.get_session_content(
             operator(OperatorRole.WRITE), org_id, agent_session_id, 0, 100
         )
-    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
+    events = await platform.managers.change_events.get_change_events(platform.owner, 0, 500)
     assert not [e for e in events if e.kind == CONTENT_OPENED]
 
 
@@ -100,7 +100,7 @@ async def test_a_grant_opens_one_tenants_content_until_it_ends_and_the_tenant_se
 
     assert PLAN in opened.model_dump_json()
     assert grant.expires_at - grant.created_at == platform.trust_options.grant_lifetime
-    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
+    events = await platform.managers.change_events.get_change_events(platform.owner, 0, 500)
     (seen,) = [e for e in events if e.kind == CONTENT_OPENED]
     assert seen.target_id == agent_session_id and seen.actor_id == support.identity_id
     assert [e.kind for e in events if e.kind in (GRANTED, REVOKED)] == [GRANTED]

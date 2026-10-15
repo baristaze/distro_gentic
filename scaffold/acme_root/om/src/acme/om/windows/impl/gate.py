@@ -414,7 +414,7 @@ def scopes_of(
     agent_project = (
         ()
         if agent_project_id is None
-        else (SpendBudgetScope(kind=SpendBudgetScopeKind.PROJECT, key=str(agent_project_id)),)
+        else (SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_PROJECT, key=str(agent_project_id)),)
     )
     return (
         SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(agent_session_id)),

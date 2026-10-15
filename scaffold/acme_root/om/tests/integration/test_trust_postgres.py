@@ -87,7 +87,7 @@ async def test_a_calls_audit_entry_and_an_operators_reads_over_postgres(
     run = await platform.loops.run(owner, agent_session_id)
 
     assert run.outcome is LoopOutcome.SUCCEEDED
-    events = await platform.managers.events.get_change_events(owner, 0, 500)
+    events = await platform.managers.change_events.get_change_events(owner, 0, 500)
     (entry,) = [e for e in events if e.kind == CALL_AUDITED]
     audit = CallAudit.model_validate(entry.payload)
     assert audit.executor == platform.placement.host

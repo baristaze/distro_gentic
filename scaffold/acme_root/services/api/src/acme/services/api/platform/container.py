@@ -69,7 +69,7 @@ def key_probe(settings: ApiSettings) -> KeyProbeInterface:
     are refused outside a local stack, the probe's twin takes every key; with
     no probe configured, the absent one refuses every save, so no key is ever
     saved unasked."""
-    if settings.model_providers == "scripted":
+    if settings.llm_providers == "scripted":
         return KeyProbeTwinImpl()
     return KeyProbeAbsentImpl()
 
@@ -147,7 +147,7 @@ def build_platform_api(
     intake = build_intake(storage, managers, integrations=integrations)
     held.append(intake)
     # The streams the runners write, read from the shared cache.
-    stream = build_stream(infra, lambda: managers.events, product_kinds=ports.kinds)
+    stream = build_stream(infra, lambda: managers.change_events, product_kinds=ports.kinds)
     # A product's claimants write its streams for the items they hold.
     watch = build_watch(
         managers,

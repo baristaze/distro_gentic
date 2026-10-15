@@ -62,4 +62,4 @@ async def test_the_recent_read_needs_read(manager: ChangeEventsManagerImpl) -> N
         update={"security": member.security.model_copy(update={"permissions": ()})}
     )
     with pytest.raises(NotAuthorized):
-        await manager.get_recent_events(no_read, None, 10)
+        await manager.get_recent_change_events(no_read, None, 10)

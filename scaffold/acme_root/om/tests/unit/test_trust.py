@@ -73,7 +73,7 @@ def of_type(steps: list[AgentStep], step_type: AgentStepType) -> list[AgentStep]
 
 
 async def audits(platform: Trusted) -> list[CallAudit]:
-    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
+    events = await platform.managers.change_events.get_change_events(platform.owner, 0, 500)
     return [CallAudit.model_validate(e.payload) for e in events if e.kind == CALL_AUDITED]
 
 
@@ -324,7 +324,7 @@ async def test_a_secrets_value_reaches_no_step_no_log_no_stream_part_and_no_mode
     (result,) = answer.content.blocks
     assert isinstance(result, ToolResultBlock)
     assert marker(INJECTED_TOKEN.name) in result.parts[0].model_dump_json(), "it ran, redacted"
-    events = await platform.managers.events.get_change_events(platform.owner, 0, 500)
+    events = await platform.managers.change_events.get_change_events(platform.owner, 0, 500)
     used = [e for e in events if e.kind == SECRET_USED]
     assert [e.payload["secret"] for e in used] == [INJECTED_TOKEN.name], "audited by name"
     held = [

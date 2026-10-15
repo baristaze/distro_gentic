@@ -146,13 +146,13 @@ class Platform:
     async def say(self, agent_session_id: UUID, text: str) -> None:
         person = Principal(kind=PrincipalKind.PERSON, id=self.owner.user_id)
         message = make_message(agent_session_id, text, principal=person)
-        await self.managers.steps.append_inputs(self.owner, agent_session_id, [message])
+        await self.managers.agent_steps.append_inputs(self.owner, agent_session_id, [message])
 
     async def history(self, agent_session_id: UUID) -> list[AgentStep]:
         steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_agent_steps(
+            page = await self.managers.agent_steps.get_agent_steps(
                 self.owner, agent_session_id, after, 200
             )
             steps.extend(page.items)
@@ -351,7 +351,7 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     )
     executor.outcome = lambda check, trial: "passed"
     root = await a_software_engineer(platform, work, agent_project_id)
-    budget = await platform.managers.budgets.create_spend_budget(
+    budget = await platform.managers.spend_budgets.create_spend_budget(
         platform.owner,
         make_spend_budget(
             SpendBudgetScopeKind.TREE, str(root), window=WindowKind.LIFE, cost_micros=TREE_CAP
@@ -392,9 +392,9 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     assert [(child.kind, child.depth) for child in (first, second)] == [(kinds.ANALYSIS, 2)] * 2
     failure, text = await platform.answer(root, "use_wait_1")
     assert failure is None and str(first.id) in text and str(second.id) in text
-    budgets = await platform.managers.budgets.get_spend_budgets(platform.owner, None, 50)
+    budgets = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
     for child in (first, second):
-        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
+        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
         assert [b.amount for b in budgets.items if b.scope == scope] == [ANALYSIS_SHARE]
         agent_project = await platform.managers.agent_projects.agent_project_of(
             platform.owner, child.id
@@ -438,15 +438,15 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
 
     # What the tree spent: each sub-agent's calls and the root's, together
     # within the root's budget.
-    tally = await platform.managers.budgets.get_spend(platform.owner, budget.id)
+    tally = await platform.managers.spend_budgets.get_spend(platform.owner, budget.id)
     assert tally.held_cost_micros == 0
     assert 0 < tally.spent_cost_micros <= TREE_CAP
     spent = []
     for child in (first, second):
-        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
+        scope = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
         (share,) = [b for b in budgets.items if b.scope == scope]
         spent.append(
-            (await platform.managers.budgets.get_spend(platform.owner, share.id)).spent_cost_micros
+            (await platform.managers.spend_budgets.get_spend(platform.owner, share.id)).spent_cost_micros
         )
     assert all(child > 0 for child in spent), "each sub-agent spent from the tree"
     assert sum(spent) < tally.spent_cost_micros, "and the root spent from it too"

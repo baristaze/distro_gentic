@@ -729,7 +729,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 tool_catalog,
                 domain_classes,
                 sessions=lambda: self.managers.agent_sessions,
-                steps=lambda: self.managers.steps,
+                steps=lambda: self.managers.agent_steps,
                 agent_projects=lambda: self.managers.agent_projects,
                 work=lambda: self.managers.work,
                 hosts=lambda: self.managers.hosts,
@@ -744,7 +744,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 integrations=IntegrationAbsentImpl
                 if integrations is None
                 else integrations.get_integration,
-                budgets=lambda: self.managers.budgets,
+                budgets=lambda: self.managers.spend_budgets,
             )
         self._agent_kinds = agent_kinds
         self._tool_catalog = tool_catalog
@@ -1039,7 +1039,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             org = await orgs_rows.read_org(org_id)
             if org is None or org.deleted_at is not None:
                 return True
-            session = await sessions_rows.read_session(org_id, agent_session_id)
+            session = await sessions_rows.read_agent_session(org_id, agent_session_id)
             return session is None or session.deleted_at is not None
 
         self._cloud_pool = CloudPoolManagerImpl(
@@ -1233,7 +1233,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             exec_relay=ExecRelayManagerImpl(
                 storage.get_exec_relay_storage(),
                 managers.work,
-                managers.steps,
+                managers.agent_steps,
                 tenancy,
                 hosts,
                 agent_projects,

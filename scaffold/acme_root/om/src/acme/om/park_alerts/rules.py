@@ -62,7 +62,7 @@ from acme.om.tenancy.rules import permissions_of
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tools.native.ask_person import ASK_PERSON
 
-NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET, ParkReason.PROVIDER})
+NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.SPEND_BUDGET, ParkReason.PROVIDER})
 """The reasons whose park can wait on a person of the tenant."""
 
 SETS_SPEND_BUDGETS = Permission.MANAGE_MEMBERS

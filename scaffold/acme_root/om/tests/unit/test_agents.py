@@ -537,7 +537,7 @@ async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cance
     deadline still reaches the tree. It is deleted while nothing below it
     is at work, and a message wakes the session below after."""
     ctx = context(Role.MEMBER)
-    agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
+    agents, steps, sessions = managers.agents, managers.agent_steps, managers.agent_sessions
     root = await start(managers, ctx)
     gone = await agents.spawn(ctx, root.id, spawn("delivery"))
     sibling = await agents.spawn(ctx, root.id, spawn())

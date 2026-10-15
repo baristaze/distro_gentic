@@ -49,7 +49,7 @@ async def inside_wall(
     """Whether a session runs inside its tenant's wall: its tree's root is
     pinned to a pool. A session no agent session is, such as a validation
     session, is its own root, and no principal pinned it."""
-    session = await sessions.read_session(org_id, agent_session_id)
+    session = await sessions.read_agent_session(org_id, agent_session_id)
     root_id = agent_session_id if session is None else session.root_id
     placed = await storage.read_placement(org_id, root_id)
     return placed is not None and placed.pool_id is not None

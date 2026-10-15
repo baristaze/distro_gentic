@@ -245,7 +245,7 @@ class Wired:
         steps: list[AgentStep] = []
         while True:
             after = steps[-1].seq if steps else 0
-            page = await self.managers.steps.get_agent_steps(
+            page = await self.managers.agent_steps.get_agent_steps(
                 self.owner, agent_session_id, after, 200
             )
             steps.extend(page.items)
@@ -338,26 +338,26 @@ def wired(
         await asyncio.sleep(0)
 
     loops = LoopManagerImpl(
-        managers.steps,
+        managers.agent_steps,
         managers.agent_sessions,
         managers.agents,
         AgentKindCatalog(kinds=KINDS),
         managers.attribution,
-        managers.models,
+        managers.language_models,
         managers.windows,
         managers.tools,
         CallGateSpendBudgetImpl(
             managers.spend_budget_gate,
             managers.pricing,
             managers.agent_sessions,
-            managers.budgets,
+            managers.spend_budgets,
             SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
         ),
         credentials(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
         engine_tools(
-            managers.steps,
+            managers.agent_steps,
             managers.agent_sessions,
             AttachmentReaderNullImpl(),
             managers.windows,

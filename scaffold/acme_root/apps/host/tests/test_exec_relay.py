@@ -155,7 +155,7 @@ async def relay_to(
     agents.append(host)
     await host.start()
     managers = api.container.managers
-    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
     if agent_project_id is not None:
         await api.container.storage.get_agent_project_storage().bind_session(
             api.owner.org_id, make_binding(session.id, agent_project_id)
@@ -163,7 +163,7 @@ async def relay_to(
     await managers.hosts.place_session(api.owner, session.id, pool.id)
     host_id = UUID(host.credential.claimant_id)
     await managers.exec_relay.bind_workspace(api.owner, session.id, host_id, str(where))
-    epoch = await managers.steps.begin_run(api.owner, session.id)
+    epoch = await managers.agent_steps.begin_run(api.owner, session.id)
     workspace = AgentWorkspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
     return Relayed(api, host, executor, runner_of(api), workspace, epoch, host_id)
 
@@ -182,7 +182,7 @@ async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UU
     """A session of the host's pool whose workspace the host prepared and
     holds: its id, and where the host made it."""
     managers = api.container.managers
-    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(api.owner, make_session())
     await managers.hosts.place_session(api.owner, session.id, host_pool(host))
     await managers.exec_relay.ask_prepare(api.owner, session.id, spec)
     assert await host.claim_once() is not None
@@ -197,7 +197,7 @@ async def run_on(
 ) -> CommandResult:
     """A command of the session's next run, relayed to the host that holds
     its workspace, while that host claims."""
-    epoch = await api.container.managers.steps.begin_run(api.owner, agent_session_id)
+    epoch = await api.container.managers.agent_steps.begin_run(api.owner, agent_session_id)
     workspace = AgentWorkspace(id=agent_session_id, org_id=api.owner.org_id, spec=spec, location="")
     waiting = asyncio.ensure_future(
         runner_of(api).run(workspace, command(epoch, *argv), seal=NO_SEAL)
@@ -253,7 +253,7 @@ async def test_a_relayed_command_runs_once_on_its_host_and_streams_its_output(
     assert len(handed) == 1  # once, on the host that holds the workspace
     # The result is stored under the call's key: a resumed run reads it, and
     # nothing runs again.
-    epoch = await relayed.api.container.managers.steps.begin_run(
+    epoch = await relayed.api.container.managers.agent_steps.begin_run(
         relayed.api.owner, relayed.workspace.id
     )
     again = await relayed.runner.outcome(relayed.workspace, spec.key, epoch, seal=NO_SEAL)

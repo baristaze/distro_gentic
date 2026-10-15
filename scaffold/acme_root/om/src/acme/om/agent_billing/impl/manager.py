@@ -179,7 +179,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         )
         # Credit is room in a bucket, never a limit: the sessions parked on
         # the budget ask their gates again, and a limit still binds.
-        await self._sessions.wake_parked(tenant, ParkReason.BUDGET)
+        await self._sessions.wake_parked(tenant, ParkReason.SPEND_BUDGET)
         return credit
 
     async def grant_units(
@@ -209,7 +209,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
         log.info("operator %s granted org %s %d units", ctx.identity_id, org_id, granted.units)
         # Granted units are room in a bucket, never a limit: the sessions
         # parked on the funds ask their gates again.
-        await self._sessions.wake_parked(tenant, ParkReason.BUDGET, FUNDS_UNLOCK)
+        await self._sessions.wake_parked(tenant, ParkReason.SPEND_BUDGET, FUNDS_UNLOCK)
         return granted
 
     async def get_entries(
@@ -260,7 +260,7 @@ class AgentBillingManagerImpl(AgentBillingManagerInterface):
                 raised_by=ctx.user_id,
             ),
         )
-        await self._sessions.wake_parked(ctx, ParkReason.BUDGET)
+        await self._sessions.wake_parked(ctx, ParkReason.SPEND_BUDGET)
         return raised
 
     async def approve_call(

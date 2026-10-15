@@ -45,7 +45,7 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
         to take again, so a create retried under the same id finishes what
         the first left."""
         snapshot = await self._retention.take_snapshot(ctx, session)
-        created = await self._inner.create_session(ctx, session)
+        created = await self._inner.create_agent_session(ctx, session)
         if snapshot.policy.storage_mode is StorageMode.MEMORY_ONLY:
             await self._privacy.set_policy(
                 ctx, created.id, StoragePolicy(mode=StorageMode.MEMORY_ONLY)
@@ -78,7 +78,7 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
         limit: int,
         among: Among = Among.VISIBLE,
     ) -> AgentSessionPage:
-        return await self._inner.get_sessions(ctx, status, after, limit, among)
+        return await self._inner.get_agent_sessions(ctx, status, after, limit, among)
 
     async def is_visible(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         return await self._inner.is_visible(ctx, agent_session_id)

@@ -298,9 +298,9 @@ class AgentSessionStorageContract:
         after = await storage.count_parked(cuts)
         added = {key: after.get(key, 0) - before.get(key, 0) for key in after}
         assert {key: n for key, n in added.items() if n} == {
-            (ParkReason.BUDGET, 0): 1,
-            (ParkReason.BUDGET, 1): 1,
-            (ParkReason.BUDGET, 2): 1,
+            (ParkReason.SPEND_BUDGET, 0): 1,
+            (ParkReason.SPEND_BUDGET, 1): 1,
+            (ParkReason.SPEND_BUDGET, 2): 1,
         }
 
     async def test_read_stalled_answers_pending_sessions_of_the_slice_oldest_first(

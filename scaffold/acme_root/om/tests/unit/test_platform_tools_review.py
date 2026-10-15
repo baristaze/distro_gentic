@@ -258,7 +258,7 @@ async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) ->
     its head, and the whole answer it keeps as an artifact."""
     for step in await platform.history(agent_session_id):
         header = step.header
-        if not isinstance(header, ToolResponseHeader) or header.artifact is None:
+        if not isinstance(header, ToolResponseHeader) or header.tool_output is None:
             continue
         (result,) = step.content.blocks
         assert isinstance(result, ToolResultBlock)
@@ -269,7 +269,7 @@ async def kept_whole(platform: Platform, agent_session_id: UUID, use_id: str) ->
         pages: list[str] = []
         while True:
             page = await platform.managers.windows.get_tool_output(
-                platform.owner, agent_session_id, header.artifact.id, len("".join(pages)), 100_000
+                platform.owner, agent_session_id, header.tool_output.id, len("".join(pages)), 100_000
             )
             pages.append(page.text)
             if not page.has_more:

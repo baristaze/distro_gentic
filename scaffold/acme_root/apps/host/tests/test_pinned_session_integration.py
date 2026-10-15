@@ -118,7 +118,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
         await pace.after(await host.claim_once() is not None)
     ended = await running
     assert ended.outcome is LoopOutcome.SUCCEEDED, ended
-    page = await managers.steps.get_agent_steps(owner, session.id, 0, 100)
+    page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 100)
     assert [s.type for s in page.items].count(AgentStepType.TOOL_RESPONSE) == 1
     # What the command printed, as the model read it on its second call: the
     # directory the host made.

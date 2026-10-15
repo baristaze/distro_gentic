@@ -108,7 +108,7 @@ async def test_a_session_pins_its_agent_projects_allowlist_and_its_egress_is_rea
         agent_projects.agent_project_id,
         EgressMode.ALLOWLIST,
     )
-    events = await loop.managers.events.get_change_events(owner, 0, 100)
+    events = await loop.managers.change_events.get_change_events(owner, 0, 100)
     assert CREATED in {event.kind for event in events}, "the write was announced"
 
     def ask(address: str, method: EgressMethod) -> EgressRequest:

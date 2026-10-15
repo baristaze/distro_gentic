@@ -116,7 +116,7 @@ def money_over(
             gate,
             book,
             managers.agent_sessions,
-            managers.budgets,
+            managers.spend_budgets,
             SessionAgentProjectsBoundImpl(storage.get_agent_project_storage()),
             version=None if language_models_layer is None else language_models_layer.version,
             tier=None if language_models_layer is None else language_models_layer.tier,
@@ -141,7 +141,7 @@ def money_over(
     agent_billing = AgentBillingManagerImpl(
         spend_accounts,
         ledger,
-        loop.managers.budgets,
+        loop.managers.spend_budgets,
         loop.managers.agent_sessions,
         loop.managers.tenancy,
         payments,

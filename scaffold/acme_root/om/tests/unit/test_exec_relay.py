@@ -160,10 +160,10 @@ async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
     )
     holder = await enrolled(managers, owner, pool, "host-1")
     other = await enrolled(managers, owner, pool, "host-2")
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    session = await managers.agent_sessions.create_agent_session(owner, make_session())
     await managers.hosts.place_session(owner, session.id, pool.id)
     await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
-    epoch = await managers.steps.begin_run(owner, session.id)
+    epoch = await managers.agent_steps.begin_run(owner, session.id)
     workspace = AgentWorkspace(id=session.id, org_id=owner.org_id, spec=CONTAINER, location="")
     return Wall(managers, storage, owner, pool, holder, other, workspace, epoch)
 
@@ -311,7 +311,7 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
     assert (payload.isolation, payload.egress, payload.reads) == ("container", (), ())
     assert elsewhere.handed == [] and await elsewhere.claim() is None
     # A resumed run reads the stored result and runs nothing again.
-    epoch = await wall.managers.steps.begin_run(wall.owner, wall.workspace.id)
+    epoch = await wall.managers.agent_steps.begin_run(wall.owner, wall.workspace.id)
     recovered = await transport(wall.managers).outcome(
         wall.workspace, spec.key, epoch, seal=NO_SEAL
     )
@@ -329,7 +329,7 @@ async def test_a_resumed_run_attaches_to_the_first_execution_and_never_starts_an
     await host.part(row, 0, "half way\n")
     # The runner is lost mid-command; the next run holds the session before
     # the lost one's wait ends, so the lost run's stop is refused as stale.
-    epoch = await wall.managers.steps.begin_run(wall.owner, wall.workspace.id)
+    epoch = await wall.managers.agent_steps.begin_run(wall.owner, wall.workspace.id)
     lost.cancel()
     with pytest.raises(asyncio.CancelledError):
         await lost
@@ -619,7 +619,7 @@ async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
         # The queue hands the first sent first; let it go and take the next.
         await host.finish(held)
         held = await host.claim_soon()
-    current = await wall.managers.steps.begin_run(wall.owner, wall.workspace.id)
+    current = await wall.managers.agent_steps.begin_run(wall.owner, wall.workspace.id)
     # A command the lost run sends is refused, and the engine reads it as a
     # lost claim.
     with pytest.raises(StaleCommand):
@@ -639,7 +639,7 @@ async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
     lost = await relay.send(
         request(), wall.owner.org_id, _call(wall, command(current, key=new_id())), 0
     )
-    await wall.managers.steps.begin_run(wall.owner, wall.workspace.id)
+    await wall.managers.agent_steps.begin_run(wall.owner, wall.workspace.id)
     assert await host.claim() is None
     progress = await relay.watch(request(), wall.owner.org_id, lost.id, -1)
     assert progress.state is ExecState.INTERRUPTED
@@ -877,9 +877,9 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
         "host-1",
     )
     # A cloud session stays on the runner; a pinned one no host holds is refused.
-    cloud = await wall.managers.agent_sessions.create_session(wall.owner, make_session())
+    cloud = await wall.managers.agent_sessions.create_agent_session(wall.owner, make_session())
     assert await placement.executor_of(wall.owner.org_id, cloud.id) == runner
-    unheld = await wall.managers.agent_sessions.create_session(wall.owner, make_session())
+    unheld = await wall.managers.agent_sessions.create_agent_session(wall.owner, make_session())
     await wall.managers.hosts.place_session(wall.owner, unheld.id, wall.pool.id)
     with pytest.raises(PinnedToHosts):
         await placement.executor_of(wall.owner.org_id, unheld.id)

@@ -73,7 +73,7 @@ def build_agent_billing(
     return AgentBillingManagerImpl(
         storage.get_spend_account_storage(),
         storage.get_spend_ledger_storage(),
-        managers.budgets,
+        managers.spend_budgets,
         managers.agent_sessions,
         managers.tenancy,
         payments,

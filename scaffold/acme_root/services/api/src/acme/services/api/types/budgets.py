@@ -19,7 +19,7 @@ class SettableScope(StrEnum):
     are its own bounds, and no call is charged to a team."""
 
     PERSON = SpendBudgetScopeKind.PERSON.value
-    PROJECT = SpendBudgetScopeKind.PROJECT.value
+    PROJECT = SpendBudgetScopeKind.AGENT_PROJECT.value
     TENANT = SpendBudgetScopeKind.TENANT.value
 
 

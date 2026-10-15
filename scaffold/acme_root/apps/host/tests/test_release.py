@@ -280,7 +280,7 @@ async def placed(
         managers.tools,
         managers.agent_workspaces,
         managers.agent_sessions,
-        managers.steps,
+        managers.agent_steps,
         managers.work,
         managers.tenancy,
         runner.platform.kinds.warm_grace,
@@ -294,7 +294,7 @@ async def placed(
     )
     await api.container.managers.hosts.place_session(owner, session.id, pool.id)
     item = await claimed_loop(managers, owner, session.id)
-    epoch = await managers.steps.begin_run(owner, session.id)
+    epoch = await managers.agent_steps.begin_run(owner, session.id)
     with pytest.raises(IsolationRefused):
         await managers.tools.prepare_agent_workspace(owner, session.id, KIND.isolation)
     assert await host.tick() is not None  # the prepare it claims
@@ -403,7 +403,7 @@ async def test_after_a_loop_ends_the_sweep_lets_its_instance_go_with_no_second_s
     # The loop ends as runs end: its last step, then its own release keeps
     # the work on a snapshot and leaves the instance warm on its host.
     step = changed_step(new_id(), utcnow(), run.agent_session_id, new_id())
-    await managers.steps.append_agent_steps(owner, run.agent_session_id, run.epoch, [step])
+    await managers.agent_steps.append_agent_steps(owner, run.agent_session_id, run.epoch, [step])
     await pumped(run.host, managers.tools.release_agent_workspace(owner, run.workspace))
     await managers.work.complete(owner, run.item)
     (kept,) = run.refs()
@@ -449,9 +449,9 @@ async def test_work_after_the_last_snapshot_is_pushed_before_the_release(
     # The next run works in the warm instance and is killed: its step comes
     # after the snapshot, and so may its work.
     item = await claimed_loop(managers, owner, run.agent_session_id)
-    epoch = await managers.steps.begin_run(owner, run.agent_session_id)
+    epoch = await managers.agent_steps.begin_run(owner, run.agent_session_id)
     step = changed_step(new_id(), utcnow(), run.agent_session_id, new_id())
-    await managers.steps.append_agent_steps(owner, run.agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(owner, run.agent_session_id, epoch, [step])
     (run.here / "more.txt").write_text("more\n")
     await managers.work.fail_for_good(owner, item, "its runner died")
 
@@ -524,9 +524,9 @@ async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loo
 
     # The session's next loop moves its head: its work is pushed again.
     item = await claimed_loop(managers, owner, run.agent_session_id)
-    epoch = await managers.steps.begin_run(owner, run.agent_session_id)
+    epoch = await managers.agent_steps.begin_run(owner, run.agent_session_id)
     step = changed_step(new_id(), utcnow(), run.agent_session_id, new_id())
-    await managers.steps.append_agent_steps(owner, run.agent_session_id, epoch, [step])
+    await managers.agent_steps.append_agent_steps(owner, run.agent_session_id, epoch, [step])
     await managers.work.fail_for_good(owner, item, "its runner died")
     monkeypatch.setattr(managers.agent_workspaces, "detach", detach)
     assert await run.passes() == 1, "the next pass pushes it, and asks for the release"

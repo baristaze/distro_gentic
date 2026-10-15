@@ -400,8 +400,8 @@ async def test_a_products_kind_spawns_the_software_engineer_under_its_share(tmp_
         kinds.SOFTWARE_ENGINEER,
         SOFTWARE_ENGINEER_KIND.version,
     )
-    page = await platform.managers.budgets.get_spend_budgets(platform.owner, None, 50)
-    own = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
+    page = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
+    own = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [
         SOFTWARE_ENGINEER_SHARE
     ]
@@ -425,8 +425,8 @@ async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> Non
     child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
 
     assert (child.kind, child.kind_version) == (kinds.REVIEWER, REVIEWER_KIND.version)
-    page = await platform.managers.budgets.get_spend_budgets(platform.owner, None, 50)
-    own = SpendBudgetScope(kind=SpendBudgetScopeKind.SESSION, key=str(child.id))
+    page = await platform.managers.spend_budgets.get_spend_budgets(platform.owner, None, 50)
+    own = SpendBudgetScope(kind=SpendBudgetScopeKind.AGENT_SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
 
 

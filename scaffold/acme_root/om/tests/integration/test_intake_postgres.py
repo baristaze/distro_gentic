@@ -147,7 +147,7 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
         platform.service, firing.model_copy(update={"event_id": new_id()})
     )
     assert limited.status is RunStatus.REFUSED
-    budget = await platform.managers.budgets.get_spend_budget(owner, run.spend_budget_id)
+    budget = await platform.managers.spend_budgets.get_spend_budget(owner, run.spend_budget_id)
     assert budget.cost_micros == agent_automation.limits.run_cap_micros
 
 
@@ -198,7 +198,7 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
         await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
         runs = await platform.agent_automations.get_runs(owner, mine.id, 10)
         assert len(runs) == slot and {r.status for r in runs} == {RunStatus.STARTED}
-        page = await platform.managers.agent_sessions.get_sessions(owner, None, None, 100)
+        page = await platform.managers.agent_sessions.get_agent_sessions(owner, None, None, 100)
         started = [s for s in page.items if s.title == "the nightly records"]
         assert len(started) == slot
         assert {s.id for s in started} == {r.agent_session_id for r in runs}
