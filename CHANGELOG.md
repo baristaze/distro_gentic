@@ -36,6 +36,11 @@ Minor; the renames are breaking, and no alias is left.
   its IAM condition reads it, so a deployment whose pool holds VMs, kept
   disks, or a sealed image retags them or ends them before it takes this
   release (#174).
+- Breaking: the runner process is the agent session runner on every
+  deployed surface: its image and ECR repository
+  `acme-agent-session-runner`, its ECS service and log group, and the
+  Terraform variable `agent_session_runner_image`. A deployment that
+  takes this release replaces that service and repository (#174).
 - Each namespace has its own OpenAPI document, generated types, and
   client module, and the platform's operator routes sit in its
   namespace routers (#174).
