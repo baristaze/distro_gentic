@@ -19,7 +19,7 @@ from acme.om.agent_projects.types.agent_project import (
 )
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 
 
 class AgentProjectsManagerInterface(ABC):
@@ -110,8 +110,9 @@ class AgentProjectsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
-        """Platform-internal: the agent project row of a session the sweep has
+        """System-internal: the agent project row of a session the sweep has
         claimed for its purge goes before the session's row, under the purge
         login, in the tenant named; for no principal. False when none was
         left."""

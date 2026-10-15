@@ -26,7 +26,7 @@ from acme.om.agent_workspaces.types.egress import EgressAllowlist, EgressDecisio
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.agent_workspaces.types.source import OpenedPullRequest, RepositoryWrite
 from acme.om.agent_workspaces.types.workspace import AgentSessionWorkspace
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 from acme.om.evidence.types.validation import WorkProduct
 
 
@@ -126,7 +126,7 @@ class AgentWorkspacesManagerInterface(ABC):
         base: str | None = None,
         untouched: tuple[str, ...] = (),
     ) -> bytes:
-        """Platform-internal: the tree a validation of the agent project runs on,
+        """System-internal: the tree a validation of the agent project runs on,
         as a tar, read from its bound repository outside every workspace
         with its fetch credential (`RepositoryReaderInterface.tree`): the
         commit `version`, with every path a `protected` pattern matches
@@ -240,7 +240,7 @@ class AgentWorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def keep_snapshot(self, ctx: TenantContext, snapshot: KeptSnapshot) -> KeptSnapshot:
-        """Platform-internal: records where a snapshot the session keeps
+        """System-internal: records where a snapshot the session keeps
         lives, the platform's bucket or a host's store, by its reference and
         its hash, never its bytes. Once: a snapshot recorded already is
         answered as stored."""
@@ -261,22 +261,25 @@ class AgentWorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def snapshot_hosts(self, org_id: UUID, agent_session_id: UUID) -> frozenset[UUID]:
-        """Platform-internal: each host whose store keeps a snapshot of the
+        """System-internal: each host whose store keeps a snapshot of the
         session, by the records, at most the options' `snapshots_read` of
         them read; for no principal."""
         ...
 
     @abstractmethod
+    @stageless
     async def forget_snapshots(self, org_id: UUID, agent_session_id: UUID) -> int:
-        """Platform-internal: the records of the session's snapshots go, once
+        """System-internal: the records of the session's snapshots go, once
         their bytes went with its content or its purge; for no principal.
         Returns how many went."""
         ...
 
     @abstractmethod
+    @stageless
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> bool:
-        """Platform-internal: the workspace row of a session the sweep has
+        """System-internal: the workspace row of a session the sweep has
         claimed for its purge goes with its history, in the tenant named;
         for no principal. False when none was left."""
         ...

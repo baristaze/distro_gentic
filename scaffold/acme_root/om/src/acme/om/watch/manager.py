@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, transition
 from acme.om.exec_relay.types.exec import ExecProgress
 from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.watch.types.control import HandCommand, HandRun
@@ -43,8 +43,9 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_live(self, rctx: RequestContext, handle: str, seen: Sequence[Seen]) -> LivePage:
-        """Platform-internal: the open streams of the one session the handle
+        """System-internal: the open streams of the one session the handle
         names, each from the part after the last `seen` names for it. The
         handle is the authority, as a presigned URL is, so this runs below
         any principal. A handle that does not verify, or has expired, is
@@ -54,6 +55,7 @@ class WatchManagerInterface(ABC):
     # A product's streams, by the item a claimant holds.
 
     @abstractmethod
+    @transition
     async def append_as(
         self,
         rctx: RequestContext,
@@ -62,7 +64,7 @@ class WatchManagerInterface(ABC):
         kind: str,
         appended: Appended,
     ) -> None:
-        """Platform-internal: the claimant appends to a stream of `kind` for
+        """System-internal: the claimant appends to a stream of `kind` for
         the item it holds, in that item's group, under the kind's bounds. A
         kind its own kind does not write, the step's, and one nobody
         registered are `NotFound`, as is an item it does not hold: another
@@ -76,6 +78,7 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_as(
         self,
         rctx: RequestContext,
@@ -85,7 +88,7 @@ class WatchManagerInterface(ABC):
         claim_token: UUID,
         seen: Sequence[ItemSeen],
     ) -> ItemPage:
-        """Platform-internal: the claimant reads the item's open streams of
+        """System-internal: the claimant reads the item's open streams of
         `kind`, each from the entry after the last `seen` names for it, for
         the item it holds under `claim_token` with a live lease. A kind its
         own kind does not read, the step's, and one nobody registered are
@@ -103,10 +106,11 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def read_item_live(
         self, rctx: RequestContext, handle: str, seen: Sequence[ItemSeen]
     ) -> ItemPage:
-        """Platform-internal: the open streams the handle names, each from
+        """System-internal: the open streams the handle names, each from
         the entry after the last `seen` names for it. The handle is the
         authority, as a session's is; one that does not verify as an item's,
         or has expired, is `LiveReadRefused`, and reads nothing."""

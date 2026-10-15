@@ -15,6 +15,7 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
 )
 from acme.infra.exceptions import InfraException
+from acme.om.agent_projects.impl.policies import SessionAgentProjectsNoneImpl
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.header import (
     ControlCommand,
@@ -117,6 +118,7 @@ async def test_a_request_a_lost_run_left_open_is_closed_and_its_hold_settled_who
         managers.pricing,
         managers.agent_sessions,
         managers.spend_budgets,
+        agent_projects=SessionAgentProjectsNoneImpl(),
     )
     hold = await gate.authorize(
         ctx, agent_session_id, person(ctx.user_id), MAIN, fill, rendered.call, credential="platform"

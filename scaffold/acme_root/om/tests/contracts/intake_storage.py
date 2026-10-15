@@ -16,6 +16,9 @@ from acme.om.intake.types.link import (
     WorkBinding,
 )
 
+INTERFACE = IntakeStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_installation",

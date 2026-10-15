@@ -160,6 +160,7 @@ class TenancyManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def operator_identity(self, rctx: RequestContext, email: str) -> Identity:
         """System-internal: the grant job's. The identity that holds the
         email, read and never written, for a grant that names an operator by
@@ -236,6 +237,7 @@ class TenancyManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def tenant_deleted(self, rctx: RequestContext, org_id: UUID) -> bool | None:
         """System-internal, for a sweep that lets go of what a tenant left
         only on proof that the tenant is gone: True when the org is marked

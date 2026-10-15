@@ -14,6 +14,9 @@ from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.placement.storage import PlacementStorageInterface, ShareToCarry
 from acme.om.placement.types.share import FairShare
 
+INTERFACE = PlacementStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {"create_share", "mark_carried", "purge_tenant", "read_share", "write_share"}
 )

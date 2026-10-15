@@ -28,6 +28,9 @@ from acme.om.placement.kinds import HOST
 PRODUCT_KIND = "batch"
 """A product's claimant kind, which the storage keeps by name alone."""
 
+INTERFACE = HostsStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_pool",

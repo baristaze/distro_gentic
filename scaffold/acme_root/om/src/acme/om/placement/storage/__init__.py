@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.base import OmBase
+from acme.om.context import tenantless
 from acme.om.placement.types.share import FairShare
 
 
@@ -45,6 +46,7 @@ class PlacementStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_uncarried(self, limit: int) -> list[ShareToCarry]:
         """Cross-tenant, in the system scope: at most `limit` shares whose
         concurrency is not carried yet, for the sweep's carry."""

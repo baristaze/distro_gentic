@@ -129,6 +129,7 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
         """System-internal: ends every item of the tenant queued or claimed
         on `lane`, as done, with `reason` as its last word, for a lane whose
@@ -137,6 +138,7 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def end_open_for_target(
         self, org_id: UUID, kind: str, target_id: UUID, reason: str
     ) -> list[WorkItem]:

@@ -22,6 +22,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
 from acme.om.levers.types.lever import LeverCheck, LeverFinding
 
+INTERFACE = AgentKnowledgeStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_entry",

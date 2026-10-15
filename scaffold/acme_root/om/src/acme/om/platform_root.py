@@ -92,8 +92,8 @@ from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
 from acme.om.language_models.layer import LanguageModelsLayer
 from acme.om.leases.hooks import AskCheckInterface, LeasableResourceKindInterface
-from acme.om.leases.types.leasable_resource import LeasableResourceKind
 from acme.om.leases.impl.manager import LeasesOptions
+from acme.om.leases.types.leasable_resource import LeasableResourceKind
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.orchestrations.kinds import OrchestrationKinds

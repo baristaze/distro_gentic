@@ -6,7 +6,8 @@ from acme.om.matrix.storage.impl.memory import (
     MatrixTenantStorageMemoryImpl,
 )
 
-from contracts.matrix_storage import MatrixStorageContract, MatrixTenantStorageContract
+from contracts.matrix_storage import MatrixStorageContract
+from contracts.matrix_tenant_storage import MatrixTenantStorageContract
 
 
 class TestMatrixStorageMemory(MatrixStorageContract):

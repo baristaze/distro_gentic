@@ -18,6 +18,9 @@ from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.types.policy import AgentProjectRetention, RetentionPolicy, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 
+INTERFACE = RetentionStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_policy",

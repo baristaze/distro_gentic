@@ -81,6 +81,7 @@ class AgentSessionStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_parked(self, cuts: Sequence[datetime]) -> dict[tuple[ParkReason, int], int]:
         """Cross-tenant, for the platform's gauge of parks, in the system
         scope: the parked sessions not marked deleted, by their park's reason
@@ -89,6 +90,7 @@ class AgentSessionStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_stalled(
         self, after: datetime, before: datetime, limit: int
     ) -> list[tuple[UUID, AgentSession]]:

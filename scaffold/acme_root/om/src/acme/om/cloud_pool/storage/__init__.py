@@ -11,16 +11,19 @@ from uuid import UUID
 
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import PoolVm
+from acme.om.context import tenantless
 
 
 class CloudPoolStorageInterface(ABC):
     @abstractmethod
+    @tenantless
     async def create_machine(self, machine: PoolVm) -> None:
         """Global: a machine's row, written before the machine
         starts. `UniqueKeyTaken` for a name or a key another holds."""
         ...
 
     @abstractmethod
+    @tenantless
     async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
         """Global: writes the first of `made`, in order, as many as
         keep `wanted` warm machines standing or starting, and answers how
@@ -29,35 +32,41 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_machine(self, machine_id: UUID) -> PoolVm | None:
         """Global: a machine by its row's id."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_by_key(self, key_digest: str) -> PoolVm | None:
         """Global: the machine handed the key whose digest this
         is, until its host traded it."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_by_name(self, name: str) -> PoolVm | None:
         """Global: the machine under its name in the machines'
         backend."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_of_session(self, tenant_id: UUID, agent_session_id: UUID) -> PoolVm | None:
         """Global: the machine that serves the tenant's session;
         None when none does."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolVm]:
         """Global: every machine that serves one of the tenant's
         sessions, oldest first, at most `limit`, for the tenant's purge."""
         ...
 
     @abstractmethod
+    @tenantless
     async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolVm]:
         """Global: the machines the pool holds, in the order of their
         ids, at most `limit` past `after`: the sweep reads them all, a page
@@ -65,6 +74,7 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def claim_warm(
         self,
         tenant_id: UUID,
@@ -80,28 +90,33 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def mark_started(self, machine_id: UUID, at: datetime) -> None:
         """Global: the machine runs, from `at`."""
         ...
 
     @abstractmethod
+    @tenantless
     async def spend_key(self, machine_id: UUID, key_digest: str) -> bool:
         """Global: spends the machine's key, once: False when it
         was spent already, or another key was handed since."""
         ...
 
     @abstractmethod
+    @tenantless
     async def mark_enrolled(self, machine_id: UUID, host_id: UUID) -> None:
         """Global: the host that traded the machine's key."""
         ...
 
     @abstractmethod
+    @tenantless
     async def mark_sealed(self, machine_id: UUID, at: datetime) -> None:
         """Global: nothing reads the machine's seed from outside
         it, from `at`."""
         ...
 
     @abstractmethod
+    @tenantless
     async def rekey(
         self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
     ) -> PoolVm | None:
@@ -112,11 +127,13 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def delete_machine(self, machine_id: UUID) -> None:
         """Global: the row of a machine that is gone."""
         ...
 
     @abstractmethod
+    @tenantless
     async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
         """Global: a session's disks are to go. Answers the erasure
         that stands for the session: this one, or one asked before it, which
@@ -124,12 +141,14 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_erasures(self, limit: int) -> list[PoolErasure]:
         """Global: the erasures asked and not done yet, oldest
         first, at most `limit`."""
         ...
 
     @abstractmethod
+    @tenantless
     async def delete_erasure(self, erasure_id: UUID) -> None:
         """Global: an erasure done."""
         ...

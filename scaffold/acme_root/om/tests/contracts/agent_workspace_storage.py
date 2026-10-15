@@ -18,6 +18,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.outbox.types.row import OutboxRow
 
+INTERFACE = AgentWorkspaceStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_allowlist",

@@ -26,6 +26,9 @@ from acme.om.context import Role
 
 from contracts.racing import race
 
+INTERFACE = AgentAutomationStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_agent_automation",

@@ -11,6 +11,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.park_alerts.storage import ParkAlertStorageInterface
 from acme.om.park_alerts.types.park_alert import PORTAL, ParkAlert
 
+INTERFACE = ParkAlertStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_park_alert",

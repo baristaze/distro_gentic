@@ -25,6 +25,9 @@ from acme.om.evidence.types.record import (
 from acme.om.evidence.types.validation import Validation
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 
+INTERFACE = EvidenceStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_inference",

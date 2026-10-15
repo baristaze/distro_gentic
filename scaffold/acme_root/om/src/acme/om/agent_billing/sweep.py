@@ -39,7 +39,7 @@ class ProviderBillsUnknownImpl(ProviderBillsInterface):
 class HoldSweepInterface(ABC):
     @abstractmethod
     async def settle_open(self, rctx: RequestContext) -> int:
-        """Platform-internal: the sweep, across tenants, once a pass, under a
+        """System-internal: the sweep, across tenants, once a pass, under a
         service context minted for each tenant from `rctx`. Each hold open
         longer than any call it covers can last, and that no settlement has
         closed, settles once through the gate: at the bill the provider

@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.exec_relay.types.exec import AgentWorkspaceBinding, ExecControl, ExecItem, ExecPart
 from acme.om.outbox.types.row import OutboxRow
 
@@ -46,6 +47,7 @@ class ExecRelayStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_expired(self, now: datetime, limit: int) -> list[tuple[UUID, ExecItem]]:
         """Cross-tenant, for the sweep: running items whose lease ended
         before `now`, each with its tenant, at most `limit`."""
@@ -96,6 +98,7 @@ class ExecRelayStorageInterface(ABC):
     ) -> AgentWorkspaceBinding | None: ...
 
     @abstractmethod
+    @tenantless
     async def read_bindings(
         self, after: UUID | None, limit: int
     ) -> list[tuple[UUID, AgentWorkspaceBinding]]:

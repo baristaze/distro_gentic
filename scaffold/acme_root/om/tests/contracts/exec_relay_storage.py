@@ -25,6 +25,9 @@ from acme.om.exec_relay.types.exec import (
 )
 from acme.om.placement.types.work import ExecOperation
 
+INTERFACE = ExecRelayStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_item",

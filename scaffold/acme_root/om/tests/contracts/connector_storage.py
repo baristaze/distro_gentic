@@ -25,6 +25,9 @@ from acme.om.tools.rules import definition_hash
 from acme.om.tools.types.mcp import McpToolDefinition
 from acme.om.tools.types.tool import Effect, ToolClass
 
+INTERFACE = ConnectorStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_connector",

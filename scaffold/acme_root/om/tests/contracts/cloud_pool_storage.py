@@ -20,6 +20,9 @@ from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import PoolVm
 from acme.om.exceptions import UniqueKeyTaken
 
+INTERFACE = CloudPoolStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset()
 """`CloudPoolStorageInterface` takes no tenant first: its rows are the
 platform's."""

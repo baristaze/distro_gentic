@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.spend_budgets.types.spend_breach import Refusal
 from acme.om.spend_budgets.types.spend_budget import SpendBudget, SpendBudgetScope
@@ -112,6 +113,7 @@ class LedgerStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_open(
         self, after: datetime, before: datetime, limit: int
     ) -> list[tuple[UUID, SpendHold, datetime]]:

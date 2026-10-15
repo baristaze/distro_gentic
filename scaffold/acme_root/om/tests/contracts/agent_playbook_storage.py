@@ -22,6 +22,9 @@ from acme.om.exceptions import TenantMismatch, UniqueKeyTaken
 from acme.om.levers.types.lever import LeverCheck, LeverFinding
 from acme.om.tools.types.policy import Decision
 
+INTERFACE = AgentPlaybookStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_agent_playbook",

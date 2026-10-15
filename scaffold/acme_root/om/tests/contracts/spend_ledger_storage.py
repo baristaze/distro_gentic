@@ -43,6 +43,9 @@ from acme.om.spend_budgets.types.spend_hold import (
 from contracts.ledger_storage import a_line
 from contracts.racing import race
 
+INTERFACE = SpendLedgerStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "close_spend_hold",

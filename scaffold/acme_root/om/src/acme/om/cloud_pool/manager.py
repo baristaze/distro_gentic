@@ -12,15 +12,16 @@ from uuid import UUID
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.cloud_pool.types.machine import MachineSnapshot
-from acme.om.context import RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext, stageless, transition
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Enrollment
 
 
 class CloudPoolManagerInterface(ABC):
     @abstractmethod
+    @stageless
     async def runs(self, spec: IsolationSpec) -> bool:
-        """Platform-internal: whether a session of the cloud at this spec
+        """System-internal: whether a session of the cloud at this spec
         runs on a machine of the pool, which the transport asks of the spec
         alone, before any stage: the pool runs machines here, and the spec
         asks for a VM."""
@@ -68,15 +69,17 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def purge(self, org_id: UUID, agent_session_id: UUID) -> None:
-        """Platform-internal: the session's purge, which runs for no
+        """System-internal: the session's purge, which runs for no
         principal: its machine and every snapshot kept under its names
         go."""
         ...
 
     @abstractmethod
+    @stageless
     async def erase(self, org_id: UUID, agent_session_id: UUID) -> None:
-        """Platform-internal: the revocation of the session's key, named with
+        """System-internal: the revocation of the session's key, named with
         its tenant: every snapshot kept under its names goes. Its machine, a
         cache, stays. The erasure is asked first, and done at once where this
         process reaches the machines; elsewhere, as in the API's process, the
@@ -92,10 +95,11 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def enroll(
         self, rctx: RequestContext, key: str, enrollment: Enrollment
     ) -> IssuedCredential:
-        """Platform-internal: a machine's host trades its key, once, for a
+        """System-internal: a machine's host trades its key, once, for a
         credential of its session's pool of one; the host is no person, so
         it calls from the request stage. `MachineUnbound` while the machine
         is warm, and serves no session yet; `InvalidCredential` for a key
@@ -103,8 +107,9 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @transition
     async def sweep(self, rctx: RequestContext) -> int:
-        """Platform-internal: one pass of the sweep, across tenants and for
+        """System-internal: one pass of the sweep, across tenants and for
         none, over every machine the pool holds, a page at a time: lets go of
         a machine whose first start died with the process that started it,
         of one whose session, or tenant, is gone, and of one under the pool's
@@ -116,7 +121,8 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def close(self) -> None:
-        """Platform-internal: at shutdown, waits out the warm starts this
+        """System-internal: at shutdown, waits out the warm starts this
         process began."""
         ...

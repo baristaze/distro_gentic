@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.context import tenantless
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.retention.types.policy import TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
@@ -63,6 +64,7 @@ class RetentionStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_behind(
         self, now: datetime, limit: int
     ) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
@@ -73,6 +75,7 @@ class RetentionStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_due(self, now: datetime, limit: int) -> list[tuple[UUID, SessionRetention]]:
         """Cross-tenant: the sweep's read, in the system scope, of at most
         `limit` snapshots whose content or whose shape has expired by `now`

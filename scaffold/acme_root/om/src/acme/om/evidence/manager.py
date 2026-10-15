@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.context import TenantContext
+from acme.om.context import TenantContext, stageless
 from acme.om.evidence.types.inference import Inference, InferencePage
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, ExecutionRecordPage, RunPurpose
@@ -110,7 +110,7 @@ class EvidenceManagerInterface(ABC):
         version: str,
         source: str,
     ) -> Validation:
-        """Platform-internal: one check the agent project's policy declares, run
+        """System-internal: one check the agent project's policy declares, run
         on a fresh executor at `version`, with the checks, fixtures, and
         runner from `source`, for `agent_session_id`, a session with no agent (a
         validation session). It runs once, or, when a requirement rates it,
@@ -134,8 +134,9 @@ class EvidenceManagerInterface(ABC):
     # The purges.
 
     @abstractmethod
+    @stageless
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> int:
-        """Platform-internal: a purged session's runs, validations, and
+        """System-internal: a purged session's runs, validations, and
         hypotheses and findings, under the purge login, in the tenant
         named; for no principal. Returns how many went."""
         ...

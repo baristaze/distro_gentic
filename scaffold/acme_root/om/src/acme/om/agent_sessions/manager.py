@@ -274,6 +274,7 @@ class AgentSessionsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    @stageless
     async def pending_across_tenants(
         self, after: datetime, before: datetime, limit: int
     ) -> list[tuple[UUID, AgentSession]]:

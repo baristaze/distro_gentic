@@ -17,6 +17,9 @@ from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
 from acme.om.trust.types.secret import AGENT_PROJECT, SecretDeclaration, SecretStore
 
+INTERFACE = TrustStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_declaration",

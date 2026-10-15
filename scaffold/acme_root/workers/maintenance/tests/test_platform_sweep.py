@@ -24,7 +24,7 @@ from acme.workers.maintenance.loop import (
 )
 from acme.workers.maintenance.main import build_loop
 
-from contracts.matrix_storage import make_choice, make_pin
+from contracts.matrix_tenant_storage import make_choice, make_pin
 from contracts.spend_account_storage import make_spend_account
 from contracts.spend_ledger_storage import a_funded_hold, funding
 

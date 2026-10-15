@@ -206,6 +206,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_ready_by_lane(self, prefix: str, now: datetime) -> dict[str, int]:
         """Cross-tenant, for the sweep's gauge of the lanes' depth, in the
         system scope: the queued items ready at `now` on each lane whose name
@@ -213,6 +214,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def count_ready_ahead(self, item: WorkItem, now: datetime) -> int:
         """Cross-tenant, in the system scope, for the operator plane's read of
         one item's place in line: the queued items ready at `now` on its lane,

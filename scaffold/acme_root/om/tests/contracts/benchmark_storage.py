@@ -25,6 +25,9 @@ from acme.om.evidence.types.acceptance import AcceptanceVerdict, Break, Link
 from acme.om.language_models.types.fill import MAIN, Fill, RoleFill
 from acme.om.tenancy.rules import operator_permissions_of
 
+INTERFACE = BenchmarkStorageInterface
+"""The storage interface whose cross-tenant cases this suite holds."""
+
 CROSS_TENANT_CASES: frozenset[str] = frozenset()
 """`BenchmarkStorageInterface` takes no tenant: its rows are the platform's."""
 

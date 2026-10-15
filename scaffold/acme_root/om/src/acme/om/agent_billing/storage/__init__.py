@@ -24,6 +24,7 @@ from acme.om.agent_billing.types.spend_ledger import (
     Turned,
     WindowRaise,
 )
+from acme.om.context import tenantless
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.spend_budgets.types.spend_hold import SpendHold, SpendSettlement
 
@@ -94,6 +95,7 @@ class SpendLedgerStorageInterface(ABC):
         ...
 
     @abstractmethod
+    @tenantless
     async def read_open(
         self, after: datetime, before: datetime, limit: int
     ) -> list[tuple[UUID, SpendHold, datetime]]:
