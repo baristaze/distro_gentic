@@ -634,6 +634,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 texts.extend(part for part in PARTS.validate_json(opened) if part.seq > after_seq)
         output = None
         if item.state is ExecState.DONE:
+            # A reader whose next part the stream let go reads the output
+            # whole, never its tail alone.
+            if texts and texts[0].seq != after_seq + 1:
+                texts = []
             opened = await self._opened(ctx, item, item.output)
             output = ExecOutput.model_validate_json(opened) if opened else ExecOutput()
         return ExecProgress(

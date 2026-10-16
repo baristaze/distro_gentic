@@ -1322,3 +1322,33 @@ async def test_a_reader_behind_a_trimmed_or_expired_stream_reads_the_whole_outpu
     assert done.state is ExecState.DONE
     assert done.output is not None and done.output.stdout == whole
     assert (await waiting).stdout == whole
+
+
+@pytest.mark.parametrize(
+    "relay_options", [ExecRelayOptions(lease=SHORT, output=StreamBounds(entries=2))]
+)
+async def test_a_done_command_whose_stream_let_its_readers_next_part_go_reads_as_its_output(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    relay = wall.managers.exec_relay
+    org = wall.owner.org_id
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    whole = "".join(f"line {seq}\n" for seq in range(5))
+    for seq in range(5):
+        await host.push(row, (seq, f"line {seq}\n"))
+    await host.finish(row, 0, whole)
+    assert (await waiting).stdout == whole
+    # The stream holds parts 3 and 4 alone: a reader from the start, or past
+    # part 0, takes the whole output and no tail beside it.
+    for mark in (-1, 0):
+        done = await relay.watch(request(), org, item_id, mark)
+        assert done.state is ExecState.DONE and done.parts == ()
+        assert done.output is not None and done.output.stdout == whole
+    # A reader that read up to part 2 still reads the rest.
+    rest = await relay.watch(request(), org, item_id, 2)
+    assert [p.text for p in rest.parts] == ["line 3\n", "line 4\n"]
