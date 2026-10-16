@@ -9,12 +9,10 @@ from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.storage.tables.agent_workspace_bindings import AgentWorkspaceBindings
 from acme.om.exec_relay.storage.tables.exec_controls import ExecControls
 from acme.om.exec_relay.storage.tables.exec_items import ExecItems
-from acme.om.exec_relay.storage.tables.exec_parts import ExecParts
 from acme.om.exec_relay.types.exec import (
     AgentWorkspaceBinding,
     ExecControl,
     ExecItem,
-    ExecPart,
     ExecState,
 )
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
@@ -22,9 +20,9 @@ from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
-PURGED_IN_ORDER = (ExecParts, ExecControls, ExecItems, AgentWorkspaceBindings)
-"""The exec relay's tables, each purged a batch at a time: the parts and the
-controls before the items they name."""
+PURGED_IN_ORDER = (ExecControls, ExecItems, AgentWorkspaceBindings)
+"""The exec relay's tables, each purged a batch at a time: the controls
+before the items they name."""
 
 
 class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
@@ -107,28 +105,6 @@ class ExecRelayStoragePostgresImpl(PgStorageBase, ExecRelayStorageInterface):
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             rows = (await session.execute(stmt)).scalars().all()
             return [(row.org_id, to_model(row, ExecItem)) for row in rows]
-
-    async def add_part(self, org_id: UUID, part: ExecPart) -> bool:
-        try:
-            return await self._insert(ExecParts, org_id, part)
-        except UniqueKeyTaken:
-            # The place is taken under another id: the same part, sent again.
-            return False
-
-    async def read_parts(
-        self, org_id: UUID, row_id: UUID, after_seq: int, limit: int
-    ) -> list[ExecPart]:
-        stmt = (
-            select(ExecParts)
-            .where(
-                ExecParts.org_id == org_id, ExecParts.row_id == row_id, ExecParts.seq > after_seq
-            )
-            .order_by(ExecParts.seq)
-            .limit(limit)
-        )
-        async with self._session_for(stmt, org_id=org_id) as session:
-            rows = (await session.execute(stmt)).scalars().all()
-            return [to_model(row, ExecPart) for row in rows]
 
     async def add_control(
         self, org_id: UUID, control: ExecControl, outbox_rows: tuple[OutboxRow, ...]

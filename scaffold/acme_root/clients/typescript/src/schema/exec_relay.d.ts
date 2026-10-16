@@ -76,10 +76,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Push Part
-         * @description One part of the item's output. A part sent again lands once.
+         * Push Parts
+         * @description The parts of the item's output one flush window gathered, as one push.
+         *     A push sent again lands once.
          */
-        post: operations["push_part"];
+        post: operations["push_parts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -272,16 +273,25 @@ export interface components {
          */
         OutputStream: "stdout" | "stderr";
         /**
-         * PartRequest
-         * @description One part of an item's output, in the order the host read it.
+         * PartBody
+         * @description One part of an item's output: its place in it, and its stream.
          */
-        PartRequest: {
+        PartBody: {
             crossing: components["schemas"]["CrossingBody"];
             /** Data */
             data: string;
             /** Seq */
             seq: number;
             stream: components["schemas"]["OutputStream"];
+        };
+        /**
+         * PartsRequest
+         * @description The parts of an item's output one flush window gathered, in the order
+         *     the host read them: one push, held to its bytes before any is decoded.
+         */
+        PartsRequest: {
+            /** Parts */
+            parts: components["schemas"]["PartBody"][];
         };
         /**
          * PrepareRequest
@@ -488,7 +498,7 @@ export interface operations {
             };
         };
     };
-    push_part: {
+    push_parts: {
         parameters: {
             query?: never;
             header?: {
@@ -503,7 +513,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PartRequest"];
+                "application/json": components["schemas"]["PartsRequest"];
             };
         };
         responses: {

@@ -15,7 +15,7 @@ from acme.services.api.gateway.platform_resolve import ExecRelayService
 from acme.services.api.types.exec_relay import (
     ExecDetailView,
     ExecLeaseView,
-    PartRequest,
+    PartsRequest,
     PreparedView,
     PrepareRequest,
     ResultRequest,
@@ -34,11 +34,12 @@ async def detail(rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID)
 
 
 @router.post("/hosts/me/exec/{item_id}/parts", status_code=204)
-async def push_part(
-    rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: PartRequest
+async def push_parts(
+    rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: PartsRequest
 ) -> None:
-    """One part of the item's output. A part sent again lands once."""
-    await relay.push_part(rctx, host, item_id, body)
+    """The parts of the item's output one flush window gathered, as one push.
+    A push sent again lands once."""
+    await relay.push_parts(rctx, host, item_id, body)
 
 
 @router.post("/hosts/me/exec/{item_id}/result", status_code=204)

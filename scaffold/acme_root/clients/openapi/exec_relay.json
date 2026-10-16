@@ -182,15 +182,15 @@
         "title": "OutputStream",
         "type": "string"
       },
-      "PartRequest": {
+      "PartBody": {
         "additionalProperties": false,
-        "description": "One part of an item's output, in the order the host read it.",
+        "description": "One part of an item's output: its place in it, and its stream.",
         "properties": {
           "crossing": {
             "$ref": "#/components/schemas/CrossingBody"
           },
           "data": {
-            "maxLength": 90000,
+            "maxLength": 170668,
             "title": "Data",
             "type": "string"
           },
@@ -209,7 +209,27 @@
           "data",
           "crossing"
         ],
-        "title": "PartRequest",
+        "title": "PartBody",
+        "type": "object"
+      },
+      "PartsRequest": {
+        "additionalProperties": false,
+        "description": "The parts of an item's output one flush window gathered, in the order\nthe host read them: one push, held to its bytes before any is decoded.",
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/PartBody"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parts"
+        ],
+        "title": "PartsRequest",
         "type": "object"
       },
       "PrepareRequest": {
@@ -652,8 +672,8 @@
     },
     "/v1/hosts/me/exec/{item_id}/parts": {
       "post": {
-        "description": "One part of the item's output. A part sent again lands once.",
-        "operationId": "push_part",
+        "description": "The parts of the item's output one flush window gathered, as one push.\nA push sent again lands once.",
+        "operationId": "push_parts",
         "parameters": [
           {
             "in": "path",
@@ -718,7 +738,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PartRequest"
+                "$ref": "#/components/schemas/PartsRequest"
               }
             }
           },
@@ -739,7 +759,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Push Part",
+        "summary": "Push Parts",
         "tags": [
           "exec_relay"
         ]

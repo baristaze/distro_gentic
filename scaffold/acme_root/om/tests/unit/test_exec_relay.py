@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -29,6 +29,7 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.streams import StreamBounds
 from acme.infra.transports import (
     CapabilityMissing,
     CommandResult,
@@ -41,13 +42,20 @@ from acme.om.agent_steps.types.header import ParkReason, ToolFailure
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
-from acme.om.exceptions import NotFound, ToolFailed, Unavailable
+from acme.om.exceptions import NotFound, ToolFailed, Unavailable, ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
 from acme.om.exec_relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.exec_relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
+from acme.om.exec_relay.rules import (
+    PUSH_BYTES,
+    PUSH_PARTS,
+    READ_BYTES,
+    RESULT_CHARS,
+    exec_id,
+    key_time,
+)
 from acme.om.exec_relay.types.exec import (
     REQUESTS,
     ExecCall,
@@ -60,6 +68,7 @@ from acme.om.exec_relay.types.exec import (
     PrepareAnswer,
     ReadRequest,
     RunRequest,
+    SentPart,
     StopKind,
 )
 from acme.om.hosts.exceptions import PinnedToHosts
@@ -77,8 +86,10 @@ from acme.om.placement.types.work import (
     WorkspacePayload,
 )
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
+from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.storage.impl.memory_base import MemoryStorageBase
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 
@@ -99,6 +110,15 @@ SHORT = timedelta(milliseconds=50)
 
 def request() -> RequestContext:
     return RequestContext(request_id=new_id(), app=APP)
+
+
+def sent_part(seq: int, text: str, stream: str = "stdout") -> SentPart:
+    """A part of an item's output as its host sends it, with the crossing it
+    declares of its bytes."""
+    data = text.encode()
+    return SentPart(
+        seq=seq, stream=stream, crossing=declared(CrossingKind.STREAM_PART, data), data=data
+    )
 
 
 @dataclass
@@ -122,13 +142,19 @@ def storage() -> StorageMemoryImpl:
 
 
 @pytest.fixture
-def managers(tmp_path: Path, storage: StorageMemoryImpl) -> PlatformManagers:
+def relay_options() -> ExecRelayOptions:
+    return ExecRelayOptions(lease=SHORT)
+
+
+@pytest.fixture
+def managers(
+    infra: InfraLocalImpl, storage: StorageMemoryImpl, relay_options: ExecRelayOptions
+) -> PlatformManagers:
     return build_platform_managers(
         storage,
-        InfraLocalImpl(tmp_path),
+        infra,
         platform_root_options=PlatformRootOptions(
-            hosts_options=HostsOptions(claim_lease=SHORT),
-            relay_options=ExecRelayOptions(lease=SHORT),
+            hosts_options=HostsOptions(claim_lease=SHORT), relay_options=relay_options
         ),
     )
 
@@ -226,16 +252,14 @@ class Host:
     def item_id(self, row: WorkItem) -> UUID:
         return ExecPayload.model_validate(row.payload).item_id
 
-    async def part(self, row: WorkItem, seq: int, text: str) -> None:
-        data = text.encode()
-        await self.managers.exec_relay.push_part(
+    async def push(self, row: WorkItem, *parts: tuple[int, str]) -> None:
+        """One push of the parts of stdout a flush window gathered, each by
+        its place."""
+        await self.managers.exec_relay.push_parts(
             request(),
             self.identity,
             self.item_id(row),
-            seq,
-            "stdout",
-            declared(CrossingKind.STREAM_PART, data),
-            data,
+            [sent_part(seq, text) for seq, text in parts],
         )
 
     async def finish(
@@ -288,8 +312,8 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
         detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
         assert detail.request == RunRequest(argv=("make", "deploy"))
         assert (detail.key, detail.epoch, detail.location) == (spec.key, wall.epoch, WHERE)
-        await host.part(row, 0, "building\n")
-        await host.part(row, 1, "deployed\n")
+        await host.push(row, (0, "building\n"))
+        await host.push(row, (1, "deployed\n"))
         await host.finish(row, 0, "building\ndeployed\n")
 
     ran, _ = await asyncio.gather(
@@ -327,7 +351,7 @@ async def test_a_resumed_run_attaches_to_the_first_execution_and_never_starts_an
     spec = command(wall.epoch)
     lost = asyncio.ensure_future(transport(wall.managers).run(wall.workspace, spec, seal=NO_SEAL))
     row = await host.claim_soon()
-    await host.part(row, 0, "half way\n")
+    await host.push(row, (0, "half way\n"))
     # The runner is lost mid-command; the next run holds the session before
     # the lost one's wait ends, so the lost run's stop is refused as stale.
     epoch = await wall.managers.agent_steps.begin_run(wall.owner, wall.workspace.id)
@@ -735,16 +759,11 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wa
     item_id = host.item_id(row)
     sent = b"the real output\n"
     tampered = b"the fake output\n"
+    forged_part = SentPart(
+        seq=0, stream="stdout", crossing=declared(CrossingKind.STREAM_PART, sent), data=tampered
+    )
     with pytest.raises(CrossingRefused):
-        await relay.push_part(
-            request(),
-            wall.holder,
-            item_id,
-            0,
-            "stdout",
-            declared(CrossingKind.STREAM_PART, sent),
-            tampered,
-        )
+        await relay.push_parts(request(), wall.holder, item_id, [forged_part])
     real = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="ok"))
     forged = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="forged"))
     for crossing, data in (
@@ -1107,3 +1126,199 @@ def test_an_id_derived_from_a_key_is_the_same_on_every_run() -> None:
     assert exec_id(key, request_bytes, 0) == exec_id(key, request_bytes, 0)
     assert exec_id(key, request_bytes, 0) != exec_id(key, request_bytes, 1)
     assert isinstance(key_time(key), datetime)
+
+
+# A command's live output is a stream on the shared cache: a push is one
+# entry, sealed once under the session's key, and no row is written for it.
+# Its result holds it whole, whatever the stream let go.
+
+
+@pytest.fixture
+def written(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every row the memory storage writes from the test's call of
+    `clear()` on, each by its type."""
+    rows: list[str] = []
+    for name in ("_put", "_insert"):
+        inner = getattr(MemoryStorageBase, name)
+
+        def spy(
+            self: MemoryStorageBase,
+            table: Any,
+            org_id: UUID,
+            entity: Any,
+            *rest: Any,
+            _inner: Any = inner,
+        ) -> Any:
+            rows.append(type(entity).__name__)
+            return _inner(self, table, org_id, entity, *rest)
+
+        monkeypatch.setattr(MemoryStorageBase, name, spy)
+    return rows
+
+
+@pytest.fixture
+def seals(monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
+    """What the platform seals under a session's key, each in the clear."""
+    sealed: list[bytes] = []
+    inner = RecordSealKeysImpl.seal
+
+    async def spy(
+        self: RecordSealKeysImpl, ctx: TenantContext, agent_session_id: UUID, key: UUID, data: bytes
+    ) -> bytes | None:
+        sealed.append(data)
+        return await inner(self, ctx, agent_session_id, key, data)
+
+    monkeypatch.setattr(RecordSealKeysImpl, "seal", spy)
+    return sealed
+
+
+async def live(infra: InfraLocalImpl, item_id: UUID) -> list[tuple[int, bytes]]:
+    """The entries of an item's live output the cache holds now."""
+    held = await infra.get_streams().read(item_id, {}, ExecRelayOptions().output)
+    return [entry for run in held for entry in run.entries]
+
+
+async def test_a_commands_output_reaches_the_watch_in_order_through_the_cache_and_no_row(
+    wall: Wall, infra: InfraLocalImpl, written: list[str]
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    printed: list[tuple[str, str]] = []
+
+    async def sink(stream: str, text: str) -> None:
+        printed.append((stream, text))
+
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), sink, seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    written.clear()
+    await host.push(row, (0, "one\n"), (1, "two\n"))
+    await host.push(row, (2, "three\n"))
+    await host.push(row, (2, "three\n"))  # sent again, it lands nothing
+    for _ in range(500):
+        if len(printed) == 3:
+            break
+        await asyncio.sleep(0.002)
+    assert printed == [("stdout", "one\n"), ("stdout", "two\n"), ("stdout", "three\n")]
+    # While it runs, its output is on the cache alone: an entry a push,
+    # numbered by its last part, and no row of any table.
+    assert written == []
+    item = await wall.storage.get_exec_relay_storage().read_item(wall.owner.org_id, item_id)
+    assert item is not None and item.output is None
+    assert [n for n, _ in await live(infra, item_id)] == [1, 2]
+    await host.finish(row, 0, "one\ntwo\nthree\n")
+    ran = await waiting
+    assert (ran.exit_code, ran.stdout) == (0, "one\ntwo\nthree\n")
+
+
+async def test_a_push_of_a_windows_parts_is_sealed_once_and_read_from_any_part_of_it(
+    wall: Wall, infra: InfraLocalImpl, seals: list[bytes]
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    relay = wall.managers.exec_relay
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    seals.clear()
+    window = [sent_part(0, "make\n"), sent_part(1, "warning\n", "stderr"), sent_part(2, "ok\n")]
+    await relay.push_parts(request(), wall.holder, item_id, window)
+    assert len(seals) == 1, "one seal for the push, whatever it holds"
+    assert [n for n, _ in await live(infra, item_id)] == [2]
+    org = wall.owner.org_id
+    progress = await relay.watch(request(), org, item_id, -1)
+    assert [(p.seq, p.stream, p.text) for p in progress.parts] == [
+        (0, "stdout", "make\n"),
+        (1, "stderr", "warning\n"),
+        (2, "stdout", "ok\n"),
+    ]
+    # A reader that read the push's first part reads the rest of it alone.
+    after = await relay.watch(request(), org, item_id, 0)
+    assert [p.seq for p in after.parts] == [1, 2]
+    await host.finish(row, 0, "make\nok\n")
+    assert (await waiting).stdout == "make\nok\n"
+
+
+async def test_a_push_out_of_its_order_past_its_bounds_or_on_no_stream_is_refused(
+    wall: Wall, infra: InfraLocalImpl
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    relay = wall.managers.exec_relay
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    for refused in (
+        [],
+        [sent_part(1, "b\n"), sent_part(0, "a\n")],
+        [sent_part(0, "a\n"), sent_part(0, "a\n")],
+        [sent_part(0, "a\n", "stdin")],
+        [sent_part(0, "x" * (PUSH_BYTES + 1))],
+        [sent_part(seq, "a") for seq in range(PUSH_PARTS + 1)],
+        [sent_part(ExecRelayOptions().max_parts, "a\n")],
+    ):
+        with pytest.raises(ValidationFailed):
+            await relay.push_parts(request(), wall.holder, item_id, refused)
+    assert await live(infra, item_id) == []
+    await host.finish(row, 0, "")
+    await waiting
+
+
+async def test_the_live_output_is_sealed_on_the_cache_and_reads_as_nothing_once_its_key_goes(
+    wall: Wall, infra: InfraLocalImpl
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    relay = wall.managers.exec_relay
+    org = wall.owner.org_id
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    await host.push(row, (0, "the deploy key is in vault\n"))
+    ((_, entry),) = await live(infra, item_id)
+    assert b"deploy key" not in entry, "the cache holds the part sealed"
+    progress = await relay.watch(request(), org, item_id, -1)
+    assert [p.text for p in progress.parts] == ["the deploy key is in vault\n"]
+
+    await wall.managers.privacy.revoke_key(wall.owner, wall.workspace.id)
+    assert await live(infra, item_id) != [], "nothing is rewritten"
+    assert (await relay.watch(request(), org, item_id, -1)).parts == ()
+    # A push once the key is gone keeps nothing.
+    await host.push(row, (1, "more\n"))
+    assert [n for n, _ in await live(infra, item_id)] == [0]
+    waiting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+
+
+@pytest.mark.parametrize(
+    "relay_options",
+    [ExecRelayOptions(lease=SHORT, output=StreamBounds(entries=2, idle=timedelta(seconds=0.2)))],
+)
+async def test_a_reader_behind_a_trimmed_or_expired_stream_reads_the_whole_output_once_done(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    relay = wall.managers.exec_relay
+    org = wall.owner.org_id
+    waiting = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    whole = "".join(f"line {seq}\n" for seq in range(5))
+    for seq in range(5):
+        await host.push(row, (seq, f"line {seq}\n"))
+    behind = await relay.watch(request(), org, item_id, -1)
+    assert [p.seq for p in behind.parts] == [3, 4], "the stream let its oldest go"
+    await asyncio.sleep(0.3)
+    assert (await relay.watch(request(), org, item_id, -1)).parts == (), "and then all of it"
+    await host.finish(row, 0, whole)
+    done = await relay.watch(request(), org, item_id, -1)
+    assert done.state is ExecState.DONE
+    assert done.output is not None and done.output.stdout == whole
+    assert (await waiting).stdout == whole

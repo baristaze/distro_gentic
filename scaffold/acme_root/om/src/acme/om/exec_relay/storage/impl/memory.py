@@ -7,7 +7,6 @@ from acme.om.exec_relay.types.exec import (
     AgentWorkspaceBinding,
     ExecControl,
     ExecItem,
-    ExecPart,
     ExecState,
 )
 from acme.om.outbox.storage import OutboxLandingInterface
@@ -19,7 +18,6 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
         self._items: MemoryTable[ExecItem] = {}
-        self._parts: MemoryTable[ExecPart] = {}
         self._controls: MemoryTable[ExecControl] = {}
         self._bindings: MemoryTable[AgentWorkspaceBinding] = {}
 
@@ -68,24 +66,6 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
             and item.lease_expires_at is not None
             and item.lease_expires_at < now
         ][:limit]
-
-    async def add_part(self, org_id: UUID, part: ExecPart) -> bool:
-        async with self._lock:
-            taken = any(
-                held.row_id == part.row_id and held.seq == part.seq
-                for held in self._rows(self._parts, org_id)
-            )
-            return not taken and self._insert(self._parts, org_id, part)
-
-    async def read_parts(
-        self, org_id: UUID, row_id: UUID, after_seq: int, limit: int
-    ) -> list[ExecPart]:
-        found = [
-            part
-            for part in self._rows(self._parts, org_id)
-            if part.row_id == row_id and part.seq > after_seq
-        ]
-        return sorted(found, key=lambda part: part.seq)[:limit]
 
     async def add_control(
         self, org_id: UUID, control: ExecControl, outbox_rows: tuple[OutboxRow, ...]
@@ -142,7 +122,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = 0
-            for table in (self._parts, self._controls, self._items, self._bindings):
+            for table in (self._controls, self._items, self._bindings):
                 gone = [
                     entity_id
                     for entity_id, (row_org, entity) in table.items()
@@ -157,7 +137,7 @@ class ExecRelayStorageMemoryImpl(MemoryStorageBase, ExecRelayStorageInterface):
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = 0
-            for table in (self._parts, self._controls, self._items, self._bindings):
+            for table in (self._controls, self._items, self._bindings):
                 gone = [
                     entity_id for entity_id, (row_org, _) in table.items() if row_org == org_id
                 ][:limit]

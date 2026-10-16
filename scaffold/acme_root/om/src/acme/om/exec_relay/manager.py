@@ -5,6 +5,7 @@ lease, reads it, streams its output, and pushes how it ended, which is
 stored under the call's key; a host's control stream stops it at once."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from acme.om.exec_relay.types.exec import (
     ExecItem,
     ExecProgress,
     PrepareAnswer,
+    SentPart,
     SnapshotAnswer,
     StopKind,
 )
@@ -235,7 +237,8 @@ class ExecRelayManagerInterface(ABC):
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
     ) -> ExecProgress:
         """System-internal: the item's state, the parts of its output after
-        `after_seq`, opened, and how it ended once it has."""
+        `after_seq` the shared cache still holds, opened, and how it ended
+        once it has, with all it printed."""
         ...
 
     @abstractmethod
@@ -300,20 +303,15 @@ class ExecRelayManagerInterface(ABC):
 
     @abstractmethod
     @transition
-    async def push_part(
-        self,
-        rctx: RequestContext,
-        host: HostIdentity,
-        item_id: UUID,
-        seq: int,
-        stream: str,
-        crossing: Crossing,
-        data: bytes,
+    async def push_parts(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, parts: Sequence[SentPart]
     ) -> None:
-        """System-internal: one part of the item's output, verified against
-        the hash it crossed with before anything reads it, then kept sealed.
-        A part sent again lands once. `CrossingRefused` for bytes that are
-        not the ones declared; `ItemNotHeld` as `detail` says."""
+        """System-internal: the parts of the item's output one flush window
+        gathered, in their order, each verified against the hash it crossed
+        with before anything reads it, then sealed once and kept on the
+        shared cache as the live output of the item's run. A push sent again
+        lands once. `CrossingRefused` for bytes that are not the ones
+        declared; `ItemNotHeld` as `detail` says."""
         ...
 
     @abstractmethod

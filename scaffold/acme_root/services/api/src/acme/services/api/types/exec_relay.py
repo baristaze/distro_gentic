@@ -5,15 +5,24 @@ the wall, in base64, and the hash its sender declared of them."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
-from acme.om.exec_relay.rules import RESULT_CHARS
+from acme.om.exec_relay.rules import PUSH_BYTES, PUSH_PARTS, RESULT_CHARS
 from acme.om.retention.crossing import SHA256, CrossingKind
 from acme.services.api.types.common import RequestBody, View
+
+PUSH_CHARS = -(-PUSH_BYTES // 3) * 4
+"""The base64 of a push's bytes, the most one part of it may carry."""
+
+
+def spelled_bytes(data: str) -> int:
+    """The bytes base64 text spells, read off its length before it is
+    decoded."""
+    return len(data) * 3 // 4 - (len(data) - len(data.rstrip("=")))
 
 
 class ControlKind(StrEnum):
@@ -41,13 +50,26 @@ class CrossingBody(RequestBody):
     size: int = Field(ge=0)
 
 
-class PartRequest(RequestBody):
-    """One part of an item's output, in the order the host read it."""
+class PartBody(RequestBody):
+    """One part of an item's output: its place in it, and its stream."""
 
     seq: int = Field(ge=0)
     stream: OutputStream
-    data: str = Field(max_length=90_000)  # base64 of the part's UTF-8 bytes
+    data: str = Field(max_length=PUSH_CHARS)  # base64 of the part's UTF-8 bytes
     crossing: CrossingBody
+
+
+class PartsRequest(RequestBody):
+    """The parts of an item's output one flush window gathered, in the order
+    the host read them: one push, held to its bytes before any is decoded."""
+
+    parts: list[PartBody] = Field(min_length=1, max_length=PUSH_PARTS)
+
+    @model_validator(mode="after")
+    def _within_a_pushs_bytes(self) -> Self:
+        if sum(spelled_bytes(part.data) for part in self.parts) > PUSH_BYTES:
+            raise ValueError(f"a push carries at most {PUSH_BYTES} bytes")
+        return self
 
 
 class ResultRequest(RequestBody):

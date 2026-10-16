@@ -77,6 +77,10 @@ WORKSPACE = "WORKSPACE"
 MCP_CALL = "mcp_call"
 """The operation of an `exec` item that calls a tool of a server this host
 runs (`mcp.HostServers`)."""
+PUSH_BYTES = 128_000
+PUSH_PARTS = 256
+"""The most bytes of output, and the most parts, one push carries, as the
+platform bounds a push."""
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
@@ -163,8 +167,9 @@ class ExecutorRelayImpl(ExecutorInterface):
     host gives; an item at any other mode is refused, with nothing run.
     `kept_whole` names the modes a workspace kept by snapshots is held at
     with no snapshot of the host's: a VM of the cloud pool, whose pool
-    keeps the VM's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
-    sent as a part, and the lease is renewed every `renew_seconds`, a
+    keeps the VM's whole disk. Output gathers for `flush_seconds`, or up to
+    `window_chars`, before the window is sent as one push, and the lease is
+    renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts
     at a quarter of a renewal's period and doubles."""
@@ -182,7 +187,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         servers: HostServers | None = None,
         base_options: Mapping[str, Any] | None = None,
         flush_seconds: float = 0.25,
-        part_bytes: int = 32_000,
+        window_chars: int = 32_000,
         renew_seconds: float = 20.0,
         jitter: Callable[[], float] = random.random,
     ) -> None:
@@ -202,7 +207,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._broker = broker
         self._servers = servers
         self._flush_seconds = flush_seconds
-        self._part_bytes = part_bytes
+        self._window_chars = window_chars
         self._renew_seconds = renew_seconds
         self._lease_seconds = renew_seconds * 3
         self._jitter = jitter
@@ -280,7 +285,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             refused = _result(refused=(error.code, error.http_status), detail=error.message)
             await self._push(item_id, refused, running.held_until)
             return
-        parts = _Parts(self._client, item_id, running, self._flush_seconds, self._part_bytes)
+        parts = _Parts(self._client, item_id, running, self._flush_seconds, self._window_chars)
         renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
         try:
@@ -796,7 +801,9 @@ def _ended(operation: asyncio.Future[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 class _Parts:
-    """The output of one item, gathered and sent in order, a part at a time."""
+    """The output of one item, gathered and sent in order, a window at a
+    time: one push holds every part a window gathered, a run of one stream's
+    text each, unless it holds more than one push carries."""
 
     def __init__(
         self,
@@ -804,13 +811,13 @@ class _Parts:
         item_id: UUID,
         running: Running,
         flush_seconds: float,
-        part_bytes: int,
+        window_chars: int,
     ) -> None:
         self._client = client
         self._item_id = item_id
         self._running = running
         self._flush_seconds = flush_seconds
-        self._part_bytes = part_bytes
+        self._window_chars = window_chars
         self._seq = 0
         self._pending: list[tuple[str, str]] = []
         self._size = 0
@@ -821,29 +828,52 @@ class _Parts:
         self._running.printed[stream].append(text)
         self._pending.append((stream, text))
         self._size += len(text)
-        if time.monotonic() - self._last >= self._flush_seconds or self._size >= self._part_bytes:
+        if time.monotonic() - self._last >= self._flush_seconds or self._size >= self._window_chars:
             await self.flush()
 
     async def flush(self) -> None:
         async with self._lock:
             pending, self._pending, self._size = self._pending, [], 0
             self._last = time.monotonic()
-            # A part is whole characters: at most four bytes each in UTF-8,
-            # so a part of a quarter as many characters fits in its bytes.
-            step = max(1, self._part_bytes // 4)
-            for stream, text in _joined(pending):
-                for start in range(0, len(text), step):
-                    chunk = text[start : start + step].encode()
-                    try:
-                        async with self._client() as client:
-                            await client.push_exec_part(
-                                self._item_id, self._seq, OutputStream(stream), chunk
-                            )
-                    except (ApiError, *WIRE_FAILURES) as error:
-                        # A part lost on the wire is lost alone: the result
-                        # carries the whole output, and is still pushed.
-                        log.warning("item %s: a part was not taken: %s", self._item_id, error)
-                    self._seq += 1
+            for push in self._pushes(_joined(pending)):
+                try:
+                    async with self._client() as client:
+                        await client.push_exec_parts(self._item_id, push)
+                except (ApiError, *WIRE_FAILURES) as error:
+                    # A push lost on the wire is lost alone: the result
+                    # carries the whole output, and is still pushed.
+                    log.warning("item %s: a push was not taken: %s", self._item_id, error)
+
+    def _pushes(self, runs: list[tuple[str, str]]) -> list[list[tuple[int, OutputStream, bytes]]]:
+        """A window's runs as numbered parts, in pushes the platform takes:
+        each of `PUSH_PARTS` parts and `PUSH_BYTES` bytes at most, a part
+        cut only between whole characters."""
+        pushes: list[list[tuple[int, OutputStream, bytes]]] = [[]]
+        size = 0
+        for stream, text in runs:
+            data = text.encode()
+            while data:
+                cut = _whole(data, PUSH_BYTES - size)
+                if cut == 0 or len(pushes[-1]) == PUSH_PARTS:
+                    pushes.append([])
+                    size = 0
+                    continue
+                pushes[-1].append((self._seq, OutputStream(stream), data[:cut]))
+                self._seq += 1
+                size += cut
+                data = data[cut:]
+        return [push for push in pushes if push]
+
+
+def _whole(data: bytes, most: int) -> int:
+    """How much of `data` fits in `most` bytes and ends on a character's
+    boundary: a UTF-8 continuation byte never starts what is left."""
+    if len(data) <= most:
+        return len(data)
+    cut = max(most, 0)
+    while cut > 0 and data[cut] & 0xC0 == 0x80:
+        cut -= 1
+    return cut
 
 
 def _joined(pending: list[tuple[str, str]]) -> list[tuple[str, str]]:

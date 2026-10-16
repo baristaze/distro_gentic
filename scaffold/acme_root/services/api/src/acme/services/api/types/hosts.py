@@ -22,7 +22,7 @@ from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES
 from acme.om.watch.types.live import MAX_ENTRY, Appended, SentEntry
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.common import RequestBody, View
-from acme.services.api.types.exec_relay import CrossingBody
+from acme.services.api.types.exec_relay import CrossingBody, spelled_bytes
 
 
 class CreatePoolRequest(RequestBody):
@@ -175,12 +175,6 @@ MAX_APPEND_CHARS = 4 * -(-MAX_APPEND_BYTES // 3)
 """The base64 of an append's most bytes: no entry's data runs longer."""
 
 
-def _size(data: str) -> int:
-    """The bytes base64 text spells, read off its length before it is
-    decoded."""
-    return len(data) * 3 // 4 - (len(data) - len(data.rstrip("=")))
-
-
 class ClaimantEnrollRequest(RequestBody):
     """A claimant's name, beside its enrollment token. The kind and the pool
     are the token's."""
@@ -287,7 +281,7 @@ class ClaimantAppendRequest(RequestBody):
 
     @model_validator(mode="after")
     def _within_an_appends_bytes(self) -> Self:
-        if sum(_size(entry.data) for entry in self.entries) > MAX_APPEND_BYTES:
+        if sum(spelled_bytes(entry.data) for entry in self.entries) > MAX_APPEND_BYTES:
             raise ValueError(f"an append carries at most {MAX_APPEND_BYTES} bytes")
         return self
 

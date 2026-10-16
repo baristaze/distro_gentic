@@ -6,7 +6,7 @@ means for the item it holds."""
 
 import base64
 import hashlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -38,18 +38,24 @@ class ExecRelayCalls(Transport):
         answer = await self.request("GET", f"/v1/hosts/me/exec/{item_id}")
         return ExecDetailView.model_validate(answer)
 
-    async def push_exec_part(
-        self, item_id: UUID, seq: int, stream: OutputStream, data: bytes
+    async def push_exec_parts(
+        self, item_id: UUID, parts: Sequence[tuple[int, OutputStream, bytes]]
     ) -> None:
-        """One part of the item's output; one sent again lands once."""
+        """The parts of the item's output one flush window gathered, each by
+        its place and its stream, in one push; one sent again lands once."""
         await self.request(
             "POST",
             f"/v1/hosts/me/exec/{item_id}/parts",
             json={
-                "seq": seq,
-                "stream": stream.value,
-                "data": base64.b64encode(data).decode(),
-                "crossing": _declared(CrossingKind.stream_part, data),
+                "parts": [
+                    {
+                        "seq": seq,
+                        "stream": stream.value,
+                        "data": base64.b64encode(data).decode(),
+                        "crossing": _declared(CrossingKind.stream_part, data),
+                    }
+                    for seq, stream, data in parts
+                ]
             },
         )
 

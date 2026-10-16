@@ -160,18 +160,30 @@ class CrossingBody(BaseModel):
     size: Annotated[int, Field(ge=0, title='Size')]
 
 
-class PartRequest(BaseModel):
+class PartBody(BaseModel):
     """
-    One part of an item's output, in the order the host read it.
+    One part of an item's output: its place in it, and its stream.
     """
 
     model_config = ConfigDict(
         extra='forbid',
     )
     crossing: CrossingBody
-    data: Annotated[str, Field(max_length=90000, title='Data')]
+    data: Annotated[str, Field(max_length=170668, title='Data')]
     seq: Annotated[int, Field(ge=0, title='Seq')]
     stream: OutputStream
+
+
+class PartsRequest(BaseModel):
+    """
+    The parts of an item's output one flush window gathered, in the order
+    the host read them: one push, held to its bytes before any is decoded.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    parts: Annotated[list[PartBody], Field(max_length=256, min_length=1, title='Parts')]
 
 
 class ResultRequest(BaseModel):
