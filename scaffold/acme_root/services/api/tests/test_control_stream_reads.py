@@ -102,13 +102,11 @@ def a_request() -> RequestContext:
 async def test_a_burst_of_wakes_reads_the_hosts_controls_no_faster_than_the_spacing() -> None:
     service, relay, _ = stream_of(burst=20, jitter=0.0)
     wakes = 0
-    stream = service.control(a_request(), HOST, None)
-    async for view in stream:
+    async for view in service.control(a_request(), HOST, None):
         if view.kind is ControlKind.WAKE:
             wakes += 1
         if len(relay.reads) == 10:
             break
-    await stream.aclose()
     gaps = [later - earlier for earlier, later in itertools.pairwise(relay.reads)]
     assert len(gaps) == 9 and min(gaps) >= SPACING, gaps
     # The one at the open, and one for each read's burst of twenty.
