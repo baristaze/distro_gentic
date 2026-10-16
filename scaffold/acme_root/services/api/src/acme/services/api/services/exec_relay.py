@@ -11,6 +11,7 @@ from acme.services.api.types.exec_relay import (
     ControlView,
     ExecDetailView,
     ExecLeaseView,
+    PartRequest,
     PartsRequest,
     PreparedView,
     PrepareRequest,
@@ -27,8 +28,14 @@ class ExecRelayServiceInterface(ABC):
 
     @abstractmethod
     async def push_parts(
-        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PartsRequest
-    ) -> None: ...
+        self,
+        rctx: RequestContext,
+        host: HostIdentity,
+        item_id: UUID,
+        body: PartsRequest | PartRequest,
+    ) -> None:
+        """A window's parts as one push, or one part alone as a push of one."""
+        ...
 
     @abstractmethod
     async def push_result(

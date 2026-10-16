@@ -45,8 +45,7 @@ async def push_parts(
     """The parts of the item's output one flush window gathered, as one push,
     or one part alone, as a host whose pushes hold one part sends it. A push
     sent again lands once."""
-    pushed = body if isinstance(body, PartsRequest) else PartsRequest(parts=[body])
-    await relay.push_parts(rctx, host, item_id, pushed)
+    await relay.push_parts(rctx, host, item_id, body)
 
 
 @router.post("/hosts/me/exec/{item_id}/result", status_code=204)

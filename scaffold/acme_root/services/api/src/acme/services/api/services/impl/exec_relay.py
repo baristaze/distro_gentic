@@ -29,6 +29,7 @@ from acme.services.api.types.exec_relay import (
     CrossingBody,
     ExecDetailView,
     ExecLeaseView,
+    PartRequest,
     PartsRequest,
     PreparedView,
     PrepareRequest,
@@ -90,8 +91,13 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
         )
 
     async def push_parts(
-        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PartsRequest
+        self,
+        rctx: RequestContext,
+        host: HostIdentity,
+        item_id: UUID,
+        body: PartsRequest | PartRequest,
     ) -> None:
+        pushed = body.parts if isinstance(body, PartsRequest) else [body]
         parts = [
             SentPart(
                 seq=part.seq,
@@ -99,7 +105,7 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
                 crossing=crossing_of(part.crossing),
                 data=decoded(part.data),
             )
-            for part in body.parts
+            for part in pushed
         ]
         await self._relay.push_parts(rctx, host, item_id, parts)
 
