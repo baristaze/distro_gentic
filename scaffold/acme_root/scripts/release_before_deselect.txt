@@ -510,3 +510,10 @@ apps/host/tests/test_hosted_fork_integration.py::test_a_fork_refused_by_its_host
 apps/host/tests/test_hosted_fork_integration.py::test_a_fork_refused_by_its_host_or_its_session_spends_nothing[True-keeps no content at rest]
 apps/host/tests/test_pinned_session_integration.py::test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_pools_host
 apps/host/tests/test_pinned_validation.py::test_a_pinned_agent_projects_delivery_is_validated_on_its_pools_host_and_the_gate_confirms_it
+
+# These tests read the exec relay's parts table, which this release drops: a
+# command's live output is a stream on the shared cache. The release before's
+# runner reads a hosted command's progress from that table, so a command it
+# waits on on this schema runs out of time.
+om/tests/integration/test_row_level_security.py::test_every_table_holds_the_policy_its_scope_declares[exec_parts]
+apps/host/tests/test_cloud_pool_lima.py::test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops
