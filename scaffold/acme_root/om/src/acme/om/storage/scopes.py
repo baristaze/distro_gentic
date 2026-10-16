@@ -184,7 +184,6 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "agent_projects": TableScope(ScopeKind.ORG),
     "agent_session_projects": TableScope(ScopeKind.ORG),
     "exec_items": TableScope(ScopeKind.ORG),
-    "exec_parts": TableScope(ScopeKind.ORG),
     "exec_controls": TableScope(ScopeKind.ORG),
     "agent_workspace_bindings": TableScope(ScopeKind.ORG),
     "agent_session_workspaces": TableScope(ScopeKind.ORG),
