@@ -12,6 +12,7 @@ from uuid import UUID
 import httpx
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.root import InfraInterface
 from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.integrations.root import IntegrationsInterface
@@ -51,10 +52,11 @@ def build_container(
     tool_catalog: tuple[ToolInterface, ...] = (),
     ports: PlatformPorts | None = None,
     payments: PaymentProviderInterface | None = None,
+    infra: InfraInterface | None = None,
     **overrides: object,
 ) -> AppContainer:
     """The test container over the memory storage root and the local infra
-    root, with the local sign-in on, the agent kinds a case runs, and the
+    root, or the roots a case passes, with the local sign-in on, the agent kinds a case runs, and the
     ports a product hands its roots, its own kinds among them. A test
     that needs a bound or a deadline of its own names the settings it
     overrides, one that needs storage to behave a certain way passes its own
@@ -75,7 +77,7 @@ def build_container(
     )
     return AppContainer.for_tests(
         storage or StorageMemoryImpl(),
-        InfraLocalImpl(tmp_path),
+        infra or InfraLocalImpl(tmp_path),
         settings,
         integrations,
         ports=ports

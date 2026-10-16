@@ -30,6 +30,7 @@ from acme.client.types.hosts import IsolationMode
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.root import InfraInterface
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
@@ -229,10 +230,12 @@ class Stack:
 
 
 @asynccontextmanager
-async def stack(tmp_path: Path, storage: StorageInterface | None = None) -> AsyncIterator[Stack]:
+async def stack(
+    tmp_path: Path, storage: StorageInterface | None = None, infra: InfraInterface | None = None
+) -> AsyncIterator[Stack]:
     """Over the memory storage, or over `storage`, where a tenant of its own
-    is bootstrapped under a fresh slug."""
-    container = build_container(tmp_path, storage, tool_catalog=SESSION_TOOLS)
+    is bootstrapped under a fresh slug, and over the local infra or `infra`."""
+    container = build_container(tmp_path, storage, tool_catalog=SESSION_TOOLS, infra=infra)
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
         slug = "ajax" if storage is None else f"ajax-{new_id().hex[-8:]}"

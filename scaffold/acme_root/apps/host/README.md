@@ -117,7 +117,7 @@ macOS.
 - **Runs a tool call once, and stops it at once.** An `exec` item it
   claims is a command or a file operation in a workspace it holds. It
   runs it through its own transport, a container per session, sends
-  what it prints back a part at a time, and pushes how it ended, each
+  what it prints back a window at a time, and pushes how it ended, each
   with the hash of the bytes it sends. It renews its lease while the
   command runs, and waits out a renewal or a result the platform fails
   to take while the lease lasts. Items run side by side, so a long

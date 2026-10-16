@@ -1,6 +1,6 @@
 """A host runs relayed work against the live app, in process. A tool call
 the runner relays runs once, on the host that holds the workspace, through
-its local transport: its output streams back a part at a time and its
+its local transport: its output streams back a window at a time and its
 result lands under the call's key. A cancel or an interrupt the platform
 records reaches the host over the control stream it holds open, and ends
 the command at once. A host's routes take its own credential alone. A
