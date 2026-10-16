@@ -50,8 +50,10 @@ class CrossingBody(RequestBody):
     size: int = Field(ge=0)
 
 
-class PartBody(RequestBody):
-    """One part of an item's output: its place in it, and its stream."""
+class PartRequest(RequestBody):
+    """One part of an item's output: its place in it, and its stream. A host
+    whose pushes hold one part each sends it alone, as a push of that part,
+    and it lands as one while the floor of `exec` work takes that host."""
 
     seq: int = Field(ge=0)
     stream: OutputStream
@@ -63,7 +65,7 @@ class PartsRequest(RequestBody):
     """The parts of an item's output one flush window gathered, in the order
     the host read them: one push, held to its bytes before any is decoded."""
 
-    parts: list[PartBody] = Field(min_length=1, max_length=PUSH_PARTS)
+    parts: list[PartRequest] = Field(min_length=1, max_length=PUSH_PARTS)
 
     @model_validator(mode="after")
     def _within_a_pushs_bytes(self) -> Self:

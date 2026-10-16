@@ -160,9 +160,11 @@ class CrossingBody(BaseModel):
     size: Annotated[int, Field(ge=0, title='Size')]
 
 
-class PartBody(BaseModel):
+class PartRequest(BaseModel):
     """
-    One part of an item's output: its place in it, and its stream.
+    One part of an item's output: its place in it, and its stream. A host
+    whose pushes hold one part each sends it alone, as a push of that part,
+    and it lands as one while the floor of `exec` work takes that host.
     """
 
     model_config = ConfigDict(
@@ -183,7 +185,9 @@ class PartsRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    parts: Annotated[list[PartBody], Field(max_length=256, min_length=1, title='Parts')]
+    parts: Annotated[
+        list[PartRequest], Field(max_length=256, min_length=1, title='Parts')
+    ]
 
 
 class ResultRequest(BaseModel):

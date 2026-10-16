@@ -182,9 +182,9 @@
         "title": "OutputStream",
         "type": "string"
       },
-      "PartBody": {
+      "PartRequest": {
         "additionalProperties": false,
-        "description": "One part of an item's output: its place in it, and its stream.",
+        "description": "One part of an item's output: its place in it, and its stream. A host\nwhose pushes hold one part each sends it alone, as a push of that part,\nand it lands as one while the floor of `exec` work takes that host.",
         "properties": {
           "crossing": {
             "$ref": "#/components/schemas/CrossingBody"
@@ -209,7 +209,7 @@
           "data",
           "crossing"
         ],
-        "title": "PartBody",
+        "title": "PartRequest",
         "type": "object"
       },
       "PartsRequest": {
@@ -218,7 +218,7 @@
         "properties": {
           "parts": {
             "items": {
-              "$ref": "#/components/schemas/PartBody"
+              "$ref": "#/components/schemas/PartRequest"
             },
             "maxItems": 256,
             "minItems": 1,
@@ -672,7 +672,7 @@
     },
     "/v1/hosts/me/exec/{item_id}/parts": {
       "post": {
-        "description": "The parts of the item's output one flush window gathered, as one push.\nA push sent again lands once.",
+        "description": "The parts of the item's output one flush window gathered, as one push,\nor one part alone, as a host whose pushes hold one part sends it. A push\nsent again lands once.",
         "operationId": "push_parts",
         "parameters": [
           {
@@ -738,7 +738,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PartsRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PartsRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PartRequest"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },

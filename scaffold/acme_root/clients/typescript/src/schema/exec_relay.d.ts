@@ -77,8 +77,9 @@ export interface paths {
         put?: never;
         /**
          * Push Parts
-         * @description The parts of the item's output one flush window gathered, as one push.
-         *     A push sent again lands once.
+         * @description The parts of the item's output one flush window gathered, as one push,
+         *     or one part alone, as a host whose pushes hold one part sends it. A push
+         *     sent again lands once.
          */
         post: operations["push_parts"];
         delete?: never;
@@ -273,10 +274,12 @@ export interface components {
          */
         OutputStream: "stdout" | "stderr";
         /**
-         * PartBody
-         * @description One part of an item's output: its place in it, and its stream.
+         * PartRequest
+         * @description One part of an item's output: its place in it, and its stream. A host
+         *     whose pushes hold one part each sends it alone, as a push of that part,
+         *     and it lands as one while the floor of `exec` work takes that host.
          */
-        PartBody: {
+        PartRequest: {
             crossing: components["schemas"]["CrossingBody"];
             /** Data */
             data: string;
@@ -291,7 +294,7 @@ export interface components {
          */
         PartsRequest: {
             /** Parts */
-            parts: components["schemas"]["PartBody"][];
+            parts: components["schemas"]["PartRequest"][];
         };
         /**
          * PrepareRequest
@@ -513,7 +516,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PartsRequest"];
+                "application/json": components["schemas"]["PartsRequest"] | components["schemas"]["PartRequest"];
             };
         };
         responses: {
