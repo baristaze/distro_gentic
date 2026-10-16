@@ -170,9 +170,9 @@ refused. What the item runs it reads from the gateway while it holds it
 
 ## Conventions
 
-- Exit codes: 0 done, 1 the platform refused, 2 a setting or a file on
-  the host is wrong, 3 not enrolled, 4 the platform is unreachable at
-  startup, 5 a startup probe failed.
+- Exit codes: 0 done, 2 a setting or a file on the host is wrong, 3 not
+  enrolled, 4 the platform is unreachable at startup, 5 a startup probe
+  failed, 7 the platform refused; 1, Python's own, a crash.
 - `ACME_API_URL` names the platform. `ACME_HOST_HOME` (default
   `~/.config/acme-host`) holds `credential.json`, mode 600, the owner's
   `ceilings.toml`, the host's own secret store, `secrets`, owner-only and
