@@ -1,6 +1,6 @@
-"""Storage of the exec relay: each `exec` item with how it ended, the parts of
-its output, the control messages for the host that holds it, and the host
-that holds each session's workspace. Every operation takes org_id first,
+"""Storage of the exec relay: each `exec` item with how it ended, the control
+messages for the host that holds it, and the host that holds each session's
+workspace. Every operation takes org_id first,
 except the sweep's read of expired leases, which reaches across tenants. A
 write that announces a change lands its outbox rows in the same commit."""
 
@@ -9,7 +9,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import tenantless
-from acme.om.exec_relay.types.exec import AgentWorkspaceBinding, ExecControl, ExecItem, ExecPart
+from acme.om.exec_relay.types.exec import AgentWorkspaceBinding, ExecControl, ExecItem
 from acme.om.outbox.types.row import OutboxRow
 
 
@@ -51,19 +51,6 @@ class ExecRelayStorageInterface(ABC):
     async def read_expired(self, now: datetime, limit: int) -> list[tuple[UUID, ExecItem]]:
         """Cross-tenant, for the sweep: running items whose lease ended
         before `now`, each with its tenant, at most `limit`."""
-        ...
-
-    @abstractmethod
-    async def add_part(self, org_id: UUID, part: ExecPart) -> bool:
-        """The create; False, with nothing landed, when the row's part at
-        that place is written."""
-        ...
-
-    @abstractmethod
-    async def read_parts(
-        self, org_id: UUID, row_id: UUID, after_seq: int, limit: int
-    ) -> list[ExecPart]:
-        """The parts of a row's output after `after_seq`, in order."""
         ...
 
     @abstractmethod
@@ -110,8 +97,7 @@ class ExecRelayStorageInterface(ABC):
     @abstractmethod
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID, limit: int) -> int:
         """At most `limit` rows of each table that hold the session's: its
-        items, their parts and controls, and its binding; returns how many
-        went."""
+        items, their controls, and its binding; returns how many went."""
         ...
 
     @abstractmethod

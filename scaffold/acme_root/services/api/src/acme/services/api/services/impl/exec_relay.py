@@ -18,7 +18,7 @@ from acme.om.context import RequestContext
 from acme.om.exceptions import ValidationFailed
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import CONTROL_KIND
-from acme.om.exec_relay.types.exec import REQUESTS, PrepareAnswer, SnapshotAnswer
+from acme.om.exec_relay.types.exec import REQUESTS, PrepareAnswer, SentPart, SnapshotAnswer
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.retention.crossing import Crossing
@@ -30,6 +30,7 @@ from acme.services.api.types.exec_relay import (
     ExecDetailView,
     ExecLeaseView,
     PartRequest,
+    PartsRequest,
     PreparedView,
     PrepareRequest,
     ResultRequest,
@@ -89,18 +90,24 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             request=REQUESTS.dump_python(detail.request, mode="json"),
         )
 
-    async def push_part(
-        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PartRequest
+    async def push_parts(
+        self,
+        rctx: RequestContext,
+        host: HostIdentity,
+        item_id: UUID,
+        body: PartsRequest | PartRequest,
     ) -> None:
-        await self._relay.push_part(
-            rctx,
-            host,
-            item_id,
-            body.seq,
-            body.stream.value,
-            crossing_of(body.crossing),
-            decoded(body.data),
-        )
+        pushed = body.parts if isinstance(body, PartsRequest) else [body]
+        parts = [
+            SentPart(
+                seq=part.seq,
+                stream=part.stream.value,
+                crossing=crossing_of(part.crossing),
+                data=decoded(part.data),
+            )
+            for part in pushed
+        ]
+        await self._relay.push_parts(rctx, host, item_id, parts)
 
     async def push_result(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: ResultRequest

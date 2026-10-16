@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from acme.infra.agent_workspaces import IsolationSpec
 from acme.infra.observability import OUTCOMES
+from acme.infra.streams import StreamBounds, StreamsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot
@@ -24,12 +25,13 @@ from acme.om.exec_relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspa
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import (
     CONTROL_KIND,
+    PUSH_BYTES,
+    PUSH_PARTS,
     asks,
     claimed_row,
     exec_id,
     held_by,
     max_attempts,
-    part_id,
     repeatable,
     resent,
     row_id,
@@ -38,6 +40,7 @@ from acme.om.exec_relay.rules import (
 )
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.exec_relay.types.exec import (
+    PARTS,
     REQUESTS,
     AgentWorkspaceBinding,
     ExecCall,
@@ -46,12 +49,12 @@ from acme.om.exec_relay.types.exec import (
     ExecItem,
     ExecOutcome,
     ExecOutput,
-    ExecPart,
     ExecProgress,
     ExecResult,
     ExecState,
     PartText,
     PrepareAnswer,
+    SentPart,
     SnapshotAnswer,
     StopKind,
 )
@@ -85,9 +88,11 @@ class ExecRelayOptions(OmBase):
     # How long a renewal holds an item: a host renews at a third of it, so
     # one missed renewal costs nothing and a lost host is known within it.
     lease: timedelta = timedelta(seconds=60)
-    part_bytes: int = 64_000  # the most one part of output carries
     max_parts: int = 100_000  # the parts one run of an item streams, at most
-    part_page: int = 200  # the parts one read takes
+    # The live output of each run of an item, on the shared cache: a push is
+    # one entry, and past the stream's entries or bytes the oldest goes. The
+    # item's result holds it whole, so what the stream lets go is no loss.
+    output: StreamBounds = StreamBounds()
     call_items: int = 1000  # the items of one call a recovery reads, at most
     # How far back a host that reconnects is told its control messages again.
     control_window: timedelta = timedelta(hours=1)
@@ -146,6 +151,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         agent_projects: AgentProjectsManagerInterface,
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
+        streams: StreamsInterface,
         options: ExecRelayOptions,
         clock: Callable[[], datetime] = utcnow,
         *,
@@ -160,6 +166,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self._agent_projects = agent_projects
         self._relay = relay
         self._seal = seal
+        self._streams = streams
         self._options = options
         self._clock = clock
 
@@ -616,17 +623,21 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     ) -> ExecProgress:
         ctx = await self._service(rctx, org_id)
         item = await self._item(org_id, item_id)
-        parts = await self._storage.read_parts(
-            org_id, item.row_id, after_seq, self._options.part_page
-        )
-        texts = [
-            PartText(
-                seq=part.seq, stream=part.stream, text=await self._opened(ctx, item, part.text)
-            )
-            for part in parts
-        ]
+        texts: list[PartText] = []
+        held = await self._streams.read(item.id, {item.row_id: after_seq}, self._options.output)
+        for entry in (
+            entry for run in held if run.stream == item.row_id for _, entry in run.entries
+        ):
+            opened = await self._seal.open(ctx, item.agent_session_id, item.key, entry)
+            # Once the session's key is gone, so is the text it sealed.
+            if opened is not None:
+                texts.extend(part for part in PARTS.validate_json(opened) if part.seq > after_seq)
         output = None
         if item.state is ExecState.DONE:
+            # A reader whose next part the stream let go reads the output
+            # whole, never its tail alone.
+            if texts and texts[0].seq != after_seq + 1:
+                texts = []
             opened = await self._opened(ctx, item, item.output)
             output = ExecOutput.model_validate_json(opened) if opened else ExecOutput()
         return ExecProgress(
@@ -764,39 +775,37 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             request=REQUESTS.validate_json(opened),
         )
 
-    async def push_part(
-        self,
-        rctx: RequestContext,
-        host: HostIdentity,
-        item_id: UUID,
-        seq: int,
-        stream: str,
-        crossing: Crossing,
-        data: bytes,
+    async def push_parts(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, parts: Sequence[SentPart]
     ) -> None:
-        # The bytes are checked against their hash before anything reads them.
-        text = _decoded(_crossed(CrossingKind.STREAM_PART, crossing, data))
-        if stream not in STREAMS:
-            raise ValidationFailed(f"no stream {stream!r}; a part is stdout or stderr")
-        if not 0 <= seq < self._options.max_parts or len(data) > self._options.part_bytes:
+        if not 0 < len(parts) <= PUSH_PARTS or sum(len(p.data) for p in parts) > PUSH_BYTES:
             raise ValidationFailed(
-                f"a part is one of {self._options.max_parts} at most, "
-                f"of {self._options.part_bytes} bytes at most"
+                f"a push is one to {PUSH_PARTS} parts, of {PUSH_BYTES} bytes at most"
             )
+        texts: list[PartText] = []
+        for part in parts:
+            # The bytes are checked against their hash before anything reads them.
+            text = _decoded(_crossed(CrossingKind.STREAM_PART, part.crossing, part.data))
+            if part.stream not in STREAMS:
+                raise ValidationFailed(f"no stream {part.stream!r}; a part is stdout or stderr")
+            if not (texts[-1].seq if texts else -1) < part.seq < self._options.max_parts:
+                raise ValidationFailed(
+                    f"a push's parts are in their order, each one of {self._options.max_parts}"
+                )
+            stream = "stdout" if part.stream == "stdout" else "stderr"
+            texts.append(PartText(seq=part.seq, stream=stream, text=text))
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
-        sealed = await self._seal.seal(ctx, item.agent_session_id, item.key, text.encode())
-        part = ExecPart(
-            id=part_id(item.row_id, seq),
-            created_at=self._clock(),
-            agent_session_id=item.agent_session_id,
-            row_id=item.row_id,
-            seq=seq,
-            stream="stdout" if stream == "stdout" else "stderr",
-            text=sealed,
-            sha256=crossing.sha256,
+        sealed = await self._seal.seal(
+            ctx, item.agent_session_id, item.key, PARTS.dump_json(tuple(texts))
         )
-        await self._storage.add_part(host.org_id, part)
+        if sealed is None:
+            return  # the session keeps no content at rest now: nothing is kept
+        # One entry, numbered by its last part, so a push sent again lands
+        # nothing, and a reader resumes after the last part it read.
+        await self._streams.append(
+            item.id, item.row_id, [(texts[-1].seq, sealed)], self._options.output
+        )
 
     async def push_result(
         self,

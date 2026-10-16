@@ -1,6 +1,6 @@
 """A host runs relayed work against the live app, in process. A tool call
 the runner relays runs once, on the host that holds the workspace, through
-its local transport: its output streams back a part at a time and its
+its local transport: its output streams back a window at a time and its
 result lands under the call's key. A cancel or an interrupt the platform
 records reaches the host over the control stream it holds open, and ends
 the command at once. A host's routes take its own credential alone. A
@@ -36,7 +36,7 @@ from host_support import (
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
-from acme.apps.host.exec_relay import ExecutorRelayImpl
+from acme.apps.host.exec_relay import PUSH_BYTES, ExecutorRelayImpl
 from acme.apps.host.mcp import HostServers
 from acme.client.client import ApiClient
 from acme.client.types.hosts import IsolationMode as HostMode
@@ -110,14 +110,15 @@ async def relay_to(
     now: Callable[[], datetime] | None = None,
     flush_seconds: float = 0.0,
     servers: HostServers | None = None,
+    window_chars: int = 32_000,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's exec relay to it. With `serves`, the host's ceilings serve that
     agent project alone, and the session belongs to `agent_project_id`. With `wire`, the
     host reaches the platform through it, and with `now` it reads its time.
-    It sends what a command prints at once, or `flush_seconds` apart, and
-    starts the MCP servers `servers` names."""
+    It sends what a command prints at once, or `flush_seconds` apart or
+    `window_chars` at a time, and starts the MCP servers `servers` names."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -130,6 +131,7 @@ async def relay_to(
             )
         },
         flush_seconds=flush_seconds,
+        window_chars=window_chars,
         renew_seconds=0.2,
         servers=servers,
     )
@@ -532,6 +534,74 @@ async def test_a_last_part_the_wire_drops_keeps_the_commands_result(
     ran = await waiting
     assert wire.failed
     assert (ran.exit_code, ran.stdout, len(handed)) == (0, "done\n", 1)
+
+
+class Pushed(httpx.AsyncBaseTransport):
+    """The stack, noting the parts of each push of output a host sends, each
+    by its place, its stream, and its bytes."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.pushes: list[list[tuple[int, str, bytes]]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path.endswith("/parts"):
+            parts = json.loads(await request.aread())["parts"]
+            self.pushes.append(
+                [(p["seq"], p["stream"], base64.b64decode(p["data"])) for p in parts]
+            )
+        return await self._inner.handle_async_request(request)
+
+
+async def test_a_window_of_output_is_one_push_that_holds_every_part_in_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Pushed(api.transport)
+    # The whole command runs within one window.
+    relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
+    printed: list[tuple[str, str]] = []
+
+    async def sink(stream: str, text: str) -> None:
+        printed.append((stream, text))
+
+    spec = command(
+        relayed.epoch,
+        "sh",
+        "-c",
+        "echo one; sleep 0.1; echo two >&2; sleep 0.1; echo three",
+        seconds=5,
+    )
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, sink, seal=NO_SEAL))
+    await asyncio.wait_for(claims(relayed.host, waiting), 10)
+    ran = await waiting
+    window = [(0, "stdout", b"one\n"), (1, "stderr", b"two\n"), (2, "stdout", b"three\n")]
+    assert wire.pushes == [window]
+    assert printed == [(stream, data.decode()) for _, stream, data in window]
+    assert (ran.stdout, ran.stderr) == ("one\nthree\n", "two\n")
+
+
+async def test_a_window_past_what_one_push_carries_goes_in_whole_characters_in_more(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Pushed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0, window_chars=10**9)
+    printed: list[str] = []
+
+    async def sink(stream: str, text: str) -> None:
+        printed.append(text)
+
+    # Three bytes a character, so no push of PUSH_BYTES ends on one's edge.
+    euros = "\u20ac" * 60_000
+    script = f"import sys; sys.stdout.write('\\u20ac' * {len(euros)})"
+    spec = command(relayed.epoch, "python3", "-c", script, seconds=10)
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, sink, seal=NO_SEAL))
+    await asyncio.wait_for(claims(relayed.host, waiting), 20)
+    ran = await waiting
+    sizes = [sum(len(data) for _, _, data in push) for push in wire.pushes]
+    assert sizes == [PUSH_BYTES - PUSH_BYTES % 3, len(euros.encode()) - PUSH_BYTES + PUSH_BYTES % 3]
+    seqs = [seq for push in wire.pushes for seq, _, _ in push]
+    assert seqs == list(range(len(seqs)))
+    assert "".join(printed) == ran.stdout == euros
 
 
 async def test_a_short_command_beside_a_long_one_runs_within_its_deadline(

@@ -76,10 +76,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Push Part
-         * @description One part of the item's output. A part sent again lands once.
+         * Push Parts
+         * @description The parts of the item's output one flush window gathered, as one push,
+         *     or one part alone, as a host whose pushes hold one part sends it. A push
+         *     sent again lands once.
          */
-        post: operations["push_part"];
+        post: operations["push_parts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -273,7 +275,9 @@ export interface components {
         OutputStream: "stdout" | "stderr";
         /**
          * PartRequest
-         * @description One part of an item's output, in the order the host read it.
+         * @description One part of an item's output: its place in it, and its stream. A host
+         *     whose pushes hold one part each sends it alone, as a push of that part,
+         *     and it lands as one while the floor of `exec` work takes that host.
          */
         PartRequest: {
             crossing: components["schemas"]["CrossingBody"];
@@ -282,6 +286,15 @@ export interface components {
             /** Seq */
             seq: number;
             stream: components["schemas"]["OutputStream"];
+        };
+        /**
+         * PartsRequest
+         * @description The parts of an item's output one flush window gathered, in the order
+         *     the host read them: one push, held to its bytes before any is decoded.
+         */
+        PartsRequest: {
+            /** Parts */
+            parts: components["schemas"]["PartRequest"][];
         };
         /**
          * PrepareRequest
@@ -488,7 +501,7 @@ export interface operations {
             };
         };
     };
-    push_part: {
+    push_parts: {
         parameters: {
             query?: never;
             header?: {
@@ -503,7 +516,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PartRequest"];
+                "application/json": components["schemas"]["PartsRequest"] | components["schemas"]["PartRequest"];
             };
         };
         responses: {

@@ -162,16 +162,32 @@ class CrossingBody(BaseModel):
 
 class PartRequest(BaseModel):
     """
-    One part of an item's output, in the order the host read it.
+    One part of an item's output: its place in it, and its stream. A host
+    whose pushes hold one part each sends it alone, as a push of that part,
+    and it lands as one while the floor of `exec` work takes that host.
     """
 
     model_config = ConfigDict(
         extra='forbid',
     )
     crossing: CrossingBody
-    data: Annotated[str, Field(max_length=90000, title='Data')]
+    data: Annotated[str, Field(max_length=170668, title='Data')]
     seq: Annotated[int, Field(ge=0, title='Seq')]
     stream: OutputStream
+
+
+class PartsRequest(BaseModel):
+    """
+    The parts of an item's output one flush window gathered, in the order
+    the host read them: one push, held to its bytes before any is decoded.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    parts: Annotated[
+        list[PartRequest], Field(max_length=256, min_length=1, title='Parts')
+    ]
 
 
 class ResultRequest(BaseModel):

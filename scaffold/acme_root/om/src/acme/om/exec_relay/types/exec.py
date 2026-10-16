@@ -13,8 +13,9 @@ from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 from acme.infra.agent_workspaces import IsolationSpec
 from acme.infra.transports import FileEntry, SecretUse
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
-from acme.om.base import Created, FrozenMapping, Identifiable, OmBase, Trackable
+from acme.om.base import FrozenMapping, Identifiable, OmBase, Trackable
 from acme.om.placement.types.work import ExecEffect, ExecOperation
+from acme.om.retention.crossing import Crossing
 
 Stream = Literal["stdout", "stderr"]
 
@@ -181,25 +182,26 @@ class ExecItem(Identifiable, Trackable):
     version: int = Field(default=1, ge=1)
 
 
-class ExecPart(Identifiable, Created):
-    """One part of an item's output, as its host streamed it, under the row
-    of the dispatch that printed it. Its sealed text is any bytes, so its
-    JSON form spells them in base64."""
+class SentPart(OmBase):
+    """One part of an item's output as its host sends it across the wall:
+    its place in the output, its stream, its bytes, and the crossing it
+    declared of them, which the bytes match before anything reads them."""
 
-    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
-
-    agent_session_id: UUID
-    row_id: UUID
     seq: int = Field(ge=0)
-    stream: Stream
-    text: bytes | None = Field(repr=False)  # sealed; None when the session keeps nothing at rest
-    sha256: str
+    stream: str
+    crossing: Crossing
+    data: bytes = Field(repr=False)
 
 
 class PartText(OmBase):
     seq: int
     stream: Stream
     text: str
+
+
+PARTS: TypeAdapter[tuple[PartText, ...]] = TypeAdapter(tuple[PartText, ...])
+"""The parts of one push, opened: what one entry of an item's live output
+holds, sealed."""
 
 
 class ExecProgress(OmBase):

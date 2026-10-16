@@ -7,9 +7,9 @@ from acme.om.storage.tables.base import Base, CreatedMixin, IdentifiableMixin
 
 
 class ExecParts(IdentifiableMixin, CreatedMixin, Base):
-    """The output a host streamed, a part at a time. A row's parts are read
-    in order, once each, under the unique index that holds a part's place;
-    a session's go with it. org_id leads both, so it gets none of its own."""
+    """A table no statement names: a command's live output is a stream on
+    the shared cache. It stays declared, so the schema check compares it,
+    until a later release drops it. org_id leads both indexes."""
 
     __tablename__ = "exec_parts"
     __org_id_index__ = False

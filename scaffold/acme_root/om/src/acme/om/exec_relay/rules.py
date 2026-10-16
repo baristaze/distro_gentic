@@ -32,6 +32,14 @@ RESULT_CHARS = 16_000_000
 """The most a host's result of one item carries across the wall: the
 characters of its JSON in base64."""
 
+PUSH_BYTES = 128_000
+"""The most bytes of output one push of a host carries: one flush window's,
+as a host gathers it, sealed once and kept as one entry of the item's live
+output."""
+
+PUSH_PARTS = 256
+"""The most parts one push carries: a run of one stream's text each."""
+
 READ_BYTES = 8 * 1024 * 1024
 """The most of a file one relayed read carries. Its bytes ride in the
 result in base64, and the result in base64 again, so a read of one byte
@@ -66,11 +74,6 @@ def exec_id(key: UUID, request: bytes, occurrence: int) -> UUID:
 def row_id(item_id: UUID, dispatch: int) -> UUID:
     """The queue row of an item's `dispatch`th time on the queue."""
     return derived_id(item_id, key_time(item_id), f"dispatch:{dispatch}")
-
-
-def part_id(row: UUID, seq: int) -> UUID:
-    """A part of the output a row's run printed, by its place in it."""
-    return derived_id(row, key_time(row), f"part:{seq}")
 
 
 def repeatable(effect: ExecEffect) -> bool:

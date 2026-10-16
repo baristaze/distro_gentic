@@ -18,8 +18,10 @@ platform's cloud. Each call crosses the wall as `exec`
   session's content, sealed under the session's key.
 - **Its result**: how the command ended, kept under the call's key, and
   what it printed, sealed the same way.
-- **Its output parts**: what the command printed, a part at a time, as
-  the host sent it.
+- **Its live output**: what the command prints while it runs, a push
+  for each window its host gathers, sealed the same way. It is a stream
+  on the shared cache, capped and expiring, since the result holds it
+  whole.
 - **A control message**: a stop for an item a host holds: a cancel, an
   interrupt, a deadline cut, or a revoked lease.
 - **A workspace binding**: the host that holds a session's workspace,

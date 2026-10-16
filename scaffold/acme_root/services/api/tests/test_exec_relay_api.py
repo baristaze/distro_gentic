@@ -180,7 +180,8 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
         "data": base64.b64encode(tampered).decode(),
         "crossing": declared("stream_part", real),
     }
-    refused = await client.post(f"{path}/parts", headers=bearer(host["token"]), json=part)
+    push = {"parts": [part]}
+    refused = await client.post(f"{path}/parts", headers=bearer(host["token"]), json=push)
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "crossing_refused"
     result = json.dumps({"outcome": {"exit_code": 0}, "output": {"stdout": "ok"}}).encode()
     forged = json.dumps({"outcome": {"exit_code": 0}, "output": {"stdout": "no"}}).encode()
@@ -196,11 +197,16 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
     assert progress.parts == () and progress.outcome is None
     # The same bytes, declared as they are, land.
     part["data"] = base64.b64encode(real).decode()
-    landed = await client.post(f"{path}/parts", headers=bearer(host["token"]), json=part)
+    landed = await client.post(f"{path}/parts", headers=bearer(host["token"]), json=push)
     assert landed.status_code == 204, landed.text
+    # A host whose pushes hold one part each sends the part alone.
+    alone = await client.post(
+        f"{path}/parts", headers=bearer(host["token"]), json={**part, "seq": 1}
+    )
+    assert alone.status_code == 204, alone.text
     body = {"data": base64.b64encode(result).decode(), "crossing": declared("result", result)}
     done = await client.post(f"{path}/result", headers=bearer(host["token"]), json=body)
     assert done.status_code == 204, done.text
     progress = await container.managers.exec_relay.watch(RUNNER, ctx.org_id, item_id, -1)
-    assert [p.text for p in progress.parts] == ["deployed\n"]
+    assert [(p.seq, p.text) for p in progress.parts] == [(0, "deployed\n"), (1, "deployed\n")]
     assert progress.output is not None and progress.output.stdout == "ok"

@@ -1,6 +1,6 @@
-"""The exec relay storage contract: exec items with how they ended, the parts of
-their output, the control messages for the host that holds them, and the
-host that holds each session's workspace. The cases named in
+"""The exec relay storage contract: exec items with how they ended, the control
+messages for the host that holds them, and the host that holds each
+session's workspace. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -19,7 +19,6 @@ from acme.om.exec_relay.types.exec import (
     ExecControl,
     ExecItem,
     ExecOutcome,
-    ExecPart,
     ExecState,
     StopKind,
 )
@@ -35,8 +34,6 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_items_by_key",
         "read_running",
         "write_item",
-        "add_part",
-        "read_parts",
         "add_control",
         "read_controls",
         "write_binding",
@@ -85,19 +82,6 @@ def running(item: ExecItem, lease: timedelta) -> ExecItem:
             "lease_expires_at": utcnow() + lease,
             "version": item.version + 1,
         }
-    )
-
-
-def make_part(item: ExecItem, seq: int) -> ExecPart:
-    return ExecPart(
-        id=new_id(),
-        created_at=utcnow(),
-        agent_session_id=item.agent_session_id,
-        row_id=item.row_id,
-        seq=seq,
-        stream="stdout",
-        text=SEALED + str(seq).encode(),
-        sha256="0" * 64,
     )
 
 
@@ -227,32 +211,6 @@ class ExecRelayStorageContract:
         assert await storage.write_item(other, moved, 1) is None
         assert await storage.read_item(org, item.id) == item
 
-    # Parts.
-
-    async def test_parts_are_read_in_order_after_a_place_once_each(
-        self, storage: ExecRelayStorageInterface
-    ) -> None:
-        org = new_id()
-        item = make_item()
-        parts = [make_part(item, seq) for seq in (2, 0, 1)]
-        for part in parts:
-            assert await storage.add_part(org, part)
-        assert not await storage.add_part(org, make_part(item, 1))
-        read = await storage.read_parts(org, item.row_id, -1, 10)
-        assert [part.seq for part in read] == [0, 1, 2]
-        assert [part.seq for part in await storage.read_parts(org, item.row_id, 0, 1)] == [1]
-        assert await storage.read_parts(org, new_id(), -1, 10) == []
-
-    async def test_parts_of_another_tenant_are_not_read_or_taken(
-        self, storage: ExecRelayStorageInterface
-    ) -> None:
-        org, other = new_id(), new_id()
-        item = make_item()
-        part = make_part(item, 0)
-        assert await storage.add_part(org, part)
-        assert not await storage.add_part(other, part)
-        assert await storage.read_parts(other, item.row_id, -1, 10) == []
-
     # Controls.
 
     async def test_a_hosts_controls_are_read_after_the_last_it_saw(
@@ -342,13 +300,11 @@ class ExecRelayStorageContract:
         gone, kept = make_item(), make_item()
         for item in (gone, kept):
             await storage.create_item(org, item)
-            await storage.add_part(org, make_part(item, 0))
             await storage.add_control(org, make_control(item), ())
             await storage.write_binding(org, make_binding(item.agent_session_id), 0, ())
         assert await storage.purge_agent_session(other, gone.agent_session_id, 100) == 0
-        assert await storage.purge_agent_session(org, gone.agent_session_id, 100) == 4
+        assert await storage.purge_agent_session(org, gone.agent_session_id, 100) == 3
         assert await storage.read_item(org, gone.id) is None
-        assert await storage.read_parts(org, gone.row_id, -1, 10) == []
         assert await storage.read_binding(org, gone.agent_session_id) is None
         assert await storage.read_item(org, kept.id) is not None
         assert await storage.read_binding(org, kept.agent_session_id) is not None
@@ -360,7 +316,7 @@ class ExecRelayStorageContract:
         item, theirs = make_item(), make_item()
         await storage.create_item(org, item)
         await storage.create_item(other, theirs)
-        await storage.add_part(org, make_part(item, 0))
+        await storage.add_control(org, make_control(item), ())
         assert await storage.purge_tenant(org, 100) == 2
         assert await storage.read_item(org, item.id) is None
         assert await storage.read_item(other, theirs.id) == theirs

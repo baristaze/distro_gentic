@@ -1222,7 +1222,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
             hosts=hosts,
             # A tool call into a customer's wall as keyed exec work: its items,
             # their output sealed under the session's key as its commands'
-            # records are, and the control messages that stop them.
+            # records are, live on the shared cache's streams while it runs,
+            # and the control messages that stop them.
             exec_relay=ExecRelayManagerImpl(
                 storage.get_exec_relay_storage(),
                 managers.work,
@@ -1232,6 +1233,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 agent_projects,
                 outbox,
                 self._records,
+                infra.get_streams(),
                 options.relay_options or ExecRelayOptions(),
                 # A snapshot a host answers is recorded where it lives.
                 kept=self._held_to_pins.keep_on_host,
