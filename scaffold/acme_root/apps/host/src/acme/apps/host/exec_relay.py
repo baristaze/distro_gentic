@@ -20,9 +20,9 @@ runs through its own local transport, in the workspace it holds,
 prepared again first, on its base when it has one, so an instance that
 stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
-declares of the bytes it sends. While the item runs the host renews its
-lease, and a stop from the control stream ends the command at once: the
-transport ends its whole process tree.
+declares of the bytes it sends. While the item runs, its prepare
+included, the host renews its lease, and a stop from the control stream
+ends the command at once: the transport ends its whole process tree.
 
 The host holds no key of the platform's. Its transport's record keeps how a
 command ended without its output, and the platform keeps the output sealed
@@ -279,16 +279,15 @@ class ExecutorRelayImpl(ExecutorInterface):
             refused = _result(refused=("capability_missing", 501), detail=why)
             await self._push(item_id, refused, running.held_until)
             return
-        try:
-            workspace = await self._held(detail, spec)
-        except InfraException as error:
-            refused = _result(refused=(error.code, error.http_status), detail=error.message)
-            await self._push(item_id, refused, running.held_until)
-            return
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._window_chars)
+        # Renewed from before the prepare, which may outlast a lease.
         renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
         try:
+            workspace = await self._held(detail, spec)
+        except InfraException as error:
+            result = _result(refused=(error.code, error.http_status), detail=error.message)
+        else:
             if running.stopped is None:
                 running.operation = asyncio.ensure_future(
                     _operate(transport, workspace, detail, parts.take)

@@ -10,6 +10,7 @@ import subprocess
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from email.utils import format_datetime
 from pathlib import Path
 from uuid import UUID
@@ -30,6 +31,7 @@ from acme.client.types.hosts import IsolationMode
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.docker import docker
 from acme.infra.root import InfraInterface
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
@@ -291,11 +293,21 @@ async def directory_host(
     return host, root
 
 
+async def image_pulled(settings: Settings) -> None:
+    """The host's image on the local Docker before the host starts, as on a
+    host that has run a while: a prepare waits on a pull a short while
+    alone, then is refused until the pull ends."""
+    image = settings.agent_workspace_image
+    pulled = await docker("pull", image, bound=timedelta(seconds=settings.pull_timeout_seconds))
+    assert pulled.ok, pulled.reason()
+
+
 async def container_host(api: Stack, pool_id: UUID, where: Path) -> HostAgent:
     """A host of the pool as the host's `main` wires one: a container per
-    workspace on the local Docker, of the default image. Its ceilings take
-    any agent project, and let nothing leave."""
+    workspace on the local Docker, of the default image, pulled before it
+    starts. Its ceilings take any agent project, and let nothing leave."""
     settings = api.settings(where / "home", None)
+    await image_pulled(settings)
     return await started_host(
         api,
         pool_id,
