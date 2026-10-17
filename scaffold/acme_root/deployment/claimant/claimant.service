@@ -31,15 +31,15 @@ WorkingDirectory=/var/lib/@UNIT@
 # (own-group-only.sh says why). @GRANTED@ is a --granted for each such group,
 # or nothing when they grant none.
 ExecStart=/opt/@UNIT@/own-group-only.sh@GRANTED@ /opt/@UNIT@/current/bin/@COMMAND@ run
-# 1 refused, 2 a setting or a file is wrong, 3 not enrolled, 5 a startup
-# probe failed that a person must fix, 6 its user is in a group neither its
-# own nor granted, 226 its walls could not be set up (a file a drop-in binds
-# is missing): a person must act, so systemd does not spin on them. A
+# 2 a setting or a file is wrong, 3 not enrolled, 5 a startup probe failed
+# that a person must fix, 6 its user is in a group neither its own nor
+# granted, 7 refused, 226 its walls could not be set up (a file a drop-in
+# binds is missing): a person must act, so systemd does not spin on them. A
 # platform unreachable or failing, or a clock not yet in step with it (4),
-# passes with time, and a crash may: both restart.
+# passes with time, and a crash (Python's 1) may: both restart.
 Restart=on-failure
 RestartSec=10
-RestartPreventExitStatus=1 2 3 5 6 226
+RestartPreventExitStatus=2 3 5 6 7 226
 TimeoutStopSec=60
 
 # Its state: the credential, the journal, and what its kind keeps, owner-only.

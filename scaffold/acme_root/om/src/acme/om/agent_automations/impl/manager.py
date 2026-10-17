@@ -68,8 +68,8 @@ class AgentAutomationsOptions(OmBase):
     # The most agent automations one firing reads a page, and runs one read takes.
     page: int = Field(default=200, gt=0)
     # A started run that names no session, and no work of a product's
-    # action, after this was lost before its action ran: it is closed, and
-    # its reservation goes with its period.
+    # action, this long after it started was lost before its action ran: it
+    # is closed, and its reservation goes with its period.
     lost_after: timedelta = timedelta(minutes=5)
     max_page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
@@ -507,7 +507,10 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
                 outcome = await self._ended(ctx, agent_automation, run)
                 done = outcome is not None
             elif run.agent_session_id is None:
-                done = now - run.created_at >= self._options.lost_after
+                # From its start, never from when it was queued: a run that
+                # waited in the queue is still starting its action.
+                started = run.started_at or run.created_at
+                done = now - started >= self._options.lost_after
             else:
                 done = await self._tree_idle(ctx, run.agent_session_id)
             if done:

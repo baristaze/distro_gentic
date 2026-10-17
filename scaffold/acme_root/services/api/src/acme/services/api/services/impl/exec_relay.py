@@ -2,7 +2,8 @@ import asyncio
 import base64
 import binascii
 import logging
-from collections.abc import AsyncIterator, Callable
+import random
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -40,8 +41,12 @@ from acme.services.api.types.exec_relay import (
 log = logging.getLogger(__name__)
 
 STREAM_SPAN = timedelta(seconds=60)
-"""How long one control stream lives. It ends then, and its host opens the
-next with the credential it holds at that moment."""
+"""The longest one control stream lives. It ends then, and its host opens
+the next with the credential it holds at that moment."""
+
+SPAN_JITTER = 0.25
+"""The share of `STREAM_SPAN` a stream may end early by, drawn as it opens,
+so streams opened together do not all end, and open again, together."""
 
 
 def decoded(data: str) -> bytes:
@@ -58,7 +63,9 @@ def crossing_of(body: CrossingBody) -> Crossing:
 
 class ExecRelayServiceImpl(ExecRelayServiceInterface):
     """`poll` is how long the control stream waits for a wake before it
-    reads the host's control messages again and pings."""
+    reads the host's control messages again and pings. `spacing` is the
+    least time between two of its reads, however many wakes come: the wakes
+    within it are answered by one read."""
 
     def __init__(
         self,
@@ -66,12 +73,18 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
         topics: TopicsInterface,
         *,
         poll: timedelta = timedelta(seconds=5),
+        spacing: timedelta = timedelta(seconds=1),
         clock: Callable[[], datetime] = utcnow,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         self._relay = relay
         self._topics = topics
         self._poll = poll
+        self._spacing = spacing
         self._clock = clock
+        self._sleep = sleep
+        self._jitter = jitter
 
     async def detail(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID
@@ -187,7 +200,9 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             yield ControlView(kind=ControlKind.WAKE)
             last = after
             opened = self._clock()
+            span = STREAM_SPAN * (1 - SPAN_JITTER * self._jitter())
             while True:
+                read = self._clock()
                 for control in await self._relay.controls(rctx, host, last):
                     last = control.id
                     yield ControlView(
@@ -197,17 +212,21 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
                     work.clear()
                     yield ControlView(kind=ControlKind.WAKE)
                 now = self._clock()
-                if now >= host.expires_at or now - opened >= STREAM_SPAN:
+                if now >= host.expires_at or now - opened >= span:
                     # It ends, and the host opens the next with the credential
                     # it holds then, which the gateway checks as it checks
                     # every call. Nothing here shows a credential again: one
                     # the host rotated meanwhile is never presented as reused.
                     return
-                wait = min(self._poll, opened + STREAM_SPAN - now)
+                wait = min(self._poll, opened + span - now)
                 try:
                     await asyncio.wait_for(woken.wait(), wait.total_seconds())
                 except TimeoutError:
                     yield ControlView(kind=ControlKind.PING)
+                # A burst of wakes is one read, not a read each.
+                rest = read + self._spacing - self._clock()
+                if rest > timedelta(0):
+                    await self._sleep(rest.total_seconds())
                 woken.clear()
         finally:
             for unsubscribe in unsubscribes:

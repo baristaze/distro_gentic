@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { keys } from "../queries/keys";
 import { entityOf, parseEnvelope } from "./envelopes";
 import type { Hints } from "./hints";
-import { isKeptFresh, PUSHED_ENTITIES, replayKey, routeEnvelope } from "./router";
+import { isKeptFresh, PUSHED_ENTITIES, replayKey, routeEnvelope, routeEnvelopes } from "./router";
 
 function recording() {
   const queryClient = new QueryClient();
@@ -250,5 +250,44 @@ describe("replayKey", () => {
     expect(replayKey(of("tenancy.user.updated", "a"), readers)).toBe(replayKey(of("tenancy.user.deleted", "a"), readers));
     expect(replayKey(of("tenancy.api_key.created", "a"), readers)).toBe(replayKey(of("tenancy.api_key.deleted", "b"), readers));
     expect(replayKey(of("tenancy.user.updated", "a"))).toBe(replayKey(of("tenancy.user.updated", "b")));
+  });
+
+  it("keeps one push per session, since each reaches that session's reads alone", () => {
+    const of = (kind: string, target: string) => {
+      const envelope = pushOf(kind, { target_id: target });
+      if (envelope.type !== "change_event") throw new Error("not a push");
+      return envelope;
+    };
+    for (const entity of ["agent_session", "stream", "control"]) {
+      const kind = `watch.${entity}.updated`;
+      expect(replayKey(of(kind, "a"))).not.toBe(replayKey(of(kind, "b")));
+      expect(replayKey(of(kind, "a"))).toBe(replayKey(of(kind, "a")));
+    }
+  });
+});
+
+describe("routeEnvelopes", () => {
+  it("reads each query the pushes reach again once, and none a wider key already reads", () => {
+    const { queryClient, seen } = recording();
+    queryClient.setQueryData(keys.agentSessions.read("a", "children"), { pages: [{ items: [{ id: "b" }] }], pageParams: [null] });
+    const outcome = routeEnvelopes(queryClient, [
+      pushOf("agent_sessions.agent_session.updated", { target_id: "a" }),
+      pushOf("agent_sessions.agent_session.updated", { target_id: "b" }),
+      pushOf("watch.stream.opened", { target_id: "a" }),
+      pushOf("tenancy.membership.updated"),
+      pushOf("tenancy.user.updated"),
+    ]);
+    // The children of `a` are read again under `a`'s own key.
+    const expected = [
+      keys.agentSessions.one("a"),
+      keys.agentSessions.lists,
+      keys.agentSessions.one("b"),
+      keys.me,
+      keys.myMemberships.all,
+      keys.memberships.all,
+      keys.users.all,
+    ];
+    expect(outcome).toEqual({ invalidated: expected });
+    expect(seen).toEqual(expected);
   });
 });

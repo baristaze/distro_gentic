@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from acme.integrations.events.twin import twin_installation
 from acme.integrations.model_providers.calls import ModelCall
+from acme.om.agent_automations.impl.manager import AgentAutomationsOptions
 from acme.om.agent_automations.types.agent_automation import (
     MIN_EVERY,
     Action,
@@ -31,7 +32,7 @@ from acme.om.agent_automations.types.agent_automation import (
 from acme.om.agent_playbooks.rules import skill_md
 from acme.om.agent_playbooks.types.agent_playbook import AgentPlaybookDraft, AgentPlaybookGate
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
-from acme.om.agent_sessions.types.agent_session import AgentSessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import Actor, AgentStepType
 from acme.om.agent_steps.types.content import ToolUseBlock
@@ -599,6 +600,36 @@ async def test_a_queued_burst_drains_one_run_a_period_within_the_cap(
     starts = sorted(r.started_at for r in runs if r.started_at is not None)
     assert len(starts) == 3
     assert all(later - earlier > one.period for earlier, later in itertools.pairwise(starts))
+
+
+async def test_a_run_long_queued_holds_its_place_while_its_session_starts(
+    platform: Wired, creator: TenantContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mine = await made(platform, creator, limits=limits(concurrency=1, queue=True))
+    (first,) = await fired(platform, comment())
+    (waiting,) = await fired(platform, comment())
+    assert (waiting.status, waiting.refusal) == (RunStatus.QUEUED, Refusal.CONCURRENCY)
+    await finish(platform, first)
+    platform.clock.now += AgentAutomationsOptions().lost_after * 2
+    # A third event arrives while the queued run, now admitted, starts its
+    # session: the run names no session yet.
+    agents = platform.managers.agents
+    start = agents.start_agent_session
+    calls = itertools.count()
+    beside: list[AgentAutomationRun] = []
+
+    async def starting(ctx: TenantContext, request: Start) -> AgentSession:
+        if next(calls) == 0:
+            beside.extend(await fired(platform, comment()))
+        return await start(ctx, request)
+
+    monkeypatch.setattr(agents, "start_agent_session", starting)
+    (moved,) = await platform.agent_automations.tick(platform.service)
+    assert (moved.id, moved.status) == (waiting.id, RunStatus.STARTED)
+    (third,) = beside
+    assert (third.status, third.refusal) == (RunStatus.QUEUED, Refusal.CONCURRENCY)
+    (held,) = [r for r in await runs_of(platform, mine) if r.id == waiting.id]
+    assert held.closed_at is None and held.agent_session_id is not None
 
 
 async def test_a_run_keeps_the_events_text_only_while_it_is_queued(

@@ -164,7 +164,7 @@ def _probe(name: str) -> Probe:
     ],
 )
 def test_a_start_that_fails_with_time_exits_to_be_restarted(raised: Exception, code: int) -> None:
-    """The unit restarts the host on 4 and leaves it stopped on 1 and 5: a
+    """The unit restarts the host on 4 and leaves it stopped on 5 and 7: a
     host started during an outage comes back on its own, and one a person
     must fix does not spin."""
 

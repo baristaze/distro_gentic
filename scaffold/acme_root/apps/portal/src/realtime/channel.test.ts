@@ -1,11 +1,14 @@
 // The socket loop over a fake socket and fake timers: what it sends, when it
 // reconnects, and how it moves the stream cursor.
 import { ApiError, type change_events } from "@acme/client";
+import { QueryClient, type QueryKey } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { keys } from "../queries/keys";
 import { useConnectionStore } from "../store/connection";
 import { CLOSE_UNAUTHENTICATED, openChannel, SOCKET_OPEN, type Channel, type SocketLike } from "./channel";
 import type { Envelope, ChangeEventEnvelope } from "./envelopes";
 import { watchPage, type PageLike } from "./pageVisibility";
+import { replayKey, routeEnvelopes } from "./router";
 import { changeEventEnvelope } from "./stream";
 import { backoffDelay, DEGRADED_POLL_INTERVAL_MS, HIDDEN_PAUSE_MS, PING_INTERVAL_MS, STABLE_OPEN_MS } from "./timeouts";
 
@@ -61,6 +64,7 @@ function harness(
   clock?: () => number,
   replayKey?: (envelope: ChangeEventEnvelope) => string,
   isAnnounced?: (envelope: ChangeEventEnvelope) => boolean,
+  onRoute?: (envelopes: readonly Envelope[]) => void,
 ) {
   const sockets: FakeSocket[] = [];
   const routed: Envelope[] = [];
@@ -82,8 +86,9 @@ function harness(
       fetches.push(after);
       return Promise.resolve(pages(after));
     },
-    route: (envelope) => {
-      routed.push(envelope);
+    route: (envelopes) => {
+      routed.push(...envelopes);
+      onRoute?.(envelopes);
     },
     refreshAll,
     connection: useConnectionStore,
@@ -361,6 +366,42 @@ describe("stream cursor", () => {
     h.sockets[0]!.receive(push(9));
     await flush();
     expect(h.routed.filter((e) => e.type === "change_event").map(seqOf)).toEqual([7, 8, 9]);
+  });
+
+  it("replays the last push of each session after a reconnect, and reads the lists again once", async () => {
+    // Two sessions changed while the socket was down. Each one's open page is
+    // read again, not only the last one's, and the lists that show both are
+    // read again once.
+    const queryClient = new QueryClient();
+    const invalidated: QueryKey[] = [];
+    queryClient.invalidateQueries = (filters) => {
+      invalidated.push(filters?.queryKey ?? []);
+      return Promise.resolve();
+    };
+    const updated = (seq: number, session: string) => ({ ...event(seq), kind: "agent_sessions.agent_session.updated", target_id: session });
+    const stream = [updated(6, "a"), updated(7, "b")];
+    const h = harness(
+      (after) => stream.filter((e) => e.seq > after),
+      200,
+      undefined,
+      (envelope) => replayKey(envelope),
+      undefined,
+      (envelopes) => routeEnvelopes(queryClient, envelopes),
+    );
+    channel = h.channel;
+    await flush();
+    h.sockets[0]!.accept();
+    await flush();
+    h.sockets[0]!.receive(hello(5));
+    await flush();
+    h.sockets[0]!.drop();
+    await vi.advanceTimersByTimeAsync(1_000);
+    h.sockets[1]!.accept();
+    await flush();
+    expect(channel.cursor()).toBe(7);
+    expect(invalidated).toContainEqual(keys.agentSessions.one("a"));
+    expect(invalidated).toContainEqual(keys.agentSessions.one("b"));
+    expect(invalidated.filter((key) => key[1] === "list")).toEqual([keys.agentSessions.lists]);
   });
 
   it("stops paging when a page moves the cursor nowhere", async () => {
