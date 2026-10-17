@@ -45,11 +45,12 @@ export interface ChannelDeps {
   requestTicket(): Promise<string>;
   openSocket(ticket: string): SocketLike;
   fetchChangeEventsAfter(after: number, limit: number): Promise<change_events.ChangeEventView[]>;
-  /** Hands one envelope to the router; the query cache is behind it. A
-   * record read back from the stream (a replay, the first catch-up) comes
-   * here too, only the last record of each entity. It tells the person
-   * nothing: a notice is `announce`'s alone. */
-  route(envelope: Envelope): void;
+  /** Hands envelopes to the router; the query cache is behind it. A push
+   * comes alone. What one page read back from the stream (a replay, the
+   * first catch-up) keeps, the last record of each `replayKey`, comes in one
+   * call, so a query several of them reach is read again once. It tells the
+   * person nothing: a notice is `announce`'s alone. */
+  route(envelopes: readonly Envelope[]): void;
   /** What a page read back from the stream routes one push of, the last
    * (`replayKey` in `router.ts`); the entity when none is handed in. */
   replayKey?(envelope: ChangeEventEnvelope): string;
@@ -130,7 +131,7 @@ export function openChannel(deps: ChannelDeps): Channel {
   // replay. The cursor passes each seq once, so each notice is told once.
   const apply = (
     envelope: Envelope,
-    route: (routed: Envelope) => void = deps.route,
+    route: (routed: Envelope) => void = (routed) => deps.route([routed]),
     tell: (notice: ChangeEventEnvelope) => void = (notice) => announce([notice]),
   ): number | null => {
     if (!isEntityChanged(envelope)) {
@@ -182,13 +183,14 @@ export function openChannel(deps: ChannelDeps): Channel {
           return;
         }
         if (stopped) return;
-        // One route per entity, not per record, where routing invalidates every
+        // One push per entity, not per record, where routing invalidates every
         // query the entity is read from: a page of two hundred records of one
         // entity that each triggered a route would cancel and restart the same
         // refetch two hundred times over. Where the entity's reader reads the
-        // one record a push names, it is one route per record, and the reader
-        // gathers them. The last push of each is the one routed, and every
-        // record still moves the cursor.
+        // one record a push names, or a push reaches one session's reads, it is
+        // one push per record, and the reader gathers them. The last push of
+        // each is kept, the page's are routed in one call, and every record
+        // still moves the cursor.
         const last = new Map<string, Envelope>();
         for (const event of page) {
           const envelope = changeEventEnvelope(event);
@@ -198,7 +200,7 @@ export function openChannel(deps: ChannelDeps): Channel {
             (notice) => kept.push(notice),
           );
         }
-        for (const envelope of last.values()) deps.route(envelope);
+        if (last.size > 0) deps.route([...last.values()]);
         if (isLastPage(page.length, deps.pageSize) || cursor === null || cursor <= from) return;
         from = cursor;
       }
@@ -223,7 +225,7 @@ export function openChannel(deps: ChannelDeps): Channel {
     // the cursor never moves past seqs that were not replayed, so the next
     // push or pong retries the fetch from where it stands. A notice waits for
     // the replay that passes it, so it is told once.
-    deps.route(envelope);
+    deps.route([envelope]);
   };
 
   const enqueue = (work: () => Promise<void>) => {
@@ -275,7 +277,7 @@ export function openChannel(deps: ChannelDeps): Channel {
       last.set(keyOf(envelope), envelope);
       if (isAnnounced(envelope)) kept.push(envelope);
     }
-    for (const envelope of last.values()) deps.route(envelope);
+    if (last.size > 0) deps.route([...last.values()]);
     announce(kept);
   };
 

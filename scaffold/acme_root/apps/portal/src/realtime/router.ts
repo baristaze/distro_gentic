@@ -13,7 +13,7 @@ import type { Hints } from "./hints";
 
 export interface RouteOutcome {
   invalidated: QueryKey[];
-  /** The entity whose reader took the push as a hint, when one did. */
+  /** An entity whose reader took a push as a hint, when one did. */
   hinted?: string;
 }
 
@@ -102,30 +102,61 @@ export function isKeptFresh(queryKey: QueryKey): boolean {
   return KEPT_FRESH.has(queryKey[0] as string);
 }
 
-/** Routes one envelope, live or read back from the stream: the entity's
- * reader reads the one record it names, or, for an entity with none, every
- * query the entity is read from is read again. */
+/** Whether invalidating `prefix` reads the query under `key` again: a key
+ * matches every query whose key starts with it. */
+function covers(prefix: QueryKey, key: QueryKey): boolean {
+  return prefix.length <= key.length && prefix.every((part, index) => Object.is(part, key[index]));
+}
+
+/** Each key once, and none another key already covers. */
+function once(targets: readonly QueryKey[]): QueryKey[] {
+  return targets.filter(
+    (key, at) => !targets.some((other, by) => by !== at && covers(other, key) && (by < at || !covers(key, other))),
+  );
+}
+
+/** Routes one envelope, live or read back from the stream. */
 export function routeEnvelope(
   queryClient: QueryClient,
   envelope: Envelope,
   readers: HintReaders = {},
 ): RouteOutcome {
-  if (!isEntityChanged(envelope)) return { invalidated: [] };
-  const entity = entityOf(envelope.payload.kind);
-  const reader = readers[entity];
-  if (reader) {
-    reader.hint(envelope.payload.target_id, envelope.payload.version);
-    return { invalidated: [], hinted: entity };
+  return routeEnvelopes(queryClient, [envelope], readers);
+}
+
+/** Routes envelopes handed over together: a push, or what a page read back
+ * from the stream keeps. The entity's reader reads the one record each names,
+ * or, for an entity with none, every query the entity is read from is read
+ * again, once however many of them reach it: each invalidation cancels and
+ * restarts a refetch in flight. */
+export function routeEnvelopes(
+  queryClient: QueryClient,
+  envelopes: readonly Envelope[],
+  readers: HintReaders = {},
+): RouteOutcome {
+  const targets: QueryKey[] = [];
+  let hinted: string | undefined;
+  for (const envelope of envelopes) {
+    if (!isEntityChanged(envelope)) continue;
+    const entity = entityOf(envelope.payload.kind);
+    const reader = readers[entity];
+    if (reader) {
+      reader.hint(envelope.payload.target_id, envelope.payload.version);
+      hinted = entity;
+      continue;
+    }
+    targets.push(...targetsOf(queryClient, envelope.payload.kind, envelope.payload.target_id));
   }
-  const targets = [...targetsOf(queryClient, envelope.payload.kind, envelope.payload.target_id)];
-  for (const queryKey of targets) void queryClient.invalidateQueries({ queryKey });
-  return { invalidated: targets };
+  const invalidated = once(targets);
+  for (const queryKey of invalidated) void queryClient.invalidateQueries({ queryKey });
+  return hinted === undefined ? { invalidated } : { invalidated, hinted };
 }
 
 /** What a page read back from the stream keeps one push of, the last: the
- * record, for an entity whose reader reads each record, and the entity for
+ * record, for an entity whose reader reads each record and for a push that
+ * names a session, which reaches that session's reads alone; the entity for
  * any other, since one invalidation reads all of it again. */
 export function replayKey(envelope: ChangeEventEnvelope, readers: HintReaders = {}): string {
   const entity = entityOf(envelope.payload.kind);
-  return readers[entity] ? `${entity}/${envelope.payload.target_id}` : entity;
+  return readers[entity] || OF_A_SESSION.has(entity) ? `${entity}/${envelope.payload.target_id}` : entity;
 }

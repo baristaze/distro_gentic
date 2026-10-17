@@ -17,7 +17,7 @@ import { useAuthSessionStore } from "../store/authSession";
 import { openChannel } from "./channel";
 import { createHints } from "./hints";
 import { watchPage } from "./pageVisibility";
-import { replayKey, routeEnvelope, type HintReaders } from "./router";
+import { replayKey, routeEnvelopes, type HintReaders } from "./router";
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -34,7 +34,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       openSocket: (ticket) =>
         new WebSocket(api.websocketUrl(`/v1/realtime?ticket=${encodeURIComponent(ticket)}`)),
       fetchChangeEventsAfter,
-      route: (envelope) => void routeEnvelope(queryClient, envelope, readers),
+      route: (envelopes) => void routeEnvelopes(queryClient, envelopes, readers),
       replayKey: (envelope) => replayKey(envelope, readers),
       refreshAll: () => queryClient.invalidateQueries(),
       connection: useConnectionStore,
