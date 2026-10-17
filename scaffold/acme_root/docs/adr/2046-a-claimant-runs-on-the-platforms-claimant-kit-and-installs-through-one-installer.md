@@ -66,5 +66,5 @@ step binds the owner's ceilings and sets up its rootless engine.
   item's read, a stream's read): the client sends no header a call
   names, and that change is its own.
 - A claimant's program keeps the host's exit codes, which the unit
-  reads: 1 refused, 2 a bad setting, 3 not enrolled, 4 the platform not
+  reads: 7 refused, 2 a bad setting, 3 not enrolled, 4 the platform not
   yet reached. Only 4 and a crash restart it.

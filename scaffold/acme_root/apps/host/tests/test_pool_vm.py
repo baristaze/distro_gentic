@@ -250,12 +250,23 @@ async def test_a_vms_host_asks_again_while_its_vm_is_warm(tmp_path: Path) -> Non
     async def sleep(seconds: float) -> None:
         waits.append(seconds)
 
-    routes = RoutesHostImpl(lambda: AdvertisementBody(os="Linux"), sleep=sleep, most_wait=1.5)
+    draws = iter((1.0, 1.0, 1.0, 0.0, 0.0, 0.0))
+    routes = RoutesHostImpl(
+        lambda: AdvertisementBody(os="Linux"),
+        sleep=sleep,
+        most_wait=1.5,
+        jitter=lambda: next(draws),
+    )
     client = Client(unbound=3)
     issued = await routes.enroll(client, "hmk_the-key", "vm")  # type: ignore[arg-type]
     assert issued.claimant_id == UUID(int=4)
     assert client.asked == ["hmk_the-key"] * 4
     assert waits == [1.0, 1.5, 1.5], "a wait that grows to its most"
+    # Another VM, warm at the same moment, draws its own jitter: half of
+    # each wait.
+    client = Client(unbound=3)
+    await routes.enroll(client, "hmk_the-key", "vm")  # type: ignore[arg-type]
+    assert waits[3:] == [0.5, 0.75, 0.75]
 
 
 async def test_a_vms_host_gives_up_on_any_other_refusal() -> None:

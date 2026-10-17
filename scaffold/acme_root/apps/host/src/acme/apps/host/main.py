@@ -1,18 +1,20 @@
 """The host's commands. `probe` runs the startup probes and prints what the
 host would advertise. `run` starts the host: it probes, enrolls once or
 picks up its credential, then beats, rotates, and claims until stopped,
-waiting out a failure it outlasts. Exit codes: 0 done, 1 the platform
-refused, 2 a setting or a file on the host is wrong, 3 not enrolled, 4 the
-platform is unreachable or failing at startup, or the clock is not yet in
-step with it, which passes with time, 5 a startup probe failed that a person
-must fix."""
+waiting out a failure it outlasts. Exit codes: 0 done, 2 a setting or a
+file on the host is wrong, 3 not enrolled, 4 the platform is unreachable or
+failing at startup, or the clock is not yet in step with it, which passes
+with time, 5 a startup probe failed that a person must fix, 7 the platform
+refused. 1 is Python's own, for an error nothing here expected: its unit
+restarts it, as it does 4."""
 
 import asyncio
 import contextlib
 import logging
 import os
+import random
 import sys
-from collections.abc import Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from datetime import timedelta
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, NoReturn
@@ -29,6 +31,7 @@ from acme.apps.host.pool_vm import pool_vm_probes
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
+from acme.client.claimant.backoff import Backoff
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
@@ -46,11 +49,11 @@ from acme.infra.transports.pool_vm import TransportPoolVmImpl
 
 log = logging.getLogger(__name__)
 
-EXIT_REFUSED = 1
 EXIT_USAGE = 2
 EXIT_NOT_ENROLLED = 3
 EXIT_UNREACHABLE = 4
 EXIT_MISCONFIGURED = 5
+EXIT_REFUSED = 7
 
 
 def app_version() -> str:
@@ -262,19 +265,34 @@ async def keep_alive(agent: HostAgent, settings: Settings) -> None:
             log.warning("the beat failed: %s", error)
 
 
-async def listen(agent: HostAgent) -> None:
-    """The control stream, opened again whenever it ends: with the
-    credential the host holds then, after a short wait that grows while the
-    platform cannot be reached."""
-    wait = 1.0
+REOPEN_SECONDS = 2.0
+"""The longest pause before the next control stream once the platform ended
+one: half of it is jitter."""
+
+
+async def listen(
+    agent: HostAgent,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    jitter: Callable[[], float] = random.random,
+) -> None:
+    """The control stream, opened again whenever it ends, with the
+    credential the host holds then. Once the platform ended one, it pauses
+    up to `REOPEN_SECONDS`; once one failed, it waits as the claimant kit
+    says (`Backoff`), a 429's ask honored, and a message heard starts that
+    wait over. Half of each pause and wait is jitter, so hosts whose streams
+    ended together, as when the platform restarts, open the next apart."""
+    backoff = Backoff(jitter)
     while True:
         try:
-            await agent.listen()
-            wait = 1.0
-        except (ApiError, *WIRE_FAILURES) as error:
+            await agent.listen(heard=backoff.reset)
+            wait = REOPEN_SECONDS / 2 + (REOPEN_SECONDS / 2) * jitter()
+        except ApiError as error:
             log.warning("the control stream ended: %s", error)
-            wait = min(wait * 2, 30.0)
-        await asyncio.sleep(wait)
+            wait = backoff.failed(error.retry_after)
+        except WIRE_FAILURES as error:
+            log.warning("the control stream ended: %s", error)
+            wait = backoff.failed(None)
+        await sleep(wait)
 
 
 def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:

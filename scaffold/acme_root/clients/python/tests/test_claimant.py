@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
+from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS, Backoff
 from acme.client.claimant.claimant import Claimant
 from acme.client.claimant.credential import (
     BadSetting,
@@ -176,6 +177,21 @@ def test_the_lease_clock_renews_at_half_the_shorter_and_asks_again_sooner_unansw
     ended = LeaseClock.started(0.0, 60.0)
     ended.ended = "revoked"
     assert ended.out(0.0) and not ended.hold.lost(0.0)
+
+
+def test_the_backoff_doubles_to_its_cap_and_a_long_run_of_failures_stays_there() -> None:
+    """Half of each wait is jitter. A caller's own cap holds, a server's ask
+    included, and failures in a row however many wait the cap."""
+    backoff = Backoff(lambda: 1.0, most=10.0)
+    assert [backoff.failed(None) for _ in range(6)] == [1.0, 2.0, 4.0, 8.0, 10.0, 10.0]
+    assert backoff.failed(30.0) == 10.0
+    for _ in range(5000):
+        backoff.failed(None)
+    assert backoff.failed(None) == 10.0
+    backoff.reset()
+    assert backoff.failed(None) == 1.0
+    assert Backoff(lambda: 0.0).failed(None) == 0.5
+    assert Backoff(lambda: 1.0).failed(600.0) == BACKOFF_MAX_SECONDS
 
 
 async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_path: Path) -> None:

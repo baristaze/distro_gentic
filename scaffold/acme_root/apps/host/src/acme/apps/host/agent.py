@@ -78,19 +78,22 @@ VM: its host asks again."""
 class RoutesHostImpl(RoutesInterface):
     """The host's own enrollment, with what it probed and the version of
     `exec` work it reads, at `/hosts/...`. A VM of the cloud pool trades
-    its key instead of an enrollment token, and asks again, after a wait
-    that grows to `most_wait` seconds, while its VM serves no session
-    yet."""
+    its key instead of an enrollment token, and asks again while its VM
+    serves no session yet, after a wait that grows to `most_wait` seconds,
+    half of it jitter (`Backoff`), so VMs started together do not ask
+    together."""
 
     def __init__(
         self,
         advertisement: Callable[[], AdvertisementBody],
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         most_wait: float = 10.0,
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         self._advertisement = advertisement
         self._sleep = sleep
         self._most_wait = most_wait
+        self._jitter = jitter
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
         if enrollment_token.startswith(VM_KEY):
@@ -101,7 +104,7 @@ class RoutesHostImpl(RoutesInterface):
         return host_issued(issued)
 
     async def _vm(self, client: ApiClient, key: str, name: str) -> Issued:
-        wait = 1.0
+        backoff = Backoff(self._jitter, most=self._most_wait)
         while True:
             try:
                 issued = await client.enroll_vm(key, name, self._advertisement(), EXEC_VERSION)
@@ -109,8 +112,7 @@ class RoutesHostImpl(RoutesInterface):
                 if error.status != UNBOUND:
                     raise
                 log.info("this VM serves no session yet; it asks again")
-                await self._sleep(wait)
-                wait = min(wait * 2, self._most_wait)
+                await self._sleep(backoff.failed(None))
                 continue
             return host_issued(issued)
 
@@ -178,7 +180,10 @@ class HostAgent:
         self._backoff = Backoff(jitter)
         self._probed: Probed | None = None
         self._enrollment = Enrollment(
-            settings, RoutesHostImpl(lambda: self.probed.advertisement), client_for, now
+            settings,
+            RoutesHostImpl(lambda: self.probed.advertisement, jitter=jitter),
+            client_for,
+            now,
         )
         self.woken = asyncio.Event()
         """Set when the control stream says work reached this host's lanes."""
@@ -262,13 +267,14 @@ class HostAgent:
         none once the platform refused it."""
         return self._enrollment.client()
 
-    async def listen(self) -> None:
+    async def listen(self, heard: Callable[[], None] = lambda: None) -> None:
         """The control stream, held open from here until the platform ends
         it with the credential it was opened with: a wake sets `woken`, and
         a stop ends the item it names at once. The last message seen is
-        where the next stream starts."""
+        where the next stream starts. `heard` is called on each message."""
         async with self.client() as client:
             async for message in client.control_stream(self._seen):
+                heard()
                 if message.id is not None:
                     self._seen = message.id
                 if message.kind is ControlKind.wake:
