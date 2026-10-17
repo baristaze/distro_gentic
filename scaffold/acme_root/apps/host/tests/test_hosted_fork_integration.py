@@ -25,7 +25,15 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from host_support import Stack, directory_host, docker_runs, postgres, probes, stack
+from host_support import (
+    Stack,
+    directory_host,
+    docker_runs,
+    image_pulled,
+    postgres,
+    probes,
+    stack,
+)
 from runner_support import HOST, TOOLS, answers, assistant, runs
 
 from acme.apps.host.agent import HostAgent
@@ -147,12 +155,14 @@ def runner_over(api: Stack, kind: AgentKind) -> RunnerContainer:
 
 async def container_host_keeping(api: Stack, pool_id: UUID, where: Path) -> tuple[HostAgent, Path]:
     """A host of the pool as the host's `main` wires one: a container per
-    workspace on the local Docker, of the default image, and a store of
-    its own that keeps their snapshots, which its probe showed. Its
-    ceilings take any agent project, and let nothing leave."""
+    workspace on the local Docker, of the default image, pulled before it
+    starts, and a store of its own that keeps their snapshots, which its
+    probe showed. Its ceilings take any agent project, and let nothing
+    leave."""
     settings = replace(
         api.settings(where / "home", None), enrollment_token=await api.token(pool_id)
     )
+    await image_pulled(settings)
     store = HostSnapshots(settings.snapshots_path, settings.secrets_path)
     broker = BrokerNullImpl()
     agents: list[HostAgent] = []

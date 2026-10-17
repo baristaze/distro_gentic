@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import io
 import json
@@ -22,7 +23,7 @@ from acme.infra.agent_workspaces import (
     refusal,
 )
 from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
-from acme.infra.docker import docker, docker_stream
+from acme.infra.docker import DockerReply, docker, docker_stream
 from acme.infra.exceptions import BackendFailed
 
 MOUNT = "/workspace"
@@ -219,7 +220,12 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
     keeps its own (ADR 1028). A setup is given open egress or none, as a
     workspace is. Its container holds the runtime's default capabilities
     less raw sockets, so a package manager can change owners and drop to
-    its own user; it takes no new privileges and is never privileged."""
+    its own user; it takes no new privileges and is never privileged.
+
+    An absent image is pulled beside the prepare that needs it, one pull of
+    an image at a time. With `pull_wait`, a prepare waits on the pull that
+    long, then is refused with a refusal that clears: a caller whose claim
+    on the work is short never holds it through a pull."""
 
     def __init__(
         self,
@@ -228,12 +234,16 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         deployment: str = DEFAULT_DEPLOYMENT,
         pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT,
         network: HostNetwork = NO_HOST_NETWORK,
+        *,
+        pull_wait: timedelta | None = None,
     ) -> None:
         self._image = image
         self._timeout = timeout
         self._deployment = deployment
         self._pull_timeout = pull_timeout
         self._network = network
+        self._pull_wait = pull_wait
+        self._pulling: dict[str, asyncio.Task[DockerReply]] = {}
 
     async def prepare(
         self,
@@ -280,7 +290,7 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
             await self._start_on_base(workspace, _opened(base))
         else:
             image = self._named_image(spec)
-            await self._present(image)
+            await self._present(image, building=building)
             await self._start(workspace, image, building=building)
         return workspace
 
@@ -360,7 +370,7 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         """The print a container started to `spec` here is labelled with."""
         return spec_print(spec, *_given(self._ca(spec)), building=building)
 
-    async def _present(self, image: str) -> None:
+    async def _present(self, image: str, *, building: bool = False) -> None:
         """`image` on this host, pulled on its own limit when it is absent, so
         a prepare's run never carries the pull: a run killed mid-pull leaves
         no image behind."""
@@ -368,9 +378,36 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
             "image", "inspect", "--format", "{{.Id}}", image, bound=self._timeout
         )
         if not present.ok:
-            pulled = await docker("pull", image, bound=self._pull_timeout)
+            pulled = await self._pulled(image, building=building)
             if not pulled.ok:
                 raise BackendFailed("docker", "pull", pulled.reason())
+
+    async def _pulled(self, reference: str, *, building: bool = False) -> DockerReply:
+        """The pull of `reference`, run beside the prepare that needs it, one
+        at a time for each reference. With a pull wait, a prepare waits on it
+        that long, then is refused with a refusal that clears, and the pull
+        runs on, so a later prepare finds the image. A prepare for a base's
+        setup (`building`) waits on it whole: its build runs on a limit of
+        its own."""
+        pull = self._pulling.get(reference)
+        if pull is None:
+            pull = asyncio.create_task(self._pull(reference))
+            self._pulling[reference] = pull
+        if self._pull_wait is None or building:
+            return await asyncio.shield(pull)
+        try:
+            return await asyncio.wait_for(asyncio.shield(pull), self._pull_wait.total_seconds())
+        except TimeoutError:
+            raise IsolationRefused(
+                f"this host is pulling the image {reference}", clears=True
+            ) from None
+
+    async def _pull(self, reference: str) -> DockerReply:
+        """One pull, on its own limit, forgotten once it ends."""
+        try:
+            return await docker("pull", reference, bound=self._pull_timeout)
+        finally:
+            self._pulling.pop(reference, None)
 
     async def _pullable(self, image: str) -> str | None:
         """The reference another daemon pulls `image` by: the first of the
@@ -525,13 +562,14 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         """The image a snapshot was taken on, on this host: found by its id,
         or pulled by the digest the snapshot names and held to that id. One
         that cannot be had loses the workspace, with the reason, before
-        anything of it is removed."""
+        anything of it is removed; one still being pulled refuses the
+        prepare as `_pulled` says."""
         if (await docker("image", "inspect", kept.image, bound=self._timeout)).ok:
             return
         taken_on = f"the image {kept.image} the snapshot was taken on"
         if kept.pull is None:
             raise AgentWorkspaceLost(f"{taken_on} is not on this host, and no registry serves it")
-        pulled = await docker("pull", kept.pull, bound=self._pull_timeout)
+        pulled = await self._pulled(kept.pull)
         if not pulled.ok:
             raise AgentWorkspaceLost(f"{taken_on} is not on this host: {pulled.reason()}")
         if not (await docker("image", "inspect", kept.image, bound=self._timeout)).ok:

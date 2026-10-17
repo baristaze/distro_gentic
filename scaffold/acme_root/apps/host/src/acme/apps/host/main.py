@@ -183,11 +183,18 @@ def host_transports(
     return {IsolationMode.CONTAINER: container}
 
 
+PULL_WAIT = timedelta(seconds=20)
+"""How long a prepare waits on its image's pull before it is refused with a
+refusal that clears, so the work's claim, a minute long, never runs out
+under it: the pull runs on, and a later claim finds the image."""
+
+
 def host_workspaces(settings: Settings) -> dict[IsolationMode, AgentWorkspaceProviderInterface]:
     """What makes a workspace its pool asks this host to prepare, by the
     mode its transport runs: a container per session, of the image its
-    owner names, holding a copy of the host's CA file under open egress. A
-    VM of the cloud pool makes its one session's workspace in itself."""
+    owner names, holding a copy of the host's CA file under open egress,
+    its image pulled beside the prepare (`PULL_WAIT`). A VM of the cloud
+    pool makes its one session's workspace in itself."""
     if settings.vm:
         return {IsolationMode.VM: AgentWorkspacePoolVmImpl(settings.vm_workspace)}
     return {
@@ -197,6 +204,7 @@ def host_workspaces(settings: Settings) -> dict[IsolationMode, AgentWorkspacePro
             f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
             host_network(),
+            pull_wait=PULL_WAIT,
         )
     }
 
