@@ -54,6 +54,7 @@ from acme.om.exec_relay.types.exec import (
 from acme.om.placement.types.work import ExecEffect
 from acme.om.tools.types.tool import Effect
 from acme.om.trust.placement import PlacementInterface
+from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
@@ -104,8 +105,7 @@ class TransportRelayImpl(TransportInterface):
         self._stage = stage
         self._file_time = file_time
         self._grace = grace
-        self._first_poll = first_poll
-        self._last_poll = last_poll
+        self._poll = RetryPolicy(base=first_poll.total_seconds(), cap=last_poll.total_seconds())
         self._remembered = remembered
         self._sleep = sleep
         self._clock = clock
@@ -329,7 +329,7 @@ class TransportRelayImpl(TransportInterface):
         waits for: the call answers interrupted, and an attaching wait
         answers None."""
         after = -1
-        delay = self._first_poll
+        polls = Retries(self._poll)
         cut = False
         while True:
             try:
@@ -352,7 +352,7 @@ class TransportRelayImpl(TransportInterface):
                         await on_output(part.stream, part.text)
                     after = part.seq
                 if progress.parts:
-                    delay = self._first_poll
+                    polls.reset()
                     continue  # more may wait behind a full page
                 if progress.state in SETTLED:
                     return progress
@@ -362,8 +362,7 @@ class TransportRelayImpl(TransportInterface):
                 await self._stop(rctx, org_id, item.id, StopKind.DEADLINE, epoch)
             if attach and now >= item.deadline + self._grace:
                 return None
-            await self._sleep(delay.total_seconds())
-            delay = min(delay * 2, self._last_poll)
+            await self._sleep(polls.failed())
 
     async def _stop(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None

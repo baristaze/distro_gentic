@@ -110,6 +110,7 @@ dependencies = [
     { name = "acme-client" },
     { name = "acme-infra" },
     { name = "acme-integrations" },
+    { name = "acme-timing" },
     { name = "typer" },
 ]
 
@@ -118,6 +119,7 @@ requires-dist = [
     { name = "acme-client", editable = "clients/python" },
     { name = "acme-infra", editable = "infra" },
     { name = "acme-integrations", editable = "integrations" },
+    { name = "acme-timing", editable = "libs/timing" },
     { name = "typer", specifier = ">=0.15" },
 ]
 

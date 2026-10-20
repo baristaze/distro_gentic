@@ -16,6 +16,7 @@ from acme.om.base import utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import Unavailable
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.timing import Retries, RetryPolicy
 
 Relayed = Callable[[Callable[[], RequestContext]], TransportInterface]
 """The exec relay's transport, each operation of which runs under the stage it
@@ -41,8 +42,7 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
     ) -> None:
         self._exec_relay = exec_relay
         self._transport = transport
-        self._first_poll = first_poll
-        self._last_poll = last_poll
+        self._poll = RetryPolicy(base=first_poll.total_seconds(), cap=last_poll.total_seconds())
         self._sleep = sleep
         self._clock = clock
 
@@ -56,15 +56,14 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
     ) -> tuple[AgentWorkspace, TransportInterface]:
         relay = self._exec_relay()
         await relay.ask_instance(ctx, agent_session_id, instance_id, spec)
-        wait = self._first_poll
+        polls = Retries(self._poll)
         while (binding := await relay.binding_of(ctx, instance_id)) is None:
             left = (by - self._clock()).total_seconds()
             if left <= 0:
                 raise Unavailable(
                     f"no host of session {agent_session_id}'s pool made an instance for its run in time"
                 )
-            await self._sleep(min(wait.total_seconds(), left))
-            wait = min(wait * 2, self._last_poll)
+            await self._sleep(min(polls.failed(), left))
         workspace = AgentWorkspace(
             id=instance_id, org_id=ctx.org_id, spec=spec, location=binding.location
         )

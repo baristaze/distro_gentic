@@ -8,6 +8,7 @@ dependencies = [
     "acme-infra",
     # The MCP client, which starts a server the owner names for one call.
     "acme-integrations",
+    "acme-timing",
     "typer>=0.15",
 ]
 
@@ -18,6 +19,7 @@ acme-host = "acme.apps.host.main:main"
 acme-client = { workspace = true }
 acme-infra = { workspace = true }
 acme-integrations = { workspace = true }
+acme-timing = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

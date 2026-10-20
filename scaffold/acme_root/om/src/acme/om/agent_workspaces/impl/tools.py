@@ -75,6 +75,7 @@ from acme.om.tools.rules import named_snapshot, snapshotted_step
 from acme.om.tools.tool import TakenSnapshot, TakeSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
+from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
@@ -105,10 +106,9 @@ class TakenOnHost(TakenSnapshot):
     taken: KeptSnapshot
 
 
-FIRST_POLL = timedelta(milliseconds=50)
-LAST_POLL = timedelta(seconds=1)
-"""How often a host's snapshot is looked for: a wait that doubles from the
-first to the last."""
+POLL = RetryPolicy(base=0.05, cap=1.0)
+"""How often a host's snapshot is looked for: a wait that doubles from
+50 ms to 1 s."""
 
 
 def _beyond_isolation(spec: IsolationSpec, restore: AgentWorkspaceSnapshot | None) -> bool:
@@ -511,7 +511,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             ctx, agent_session_id, spec, snapshot_id, kept_for=kept_for
         )
         by = self._clock() + self._snapshot_wait
-        wait = FIRST_POLL
+        polls = Retries(POLL)
         while (record := await self._agent_workspaces.kept_snapshot(ctx, snapshot_id)) is None:
             refused = await self._placed.refusal_of(ctx, item_id)
             if refused is not None:
@@ -521,8 +521,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 raise SnapshotRefused(
                     f"the host that holds session {agent_session_id}'s workspace kept no snapshot in time"
                 )
-            await self._sleep(min(wait.total_seconds(), left))
-            wait = min(wait * 2, LAST_POLL)
+            await self._sleep(min(polls.failed(), left))
         return record
 
     async def _fork_on_host(

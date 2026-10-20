@@ -69,6 +69,7 @@ from acme.infra.transports import (
     TransportInterface,
     secret_held,
 )
+from acme.timing import Every, Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ class ExecutorRelayImpl(ExecutorInterface):
     renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts
-    at a quarter of a renewal's period and doubles."""
+    at a quarter of a renewal's period and doubles, never past the lease."""
 
     def __init__(
         self,
@@ -210,6 +211,10 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._window_chars = window_chars
         self._renew_seconds = renew_seconds
         self._lease_seconds = renew_seconds * 3
+        # Half of each wait is jitter. The cap at the lease changes no wait
+        # the host sleeps: the first wait it shortens comes once the waits
+        # before it used most of the lease, and still lands past it.
+        self._outlast = RetryPolicy(base=renew_seconds / 4, cap=self._lease_seconds, jitter=0.5)
         self._jitter = jitter
         self._running: dict[UUID, Running] = {}
 
@@ -685,8 +690,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         is tried again while the lease lasts. A renewal refused, or one that
         still fails when the lease ends, means the lease is no longer the
         host's: the command ends, and nothing is pushed for it."""
-        while True:
-            await asyncio.sleep(self._renew_seconds)
+        async for _ in Every(self._renew_seconds, phase=self._renew_seconds):
             try:
                 await self._outlasting(
                     lambda client: client.extend_exec_lease(item_id), running.held_until
@@ -716,7 +720,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         failure the host outlasts is tried again after a wait that doubles,
         half of it jitter, or longer when the server asked; one that would
         land past `until`, by this host's clock, is raised, as a refusal is."""
-        failures = 0
+        retries = Retries(self._outlast, draw=self._jitter)
         while True:
             try:
                 async with self._client() as client:
@@ -725,11 +729,8 @@ class ExecutorRelayImpl(ExecutorInterface):
             except (ApiError, *WIRE_FAILURES) as error:
                 if not outlasted(error):
                     raise
-                failures += 1
-                full = self._renew_seconds / 4 * 2 ** (failures - 1)
-                wait = full / 2 + (full / 2) * self._jitter()
-                if isinstance(error, ApiError) and error.retry_after is not None:
-                    wait = max(wait, error.retry_after)
+                asked = error.retry_after if isinstance(error, ApiError) else None
+                wait = retries.failed(asked)
                 if time.monotonic() + wait >= until:
                     raise
                 log.info("a call failed (%s); trying again in %.1fs", error, wait)

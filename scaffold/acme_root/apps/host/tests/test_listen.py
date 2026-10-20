@@ -9,8 +9,8 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from acme.apps.host.main import REOPEN_SECONDS, listen
-from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS
+from acme.apps.host.main import REOPEN, listen
+from acme.client.claimant.claimant import RETRY
 from acme.client.transport import ApiError
 
 
@@ -58,17 +58,17 @@ def drawn(*values: float) -> Callable[[], float]:
 
 async def test_a_stream_the_platform_ended_is_opened_again_after_a_jittered_pause() -> None:
     waits = await waits_of(Streams((1, None), (3, None), (1, None)), drawn(0.0, 0.5, 1.0))
-    assert waits == [REOPEN_SECONDS / 2, REOPEN_SECONDS * 3 / 4, REOPEN_SECONDS]
+    assert waits == [REOPEN.cap / 2, REOPEN.cap * 3 / 4, REOPEN.cap]
 
 
 async def test_a_stream_that_fails_waits_the_kits_backoff_with_a_429_honored_and_the_cap() -> None:
     failures = Streams((0, WIRE), (0, WIRE), (0, SLOW_DOWN), *[(0, WIRE)] * 6, (0, LONG_ASK))
     waits = await waits_of(failures, lambda: 1.0)
-    assert waits == [1.0, 2.0, 7.0, 8.0, 16.0, 32.0, 64.0, 120.0, 120.0, BACKOFF_MAX_SECONDS]
+    assert waits == [1.0, 2.0, 7.0, 8.0, 16.0, 32.0, 64.0, 120.0, 120.0, RETRY.cap]
     # Another host, failing at the same moments, draws its own jitter.
     failures = Streams((0, WIRE), (0, WIRE), (0, SLOW_DOWN), *[(0, WIRE)] * 6, (0, LONG_ASK))
     apart = await waits_of(failures, lambda: 0.0)
-    assert apart == [0.5, 1.0, 7.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0, BACKOFF_MAX_SECONDS]
+    assert apart == [0.5, 1.0, 7.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0, RETRY.cap]
 
 
 async def test_a_message_heard_starts_the_wait_over() -> None:

@@ -61,6 +61,7 @@ from acme.om.hosts.types.host import Enrollment
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool, Region
 from acme.om.tenancy.rules import hash_token
+from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +127,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self._placed = placed
         self._exec_relay = exec_relay
         self._options = options
+        self._poll = RetryPolicy(
+            base=options.first_poll.total_seconds(), cap=options.last_poll.total_seconds()
+        )
         self._session_gone = session_gone
         self._expired = expired
         self._stage = stage
@@ -412,7 +416,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     async def _enrolled(self, agent_session_id: UUID, vm: PoolVm) -> PoolVm:
         """The VM once its host has enrolled, waited on a while."""
         by = self._clock() + self._options.ready_wait
-        wait = self._options.first_poll
+        polls = Retries(self._poll)
         while True:
             found = await self._storage.read_vm(vm.id)
             if found is None:
@@ -428,8 +432,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                     "enrolled yet",
                     clears=True,
                 )
-            await self._sleep(min(wait.total_seconds(), left))
-            wait = min(wait * 2, self._options.last_poll)
+            await self._sleep(min(polls.failed(), left))
 
     async def _held(
         self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec, pool: HostPool
@@ -437,7 +440,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         """The workspace once the VM's host holds it, waited on a while:
         its host is asked to prepare it through the exec relay, as any host is."""
         by = self._clock() + self._options.ready_wait
-        wait = self._options.first_poll
+        polls = Retries(self._poll)
         while True:
             hosts = await self._hosts().get_hosts(ctx, pool.id)
             placed = PlacementState(
@@ -455,8 +458,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 assert held is not None  # a pool of one is given
                 return held
             left = (by - self._clock()).total_seconds()
-            await self._sleep(max(0.0, min(wait.total_seconds(), left)))
-            wait = min(wait * 2, self._options.last_poll)
+            await self._sleep(max(0.0, min(polls.failed(), left)))
 
     async def _held_to(self, agent_session_id: UUID, restore: KeptSnapshot) -> None:
         """The snapshot's disk, held to the digest the pool recorded, before

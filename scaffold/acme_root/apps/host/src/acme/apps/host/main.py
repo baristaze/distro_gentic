@@ -31,7 +31,7 @@ from acme.apps.host.pool_vm import pool_vm_probes
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
-from acme.client.claimant.backoff import Backoff
+from acme.client.claimant.claimant import RETRY
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
@@ -46,6 +46,7 @@ from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.transports.pool_vm import TransportPoolVmImpl
+from acme.timing import Every, Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
 
@@ -263,9 +264,9 @@ async def serve(agent: HostAgent, settings: Settings) -> None:
 
 
 async def keep_alive(agent: HostAgent, settings: Settings) -> None:
-    """Rotates the credential when it is due and beats, every beat."""
-    while True:
-        await asyncio.sleep(settings.beat_seconds)
+    """Rotates the credential when it is due and beats, every beat, start
+    to start, however long a beat takes."""
+    async for _ in Every(settings.beat_seconds, phase=settings.beat_seconds):
         try:
             await agent.rotate_if_due()
             await agent.beat()
@@ -273,9 +274,9 @@ async def keep_alive(agent: HostAgent, settings: Settings) -> None:
             log.warning("the beat failed: %s", error)
 
 
-REOPEN_SECONDS = 2.0
-"""The longest pause before the next control stream once the platform ended
-one: half of it is jitter."""
+REOPEN = RetryPolicy(base=2.0, cap=2.0, jitter=0.5)
+"""The pause before the next control stream once the platform ended one:
+2 s at most, half of it jitter."""
 
 
 async def listen(
@@ -285,21 +286,21 @@ async def listen(
 ) -> None:
     """The control stream, opened again whenever it ends, with the
     credential the host holds then. Once the platform ended one, it pauses
-    up to `REOPEN_SECONDS`; once one failed, it waits as the claimant kit
-    says (`Backoff`), a 429's ask honored, and a message heard starts that
-    wait over. Half of each pause and wait is jitter, so hosts whose streams
+    as `REOPEN` says; once one failed, it waits as the claimant kit says
+    (`RETRY`), a 429's ask honored, and a message heard starts that wait
+    over. Half of each pause and wait is jitter, so hosts whose streams
     ended together, as when the platform restarts, open the next apart."""
-    backoff = Backoff(jitter)
+    retries = Retries(RETRY, draw=jitter)
     while True:
         try:
-            await agent.listen(heard=backoff.reset)
-            wait = REOPEN_SECONDS / 2 + (REOPEN_SECONDS / 2) * jitter()
+            await agent.listen(heard=retries.reset)
+            wait = REOPEN.wait(1, draw=jitter)
         except ApiError as error:
             log.warning("the control stream ended: %s", error)
-            wait = backoff.failed(error.retry_after)
+            wait = retries.failed(error.retry_after)
         except WIRE_FAILURES as error:
             log.warning("the control stream ended: %s", error)
-            wait = backoff.failed(None)
+            wait = retries.failed()
         await sleep(wait)
 
 
