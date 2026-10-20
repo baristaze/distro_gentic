@@ -20,7 +20,7 @@ from host_support import Stack, probes
 from acme.apps.host.agent import ExecutorInterface, HostAgent
 from acme.apps.host.ceilings import Ask, Ceilings
 from acme.apps.host.config import BadSetting, settings_from_env
-from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS
+from acme.client.claimant.claimant import RETRY
 from acme.client.claimant.credential import load_credential
 from acme.client.claimant.enrollment import NotEnrolled
 from acme.client.client import ApiClient
@@ -334,7 +334,7 @@ async def test_a_host_waits_out_a_failed_beat_and_goes_on_with_its_credential(
     wait = await host.turn()
     assert flaky.failed
     assert wait == (7.0 if failure is not None else 0.5)
-    assert 0 < wait <= BACKOFF_MAX_SECONDS
+    assert 0 < wait <= RETRY.cap
     assert host.credential == held == load_credential(tmp_path / "credential.json")
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
     item = await enqueue(

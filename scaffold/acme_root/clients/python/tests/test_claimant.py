@@ -16,8 +16,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
-from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS, Backoff
-from acme.client.claimant.claimant import Claimant
+from acme.client.claimant.claimant import RETRY, Claimant
 from acme.client.claimant.credential import (
     BadSetting,
     Credential,
@@ -179,19 +178,58 @@ def test_the_lease_clock_renews_at_half_the_shorter_and_asks_again_sooner_unansw
     assert ended.out(0.0) and not ended.hold.lost(0.0)
 
 
-def test_the_backoff_doubles_to_its_cap_and_a_long_run_of_failures_stays_there() -> None:
-    """Half of each wait is jitter. A caller's own cap holds, a server's ask
-    included, and failures in a row however many wait the cap."""
-    backoff = Backoff(lambda: 1.0, most=10.0)
-    assert [backoff.failed(None) for _ in range(6)] == [1.0, 2.0, 4.0, 8.0, 10.0, 10.0]
-    assert backoff.failed(30.0) == 10.0
-    for _ in range(5000):
-        backoff.failed(None)
-    assert backoff.failed(None) == 10.0
-    backoff.reset()
-    assert backoff.failed(None) == 1.0
-    assert Backoff(lambda: 0.0).failed(None) == 0.5
-    assert Backoff(lambda: 1.0).failed(600.0) == BACKOFF_MAX_SECONDS
+async def test_a_claimant_that_fails_waits_a_doubling_wait_to_its_cap_and_an_answer_starts_it_over(
+    tmp_path: Path,
+) -> None:
+    """Half of each wait is jitter. A server's ask is the floor of a wait and
+    the cap its bound, failures in a row however many wait the cap, and a
+    call answered starts the wait over."""
+    first = a_credential()
+    settings = ClaimantSettings(
+        api_url=first.api_url, home=tmp_path, name="scanner-1", enrollment_token=None
+    )
+    save_credential(settings.credential_path, first)
+    answers: list[httpx.Response | Exception] = []
+
+    async def platform(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/claimants/me/claims"
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    def client_for(token: str | None) -> ApiClient:
+        return ApiClient(
+            settings.api_url,
+            app="api",
+            app_version="scanner@0.1.0",
+            token=token,
+            transport=httpx.MockTransport(platform),
+            retries=0,  # the claimant's own wait is the point here
+        )
+
+    drawn = [1.0]
+    claimant = Claimant(settings, client_for, now=lambda: NOW, jitter=lambda: drawn[0])
+    await claimant.start()
+
+    async def waits(*given: httpx.Response | Exception) -> list[float]:
+        answers.extend(given)
+        return [(await claimant.turn()).wait for _ in given]
+
+    def slow_down(seconds: int) -> httpx.Response:
+        failed = {"error": {"code": "rate_limited", "message": "slow down"}}
+        return httpx.Response(429, headers={"Retry-After": str(seconds)}, json=failed)
+
+    unavailable = httpx.Response(503, json={"error": {"code": "unavailable", "message": "no"}})
+    wire = httpx.ConnectError("connection refused")
+    answered = httpx.Response(200, json={"item": None})
+    assert await waits(*[unavailable] * 8, wire) == [1, 2, 4, 8, 16, 32, 64, 120, 120]
+    assert await waits(*[wire] * 50) == [RETRY.cap] * 50
+    assert await waits(answered) == [settings.beat_seconds]
+    assert await waits(slow_down(600), slow_down(7), wire) == [RETRY.cap, 7.0, 4.0]
+    assert await waits(answered) == [settings.beat_seconds]
+    drawn[0] = 0.0
+    assert await waits(wire, wire) == [0.5, 1.0]
 
 
 async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_path: Path) -> None:

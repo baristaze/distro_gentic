@@ -18,14 +18,14 @@ import logging
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID
 
 from acme.apps.host.ceilings import Ask, Ceilings, ask_of, refusals
 from acme.apps.host.config import Settings
 from acme.apps.host.probe import Probed, Probes, startup
-from acme.client.claimant.backoff import Backoff
+from acme.client.claimant.claimant import RETRY
 from acme.client.claimant.credential import Credential
 from acme.client.claimant.enrollment import (
     REFUSED,
@@ -44,6 +44,7 @@ from acme.client.types.hosts import (
     IsolationMode,
     IssuedHostCredentialView,
 )
+from acme.timing import Retries
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ ENDS_THE_HOST = REFUSED | {426}
 """The answers a host does not outlast: its credential refused, ended, or
 revoked, and the work it reads below the floor. Every other failure, an
 answer the API could not serve, a 429, or the wire, the host waits out
-(`Backoff`) and calls again with the credential it holds."""
+(`RETRY`) and calls again with the credential it holds."""
 
 
 def host_issued(view: IssuedHostCredentialView) -> Issued:
@@ -80,7 +81,7 @@ class RoutesHostImpl(RoutesInterface):
     `exec` work it reads, at `/hosts/...`. A VM of the cloud pool trades
     its key instead of an enrollment token, and asks again while its VM
     serves no session yet, after a wait that grows to `most_wait` seconds,
-    half of it jitter (`Backoff`), so VMs started together do not ask
+    half of it jitter (`RETRY`), so VMs started together do not ask
     together."""
 
     def __init__(
@@ -92,7 +93,7 @@ class RoutesHostImpl(RoutesInterface):
     ) -> None:
         self._advertisement = advertisement
         self._sleep = sleep
-        self._most_wait = most_wait
+        self._wait = replace(RETRY, cap=most_wait)
         self._jitter = jitter
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
@@ -104,7 +105,7 @@ class RoutesHostImpl(RoutesInterface):
         return host_issued(issued)
 
     async def _vm(self, client: ApiClient, key: str, name: str) -> Issued:
-        backoff = Backoff(self._jitter, most=self._most_wait)
+        retries = Retries(self._wait, draw=self._jitter)
         while True:
             try:
                 issued = await client.enroll_vm(key, name, self._advertisement(), EXEC_VERSION)
@@ -112,7 +113,7 @@ class RoutesHostImpl(RoutesInterface):
                 if error.status != UNBOUND:
                     raise
                 log.info("this VM serves no session yet; it asks again")
-                await self._sleep(backoff.failed(None))
+                await self._sleep(retries.failed())
                 continue
             return host_issued(issued)
 
@@ -177,7 +178,7 @@ class HostAgent:
         self._client_for = client_for
         self._executor = executor or ExecutorPendingImpl()
         self._now = now
-        self._backoff = Backoff(jitter)
+        self._retries = Retries(RETRY, draw=jitter)
         self._probed: Probed | None = None
         self._enrollment = Enrollment(
             settings,
@@ -304,11 +305,11 @@ class HostAgent:
                     self._enrollment.refuse()
                 raise
             log.warning("the platform failed: %s %s", error.status, error.code)
-            return self._backoff.failed(error.retry_after)
+            return self._retries.failed(error.retry_after)
         except WIRE_FAILURES as error:
             log.warning("the platform is unreachable: %s", error)
-            return self._backoff.failed(None)
-        self._backoff.reset()
+            return self._retries.failed()
+        self._retries.reset()
         return 0.0 if handled is not None else self._settings.beat_seconds
 
     def _modes(self) -> frozenset[IsolationMode]:

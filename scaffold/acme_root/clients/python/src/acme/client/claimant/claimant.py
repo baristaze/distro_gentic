@@ -29,7 +29,6 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from acme.client.claimant.backoff import Backoff
 from acme.client.claimant.enrollment import (
     ClientFactory,
     CredentialRefused,
@@ -43,8 +42,17 @@ from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
 from acme.client.types.hosts import ClaimantWorkView
 from acme.client.types.placement import ReportOutcome
+from acme.timing import Retries, RetryPolicy
 
 log = logging.getLogger(__name__)
+
+RETRY = RetryPolicy(base=1.0, cap=120.0, jitter=0.5)
+"""The wait after a failure a claimant outlasts: an answer the platform
+could not serve, a 429, or the wire. It doubles per failure in a row from
+1 s, half of it jitter, so claimants that failed together do not return
+together; it is longer when the server asked for longer, and never past
+120 s, a 429's ask included. A caller that asks again sooner names its
+own cap."""
 
 CLAIM_LOST = frozenset({404, 409})
 """A report's answers when the item is no longer this claim's: its claim
@@ -93,7 +101,7 @@ class Claimant:
         self.enrollment = Enrollment(settings, RoutesClaimantImpl(), client_for, now)
         self.journal = Journal(settings.journal_path)
         self._send = send
-        self._backoff = Backoff(jitter) if jitter is not None else Backoff()
+        self._retries = Retries(RETRY) if jitter is None else Retries(RETRY, draw=jitter)
 
     async def start(self) -> None:
         """Enrolls once, or picks up the credential it holds."""
@@ -118,11 +126,11 @@ class Claimant:
                 self.enrollment.refuse()
                 raise CredentialRefused(str(error)) from None
             log.warning("the platform failed: %s %s", error.status, error.code)
-            return Turn(None, self._backoff.failed(error.retry_after))
+            return Turn(None, self._retries.failed(error.retry_after))
         except WIRE_FAILURES as error:
             log.warning("the platform is unreachable: %s", error)
-            return Turn(None, self._backoff.failed(None))
-        self._backoff.reset()
+            return Turn(None, self._retries.failed())
+        self._retries.reset()
         return Turn(item, 0.0 if item is not None else self._settings.beat_seconds)
 
     @contextlib.asynccontextmanager

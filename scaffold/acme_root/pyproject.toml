@@ -105,6 +105,11 @@ exclude = ["clients/python/src/acme/client/schema/**"]
 package = "acme"
 exclude = ["clients/python/src/acme/client/schema.py"]
 
+# A host takes the shared waits as the client of the gateway does: a leaf
+# that imports nothing of the system, so it reaches nothing through them.
+[tool.distro-check.options.PLC-10]
+reaches = ["client", "timing"]
+
 # A host runs the exec items it holds on its own disk, through the engine's
 # transports, isolation, and local secrets; it dials nothing through them.
 [[tool.distro-check.exception]]

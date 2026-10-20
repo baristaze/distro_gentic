@@ -45,6 +45,7 @@ from acme.om.hosts.rules import SNAPSHOTS, snapshots_advertised
 from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.work.types.work_item import WorkStatus
+from acme.timing import Retries, RetryPolicy
 
 
 class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
@@ -66,8 +67,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         self._exec_relay = exec_relay
         self._hosts = hosts
         self._restore_wait = restore_wait
-        self._first_poll = first_poll
-        self._last_poll = last_poll
+        self._poll = RetryPolicy(base=first_poll.total_seconds(), cap=last_poll.total_seconds())
         self._sleep = sleep
         self._clock = clock
 
@@ -190,7 +190,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         relay = self._exec_relay()
         item_id = await relay.ask_restore(ctx, agent_session_id, spec, restore)
         by = self._clock() + self._restore_wait
-        wait = self._first_poll
+        polls = Retries(self._poll)
         while True:
             row = await relay.workspace_work(ctx, item_id)
             if row.status is WorkStatus.DONE:
@@ -209,8 +209,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
                     f"workspace from snapshot {restore.id} yet; one does when it claims the work",
                     clears=True,
                 )
-            await self._sleep(min(wait.total_seconds(), left))
-            wait = min(wait * 2, self._last_poll)
+            await self._sleep(min(polls.failed(), left))
 
 
 def _held(
