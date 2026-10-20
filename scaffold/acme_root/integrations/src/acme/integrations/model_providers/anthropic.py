@@ -55,8 +55,9 @@ from acme.integrations.model_providers.wire import (
     clipped,
     json_object,
     key_for,
-    retry_after,
+    provider_wait,
     sse_events,
+    transport_failed,
 )
 from acme.integrations.model_providers.wire import (
     field as get,
@@ -561,18 +562,14 @@ class ModelProviderAnthropicImpl(ModelProviderInterface):
                         kind,
                         message,
                         status=response.status_code,
-                        retry_after=retry_after(response.headers),
+                        retry_after=provider_wait(response.headers),
                         authentication=unauthenticated(raw),
                     )
                 async for event, data in sse_events(response.aiter_lines()):
                     for part in folded.feed(event, data):
                         yield part
         except httpx.HTTPError as error:
-            raise ModelCallFailed(
-                ErrorKind.TRANSIENT,
-                f"Anthropic did not answer: {type(error).__name__}",
-                partial=folded.partial(),
-            ) from None
+            raise transport_failed("Anthropic", error, folded.partial()) from None
         yield Finished(reply=folded.reply())
 
     def describe(self) -> str:
