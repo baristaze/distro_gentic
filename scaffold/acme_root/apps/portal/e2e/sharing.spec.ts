@@ -12,10 +12,9 @@
 // says the member steers.
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn } from "./signIn";
+import { MEMBER, mintLogins, ORG, OWNER, signedIn } from "./signIn";
 
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
-const MEMBER = process.env.SEED_MEMBER_EMAIL ?? "bob@example.test";
 const MEMBER_NAME = process.env.SEED_MEMBER_NAME ?? "Bob";
 const OWNER_NAME = process.env.SEED_NAME ?? "Local Owner";
 // The agent the composer's chip offers for the kind the stack registers.
@@ -46,7 +45,8 @@ const panel = (page: Page) => page.getByRole("dialog", { name: "Who steers and w
 const rows = (page: Page, table: string) => page.getByRole("table", { name: table }).locator("tbody tr");
 
 test("a member finds the org's sessions and joins one, suggests in it, and its steerer hands them the steer; a private one stays out of the org's view", async ({ browser }) => {
-  const owner = await signedIn(browser, OWNER, ORG);
+  const logins = mintLogins(OWNER, MEMBER);
+  const owner = await signedIn(browser, logins, OWNER, ORG);
   const team = `Release notes ${STAMP}`;
   const teamId = await start(owner, team);
   await expect(chip(owner)).toHaveText("You steer");
@@ -56,7 +56,7 @@ test("a member finds the org's sessions and joins one, suggests in it, and its s
   await expect(chip(owner)).toHaveAttribute("title", "You steer. Org-wide.");
   await expect(owner.getByRole("list", { name: "Timeline" }).locator("[data-kind='shared']")).toContainText("Made org-wide");
 
-  const member = await signedIn(browser, MEMBER, ORG);
+  const member = await signedIn(browser, logins, MEMBER, ORG);
   const draft = `Salary notes ${STAMP}`;
   const draftId = await start(member, draft);
   await expect(chip(member)).toHaveAttribute("title", "You steer. Private.");

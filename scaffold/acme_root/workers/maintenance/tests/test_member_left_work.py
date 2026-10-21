@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from worker_support import build_container, request, sign_in, signing
+from worker_support import build_container, provider_login, request, sign_in
 
 from acme.om.change_events.types.change_event import ChangeEvent
 from acme.om.context import Role, TenantContext
@@ -31,9 +31,9 @@ async def add_bob(container: WorkerContainer) -> User:
 
 
 async def bob_signs_in(container: WorkerContainer, org_id: UUID) -> TenantContext:
-    """Bob's own session in the org, by address."""
+    """Bob's own session in the org, signed in through the twin."""
     tenancy = container.managers.tenancy
-    login = await signing(container).sign_in.dev_sign_in(request(), "bob@example.test")
+    login = await provider_login(container, "bob@example.test")
     identity = await tenancy.authenticate_login(request(), login.token)
     issued = await tenancy.sign_in.exchange_login(identity, org_id)
     return await tenancy.authenticate(request(), issued.token)

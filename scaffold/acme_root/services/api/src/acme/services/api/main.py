@@ -1,9 +1,8 @@
 """The service binary is also its own operations CLI: serve, migrate,
-bootstrap, add-member, seed-platform, grant-operator, and openapi are
-subcommands of one
-entry point. Each one boots the same way before it does anything else, and
-logs to standard error, so standard output carries only what a command
-prints (the documents it wrote, a local token)."""
+bootstrap, add-member, seed-platform, grant-operator, mint-local-login, and
+openapi are subcommands of one entry point. Each one boots the same way
+before it does anything else, and logs to standard error, so standard output
+carries only what a command prints (the documents it wrote, a local token)."""
 
 import argparse
 import asyncio
@@ -16,6 +15,7 @@ from typing import Any
 from uuid import UUID
 
 import uvicorn
+from pydantic import ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.impl.configured import absent_integrations
@@ -222,6 +222,49 @@ async def granted(container: AppContainer, settings: ApiSettings, args: argparse
     return 0
 
 
+def mint_local_login(args: argparse.Namespace) -> int:
+    """The local mint: a login for each address, printed alone, one a line
+    in the order given, for the machines that drive a local stack and have
+    no browser or mailbox (the traffic generator and its stress runs, the
+    browser checks, the demo recorders). One process mints every address it
+    is handed. It runs over the local database, which `refuse_remote`
+    holds it to, and turns `local_login_mint` on, which the settings refuse
+    outside a local or test environment, so there it refuses before it
+    builds or writes anything. No route or page reaches the mint (ADR
+    0104)."""
+    try:
+        settings = ApiSettings(local_login_mint=True)
+    except ValidationError as error:
+        for problem in error.errors():
+            print(f"acme-api: {problem['msg'].removeprefix('Value error, ')}", file=sys.stderr)
+        return 2
+
+    async def run() -> int:
+        boot(settings)
+        settings.refuse_remote()
+        container = AppContainer.build(settings)
+        await container.start()
+        try:
+            tokens = await minted_logins(container, settings, args.email)
+        finally:
+            await container.close()
+        for token in tokens:
+            print(token)
+        return 0
+
+    return asyncio.run(run())
+
+
+async def minted_logins(
+    container: AppContainer, settings: ApiSettings, emails: list[str]
+) -> list[str]:
+    """The local mint's logins, one per address in the order given."""
+    sign_in = container.managers.tenancy.sign_in
+    return [
+        (await sign_in.mint_local_login(command_request(settings), email)).token for email in emails
+    ]
+
+
 def add_member(args: argparse.Namespace) -> int:
     async def run() -> int:
         settings = ApiSettings()
@@ -403,6 +446,19 @@ def main(argv: list[str] | None = None) -> int:
         "seconds, 3600 when absent, 28800 at most",
     )
 
+    p_mint = sub.add_parser(
+        "mint-local-login",
+        help="the local mint: print a login for each address, one a line, on a local "
+        "database; refused outside a local or test environment",
+    )
+    p_mint.add_argument(
+        "--email",
+        required=True,
+        action="append",
+        help="a person to sign in, made with their personal org when nobody holds the "
+        "address; repeat it for more, one process for them all",
+    )
+
     p_openapi = sub.add_parser(
         "openapi", help="emit each namespace's OpenAPI document into a folder"
     )
@@ -419,6 +475,8 @@ def main(argv: list[str] | None = None) -> int:
         return add_member(args)
     if args.command == "seed-platform":
         return seed_platform_of(args)
+    if args.command == "mint-local-login":
+        return mint_local_login(args)
     if args.command == "grant-operator":
         if args.expires_in is not None and not (args.mint_token or args.grant_content):
             parser.error("--expires-in goes with --mint-token or --grant-content")

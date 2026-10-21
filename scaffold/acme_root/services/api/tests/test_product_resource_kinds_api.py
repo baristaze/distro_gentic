@@ -114,7 +114,7 @@ async def a_member(
     client: httpx.AsyncClient, container: AppContainer, org_id: UUID, name: str
 ) -> dict[str, str]:
     await add_member(container, org_id, f"{name}@example.test", Role.MEMBER)
-    return await sign_in_as(client, f"{name}@example.test", org_id)
+    return await sign_in_as(client, container, f"{name}@example.test", org_id)
 
 
 async def test_a_products_kind_is_asked_for_granted_and_revoked_through_the_routes(

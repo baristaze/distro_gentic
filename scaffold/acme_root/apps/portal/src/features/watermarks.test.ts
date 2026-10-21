@@ -125,7 +125,7 @@ vi.mock("../app/api", () => {
   };
   return { api: { get: send, post: () => Promise.resolve({}), patch: () => Promise.resolve({}), del: () => Promise.resolve({}), request: () => Promise.resolve({}) } };
 });
-vi.mock("../app/config", () => ({ runtimeConfig: () => ({ environment: "local", devSignIn: true }) }));
+vi.mock("../app/config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 vi.mock("../realtime/RealtimeProvider", () => ({ RealtimeProvider: ({ children }: { children: ReactNode }) => children }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
@@ -147,15 +147,14 @@ function nameOf(field: Element): string {
   return (by ? document.getElementById(by)?.textContent : field.getAttribute("aria-label") ?? field.closest("label")?.textContent) ?? "(unnamed)";
 }
 
-/** Every platform screen's address inside the shell, its params filled, and
- * the sign-in a developer uses; a moved address is a redirect, not a screen. */
+/** Every platform screen's address inside the shell, its params filled; a
+ * moved address is a redirect, not a screen. */
 const moved = new Set(MOVED.map((each) => each.from));
 const SCREENS = [
   ...shellRoutes(SLOT)
     .map((route) => route.path ?? "")
     .filter((path) => path !== "" && !moved.has(path))
     .map((path) => path.replace(/:([A-Za-z]+)/g, (_, name: string) => PARAMS[name] ?? "x")),
-  "/login/dev",
 ];
 
 beforeEach(() => {
@@ -170,8 +169,6 @@ afterEach(async () => {
 
 /** The fields a screen draws once its reads settle and its closed forms are opened. */
 async function fieldsOf(address: string): Promise<{ title: string; fields: { name: string; placeholder: string }[] }> {
-  // The sign-in is a signed-out person's screen.
-  if (address.startsWith("/login")) useAuthSessionStore.getState().clear();
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   await act(async () => root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
   await settle();
@@ -214,7 +211,6 @@ it("mounts every platform screen, and finds no text field on any without a water
   expect(seen.get("/sessions")).toContain("Filter by title");
   expect(seen.get("/sessions/s1")).toContain("Message");
   expect(seen.get("/orgs/new")).toEqual(expect.arrayContaining(["Name"]));
-  expect(seen.get("/login/dev")).toEqual(expect.arrayContaining(["Email"]));
 }, 60_000);
 
 /** Every screen's source: the features and the app, not the kit's own parts.

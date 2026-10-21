@@ -481,8 +481,8 @@ async def written(container: Any, owner: Any, agent_session_id: UUID, steps: lis
     """Steps appended as one run writes them, then the session's status
     brought up to them once: a park or a run's end asks for no run."""
     managers = container.managers
-    epoch = await managers.steps.begin_run(owner, agent_session_id)
-    await managers.steps.append_agent_steps(owner, agent_session_id, epoch, steps)
+    epoch = await managers.agent_steps.begin_run(owner, agent_session_id)
+    await managers.agent_steps.append_agent_steps(owner, agent_session_id, epoch, steps)
     await managers.agent_sessions.project_status(owner, agent_session_id)
 
 
@@ -611,7 +611,7 @@ async def next_beat(slug: str, root_id: UUID) -> None:
         child = (working or asking or [None])[0]
         if child is None:
             raise SystemExit(f"no sub-agent of {root_id} is at work or asks")
-        held = (await managers.steps.get_agent_steps(owner, child.id, 0, 100)).items
+        held = (await managers.agent_steps.get_agent_steps(owner, child.id, 0, 100)).items
         person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
         work = story(child, person, max(utcnow(), held[-1].created_at))
         work.loop_id = held[-1].loop_id

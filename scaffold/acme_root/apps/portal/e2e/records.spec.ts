@@ -11,12 +11,13 @@
 // another org then finds none of the records.
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn } from "./signIn";
 
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
 const STAMP = Date.now();
 const PASSWORD = `cred-${STAMP}-never-shown`;
 const KEY = `key-${STAMP}-never-shown`;
+const STRANGER = `stranger-${STAMP}@example.test`;
 
 /** Every reply the page reads from the API, by its address, and the
  * bearer the page sends, to read the records back as it would. */
@@ -35,7 +36,8 @@ function listen(page: Page) {
 }
 
 test("an owner keeps an agent project, a key, an API key, and an agent automation through the screens; the secrets show nowhere after they are saved, and another org sees none of it", async ({ browser }) => {
-  const owner = await signedIn(browser, OWNER, ORG);
+  const logins = mintLogins(OWNER, STRANGER);
+  const owner = await signedIn(browser, logins, OWNER, ORG);
   const seen = listen(owner);
   const readBack = async <T>(path: string): Promise<T> => {
     const response = await owner.request.get(path, { headers: { authorization: seen.bearer() } });
@@ -130,7 +132,7 @@ test("an owner keeps an agent project, a key, an API key, and an agent automatio
   }
   console.log(`replies read: ${seen.replies.length}; holding the password, the provider key, or the API key past its create: 0`);
 
-  const stranger = await signedIn(browser, `stranger-${STAMP}@example.test`);
+  const stranger = await signedIn(browser, logins, STRANGER);
   await stranger.goto("/settings/agent-projects");
   await expect(stranger.getByRole("table", { name: "Agent projects" })).toContainText("No agent projects yet.");
   await stranger.goto(`/settings/agent-projects/${agentProjectId}`);

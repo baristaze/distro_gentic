@@ -20,7 +20,7 @@ from httpx import ASGITransport
 from runner_support import SONNET, answers
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.integrations.identity.absent import IdentityProviderAbsentImpl
+from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.content import TextBlock, ToolUseBlock
@@ -72,7 +72,7 @@ def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
     read: list[str] = []
     storage = StorageMemoryImpl()
     infra = InfraLocalImpl(tmp_path)
-    providers = IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers())
+    providers = IntegrationsOverImpl(IdentityProviderTwinImpl(), scripted_model_providers())
 
     def integrations(*_: object) -> IntegrationsInterface:
         return providers
@@ -87,9 +87,7 @@ def processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Processes:
     local = {"_env_file": None, "environment": "local"}
     return Processes(
         api=AppContainer.build(
-            ApiSettings.model_validate(
-                {**local, "totp_encryption_key": TOTP_KEY, "dev_sign_in_enabled": True}
-            )
+            ApiSettings.model_validate({**local, "totp_encryption_key": TOTP_KEY})
         ),
         runner=RunnerContainer.build(
             AgentSessionRunnerSettings.model_validate({**local, "runner_id": "runner-test"})
@@ -130,7 +128,7 @@ async def test_a_products_kind_starts_through_the_api_and_runs_in_the_runner(
     )
     seeded = await seed_platform(api.storage, api.managers, owner, (LEDGER,))
     assert seeded.agent_project is not None
-    headers = await sign_in_as(client, "ann@example.test", org.id)
+    headers = await sign_in_as(client, api, "ann@example.test", org.id)
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(headers),
@@ -213,7 +211,7 @@ async def test_a_agent_playbook_invoked_through_the_api_reaches_the_model_and_it
     )
     seeded = await seed_platform(api.storage, api.managers, owner, (LEDGER,))
     assert seeded.agent_project is not None
-    headers = await sign_in_as(client, "ann@example.test", org.id)
+    headers = await sign_in_as(client, api, "ann@example.test", org.id)
     brief = "Never read the title; say the ledger is closed."
     published = await client.post(
         "/v1/agent-playbooks",

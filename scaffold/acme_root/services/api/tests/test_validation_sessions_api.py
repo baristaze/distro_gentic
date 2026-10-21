@@ -84,7 +84,7 @@ async def tenant(
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), slug.title(), slug, email, slug.title()
     )
-    owner = await sign_in_as(client, email, org.id)
+    owner = await sign_in_as(client, container, email, org.id)
     made = await client.post("/v1/agent-projects", headers=owner, json=AGENT_PROJECT)
     assert made.status_code == 201, made.text
     agent_project_id = UUID(made.json()["id"])

@@ -40,7 +40,7 @@ async def test_a_delivery_reaches_the_tenant_that_connected_its_installation_ove
         _, org = await container.managers.tenancy.bootstrap(
             seed_request(), "Bravo", f"bravo-{suffix}", email, "Bo"
         )
-        bravo = await sign_in_as(client, email, org.id)
+        bravo = await sign_in_as(client, container, email, org.id)
         mine, theirs = an_installation(), an_installation()
         for headers, installation in ((ajax, mine), (bravo, theirs)):
             connected = await connect(client, headers, forge, installation)

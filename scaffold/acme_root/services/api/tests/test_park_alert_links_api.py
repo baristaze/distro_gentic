@@ -76,16 +76,16 @@ async def ajax(client: httpx.AsyncClient, container: AppContainer) -> Tenant:
     await container.storage.get_agent_project_storage().create_agent_project(
         org.id, agent_project, ()
     )
-    headers = {Role.OWNER: await sign_in_as(client, "owner@ajax.test", org.id)}
+    headers = {Role.OWNER: await sign_in_as(client, container, "owner@ajax.test", org.id)}
     for role in (Role.ADMIN, Role.MEMBER, Role.VIEWER):
         email = f"{role.value}@ajax.test"
         await add_member(container, org.id, email, role)
-        headers[role] = await sign_in_as(client, email, org.id)
+        headers[role] = await sign_in_as(client, container, email, org.id)
     tenant = Tenant(org.id, headers)
     _, other = await container.managers.tenancy.bootstrap(
         seed_request(), "Bravo", "bravo", "owner@bravo.test", "Owner"
     )
-    tenant.stranger = await sign_in_as(client, "owner@bravo.test", other.id)
+    tenant.stranger = await sign_in_as(client, container, "owner@bravo.test", other.id)
     return tenant
 
 

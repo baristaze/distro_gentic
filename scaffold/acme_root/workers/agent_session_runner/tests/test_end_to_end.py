@@ -61,7 +61,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.transports import StaleCommand
 from acme.infra.transports.records import RecordBook
-from acme.integrations.impl.configured import absent_integrations
+from acme.integrations.identity.twin import IdentityProviderTwinImpl
+from acme.integrations.impl.configured import IntegrationsOverImpl
+from acme.integrations.model_providers.registry import absent_model_providers
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
@@ -302,13 +304,13 @@ async def a_stack(tmp_path: Path, kinds: tuple[AgentKind, ...]) -> AsyncIterator
     # raises on purpose is no report. The platform's agents ship over the
     # repository's corpus, as they do in the runner and in a deployed api,
     # so a start classes every tool its kind offers as the runner runs it.
-    settings = ApiSettings(dev_sign_in_enabled=True, sentry_dsn=None, otel_endpoint=None)
+    settings = ApiSettings(sentry_dsn=None, otel_endpoint=None)
     settings.refuse_remote()
     container = AppContainer.over(
         settings,
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
-        absent_integrations(),
+        IntegrationsOverImpl(IdentityProviderTwinImpl(), absent_model_providers()),
         ports=PlatformPorts(kinds=ProductKinds(agents=kinds)),
         platform_agents=PlatformAgents(corpus=read_corpus(REPO)),
     )
@@ -342,7 +344,7 @@ async def owner_of(stack: Stack) -> Person:
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     seeded = await seed_platform(stack.container.storage, stack.container.managers, ctx, E2E_KINDS)
-    headers = await sign_in_as(stack.client, "ann@example.test", org.id)
+    headers = await sign_in_as(stack.client, stack.container, "ann@example.test", org.id)
     assert seeded.agent_project is not None
     return Person(ctx, headers, seeded.agent_project.id)
 

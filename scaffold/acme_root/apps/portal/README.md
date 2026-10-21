@@ -115,7 +115,23 @@ pnpm --filter @acme/portal test
 make openapi                      # regenerates the client's types
 ```
 
-On the local stack, `/login/dev` signs in by address alone.
+A person signs in only through the identity provider, at `/login`. On
+the local stack the portal signs in through WorkOS's Staging
+application. Without its key the API answers `503`, the page says
+sign-in is not available, and nobody signs in.
+
+WorkOS offers an email code, Google, Microsoft, Apple, GitHub, and the
+org's single sign-on, with passwords off
+([the runbook](../../docs/runbooks/providers/workos.md)).
+
+No browser check signs in through a page. A check mints a login for each
+person it needs with `acme-api mint-local-login`, in one process on the
+local database (`e2e/signIn.ts`). It exchanges each login for an auth
+session in the org through the API, as the portal does after a sign-in,
+and puts the session in the portal's session storage before the page
+loads. The seeded people are plus-addresses of `SEED_EMAIL`, as
+`make seed` makes them: the shell's, else `.env`'s, else git's
+`user.email`.
 
 The browser check needs the whole stack up: the API, the maintenance
 worker, the session runner on the scripted provider, and this dev server.

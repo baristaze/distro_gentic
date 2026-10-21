@@ -194,3 +194,10 @@ it.each([
   expect(router.state.historyAction).toBe("REPLACE");
   if (title !== null) expect(container.querySelector("h1")!.textContent).toBe(title);
 });
+
+it("shows the not-found page at an address no route serves", async () => {
+  await open("/login/elsewhere");
+  expect(container.textContent).toContain("Page not found");
+  expect(container.textContent).not.toContain("Sign in");
+  expect(net.calls).toHaveLength(0);
+});

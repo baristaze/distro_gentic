@@ -103,7 +103,7 @@ async def connected(
     _, org = await container.managers.tenancy.bootstrap(
         seed_request(), name.title(), name, email, name.title()
     )
-    headers = await sign_in_as(client, email, org.id)
+    headers = await sign_in_as(client, container, email, org.id)
     answered = await client.post(
         "/v1/integrations/forge/installations",
         headers=headers,

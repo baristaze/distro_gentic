@@ -27,7 +27,7 @@ async def tenant(client: httpx.AsyncClient, container: AppContainer, slug: str) 
     _, org = await container.managers.tenancy.bootstrap(
         seed_request(), slug.title(), slug, email, slug.title()
     )
-    return Tenant(org.id, await sign_in_as(client, email, org.id))
+    return Tenant(org.id, await sign_in_as(client, container, email, org.id))
 
 
 async def person(
@@ -36,7 +36,7 @@ async def person(
     """A person of the role in the tenant, signed in."""
     email = f"{role.value}-{org_id.hex[:8]}@example.test"
     await add_member(container, org_id, email, role)
-    return await sign_in_as(client, email, org_id)
+    return await sign_in_as(client, container, email, org_id)
 
 
 def refused(response: httpx.Response, status: int, code: str) -> None:

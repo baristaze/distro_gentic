@@ -11,7 +11,7 @@ import { catalogMarkdown, paramNames, routeCatalog } from "./routeCatalog";
 
 // The pages are read, never drawn: no call leaves.
 vi.mock("./api", () => ({ api: {} }));
-vi.mock("./config", () => ({ runtimeConfig: () => ({ environment: "local", devSignIn: true }) }));
+vi.mock("./config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 
 const SLOT = joinProducts(PLATFORM, PRODUCT);
 

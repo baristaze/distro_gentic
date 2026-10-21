@@ -15,7 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn, SLUG } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
@@ -56,7 +56,7 @@ function tree(...root: string[]): string {
 
 test("a session's sub-agents: a card that follows each, a report that leads to its child and back, a row that folds, and a toast when one needs its person", async ({ browser }) => {
   const made = JSON.parse(tree()) as { root: string; children: [string, string] };
-  const owner = await signedIn(browser, OWNER, ORG);
+  const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.goto(`/sessions/${made.root}`);
   await expect(owner.getByRole("heading", { level: 1, name: ASKED })).toBeVisible();
   const chat = owner.getByRole("list", { name: "Timeline" });
@@ -154,7 +154,7 @@ test("the software engineer's scene starts two sub-agents: a card that follows e
     cwd: ROOT,
     stdio: "inherit",
   });
-  const owner = await signedIn(browser, OWNER, ORG);
+  const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: /^Software engineer/ }).click();
   await owner.keyboard.press("Escape");

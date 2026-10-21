@@ -7,11 +7,10 @@
 // park: the card goes, and the timeline says the run ended cancelled. Each
 // card is shot light and dark under e2e/screenshots/.
 import { expect, test, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn } from "./signIn";
+import { MEMBER, mintLogins, ORG, OWNER, signedIn } from "./signIn";
 
 // The agent the composer's chip offers for the kind the stack registers.
 const AGENT = process.env.ACME_E2E_AGENT ?? "Platform assistant";
-const MEMBER = process.env.SEED_MEMBER_EMAIL ?? "bob@example.test";
 const HOLDS = `${process.env.SEED_NAME ?? "Local Owner"} has control`;
 const SHOTS = new URL("./screenshots/", import.meta.url).pathname;
 
@@ -39,7 +38,8 @@ async function shareWithOrg(page: Page, sessionId: string): Promise<void> {
 }
 
 test("a hand-over: its holder ends the run beside Give it back, another member sees who holds it and End this run alone, and the loop ends cancelled", async ({ browser }) => {
-  const owner = await signedIn(browser, OWNER, ORG);
+  const logins = mintLogins(OWNER, MEMBER);
+  const owner = await signedIn(browser, logins, OWNER, ORG);
   const title = `Hand over ${Date.now()}`;
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: new RegExp(`^${AGENT}`) }).click();
@@ -66,7 +66,7 @@ test("a hand-over: its holder ends the run beside Give it back, another member s
   await shoot(owner, "card");
 
   // Another member who may write: who holds it, and the end of the run alone.
-  const member = await signedIn(browser, MEMBER, ORG);
+  const member = await signedIn(browser, logins, MEMBER, ORG);
   await member.goto(`/sessions/${sessionId}?pane=workspace`);
   const theirs = member.getByRole("complementary", { name: "Session pane" }).locator("section#control");
   await expect(theirs.getByRole("heading", { name: HOLDS })).toBeVisible();
