@@ -11,7 +11,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn, SLUG } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
@@ -46,7 +46,7 @@ async function approve(chat: Locator): Promise<void> {
 test("a session's pane: tabs that open themselves once, a step from its row, and take control that runs pytest and gives back", async ({ browser }) => {
   test.skip(!REPOSITORIES || !API, "PORTAL_REPOSITORIES names the scene's repositories, PORTAL_API_URL the API");
   check("scene", REPOSITORIES!, SLUG);
-  const owner = await signedIn(browser, OWNER, ORG);
+  const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: /^Software engineer/ }).click();
   await owner.keyboard.press("Escape");

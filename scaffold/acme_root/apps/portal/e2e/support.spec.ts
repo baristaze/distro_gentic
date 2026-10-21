@@ -11,7 +11,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn, SLUG } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
@@ -48,7 +48,7 @@ function parkedRoot(): string {
 
 test("support beside a parked session: the pane folds first, Send stays open while it works, and a chip opens its page while the dock keeps the conversation", async ({ browser }) => {
   const root = parkedRoot();
-  const owner = await signedIn(browser, OWNER, ORG);
+  const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.goto(`/sessions/${root}`);
   await expect(owner.getByRole("heading", { level: 1, name: ASKED })).toBeVisible();
   await expect(owner.locator(".acme-status-pill")).toHaveText("parked");

@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { ORG, OWNER, signedIn, SLUG } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
@@ -24,7 +24,9 @@ function recordEvidence(sessionId: string): void {
 }
 
 test("a member starts a session on Home, sees it run and finish in the left bar, and reads it; another org sees no row of it", async ({ browser }) => {
-  const owner = await signedIn(browser, OWNER, ORG);
+  const strangerEmail = `stranger-${Date.now()}@example.test`;
+  const logins = mintLogins(OWNER, strangerEmail);
+  const owner = await signedIn(browser, logins, OWNER, ORG);
   const title = `Tidy the docs ${Date.now()}`;
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: new RegExp(`^${AGENT}`) }).click();
@@ -69,7 +71,7 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   await expect(owner.getByRole("list", { name: "Validations" }).locator("li")).toHaveCount(1);
   await owner.screenshot({ path: `${SHOTS}session-evidence.png`, fullPage: true });
 
-  const stranger = await signedIn(browser, `stranger-${Date.now()}@example.test`);
+  const stranger = await signedIn(browser, logins, strangerEmail);
   const strangerBar = stranger.getByRole("complementary", { name: "Sidebar" });
   await expect(strangerBar).toContainText("No sessions yet. Describe a task on Home.");
   await expect(strangerBar.getByText(title)).toHaveCount(0);

@@ -11,7 +11,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { ORG, OWNER, signedIn, SLUG } from "./signIn";
+import { mintLogins, ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
@@ -48,7 +48,7 @@ test("the software engineer's session reads as a live chat: thoughts, work block
     cwd: ROOT,
     stdio: "inherit",
   });
-  const owner = await signedIn(browser, OWNER, ORG);
+  const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.getByRole("button", { name: /^Agent:/ }).click();
   await owner.getByRole("menuitemradio", { name: /^Software engineer/ }).click();
   await owner.keyboard.press("Escape");
