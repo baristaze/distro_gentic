@@ -161,7 +161,7 @@ async def viewer_of(
     me = await client.get("/v1/orgs/current", headers=owner)
     org_id = UUID(me.json()["id"])
     await add_member(container, org_id, "vic@example.test", Role.VIEWER)
-    return await sign_in_as(client, "vic@example.test", org_id)
+    return await sign_in_as(client, container, "vic@example.test", org_id)
 
 
 async def test_a_member_lists_the_tenants_sessions_newest_first_a_page_at_a_time(
@@ -348,11 +348,11 @@ async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_al
     await sessions.park(ctx, held.id, epoch, message.id, APPROVAL)
     me = await client.get("/v1/orgs/current", headers=owner)
     await add_member(container, UUID(me.json()["id"]), "mia@example.test", Role.MEMBER)
-    member = await sign_in_as(client, "mia@example.test", UUID(me.json()["id"]))
+    member = await sign_in_as(client, container, "mia@example.test", UUID(me.json()["id"]))
     _, other = await container.managers.tenancy.bootstrap(
         seed_request(), "Other", "other", "owner@other.test", "Other"
     )
-    stranger = await sign_in_as(client, "owner@other.test", other.id)
+    stranger = await sign_in_as(client, container, "owner@other.test", other.id)
 
     async def listed(headers: dict[str, str]) -> set[str]:
         answered = await client.get("/v1/approvals", headers=headers)
@@ -643,7 +643,7 @@ async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_
     _, other = await container.managers.tenancy.bootstrap(
         seed_request(), "Other", "other", "owner@other.test", "Other"
     )
-    stranger = await sign_in_as(client, "owner@other.test", other.id)
+    stranger = await sign_in_as(client, container, "owner@other.test", other.id)
     unknown = f"/v1/agent-sessions/{UUID(int=7)}"
     reads = [
         "/children",

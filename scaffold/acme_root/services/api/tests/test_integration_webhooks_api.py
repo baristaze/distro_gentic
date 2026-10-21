@@ -61,7 +61,7 @@ async def tenant(
     _, org = await container.managers.tenancy.bootstrap(
         seed_request(), name.title(), name, email, name.title()
     )
-    return org.id, await sign_in_as(client, email, org.id)
+    return org.id, await sign_in_as(client, container, email, org.id)
 
 
 async def connect(
@@ -210,7 +210,7 @@ async def test_an_installation_is_connected_by_one_tenant_with_the_systems_grant
         payload, signed = a_check(forge, "73003")
         assert (await client.post(ROUTE, content=payload, headers=signed)).status_code == 400
         await add_member(container, bravo, "member@bravo.test", Role.MEMBER)
-        member = await sign_in_as(client, "member@bravo.test", bravo)
+        member = await sign_in_as(client, container, "member@bravo.test", bravo)
         refused = await connect(client, member, forge, "73003")
         assert refused.status_code == 403, refused.text
         again = await connect(client, headers, forge, "73003")

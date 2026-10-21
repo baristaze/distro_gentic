@@ -286,7 +286,7 @@ async def test_a_lifetime_past_a_century_is_refused_and_the_sweep_still_reaches_
     await container.storage.get_agent_project_storage().create_agent_project(
         org.id, agent_project, ()
     )
-    bravo = await sign_in_as(client, "owner@bravo.test", org.id)
+    bravo = await sign_in_as(client, container, "owner@bravo.test", org.id)
     theirs = await session_saying(client, container, bravo, str(agent_project.id))
     kept_nothing = await client.put(
         "/v1/retention/policy", headers=bravo, json={"policy": {"storage_mode": "memory_only"}}

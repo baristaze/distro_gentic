@@ -214,7 +214,7 @@ async def test_a_declared_namespaces_service_opens_a_live_read_and_writes_its_ow
 
         # A viewer of the tenant reads the shipment but writes no note.
         await add_member(container, ctx.org_id, "vic@example.test", Role.VIEWER)
-        viewer = await sign_in_as(client, "vic@example.test", ctx.org_id)
+        viewer = await sign_in_as(client, container, "vic@example.test", ctx.org_id)
         viewed = await client.post(
             f"/v1/parcels/shipments/{mine.id}/notes", params={"text": "x"}, headers=viewer
         )

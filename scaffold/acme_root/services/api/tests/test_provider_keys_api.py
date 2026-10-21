@@ -74,7 +74,7 @@ async def test_a_member_who_may_not_manage_the_org_saves_no_key(
 ) -> None:
     org_id = (await client.get("/v1/orgs/current", headers=owner)).json()["id"]
     await add_member(container, UUID(org_id), "mia@example.test", Role.MEMBER)
-    member = await sign_in_as(client, "mia@example.test", UUID(org_id))
+    member = await sign_in_as(client, container, "mia@example.test", UUID(org_id))
     refused = await client.put("/v1/provider-keys/openai", headers=member, json={"value": VALUE})
     assert refused.status_code == 403, refused.text
     assert VALUE not in refused.text

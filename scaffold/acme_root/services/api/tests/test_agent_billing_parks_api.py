@@ -32,7 +32,7 @@ from api_support import (
     sign_in_as,
 )
 
-from acme.integrations.identity.absent import IdentityProviderAbsentImpl
+from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.calls import ModelReply
@@ -130,7 +130,7 @@ class Case:
         for role in (Role.ADMIN, Role.MEMBER, Role.VIEWER):
             email = f"{role.value}@ajax.test"
             await add_member(self.container, self.org_id, email, role)
-            self.headers[role] = await sign_in_as(self.client, email, self.org_id)
+            self.headers[role] = await sign_in_as(self.client, self.container, email, self.org_id)
         agent_billing = build_agent_billing(
             self.container.storage,
             self.container.managers,
@@ -144,7 +144,7 @@ class Case:
         _, other = await self.container.managers.tenancy.bootstrap(
             seed_request(), "Bravo", "bravo", "owner@bravo.test", "Owner"
         )
-        self.stranger = await sign_in_as(self.client, "owner@bravo.test", other.id)
+        self.stranger = await sign_in_as(self.client, self.container, "owner@bravo.test", other.id)
 
     async def ctx(self, headers: dict[str, str]) -> TenantContext:
         token = headers["Authorization"].removeprefix("Bearer ")
@@ -255,7 +255,7 @@ def container(
     gate: MoneyGateImpl,
     payments: PaymentProviderTwinImpl,
 ) -> AppContainer:
-    integrations = IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers)
+    integrations = IntegrationsOverImpl(IdentityProviderTwinImpl(), providers)
     ports = PlatformPorts(
         spend_budget_gate=gate, kinds=ProductKinds(agents=(STEWARD,), tools=lambda _managers: ())
     )

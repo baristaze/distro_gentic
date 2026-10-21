@@ -60,7 +60,7 @@ async def test_a_claimants_stream_is_read_by_its_tenant_alone_over_the_stack(
             app=create_app(container), client=(an_address(), 40000), raise_app_exceptions=False
         )
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            owner = await sign_in_as(client, email, org.id)
+            owner = await sign_in_as(client, container, email, org.id)
             pool_id = await a_pool(client, owner)
             node = await a_node(client, await a_token(client, owner, pool_id))
             render, claim_token = await held_render(client, container, owner, node)

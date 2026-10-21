@@ -60,7 +60,7 @@ async def tenant_on(
             funding=funding, key_ref="own-keys" if own else None, unit_plan_id="starter", zone="UTC"
         ),
     )
-    return ctx, await sign_in_as(client, email, org.id)
+    return ctx, await sign_in_as(client, container, email, org.id)
 
 
 def test_the_wire_names_every_provider_and_effort_the_providers_do() -> None:

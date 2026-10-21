@@ -221,7 +221,7 @@ async def test_a_pinned_session_reads_waiting_until_a_host_of_its_pool_is_online
     assert pinned.json()["waiting"] is True
     org_id = (await tenant_of(container, owner)).org_id
     await add_member(container, org_id, "val@example.test", Role.VIEWER)
-    viewer = await sign_in_as(client, "val@example.test", org_id)
+    viewer = await sign_in_as(client, container, "val@example.test", org_id)
     moved = await client.put(path, headers=viewer, json={"pool_id": None})
     assert moved.status_code == 403, moved.text
     assert (await client.get(path, headers=viewer)).json()["waiting"] is True
