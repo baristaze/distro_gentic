@@ -34,6 +34,7 @@ async def container(tmp_path: Path) -> AsyncIterator[WorkerContainer]:
         secrets_backend="local",
         sentry_dsn=None,
         otel_endpoint=None,
+        identity_provider="twin",
         worker_id="member-left-integration",
     )
     settings.refuse_remote()
