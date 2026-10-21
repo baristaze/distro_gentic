@@ -27,7 +27,7 @@ from acme.om.exceptions import (
     ValidationFailed,
     WorkNotFailed,
 )
-from acme.om.platform_root import PlatformManagers, build_platform_managers
+from acme.om.platform_root import PlatformManagers
 from acme.om.root import KINDS, Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.impl.manager import TenancyOptions
@@ -40,6 +40,8 @@ from acme.om.work.types.work_item import (
     WorkStatus,
 )
 
+from contracts.platform_signing_in import platform_managers_signing_in
+from contracts.signing_in import provider_login
 from contracts.work_cap import (
     a_burst_drains_as_fast_as_the_worker_runs_at_a_cap_of_two,
     a_second_item_is_passed_over_at_a_cap_of_one,
@@ -71,14 +73,14 @@ def storage() -> StorageMemoryImpl:
 
 @pytest.fixture
 def managers(infra: InfraLocalImpl, storage: StorageMemoryImpl) -> PlatformManagers:
-    return build_platform_managers(storage, infra, TenancyOptions(dev_sign_in=True))
+    return platform_managers_signing_in(storage, infra, TenancyOptions())
 
 
 @pytest.fixture
 async def ctx(managers: PlatformManagers) -> TenantContext:
     tenancy = managers.tenancy
     _, org = await tenancy.bootstrap(request(APP), "Ajax", "ajax", "ann@example.test", "Ann")
-    login = await tenancy.sign_in.dev_sign_in(request(APP), "ann@example.test")
+    login = await provider_login(tenancy, "ann@example.test", rctx=request(APP))
     identity = await tenancy.authenticate_login(request(APP), login.token)
     issued = await tenancy.sign_in.exchange_login(identity, org.id)
     return await tenancy.authenticate(request(APP), issued.token)
@@ -290,7 +292,7 @@ async def second_tenant(managers: PlatformManagers) -> TenantContext:
     """Bob's context in a second team org, Beta."""
     tenancy = managers.tenancy
     _, beta = await tenancy.bootstrap(request(APP), "Beta", "beta", "bob@example.test", "Bob")
-    login = await tenancy.sign_in.dev_sign_in(request(APP), "bob@example.test")
+    login = await provider_login(tenancy, "bob@example.test", rctx=request(APP))
     identity = await tenancy.authenticate_login(request(APP), login.token)
     issued = await tenancy.sign_in.exchange_login(identity, beta.id)
     return await tenancy.authenticate(request(APP), issued.token)
@@ -463,7 +465,7 @@ async def test_an_enqueue_takes_the_permission_its_kind_is_asked_for_with(
     deletion of the org."""
     tenancy = managers.tenancy
     await tenancy.add_member(request(APP), "ajax", "bob@example.test", "Bob", Role.MEMBER)
-    login = await tenancy.sign_in.dev_sign_in(request(APP), "bob@example.test")
+    login = await provider_login(tenancy, "bob@example.test", rctx=request(APP))
     issued = await tenancy.sign_in.exchange_login(
         await tenancy.authenticate_login(request(APP), login.token), ctx.org_id
     )
@@ -689,7 +691,7 @@ async def test_a_claim_in_a_deleted_org_fails_the_item_and_moves_on(
             await tenancy.sign_in.exchange_login(
                 await tenancy.authenticate_login(
                     request(APP),
-                    (await tenancy.sign_in.dev_sign_in(request(APP), "bob@example.test")).token,
+                    (await provider_login(tenancy, "bob@example.test", rctx=request(APP))).token,
                 ),
                 beta.id,
             )

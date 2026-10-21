@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import { createBrowserRouter, Navigate, Outlet, useLocation, type RouteObject } from "react-router-dom";
 import { CallbackPage } from "../features/sign_in/CallbackPage";
-import { DevSignInPage } from "../features/sign_in/DevSignInPage";
 import { LoginPage } from "../features/sign_in/LoginPage";
 import { PRODUCT } from "../product";
 import { useFlags } from "../queries/flags";
@@ -70,7 +69,6 @@ export const routes: RouteObject[] = [
   { path: "/auth/callback", element: <CallbackPage />, errorElement: <RouteError /> },
   // The identity provider's "initiate login" address: it starts a sign-in at once.
   { path: "/login", element: <LoginPage />, errorElement: <RouteError /> },
-  { path: "/login/dev", element: <DevSignInPage />, errorElement: <RouteError /> },
   { path: "/sign-in", element: <GoOn to="/login" />, errorElement: <RouteError /> },
   { path: "/sign-up", element: <GoOn to="/login?screen_hint=sign-up" />, errorElement: <RouteError /> },
   // Where the identity provider's logout sends the browser back: a sign-in page that waits.

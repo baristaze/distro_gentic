@@ -30,7 +30,7 @@ from api_support import (
     sign_in_as,
 )
 
-from acme.integrations.identity.absent import IdentityProviderAbsentImpl
+from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.calls import ModelReply
@@ -197,7 +197,7 @@ def build() -> Build:
 
 @pytest.fixture
 def container(tmp_path: Path, providers: ModelProvidersInterface, build: Build) -> AppContainer:
-    integrations = IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers)
+    integrations = IntegrationsOverImpl(IdentityProviderTwinImpl(), providers)
     return build_container(
         tmp_path,
         integrations=integrations,
@@ -233,7 +233,7 @@ async def org_of(case: Case) -> UUID:
 async def member(case: Case, email: str = "mia@example.test") -> tuple[UUID, dict[str, str]]:
     org_id = await org_of(case)
     user = await add_member(case.container, org_id, email, Role.MEMBER)
-    return user.id, await sign_in_as(case.client, email, org_id)
+    return user.id, await sign_in_as(case.client, case.container, email, org_id)
 
 
 async def api_key_of(case: Case, headers: dict[str, str]) -> dict[str, str]:
