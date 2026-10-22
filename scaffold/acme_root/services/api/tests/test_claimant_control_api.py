@@ -31,7 +31,7 @@ from test_claimant_kit_api import (
     tenant_of,
 )
 
-from acme.client.claimant.claimant import Claimant
+from acme.client.claimant.claimant import CONTROL_ITEMS, Claimant
 from acme.client.claimant.enrollment import CredentialRefused
 from acme.client.types.hosts import ClaimantControlKind, ClaimantWorkView
 from acme.client.types.placement import ReportOutcome
@@ -212,6 +212,15 @@ async def test_a_revoked_claimants_stream_ends_and_its_credential_opens_none(
     async with asyncio.timeout(5):
         await first.wait()
     assert lines[0] == ClaimantControlKind.wake.value
+    # It names at most the items the platform bounds; past them it is
+    # refused, and no stream opens.
+    bearer = {"Authorization": f"Bearer {claimant.enrollment.credential.token}"}
+    too_many = await client.get(
+        "/v1/claimants/me/control",
+        params={"item": [str(uuid4()) for _ in range(CONTROL_ITEMS + 1)]},
+        headers=bearer,
+    )
+    assert too_many.status_code == 422, too_many.text
 
     claimant_id = claimant.enrollment.credential.claimant_id
     revoked = await client.delete(f"/v1/claimants/{claimant_id}", headers=owner)
@@ -220,10 +229,7 @@ async def test_a_revoked_claimants_stream_ends_and_its_credential_opens_none(
         await stream
     # Its credential opens no stream again, and the kit stops listening
     # once refused, so its next turn raises.
-    refused = await client.get(
-        "/v1/claimants/me/control",
-        headers={"Authorization": f"Bearer {claimant.enrollment.credential.token}"},
-    )
+    refused = await client.get("/v1/claimants/me/control", headers=bearer)
     assert refused.status_code == 401, refused.text
     async with claimant.listening():
         async with asyncio.timeout(5):
