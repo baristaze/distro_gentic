@@ -3,7 +3,9 @@ import hashlib
 import io
 import json
 import re
+import shutil
 import tarfile
+import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import timedelta
@@ -114,6 +116,10 @@ labels name."""
 
 FORMAT = "acme.container-snapshot/1"
 """What a container's snapshot says it is, in its manifest."""
+
+COPY_BYTES = 1 << 20
+"""The bytes a snapshot's part is copied by, from Docker to disk and from
+disk into its archive."""
 
 DOCKERS_OWN = frozenset(
     {"/.dockerenv", "/etc/hostname", "/etc/hosts", "/etc/resolv.conf"}
@@ -287,7 +293,7 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
             if not removed.ok:
                 raise BackendFailed("docker", "rm", removed.reason())
         if built and base is not None:
-            await self._start_on_base(workspace, _opened(base))
+            await self._start_on_base(workspace, await asyncio.to_thread(_opened, base))
         else:
             image = self._named_image(spec)
             await self._present(image, building=building)
@@ -314,29 +320,39 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         paused = await docker("pause", name, bound=self._timeout)
         if not paused.ok:
             raise BackendFailed("docker", "pause", paused.reason())
-        try:
-            changed = await docker("diff", name, bound=self._timeout)
-            if not changed.ok:
-                raise BackendFailed("docker", "diff", changed.reason())
-            kept, deleted = _changes(changed.stdout.decode())
-            layer = b""
-            if kept:
-                exported, read = await docker_stream(
-                    "export", name, bound=self._timeout, read=lambda out: _layer(out, kept)
+        # What changed and what the volume holds stream to disk in a thread,
+        # and the archive is made of them in a thread too: neither part is
+        # held in memory beside the archive, and the event loop waits on
+        # none of it.
+        with tempfile.TemporaryFile() as layer, tempfile.TemporaryFile() as files:
+            try:
+                changed = await docker("diff", name, bound=self._timeout)
+                if not changed.ok:
+                    raise BackendFailed("docker", "diff", changed.reason())
+                kept, deleted = _changes(changed.stdout.decode())
+                if kept:
+                    exported, wrote = await docker_stream(
+                        "export",
+                        name,
+                        bound=self._timeout,
+                        read=lambda out: _layer(out, kept, layer),
+                    )
+                    if wrote is None:
+                        raise BackendFailed("docker", "export", exported.reason())
+                copied, wrote = await docker_stream(
+                    "cp",
+                    f"{name}:{MOUNT}",
+                    "-",
+                    bound=self._timeout,
+                    read=lambda out: _spooled(out, files),
                 )
-                if read is None:
-                    raise BackendFailed("docker", "export", exported.reason())
-                layer = read
-            files = await docker("cp", f"{name}:{MOUNT}", "-", bound=self._timeout)
-            if not files.ok:
-                raise BackendFailed("docker", "cp", files.reason())
-        finally:
-            unpaused = await docker("unpause", name, bound=self._timeout)
-        if not unpaused.ok:
-            raise BackendFailed("docker", "unpause", unpaused.reason())
-        return _archive(
-            Kept(image=image, pull=pull, deleted=deleted, layer=layer, files=files.stdout)
-        )
+                if wrote is None:
+                    raise BackendFailed("docker", "cp", copied.reason())
+            finally:
+                unpaused = await docker("unpause", name, bound=self._timeout)
+            if not unpaused.ok:
+                raise BackendFailed("docker", "unpause", unpaused.reason())
+            return await asyncio.to_thread(_archive, image, pull, deleted, layer, files)
 
     async def release(self, workspace: AgentWorkspace) -> None:
         await docker("rm", "-f", workspace.location, bound=self._timeout)
@@ -498,7 +514,7 @@ class AgentWorkspaceContainerImpl(AgentWorkspaceProviderInterface):
         named by its id, never by a tag that may have moved. A restore that
         fails part way removes what it made, so no half-restored workspace is
         ever found again."""
-        kept = _opened(snapshot)
+        kept = await asyncio.to_thread(_opened, snapshot)
         await self._bring_image(kept)
         name = workspace.location
         await self._remove(name)
@@ -715,40 +731,48 @@ def _changes(diff: str) -> tuple[frozenset[str], tuple[str, ...]]:
     return frozenset(kept), tuple(deleted)
 
 
-def _layer(export: IO[bytes], kept: frozenset[str]) -> bytes:
+def _layer(export: IO[bytes], kept: frozenset[str], into: IO[bytes]) -> int:
     """The members of a container's export that `kept` names, in its order,
-    an archive of their own: what changed in its writable layer, read from
-    the stream, so the image beneath is never held."""
-    out = io.BytesIO()
+    written to `into` as an archive of their own: what changed in its
+    writable layer, read from the stream, so the image beneath is never
+    held. Answers the bytes written."""
     with (
         tarfile.open(fileobj=export, mode="r|") as source,
-        tarfile.open(fileobj=out, mode="w", format=tarfile.PAX_FORMAT) as layer,
+        tarfile.open(fileobj=into, mode="w", format=tarfile.PAX_FORMAT) as layer,
     ):
         for member in source:
             if "/" + member.name.removeprefix("./").rstrip("/") in kept:
                 layer.addfile(member, source.extractfile(member) if member.isreg() else None)
-    return out.getvalue()
+    return into.tell()
 
 
-def _archive(kept: Kept) -> bytes:
-    """A snapshot's bytes: its manifest, then its two archives."""
-    manifest = {
-        "format": FORMAT,
-        "image": kept.image,
-        "pull": kept.pull,
-        "deleted": list(kept.deleted),
-    }
+def _spooled(out: IO[bytes], into: IO[bytes]) -> int:
+    """What a command printed, written to `into` as it streams; the bytes
+    written."""
+    shutil.copyfileobj(out, into, COPY_BYTES)
+    return into.tell()
+
+
+def _archive(
+    image: str, pull: str | None, deleted: tuple[str, ...], layer: IO[bytes], files: IO[bytes]
+) -> bytes:
+    """A snapshot's bytes: its manifest, then its two archives, the layer
+    and the files each read from the start of the file it was spooled to."""
+    manifest = {"format": FORMAT, "image": image, "pull": pull, "deleted": list(deleted)}
     out = io.BytesIO()
-    with tarfile.open(fileobj=out, mode="w", format=tarfile.PAX_FORMAT) as archive:
+    with tarfile.TarFile(
+        fileobj=out, mode="w", format=tarfile.PAX_FORMAT, copybufsize=COPY_BYTES
+    ) as archive:
         for name, data in (
-            ("manifest.json", json.dumps(manifest).encode()),
-            ("layer.tar", kept.layer),
-            ("workspace.tar", kept.files),
+            ("manifest.json", io.BytesIO(json.dumps(manifest).encode())),
+            ("layer.tar", layer),
+            ("workspace.tar", files),
         ):
             member = tarfile.TarInfo(name)
-            member.size = len(data)
+            member.size = data.seek(0, io.SEEK_END)
             member.mode = 0o600
-            archive.addfile(member, io.BytesIO(data))
+            data.seek(0)
+            archive.addfile(member, data)
     return out.getvalue()
 
 

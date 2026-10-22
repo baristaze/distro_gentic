@@ -20,9 +20,10 @@ runs through its own local transport, in the workspace it holds,
 prepared again first, on its base when it has one, so an instance that
 stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
-declares of the bytes it sends. While the item runs, its prepare
-included, the host renews its lease, and a stop from the control stream
-ends the command at once: the transport ends its whole process tree.
+declares of the bytes it sends. From its claim until its result, its
+detail's read and its prepare included, the host renews its lease, and a
+stop from the control stream ends the command at once: the transport ends
+its whole process tree.
 
 The host holds no key of the platform's. Its transport's record keeps how a
 command ended without its output, and the platform keeps the output sealed
@@ -265,6 +266,21 @@ class ExecutorRelayImpl(ExecutorInterface):
         return True
 
     async def _run(self, item_id: UUID, running: Running, ask: Ask) -> None:
+        """Renews the item's lease from its claim until its outcome is known,
+        then pushes it: the read of its detail, which carries the bytes a
+        write sends, may outlast a lease, as its prepare may."""
+        renewal = asyncio.ensure_future(self._renew(item_id, running))
+        try:
+            result = await self._outcome(item_id, running, ask)
+        finally:
+            renewal.cancel()
+        if running.stopped == "revoke":
+            log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
+            return
+        await self._push(item_id, result, running.held_until)
+
+    async def _outcome(self, item_id: UUID, running: Running, ask: Ask) -> dict[str, Any]:
+        """How the item ended here, or why this host refused it."""
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
         spec = IsolationSpec.model_validate(detail.spec)
@@ -272,21 +288,14 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs = unlike(ask, spec, reads)
         if differs is not None:
             why = "this host refused it: " + differs
-            refused = _result(refused=("refused_by_host", 403), detail=why)
-            await self._push(item_id, refused, running.held_until)
-            return
+            return _result(refused=("refused_by_host", 403), detail=why)
         if detail.request.get("operation") == MCP_CALL:
-            await self._call_server(item_id, running, detail)
-            return
+            return await self._call_server(running, detail)
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
-            refused = _result(refused=("capability_missing", 501), detail=why)
-            await self._push(item_id, refused, running.held_until)
-            return
+            return _result(refused=("capability_missing", 501), detail=why)
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._window_chars)
-        # Renewed from before the prepare, which may outlast a lease.
-        renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
         try:
             workspace = await self._held(detail, spec)
@@ -299,39 +308,26 @@ class ExecutorRelayImpl(ExecutorInterface):
                 )
                 await asyncio.wait({running.operation})
                 result = _ended(running.operation)
-        finally:
-            renewal.cancel()
         await parts.flush()
-        if running.stopped == "revoke":
-            log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
-            return
         if result is None:
             result = _result(
                 stopped=running.stopped or "cancel",
                 stdout="".join(running.printed["stdout"]),
                 stderr="".join(running.printed["stderr"]),
             )
-        await self._push(item_id, result, running.held_until)
+        return result
 
-    async def _call_server(self, item_id: UUID, running: Running, detail: ExecDetailView) -> None:
+    async def _call_server(self, running: Running, detail: ExecDetailView) -> dict[str, Any]:
         """A call of a tool of a server this host runs: it needs no workspace
         and no transport. The server starts for the call, and a stop ends
         it with its process."""
-        renewal = asyncio.ensure_future(self._renew(item_id, running))
-        result: dict[str, Any] | None = None
-        try:
-            if running.stopped is None:
-                running.operation = asyncio.ensure_future(self._answered(detail))
-                await asyncio.wait({running.operation})
-                result = _ended(running.operation)
-        finally:
-            renewal.cancel()
-        if running.stopped == "revoke":
-            log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
-            return
-        if result is None:
-            result = _result(stopped=running.stopped or "cancel")
-        await self._push(item_id, result, running.held_until)
+        if running.stopped is None:
+            running.operation = asyncio.ensure_future(self._answered(detail))
+            await asyncio.wait({running.operation})
+            result = _ended(running.operation)
+            if result is not None:
+                return result
+        return _result(stopped=running.stopped or "cancel")
 
     async def _answered(self, detail: ExecDetailView) -> dict[str, Any]:
         """The server's answer, its own word that the tool failed as an exit
