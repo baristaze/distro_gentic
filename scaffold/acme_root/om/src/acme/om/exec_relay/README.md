@@ -96,7 +96,8 @@ platform's cloud. Each call crosses the wall as `exec`
   crash attaches to the first execution or reads its result.
 - **Claim and run.** The host claims the item under a lease, reads what
   it runs, runs it through its own transport, streams the output back,
-  and pushes the result. It renews the lease while the command runs.
+  and pushes the result. It renews the lease from the claim until the
+  result is ready, so a long read or prepare never lets it lapse.
 - **Stop.** A stop is written as a control message and reaches the host
   over its control stream at once. An item no host took yet never runs.
 - **Lose the lease.** An unsafe item whose lease runs out ends

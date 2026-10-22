@@ -62,7 +62,9 @@ macOS.
   container it holds by its labels whole, and refuses the snapshot when
   it holds the value of a secret it keeps for the tenant. It keeps the
   bytes in its store, owner-only, and answers their reference, their
-  SHA-256, and their size; the bytes never leave the host. A prepare that
+  SHA-256, and their size; the bytes never leave the host. The scan,
+  the hash, and the archive run off the host's event loop, so a large
+  snapshot holds up no other session's commands. A prepare that
   names a snapshot starts the workspace from it, replaced whole, once its
   bytes match their digest; bytes gone or altered are answered lost. An
   erase lets a session's snapshots go. It refuses a workspace kept by
@@ -118,9 +120,10 @@ macOS.
   claims is a command or a file operation in a workspace it holds. It
   runs it through its own transport, a container per session, sends
   what it prints back a window at a time, and pushes how it ended, each
-  with the hash of the bytes it sends. It renews its lease while the
-  command runs, and waits out a renewal or a result the platform fails
-  to take while the lease lasts. Items run side by side, so a long
+  with the hash of the bytes it sends. It renews its lease from the
+  claim, while it reads the item and prepares the workspace as while
+  the command runs, and waits out a renewal or a result the platform
+  fails to take while the lease lasts. Items run side by side, so a long
   command holds up no other call. It holds one control stream open to
   the platform, which wakes it to claim at once and stops a command at
   once, and opens it again with the credential it holds whenever it

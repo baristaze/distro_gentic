@@ -1,12 +1,16 @@
 """Redaction matches a secret raw, encoded, and escaped, whole or split
-across the chunks of a stream, and leaves the secret's name in its place."""
+across the chunks of a stream, and leaves the secret's name in its place.
+A snapshot's scan finds it the same ways, split across the slices it
+searches or across the parts it reads."""
 
 import base64
 import json
+from collections.abc import AsyncIterator
 from urllib.parse import quote
 
 import pytest
 
+from acme.infra.transports import SCAN_SLICE, secret_held
 from acme.infra.transports.redaction import Redactor, forms, marker
 
 SECRET = 'tok-3f9A/b+c="q"\\9z'
@@ -69,3 +73,20 @@ def test_a_short_value_is_matched_raw_and_never_by_a_short_encoding() -> None:
     assert Redactor({"pin": "4711"}).redact("pin 4711, page 4711") == (
         "pin [redacted:pin], page [redacted:pin]"
     )
+
+
+async def parts_of(*parts: bytes) -> AsyncIterator[bytes]:
+    for part in parts:
+        yield part
+
+
+async def test_a_scan_finds_a_value_split_across_its_slices_or_its_parts() -> None:
+    encoded = base64.b64encode(SECRET.encode())
+    noise = bytes(SCAN_SLICE)
+    across = noise[: SCAN_SLICE - 5] + encoded + noise
+    assert await secret_held(parts_of(across), {NAME: SECRET}) == NAME
+    raw = SECRET.encode()
+    for size in (1, 3, 7):
+        split = [raw[i : i + size] for i in range(0, len(raw), size)]
+        assert await secret_held(parts_of(b"before ", *split, b" after"), {NAME: SECRET}) == NAME
+    assert await secret_held(parts_of(noise, noise), {NAME: SECRET}) is None
