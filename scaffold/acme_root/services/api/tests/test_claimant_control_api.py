@@ -3,7 +3,8 @@ stream open over the live app in memory, the app's answer handed over as
 it is sent: a `scan` job on a `scanner` pool, and the `scan_cues` its
 kind reads. With the kit's idle wait at 30 s, work is claimed within a
 second of landing; a lease the sweep takes back is revoked on the stream
-within its re-read, never at a renewal; an append to a stream its kind
+within its re-read, never at a renewal, and a work it stopped is never
+recorded done, so the item runs again; an append to a stream its kind
 reads wakes the work within a second; and the stream ends once the
 claimant is revoked, whose credential then opens none."""
 
@@ -33,11 +34,13 @@ from test_claimant_kit_api import (
 
 from acme.client.claimant.claimant import CONTROL_ITEMS, Claimant
 from acme.client.claimant.enrollment import CredentialRefused
+from acme.client.claimant.journal import Entry
 from acme.client.types.hosts import ClaimantControlKind, ClaimantWorkView
 from acme.client.types.placement import ReportOutcome
 from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.watch.kinds import StreamKind
 from acme.om.watch.root import build_kind_streams
+from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.container import AppContainer
 
 CUES = "scan_cues"
@@ -161,6 +164,49 @@ async def test_a_lease_the_sweep_takes_back_is_revoked_on_the_stream_within_its_
         # runs again where it is claimed next.
         assert not await claimant.report(turn.item, ReportOutcome.failed, "stopped")
         assert claimant.journal.pending() == []
+
+
+async def test_a_work_stopped_by_its_items_revoke_is_never_recorded_done_and_runs_again(
+    client: httpx.AsyncClient,
+    owner: dict[str, str],
+    container: AppContainer,
+    transport: Counted,
+    tmp_path: Path,
+) -> None:
+    claimant, pool_id = await a_claimant(client, owner, transport, tmp_path)
+    ctx = await tenant_of(container, owner)
+    async with claimant.listening():
+        await heard_open(claimant)
+        scan = await a_scan(container, owner, pool_id)
+        turn = await claimant.turn()
+        assert turn.item is not None and turn.item.id == scan.id
+        first = turn.item
+        revoked = claimant.revoked(first)
+        await asyncio.sleep(1.0)  # its work runs, and the stream read what it holds
+        claimed = await container.managers.work.get_item(ctx, scan.id)
+        await container.managers.work.extend_lease(ctx, claimed, timedelta(seconds=-1))
+        assert await container.managers.work.requeue_stale(seed_request(), 10) == 1
+        async with asyncio.timeout(REREAD + 1):
+            await revoked.wait()
+
+        # The work stops on the revoke and answers as done; neither a kind's
+        # own entry for it nor its report is kept.
+        own = {"claim_token": str(first.claim_token), "outcome": ReportOutcome.done.value}
+        assert not await claimant.keep(Entry(str(uuid4()), str(first.id), own))
+        assert not await claimant.report(first, ReportOutcome.done)
+        assert claimant.journal.pending() == []
+        assert claimant.journal.lapsed(first.id) is None
+
+        # The requeued item is handed to the work again, under a new claim,
+        # and only that work's report records it done.
+        again = await claimant.turn()
+        assert again.item is not None and again.item.id == scan.id
+        assert again.item.claim_token != first.claim_token
+        stored = await container.managers.work.get_item(ctx, scan.id)
+        assert stored.status is WorkStatus.CLAIMED, stored.status
+        assert await claimant.report(again.item, ReportOutcome.done)
+        stored = await container.managers.work.get_item(ctx, scan.id)
+        assert stored.status is WorkStatus.DONE, stored.status
 
 
 async def test_an_append_to_a_stream_its_kind_reads_wakes_the_work_within_a_second(

@@ -71,9 +71,13 @@ beside the claimant's turns and opens it again when it ends.
 `Claimant.wait` is the wait between turns, cut short by a wake, so the
 claimant's own beat is only its slow fallback claim. `revoked(item)` is
 set on a revoke. `appended(item, kind, seconds)` waits for an append or
-for its fallback read. A failure reported for a revoked item is not
-kept, so the item runs again where it is claimed next; a success is
-kept, and lands under a later claim, as ADR 2046 keeps it.
+for its fallback read. A report of an item revoked before it is reported
+is not kept, a success as much as a failure, so the item runs again where
+it is claimed next and never lands under that claim: the work on it was
+cut short, and running an item twice is safe, since its handler is
+idempotent, while recording a work cut short as done is not. A report
+kept before its item's revoke still lands under a later claim, as ADR
+2046 keeps it.
 
 ## Consequences
 

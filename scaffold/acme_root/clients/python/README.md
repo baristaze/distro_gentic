@@ -53,7 +53,10 @@ async with claimant.listening():  # the control stream, open beside the turns
 Inside the loop, a work opens `claimant.client()` for each call or short
 burst and never holds one across a beat, since a rotation retires the
 token a held client carries a minute later. It stops once
-`claimant.revoked(item)` is set: the platform took the item back. A work
+`claimant.revoked(item)` is set: the platform took the item back. The kit
+then keeps no report of it, done or failed, so the item runs again where
+it is claimed next: its handler is idempotent, and a work cut short is
+never recorded done. A work
 that reads a stream its kind reads waits on
 `claimant.appended(item, kind, seconds)` between reads, and the seconds
 are its slow fallback read.

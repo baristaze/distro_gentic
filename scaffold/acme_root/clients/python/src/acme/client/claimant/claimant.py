@@ -22,8 +22,9 @@ the work runs.
 Beside its turns it holds its control stream open (`listening`), as a host
 does: a wake there cuts the wait between turns short, so work is claimed
 as it lands and the wait is only the slow fallback; a revoke ends what
-still works on an item the platform took back (`revoked`); and an append
-to a stream its kind reads wakes the work that reads it (`appended`)."""
+still works on an item the platform took back (`revoked`), and no report
+of that work is kept; and an append to a stream its kind reads wakes the
+work that reads it (`appended`)."""
 
 import asyncio
 import contextlib
@@ -204,8 +205,9 @@ class Claimant:
     def revoked(self, item: ClaimantWorkView) -> asyncio.Event:
         """Set once the control stream says the platform no longer holds the
         item for this claimant: its lease was taken, or it was ended. The
-        work on it stops then, and a failure it reports is not kept
-        (`report`): the item runs again where it is claimed next."""
+        work on it stops then, and whatever it reports is not kept, a
+        success as much as a failure (`keep`): the item runs again where
+        it is claimed next, and a work cut short is never recorded done."""
         return self._hold(item.id).revoked
 
     async def appended(self, item: ClaimantWorkView, kind: str, seconds: float) -> bool:
@@ -261,7 +263,8 @@ class Claimant:
     ) -> bool:
         """The item's answer, kept in the journal, then sent: whether the
         platform recorded it. One it did not answer waits in the journal,
-        and the next turn sends it.
+        and the next turn sends it. One for an item the control stream
+        revoked is not kept (`keep`).
 
         It is held to the report's shape before it is kept, so the platform
         never refuses it for its reason: a failure names its reason and a
@@ -272,21 +275,28 @@ class Claimant:
             raise ValueError(f"item {item.id} is held under no claim token")
         if (outcome is ReportOutcome.failed) != (error is not None):
             raise ValueError("a failure names its reason, and a success names none")
-        held = self._held.pop(item.id, None)
-        if held is not None and held.revoked.is_set() and outcome is ReportOutcome.failed:
-            # The platform took it back before the work ended: it runs again
-            # where it is claimed next, and no failure of a stopped work
-            # lands under that claim.
-            log.warning("item %s was revoked; its failure is not kept", item.id)
-            return False
         body: dict[str, Any] = {"claim_token": str(item.claim_token), "outcome": outcome.value}
         if error is not None:
             body["error"] = error[:REASON_MAX] if error.strip() else NO_REASON
-        return await self.keep(Entry(str(item.id), str(item.id), body))
+        try:
+            return await self.keep(Entry(str(item.id), str(item.id), body))
+        finally:
+            self._held.pop(item.id, None)
 
     async def keep(self, entry: Entry) -> bool:
         """Keeps a report in the journal, then sends it with `send`:
-        whether the platform recorded it."""
+        whether the platform recorded it.
+
+        A report of an item the control stream revoked is not kept, a
+        success as much as a failure, and is answered False: the work on it
+        was cut short, so the item runs again where it is claimed next, and
+        no report of the stopped work lands under that claim. Running it
+        twice is safe, since a handler is idempotent; recording a work cut
+        short as done is not."""
+        held = self._held.get(UUID(entry.item_id))
+        if held is not None and held.revoked.is_set():
+            log.warning("item %s was revoked; its report is not kept", entry.item_id)
+            return False
         self.journal.keep(entry)
         try:
             return await self._sent(entry) is Sent.RECORDED
