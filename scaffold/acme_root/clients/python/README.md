@@ -27,7 +27,8 @@ it, and nothing else in Python calls `/v1/*`.
   journal until the platform records it. The workspace host runs on it;
   a product's claimant does too, through `Claimant` and the
   `/claimants/...` calls, with its control stream held open beside its
-  turns, so it is woken to claim, to stop, and to read, and never polls.
+  turns, so it is woken to claim, to stop, and to read, and its own
+  timer is only the fallback.
 
 ```python
 async with ApiClient(url, app="cli", app_version="cli@0.1.0", token=token) as api:
