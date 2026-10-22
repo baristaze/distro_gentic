@@ -5,13 +5,16 @@ ends. None of them is retried: an enrollment twice is two hosts or two
 claimants, a credential rotated twice ends its holder, and a lost report
 is the claimant's journal to send again (`acme.client.claimant`)."""
 
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 from uuid import UUID
 
+from acme.client.calls.exec_relay import CONTROL_IDLE_SECONDS
 from acme.client.transport import Transport
 from acme.client.types.hosts import (
     AdvertisementBody,
     ClaimantClaimView,
+    ClaimantControlView,
     ClaimantWorkView,
     ClaimView,
     HostView,
@@ -112,6 +115,20 @@ class HostsCalls(Transport):
         names, or none."""
         answer = await self.request("POST", "/v1/claimants/me/claims")
         return ClaimantClaimView.model_validate(answer)
+
+    async def claimant_control_stream(
+        self, items: Sequence[UUID] = ()
+    ) -> AsyncIterator[ClaimantControlView]:
+        """The claimant's control stream, opened from here and held open:
+        each line as it arrives, until the platform ends it with the
+        credential it was opened with. `items` are those it works on now,
+        which the stream revokes at its first read once they are no longer
+        its own. A line that does not come within `CONTROL_IDLE_SECONDS`
+        takes the stream for lost."""
+        params = {"item": [str(item) for item in items]} if items else {}
+        path = "/v1/claimants/me/control"
+        async for line in self.lines(path, params=params, idle_seconds=CONTROL_IDLE_SECONDS):
+            yield ClaimantControlView.model_validate_json(line)
 
     async def extend_claimant_lease(self, item_id: UUID, claim_token: UUID) -> ClaimantWorkView:
         """Renews the lease on the item the claimant holds, under the claim

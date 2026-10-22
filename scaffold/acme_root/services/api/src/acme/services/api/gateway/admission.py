@@ -39,14 +39,14 @@ read the counter that says by how much. None of them does tenant work,
 liveness does no I/O at all, and readiness carries a deadline of its own. The
 paths are matched as they arrive, because routing has not run this far out."""
 
-STREAM_PATHS = frozenset({"/v1/hosts/me/control"})
+STREAM_PATHS = frozenset({"/v1/hosts/me/control", "/v1/claimants/me/control"})
 """The long-lived HTTP streams, which admission lets through uncounted as it
 does a socket, and for the same reason: each is held open for as long as its
-subscriber wants it. A host holds its control stream (`realtime/control.py`)
-for a minute at a time and opens the next at once, so a fleet of hosts
-counted as reads would take every slot of the read lane and refuse every
-other read. The stream bounds itself instead: by its span, and by the
-credential it was opened with."""
+subscriber wants it. A host, and a product's claimant, holds its control
+stream (`realtime/control.py`) for a minute at a time and opens the next at
+once, so a fleet of them counted as reads would take every slot of the read
+lane and refuse every other read. The stream bounds itself instead: by its
+span, and by the credential it was opened with."""
 
 UNCOUNTED_PATHS = UNBOUNDED_PATHS | STREAM_PATHS
 

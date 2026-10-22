@@ -33,6 +33,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "purge_tenant_caps",
         "read_item",
         "read_item_by_key",
+        "read_claimed_on_lanes",
         "read_latest_for_target",
         "read_tenant_cap",
         "write_item_if_failed",

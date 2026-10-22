@@ -206,6 +206,33 @@ class PlatformWorkStorageContract:
         await storage.create_item(new_id(), make_item(lane=lane))
         assert await storage.count_ready_on_lanes(new_id(), [lane], utcnow()) == {}
 
+    async def test_a_claimants_items_are_those_it_holds_claimed_on_its_lanes(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org = new_id()
+        for _ in range(3):
+            await storage.create_item(org, make_item(lane=lane))
+        await storage.create_item(org, make_item(lane=f"{lane}-b"))
+        first = await storage.claim_next(lane, [WorkKind.NOOP], "scanner:1", LEASE)
+        second = await storage.claim_next(lane, [WorkKind.NOOP], "scanner:1", LEASE)
+        await storage.claim_next(lane, [WorkKind.NOOP], "scanner:2", LEASE)
+        await storage.claim_next(f"{lane}-b", [WorkKind.NOOP], "scanner:1", LEASE)
+        assert first is not None and second is not None
+        held = await storage.read_claimed_on_lanes(org, [lane], "scanner:1", 10)
+        assert [(item.id, item.claim_token) for item in held] == sorted(
+            (item.id, item.claim_token) for _, item in (first, second)
+        )
+        assert len(await storage.read_claimed_on_lanes(org, [lane], "scanner:1", 1)) == 1
+        assert await storage.read_claimed_on_lanes(org, [], "scanner:1", 10) == []
+
+    async def test_read_claimed_on_lanes_of_another_tenant_finds_nothing(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        await storage.create_item(new_id(), make_item(lane=lane))
+        claimed = await storage.claim_next(lane, [WorkKind.NOOP], "scanner:1", LEASE)
+        assert claimed is not None
+        assert await storage.read_claimed_on_lanes(new_id(), [lane], "scanner:1", 10) == []
+
     async def test_the_latest_item_for_a_target_is_the_one_made_last(
         self, storage: WorkStorageInterface, lane: str
     ) -> None:

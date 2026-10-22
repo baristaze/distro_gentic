@@ -46,8 +46,9 @@ PLATFORM_HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A check of an agent project's policy run with no agent, as CI asks for one.
     "platform_agents": (platform_agents.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
-    # beat, and claim; and a product's claimant's, through the same path.
-    "hosts": (hosts.router, hosts.claimants, hosts.operator),
+    # beat, and claim; and a product's claimant's, through the same path,
+    # with its control stream.
+    "hosts": (hosts.router, hosts.claimants, control.claimants, hosts.operator),
     # The exec work a host holds and its control stream: a host's own calls,
     # each opened from inside its wall.
     "exec_relay": (exec_relay.router, control.router),

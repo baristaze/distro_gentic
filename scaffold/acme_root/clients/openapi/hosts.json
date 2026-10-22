@@ -163,6 +163,53 @@
         "title": "ClaimantClaimView",
         "type": "object"
       },
+      "ClaimantControlKind": {
+        "description": "What one line of a claimant's control stream says.",
+        "enum": [
+          "wake",
+          "ping",
+          "revoke",
+          "appended"
+        ],
+        "title": "ClaimantControlKind",
+        "type": "string"
+      },
+      "ClaimantControlView": {
+        "description": "One line of a claimant's control stream. `wake` asks it to claim now,\nand `ping` keeps the stream open. `revoke` names an item it no longer\nholds under the claim it had, whatever took it, its own report\nincluded: what still works on it ends now, and what it sends for it is\nrefused. `appended` names an item it holds and `stream_kind`, a kind its\nown kind reads, whose streams have new entries to read now.",
+        "properties": {
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ClaimantControlKind"
+          },
+          "stream_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream Kind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ClaimantControlView",
+        "type": "object"
+      },
       "ClaimantEnrollRequest": {
         "additionalProperties": false,
         "description": "A claimant's name, beside its enrollment token. The kind and the pool\nare the token's.",
@@ -1458,6 +1505,110 @@
           }
         },
         "summary": "Claim Claimant Work",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/claimants/me/control": {
+      "get": {
+        "description": "The claimant's control stream. `item` names each item it works on\nnow, once each: one it no longer holds is revoked at the first read.",
+        "operationId": "claimant_control",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "item",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantControlView"
+                }
+              },
+              "application/x-ndjson": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claimant Control",
         "tags": [
           "hosts"
         ]

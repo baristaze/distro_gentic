@@ -105,3 +105,5 @@ its registered lane reads it. The hosts manager resolves a caller's
 credential to a `Claimant` and calls `claim_for`, then `held_for`,
 `extend_for`, and `report_for` for a product's claimant, each under the
 claim token `claim_for` handed it; it never passes a lane or a kind.
+`holding_for` reads, off the identity alone, the lanes and kinds the
+claimant takes and the items it holds there now, for its control stream.

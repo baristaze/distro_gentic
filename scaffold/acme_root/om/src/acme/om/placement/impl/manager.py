@@ -21,7 +21,13 @@ from acme.om.placement.kinds import (
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, another_session, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
-from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
+from acme.om.placement.types.claimant import (
+    HOLDING_MAX,
+    Claimant,
+    ClaimantReport,
+    Holding,
+    ReportOutcome,
+)
 from acme.om.placement.types.share import FairShare, TierShare
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
@@ -105,6 +111,21 @@ class PlacementManagerImpl(PlacementManagerInterface):
                     ctx, item, f"routed to {claimant.worker_id} of {whose}"
                 )
         return None
+
+    async def holding_for(self, claimant: Claimant, org_id: UUID) -> Holding:
+        claims = claims_of(self._claimants, self._kinds, claimant)
+        if claimant.kind == HOST or (claimant.org_id is not None and org_id != claimant.org_id):
+            return Holding(claims=claims, items=(), whole=True)
+        kinds = {lane: frozenset(taken) for lane, taken in claims}
+        found = await self._work.claimed_on_lanes(
+            org_id, tuple(kinds), claimant.worker_id, HOLDING_MAX
+        )
+        items = tuple(
+            (item.id, item.claim_token)
+            for item in found
+            if item.claim_token is not None and item.kind in kinds[item.lane]
+        )
+        return Holding(claims=claims, items=items, whole=len(found) < HOLDING_MAX)
 
     async def report_for(
         self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport

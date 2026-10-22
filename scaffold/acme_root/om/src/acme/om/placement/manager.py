@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from acme.om.context import OperatorContext, RequestContext, TenantContext, stageless, transition
-from acme.om.placement.types.claimant import Claimant, ClaimantReport
+from acme.om.placement.types.claimant import Claimant, ClaimantReport, Holding
 from acme.om.placement.types.share import ShareStanding
 
 if TYPE_CHECKING:
@@ -69,6 +69,17 @@ class PlacementManagerInterface(ABC):
         does not take, and one not there, so a claimant reads only the items
         it holds, within its tenant. LeaseLost under a token that is not the
         claim's: its lease lapsed, and the item was claimed again."""
+        ...
+
+    @abstractmethod
+    @stageless
+    async def holding_for(self, claimant: Claimant, org_id: UUID) -> Holding:
+        """System-internal: what `claimant` takes and holds in the tenant
+        `org_id`, read off its identity and the queue alone: the lanes and
+        kinds it claims (`claim_for`), and the items of those kinds it holds
+        claimed there now, each with its claim token. A host's items are the
+        relay's, so a host holds none here, and a claimant of another tenant
+        holds none of this one's."""
         ...
 
     @abstractmethod

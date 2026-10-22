@@ -26,6 +26,32 @@ class ClaimRequest(BaseModel):
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
 
 
+class ClaimantControlKind(StrEnum):
+    """
+    What one line of a claimant's control stream says.
+    """
+
+    wake = 'wake'
+    ping = 'ping'
+    revoke = 'revoke'
+    appended = 'appended'
+
+
+class ClaimantControlView(BaseModel):
+    """
+    One line of a claimant's control stream. `wake` asks it to claim now,
+    and `ping` keeps the stream open. `revoke` names an item it no longer
+    holds under the claim it had, whatever took it, its own report
+    included: what still works on it ends now, and what it sends for it is
+    refused. `appended` names an item it holds and `stream_kind`, a kind its
+    own kind reads, whose streams have new entries to read now.
+    """
+
+    item_id: Annotated[UUID | None, Field(title='Item Id')] = None
+    kind: ClaimantControlKind
+    stream_kind: Annotated[str | None, Field(title='Stream Kind')] = None
+
+
 class ClaimantEnrollRequest(BaseModel):
     """
     A claimant's name, beside its enrollment token. The kind and the pool

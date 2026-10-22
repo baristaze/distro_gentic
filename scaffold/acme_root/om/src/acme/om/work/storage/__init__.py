@@ -231,6 +231,14 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], claimed_by: str, limit: int
+    ) -> list[WorkItem]:
+        """The tenant's items on `lanes` claimed by `claimed_by` now, at most
+        `limit`, in id order: what one claimant holds there."""
+        ...
+
+    @abstractmethod
     async def read_latest_for_target(
         self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:

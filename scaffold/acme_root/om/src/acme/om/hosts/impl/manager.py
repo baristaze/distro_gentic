@@ -49,7 +49,7 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement import PlacementManagerInterface
 from acme.om.placement.kinds import HOST, HOST_PREFIX, ClaimantKinds
-from acme.om.placement.types.claimant import Claimant, ClaimantReport
+from acme.om.placement.types.claimant import Claimant, ClaimantReport, Holding
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import hash_token
 from acme.om.work.types.work_item import WorkItem
@@ -572,6 +572,11 @@ class HostsManagerImpl(HostsManagerInterface):
         return await self._placement.held_for(
             rctx, claimant_of(claimant), claimant.org_id, item_id, claim_token
         )
+
+    async def holding_as(self, rctx: RequestContext, claimant: ClaimantIdentity) -> Holding:
+        self._not_a_host(claimant)
+        await self._live(claimant)
+        return await self._placement.holding_for(claimant_of(claimant), claimant.org_id)
 
     async def extend_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID

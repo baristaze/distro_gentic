@@ -210,6 +210,10 @@ needs no item: the runner reaches it by the direct transport.
 A product built on the platform adds kinds of its own, each with its
 lane and the claimant that takes it through the gateway. The platform's
 kinds are registered the same way, and a claimant takes only its own.
+Each claimant holds a control stream open, as a host does ([The Exec
+Relay Transport](#the-exec-relay-transport)): it claims when its work
+lands, stops when an item it holds is taken back, and reads when a
+stream it reads gains entries. Its own slow timer is only the fallback.
 A product's scarce resource, a thing one holder uses at a time, is a
 kind it registers too: the guideline's [leases][g-leases] grant it,
 asking the product's hooks at each grant and its check at each ask.

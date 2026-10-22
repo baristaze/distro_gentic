@@ -570,19 +570,19 @@ async def test_a_products_stream_kind_is_held_to_its_bounds(tmp_path: Path) -> N
         entries=2, bytes=1024, streams=1, open=cache.max_open, idle=cache.idle
     )
     streams = build_kind_streams(infra, product)
-    job, first, second = new_id(), new_id(), new_id()
+    job, first, second, org = new_id(), new_id(), new_id(), new_id()
 
-    await streams.append("frames", job, first, [(0, b"a"), (1, b"b"), (2, b"c")])
+    await streams.append("frames", job, first, [(0, b"a"), (1, b"b"), (2, b"c")], org_id=org)
     (held,) = await streams.read("frames", job, {})
     assert (held.first, [entry for _, entry in held.entries]) == (1, [b"b", b"c"])
-    await streams.append("frames", job, second, [(0, b"x")])
+    await streams.append("frames", job, second, [(0, b"x")], org_id=org)
     assert [slice.stream for slice in await streams.read("frames", job, {})] == [second]
     # Its group is its own: the step's reads of the same id find none of it.
     step = build_stream(infra, lambda: pytest.fail("no stream opens"), product_kinds=product)
     assert await step.read(job, ()) == ()
     for unbounded in ("unregistered", STEP):
         with pytest.raises(NotFound):
-            await streams.append(unbounded, job, first, [(3, b"d")])
+            await streams.append(unbounded, job, first, [(3, b"d")], org_id=org)
         with pytest.raises(NotFound):
             await streams.read(unbounded, job, {})
     with pytest.raises(ValueError, match="positive"):

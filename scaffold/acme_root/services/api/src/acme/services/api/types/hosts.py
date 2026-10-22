@@ -5,6 +5,7 @@ those are its credential's."""
 
 import base64
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Self
 from uuid import UUID
 
@@ -231,6 +232,34 @@ class ClaimantClaimView(View):
     """What a claim answers: the item, or none when nothing is ready."""
 
     item: ClaimantWorkView | None
+
+
+CONTROL_ITEMS = 64
+"""The most items a claimant names as it opens its control stream: those it
+works on now, which the stream checks at its first read, so a stop made
+while no stream was open still reaches it."""
+
+
+class ClaimantControlKind(StrEnum):
+    """What one line of a claimant's control stream says."""
+
+    WAKE = "wake"  # work reached the claimant's lanes: claim now
+    PING = "ping"  # nothing happened; the stream is open
+    REVOKE = "revoke"  # the item is no longer held under its claim: end its work now
+    APPENDED = "appended"  # a stream the claimant reads has new entries for the item
+
+
+class ClaimantControlView(View):
+    """One line of a claimant's control stream. `wake` asks it to claim now,
+    and `ping` keeps the stream open. `revoke` names an item it no longer
+    holds under the claim it had, whatever took it, its own report
+    included: what still works on it ends now, and what it sends for it is
+    refused. `appended` names an item it holds and `stream_kind`, a kind its
+    own kind reads, whose streams have new entries to read now."""
+
+    kind: ClaimantControlKind
+    item_id: UUID | None = None
+    stream_kind: str | None = None
 
 
 class ExtendLeaseRequest(RequestBody):

@@ -54,7 +54,7 @@ def build_kind_streams(
     """The live streams of a product's stream kinds, each under its own
     bounds, on the cache the step's parts share."""
     registry = step_kinds(options or StreamOptions(), *product_kinds.streams)
-    return KindStreamsImpl(infra.get_streams(), registry)
+    return KindStreamsImpl(infra.get_streams(), registry, infra.get_topics())
 
 
 def build_watch(

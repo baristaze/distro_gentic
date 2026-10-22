@@ -12,7 +12,7 @@ from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
 from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.manager import PlacementManagerInterface
-from acme.om.placement.types.claimant import Claimant, ClaimantReport
+from acme.om.placement.types.claimant import Claimant, ClaimantReport, Holding
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem
@@ -78,6 +78,9 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
         claim_token: UUID,
     ) -> WorkItem:
         return await self._inner.held_for(rctx, claimant, org_id, item_id, claim_token)
+
+    async def holding_for(self, claimant: Claimant, org_id: UUID) -> Holding:
+        return await self._inner.holding_for(claimant, org_id)
 
     async def report_for(
         self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport

@@ -156,7 +156,7 @@ class WatchManagerImpl(WatchManagerInterface):
         if item.lease_expires_at is None or item.lease_expires_at <= self._clock():
             raise LeaseLost(f"{claimant.kind} {claimant.id} no longer holds work item {item_id}")
         entries = [(entry.n, entry.data) for entry in appended.entries]
-        await streams.append(kind, item.id, appended.stream, entries)
+        await streams.append(kind, item.id, appended.stream, entries, org_id=claimant.org_id)
 
     async def read_as(
         self,

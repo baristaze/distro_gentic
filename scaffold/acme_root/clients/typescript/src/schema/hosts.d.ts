@@ -94,6 +94,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/claimants/me/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Claimant Control
+         * @description The claimant's control stream. `item` names each item it works on
+         *     now, once each: one it no longer holds is revoked at the first read.
+         */
+        get: operations["claimant_control"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/claimants/me/credentials": {
         parameters: {
             query?: never;
@@ -533,6 +554,28 @@ export interface components {
          */
         ClaimantClaimView: {
             item: components["schemas"]["ClaimantWorkView"] | null;
+        };
+        /**
+         * ClaimantControlKind
+         * @description What one line of a claimant's control stream says.
+         * @enum {string}
+         */
+        ClaimantControlKind: "wake" | "ping" | "revoke" | "appended";
+        /**
+         * ClaimantControlView
+         * @description One line of a claimant's control stream. `wake` asks it to claim now,
+         *     and `ping` keeps the stream open. `revoke` names an item it no longer
+         *     holds under the claim it had, whatever took it, its own report
+         *     included: what still works on it ends now, and what it sends for it is
+         *     refused. `appended` names an item it holds and `stream_kind`, a kind its
+         *     own kind reads, whose streams have new entries to read now.
+         */
+        ClaimantControlView: {
+            /** Item Id */
+            item_id?: string | null;
+            kind: components["schemas"]["ClaimantControlKind"];
+            /** Stream Kind */
+            stream_kind?: string | null;
         };
         /**
          * ClaimantEnrollRequest
@@ -1235,6 +1278,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimantClaimView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claimant_control: {
+        parameters: {
+            query?: {
+                item?: string[] | null;
+            };
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantControlView"];
+                    "application/x-ndjson": unknown;
                 };
             };
             /** @description Validation Error */

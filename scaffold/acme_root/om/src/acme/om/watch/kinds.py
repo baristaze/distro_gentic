@@ -109,10 +109,19 @@ class KindStreamsInterface(ABC):
 
     @abstractmethod
     async def append(
-        self, kind: str, group: UUID, stream: UUID, entries: Sequence[tuple[int, bytes]]
+        self,
+        kind: str,
+        group: UUID,
+        stream: UUID,
+        entries: Sequence[tuple[int, bytes]],
+        *,
+        org_id: UUID,
     ) -> None:
         """Appends the numbered entries to the stream, past its bounds the
-        oldest going first, never the newest."""
+        oldest going first, never the newest. `org_id` is the tenant of the
+        item the group is. A kind a claimant reads tells its reader at once
+        (`Topics.STREAM_APPENDED`), so the claimant that holds the item
+        reads it now and never polls for it."""
         ...
 
     @abstractmethod
