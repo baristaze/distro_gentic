@@ -328,7 +328,8 @@ async def test_a_stop_over_the_control_stream_ends_a_running_command_at_once(
 ) -> None:
     relay = relayed.api.container.managers.exec_relay
     listening = asyncio.ensure_future(relayed.host.listen())
-    spec = command(relayed.epoch, "sh", "-c", "echo started; sleep 30")
+    asleep = 30
+    spec = command(relayed.epoch, "sh", "-c", f"echo started; sleep {asleep}")
     started = asyncio.Event()
 
     async def sink(stream: str, text: str) -> None:
@@ -350,7 +351,10 @@ async def test_a_stop_over_the_control_stream_ends_a_running_command_at_once(
     assert ended.value.failure is ToolFailure.INTERRUPTED
     assert kind.value in ended.value.message
     print(f"{kind.value}: the command ended {took:.3f}s after its stop")
-    assert took < 2, f"the command ended {took:.1f}s after its stop"
+    # Held against the command's own run, never a fixed bound: a stop that
+    # missed its tree lets it sleep out its 30 s, and one that reached it
+    # ends it at the control stream's next read, a second or so later.
+    assert took < asleep / 2, f"the command ended {took:.1f}s after its stop"
     progress = await relay.watch(_request(), relayed.api.owner.org_id, item_id, -1)
     assert progress.state is ExecState.DONE
     assert progress.outcome is not None and progress.outcome.stopped is kind

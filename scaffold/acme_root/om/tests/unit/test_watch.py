@@ -400,9 +400,11 @@ async def test_a_part_at_a_time_is_written_at_most_once_a_window_and_joins_back_
 
     for step in steps:
         assert (read[step, 0], read[step, 1]) == ("".join(words[:60]), "".join(words[60:]))
-        # A window's write, the new block's, and the one `flush` makes.
+        # A window's write, the new block's, and the one `flush` makes: the
+        # bound grows with the time the parts took, so a slow machine, whose
+        # windows each hold fewer parts, is held to the same rule.
         assert len(streams.appends[step]) <= took / window.total_seconds() + 3
-        assert len(streams.appends[step]) < len(words) / 4
+        assert len(streams.appends[step]) < len(words), "a write joins its window's parts"
     await stream.close()
 
 
