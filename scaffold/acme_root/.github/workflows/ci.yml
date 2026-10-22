@@ -176,7 +176,6 @@ jobs:
     # engine run as that user, and the unit's exposure stays under its bound.
     name: the host installs and starts under its unit
     runs-on: ubuntu-latest
-    needs: check
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
