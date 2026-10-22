@@ -5,45 +5,28 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.25.0 (2026-10-21)
+## 0.26.0 (2026-10-22)
 
-The platform's base moves to the engine's v0.21.0, with the guideline's
-v0.63.0: a person signs in through the identity provider alone, on
-every stack, and nothing keeps a password. The browser checks sign
-their people in from the local mint. Minor, with one reversal: the
-sign-in by an address alone is gone.
-
-### Added
-
-- From the base: `acme-api mint-local-login`, the local mint, which
-  prints a sign-in token for each address from the local database and
-  refuses at boot outside `local` and `test`, with no route and no page;
-  and the engine's demo played as a scene (#187).
+The platform's base moves to the engine's v0.22.0, on the guideline's
+v0.64.0: a copy's gates take less time, its suites on every core and side
+by side. Minor.
 
 ### Changed
 
-- The base moves to the engine's v0.21.0 and the guideline's v0.63.0.
-  Every stack signs in through WorkOS, the local one through the Staging
-  application. `make seed` makes each seeded person a plus-address of
-  `SEED_EMAIL` in `.env` and refuses a domain that takes no mail; an
-  existing checkout sets it and runs `make reset`. The spec and lenses
-  cite both releases (#187).
-- The browser checks sign each person in from one `mint-local-login`
-  run per spec: the login is exchanged for an auth session in the org
-  and put in the portal's session before the page loads, and no page
-  signs anyone in. The platform's own tests sign in through the
-  identity twin (#187).
-- The WorkOS runbook, ADR 0063, and the WorkOS client name every
-  sign-in method: an email code, Google, Microsoft, Apple, GitHub, and
-  single sign-on (#187).
+- The base moves to the engine's v0.22.0. A copy's `make test-unit` runs
+  on one worker per core and ends on its ten slowest tests (ADR 0105: a
+  unit test holds nothing another can reach, its id fixed at
+  collection); its CI starts the integration, telemetry, and image jobs
+  beside the fast gate; the integration wipe empties only the tables
+  written since the last one; `make openapi` cuts the schema in linear
+  time; and arch-check is pinned at v0.64.0 (#191).
+- This repository's CI runs each copy's fast gate and integration suite
+  as jobs of their own, side by side (#189).
 
 ### Fixed
 
-- `portal_check.py tree` reads the agent's steps from
-  `managers.agent_steps` (#187).
-
-### Removed
-
-- From the base, the sign-in by an address alone:
-  `POST /v1/auth/dev-sign-in`, `ACME_DEV_SIGN_IN_ENABLED`, the portal's
-  `/login/dev`, and `--dev-email` (reversal) (#187).
+- The unit suite holds no wall-clock bound a loaded runner can miss: the
+  evidence rules' refused runs carry a fixed time, so their ids are the
+  same in every collection; the exec relay's stop test holds the stop
+  against the command's own run; and the watch test's bound on writes
+  grows with the time its parts took (#190).
