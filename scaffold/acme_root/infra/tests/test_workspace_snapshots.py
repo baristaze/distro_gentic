@@ -31,7 +31,6 @@ from acme.infra.agent_workspaces.account import AgentWorkspaceAccountImpl
 from acme.infra.agent_workspaces.container import (
     FORMAT,
     AgentWorkspaceContainerImpl,
-    Kept,
     _archive,
     _changes,
     _opened,
@@ -225,7 +224,7 @@ async def test_a_restore_whose_image_cannot_be_had_is_refused_with_its_reason_an
 
     monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", replied)
     provider = AgentWorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
-    snapshot = _archive(Kept(image=IMAGE_ID, pull=pull, deleted=(), layer=b"", files=b""))
+    snapshot = _archive(IMAGE_ID, pull, (), io.BytesIO(), io.BytesIO())
     with pytest.raises(AgentWorkspaceLost, match=says):
         await provider.prepare(new_id(), new_id(), kept(IsolationMode.CONTAINER), snapshot=snapshot)
     assert {call[0] for call in calls} <= {"version", "image", "pull"}, "nothing removed or made"

@@ -2,16 +2,17 @@
 A snapshot's bytes stay here: the platform records the reference the store
 knows it by, the SHA-256 of its bytes, and their size, never the bytes.
 
-A snapshot is kept under `<root>/<org_id>/<agent_session_id>/<snapshot_id>`, owner
-only, written whole before it is named, so a reader never finds half of
-one. One that holds the value of a secret this host keeps for the tenant, in
-any form redaction matches, is refused before anything of it is kept: the
-host scans it against `values` first. A load
-holds the bytes to the digest and the size the platform recorded: bytes gone
-or altered are lost, never started from. An erase lets every snapshot of a
-session go, when its content goes. Hosts of a pool that share a store's root
-reach one another's snapshots; a restore runs on any host whose store holds
-the reference.
+A snapshot is kept under `<root>/<org_id>/<agent_session_id>/<snapshot_id>`,
+owner only, written whole before it is named, so a reader never finds half
+of one. Its bytes are written, read, and hashed in a thread, so a large one
+holds up nothing else the host runs. One that holds the value of a secret
+this host keeps for the tenant, in any form redaction matches, is refused
+before anything of it is kept: the host scans it against `values` first. A
+load holds the bytes to the digest and the size the platform recorded: bytes
+gone or altered are lost, never started from. An erase lets every snapshot
+of a session go, when its content goes. Hosts of a pool that share a store's
+root reach one another's snapshots; a restore runs on any host whose store
+holds the reference.
 
 The store keeps the tenant's workspace bases too, under
 `<root>/<org_id>/bases/<key>`, owner only and written whole, as a
@@ -33,6 +34,11 @@ BASES = "bases"
 by a session's id, so no session's erase reaches it."""
 
 STORE_FOLDER = "snapshots"
+
+
+def digest_of(archive: bytes) -> str:
+    """The digest a snapshot is kept and loaded by."""
+    return DIGEST_SCHEME + hashlib.sha256(archive).hexdigest()
 
 
 class SnapshotLost(Exception):
@@ -74,7 +80,7 @@ class HostSnapshots:
         reference, the digest, and the size."""
         reference = f"{org_id}/{agent_session_id}/{snapshot_id}"
         await asyncio.to_thread(self._write, reference, archive)
-        return reference, DIGEST_SCHEME + hashlib.sha256(archive).hexdigest(), len(archive)
+        return reference, await asyncio.to_thread(digest_of, archive), len(archive)
 
     async def load(self, reference: str, digest: str, size: int) -> bytes:
         """The snapshot's bytes, once they match the digest and the size
@@ -84,7 +90,7 @@ class HostSnapshots:
             archive = await asyncio.to_thread(path.read_bytes)
         except OSError as error:
             raise SnapshotLost(f"snapshot {reference} is gone from this host's store") from error
-        if len(archive) != size or DIGEST_SCHEME + hashlib.sha256(archive).hexdigest() != digest:
+        if len(archive) != size or await asyncio.to_thread(digest_of, archive) != digest:
             raise SnapshotLost(f"snapshot {reference} does not match the digest it was kept by")
         return archive
 

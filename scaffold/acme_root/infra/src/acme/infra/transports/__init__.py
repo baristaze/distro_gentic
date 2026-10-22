@@ -26,6 +26,7 @@ reaches it, and redacted from everything the command prints, raw, encoded,
 or escaped, before anything streams or returns. The value is dropped when
 the command ends; the result names each secret it used, never a value."""
 
+import asyncio
 import re
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable, Mapping
@@ -64,6 +65,11 @@ __all__ = [
 ]
 
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+SCAN_SLICE = 1 << 20
+"""The most bytes of a part one search of a snapshot's scan reads: a part of
+any size is never copied whole, and no search holds the interpreter long
+enough to stall the event loop beside it."""
 
 
 class CapabilityMissing(InfraException):
@@ -341,10 +347,12 @@ async def secret_held(parts: AsyncIterable[bytes], secrets: Mapping[str, str]) -
     """The name of a secret, of `secrets` by name, whose value the bytes of
     `parts` hold in any form redaction matches; None when they hold none.
     What a workspace's snapshot is scanned for before anything of it is
-    kept. The parts are read as they come, never held whole, with a
-    holdback as long as the longest form less one byte, so a value split
-    across two parts is still found. With no value to look for, nothing is
-    read."""
+    kept. The parts are read as they come, never held whole, and each is
+    searched in a thread, `SCAN_SLICE` bytes at a time, so a snapshot of any
+    size never blocks the event loop. Each search reads a holdback as long
+    as the longest form less one byte before its slice, so a value split
+    across two slices or two parts is still found. With no value to look
+    for, nothing is read."""
     needles: dict[bytes, str] = {}
     for name, value in secrets.items():
         if value:
@@ -355,9 +363,23 @@ async def secret_held(parts: AsyncIterable[bytes], secrets: Mapping[str, str]) -
     hold = max(len(needle) for needle in needles) - 1
     tail = b""
     async for part in parts:
-        window = tail + part
+        found, tail = await asyncio.to_thread(_searched, needles, hold, tail, part)
+        if found is not None:
+            return found
+    return None
+
+
+def _searched(
+    needles: Mapping[bytes, str], hold: int, tail: bytes, part: bytes
+) -> tuple[str | None, bytes]:
+    """The name of the needle `part` holds, after `tail`, the holdback of
+    the parts before it, a slice at a time; and the holdback of the parts so
+    far, for the next."""
+    view = memoryview(part)
+    for start in range(0, len(view), SCAN_SLICE):
+        window = tail + view[start : start + SCAN_SLICE]
         for needle, name in needles.items():
             if needle in window:
-                return name
-        tail = window[len(window) - hold :] if hold else b""
-    return None
+                return name, b""
+        tail = window[-hold:] if hold else b""
+    return None, tail
