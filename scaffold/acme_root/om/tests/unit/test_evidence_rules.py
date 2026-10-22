@@ -3,7 +3,7 @@ baseline that came first, the results contract and its one collector,
 and the acceptance scanner."""
 
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -247,8 +247,15 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
     assert [case.name for case in seen if case is not None] == ["unit-case-0", "unit-case-0"]
 
 
+RAN_AT = datetime(2026, 1, 1, tzinfo=UTC)
+"""When a refused run ran. The cases below build their runs as the module is
+collected, and their ids carry each run's lines, so the time is fixed: one
+read from the clock gives each collection ids of its own, and workers that
+collect apart refuse to run together."""
+
+
 def a_run(**changes: Any) -> list[dict[str, Any]]:
-    start, case, end = stream("unit", "1", "c0ffee", "passed", Provenance.REAL, utcnow())
+    start, case, end = stream("unit", "1", "c0ffee", "passed", Provenance.REAL, RAN_AT)
     return [{**start, **changes.get("start", {})}, case, {**end, **changes.get("end", {})}]
 
 
