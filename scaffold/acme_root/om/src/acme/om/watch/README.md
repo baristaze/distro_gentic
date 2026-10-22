@@ -44,7 +44,9 @@ stream.
 - **A claimant reads.** A product's claimant reads the streams of a
   kind its own kind reads, for the item it holds under a live lease and
   its claim token, from the entry after the last it read. Any other item
-  or kind, and a lapsed lease, are not found, and nothing is read.
+  or kind, and a lapsed lease, are not found, and nothing is read. An
+  append to such a kind wakes it on its control stream, so it reads when
+  there is something to read.
 - **Open an item's read.** A viewer who may read the item's tenant gets
   a handle to the item's streams of one kind, as a session's.
 - **Read live.** The handle reads the session's open streams, each from
@@ -127,7 +129,9 @@ read. An item's handle is `rules.signed`/`rules.verified_item` over an
 writer (`StreamKind.claimant`), the bounds `MAX_APPEND_ENTRIES` and
 `MAX_APPEND_BYTES`, each entry's `stream_part` crossing
 (`crossing.verified`), then `hosts.held_as` and the lease, and appends
-through `KindStreamsInterface` in the item's group. ADR 2030. `read_as`
+through `KindStreamsInterface` in the item's group. ADR 2030. An append
+to a kind with a reader publishes `Topics.STREAM_APPENDED` with the
+item's tenant, which the claimant's control stream hears. ADR 2065. `read_as`
 checks the kind's reader (`StreamKind.reader`), then `hosts.held_as` and
 the lease, each refusal the same `NotFound` (a `LeaseLost` from
 `held_as` among them), and reads the item's group as `read_item_live`

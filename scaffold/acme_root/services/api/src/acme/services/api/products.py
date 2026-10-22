@@ -26,10 +26,11 @@ class ProductLive:
     viewer of the session's or the item's tenant, and the streams of the
     product's own kinds, which its routes write where no claimant does and
     read where the product shows them. A kind's stream is grouped by an
-    item's id and carries no tenant or permission of its own, so a service
-    reads or writes one only for an item it read under the caller's
-    context, with the permission the platform's routes require for the same
-    act: READ to read, WRITE to write."""
+    item's id and carries no permission of its own, so a service reads or
+    writes one only for an item it read under the caller's context, with
+    the permission the platform's routes require for the same act: READ to
+    read, WRITE to write. A write names that item's tenant, whose claimant
+    the append wakes."""
 
     watch: WatchManagerInterface
     kind_streams: KindStreamsInterface

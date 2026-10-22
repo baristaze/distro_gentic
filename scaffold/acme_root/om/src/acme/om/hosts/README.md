@@ -105,6 +105,7 @@ The gateway resolves a host's credential with `authenticate` and calls
 `claim`, which hands placement a claimant built from that identity. It
 resolves a product's claimant's with `authenticate_claimant` and calls
 `claim_as`, `held_as`, `extend_as`, and `report_as`, which hand placement
-the same. A
+the same, and `holding_as`, which its control stream reads again on a
+short timer and which refuses a revoked claimant. A
 producer of a session's workspace reads the session's pool from
 `placement_of`; a session with no pool runs in the cloud.
