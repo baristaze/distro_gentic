@@ -760,7 +760,7 @@ def _archive(
     and the files each read from the start of the file it was spooled to."""
     manifest = {"format": FORMAT, "image": image, "pull": pull, "deleted": list(deleted)}
     out = io.BytesIO()
-    with tarfile.open(
+    with tarfile.TarFile(
         fileobj=out, mode="w", format=tarfile.PAX_FORMAT, copybufsize=COPY_BYTES
     ) as archive:
         for name, data in (
