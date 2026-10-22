@@ -4,6 +4,8 @@ consumers import them."""
 from acme.client.schema.hosts import (
     AdvertisementBody,
     ClaimantClaimView,
+    ClaimantControlKind,
+    ClaimantControlView,
     ClaimantWorkView,
     ClaimedWorkView,
     ClaimView,
@@ -17,6 +19,8 @@ __all__ = [
     "AdvertisementBody",
     "ClaimView",
     "ClaimantClaimView",
+    "ClaimantControlKind",
+    "ClaimantControlView",
     "ClaimantWorkView",
     "ClaimedWorkView",
     "HostView",

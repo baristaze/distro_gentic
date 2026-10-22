@@ -40,6 +40,7 @@ class TopicPayload(BaseModel):
 class Topics(StrEnum):
     WORK_AVAILABLE = "work_available"
     ENTITY_CHANGED = "entity_changed"  # kind, target_id, seq, version: the realtime producer
+    STREAM_APPENDED = "stream_appended"  # kind, group: a stream's reader reads it now
 
 
 class WorkAvailablePayload(TopicPayload):
@@ -65,9 +66,19 @@ class EntityChangedPayload(TopicPayload):
     version: int | None = None
 
 
+class StreamAppendedPayload(TopicPayload):
+    """Entries were appended to a stream of `kind` in the group a caller
+    named, `group`. The stream holds them; a reader that waits on the group
+    reads it now, and one that missed this reads it on its own timer."""
+
+    kind: str
+    group: UUID
+
+
 TOPIC_PAYLOADS: dict[Topics, type[TopicPayload]] = {
     Topics.WORK_AVAILABLE: WorkAvailablePayload,
     Topics.ENTITY_CHANGED: EntityChangedPayload,
+    Topics.STREAM_APPENDED: StreamAppendedPayload,
 }
 
 TopicHandler = Callable[[TopicPayload], Awaitable[None]]

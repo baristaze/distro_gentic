@@ -32,6 +32,23 @@ class Claimant(OmBase):
         return f"{self.kind}:{self.id}"
 
 
+HOLDING_MAX = 1000
+"""The most items one read of a claimant's holding returns. One that holds
+as many is read as holding more."""
+
+
+class Holding(OmBase):
+    """What a claimant takes and holds, read off its identity and the queue
+    alone: the lanes it takes work from, with the kinds it takes from each,
+    and the items it holds claimed there now, each id with the claim token
+    its claim was handed, in id order. `whole` is False when the read met
+    `HOLDING_MAX`: an item missing from `items` may still be its own."""
+
+    claims: tuple[tuple[str, tuple[str, ...]], ...]
+    items: tuple[tuple[UUID, UUID], ...]
+    whole: bool
+
+
 class ReportOutcome(StrEnum):
     DONE = "done"  # the work is done: the item completes
     FAILED = "failed"  # the work failed: the item is retried until its attempts are spent

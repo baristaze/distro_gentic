@@ -322,6 +322,18 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
                 found[(item.lane, item.kind)] = found.get((item.lane, item.kind), 0) + 1
         return found
 
+    async def read_claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], claimed_by: str, limit: int
+    ) -> list[WorkItem]:
+        held = [
+            item
+            for item in self._rows(self._items, org_id)
+            if item.status is WorkStatus.CLAIMED
+            and item.claimed_by == claimed_by
+            and item.lane in lanes
+        ]
+        return sorted(held, key=lambda item: item.id)[:limit]
+
     async def read_latest_for_target(
         self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:

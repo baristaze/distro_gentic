@@ -434,6 +434,28 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             rows = (await session.execute(stmt)).all()
         return {(lane, kind): count for lane, kind, count in rows}
 
+    async def read_claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], claimed_by: str, limit: int
+    ) -> list[WorkItem]:
+        if not lanes:
+            return []
+        # The claim's index leads with the lane and the status, so this
+        # reads the lanes' claimed items alone.
+        stmt = (
+            select(WorkItems)
+            .where(
+                WorkItems.lane.in_(list(lanes)),
+                WorkItems.status == WorkStatus.CLAIMED.value,
+                WorkItems.org_id == org_id,
+                WorkItems.claimed_by == claimed_by,
+            )
+            .order_by(WorkItems.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [to_model(row, WorkItem) for row in rows]
+
     async def read_latest_for_target(
         self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:

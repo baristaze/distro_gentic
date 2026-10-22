@@ -88,7 +88,9 @@ class ParcelsService:
         ctx.require(Permission.WRITE)
         item = await self.managers.work.get_item(ctx, item_id)
         number = self.noted.get(item.id, 0)
-        await self.live.kind_streams.append(NOTES, item.id, item.id, ((number, text.encode()),))
+        await self.live.kind_streams.append(
+            NOTES, item.id, item.id, ((number, text.encode()),), org_id=ctx.org_id
+        )
         self.noted[item.id] = number + 1
 
     async def track(self, ctx: TenantContext, item_id: UUID) -> ItemRead:
@@ -198,7 +200,9 @@ async def test_a_declared_namespaces_service_opens_a_live_read_and_writes_its_ow
                 f"/v1/parcels/shipments/{mine.id}/notes", params={"text": text}, headers=headers
             )
             assert noted.status_code == 204, noted.text
-        await courier.append(TRACKING, mine.id, mine.id, [(0, b"picked up"), (1, b"in transit")])
+        await courier.append(
+            TRACKING, mine.id, mine.id, [(0, b"picked up"), (1, b"in transit")], org_id=ctx.org_id
+        )
         opened = await client.post(
             f"/v1/parcels/shipments/{mine.id}/tracking/live", headers=headers
         )

@@ -25,7 +25,7 @@ from acme.om.hosts.types.host import (
 from acme.om.hosts.types.placement import PlacementState, SessionPlacement
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.kinds import HOST
-from acme.om.placement.types.claimant import ClaimantReport
+from acme.om.placement.types.claimant import ClaimantReport, Holding
 from acme.om.work.types.work_item import WorkItem
 
 
@@ -293,6 +293,16 @@ class HostsManagerInterface(ABC):
     ) -> WorkItem:
         """System-internal: the item the claimant holds under the claim
         token, in its own tenant (`placement.held_for`)."""
+        ...
+
+    @abstractmethod
+    @transition
+    async def holding_as(self, rctx: RequestContext, claimant: ClaimantIdentity) -> Holding:
+        """System-internal: what the claimant takes and holds in its own
+        tenant, its lanes and kinds and the items it holds claimed there
+        now, which its control stream reads again on a short timer
+        (`placement.holding_for`). `CredentialExpired` once it is revoked,
+        so the stream ends with it."""
         ...
 
     @abstractmethod

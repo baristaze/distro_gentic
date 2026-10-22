@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from acme.infra.streams import StreamBounds, StreamsInterface, StreamSlice
-from acme.om.base import derived_id
+from acme.infra.topics import StreamAppendedPayload, Topics, TopicsInterface
+from acme.om.base import derived_id, new_id, utcnow
 from acme.om.exceptions import NotFound
 from acme.om.watch.kinds import STEP, KindStreamsInterface, StreamKinds
 
@@ -13,16 +14,38 @@ class KindStreamsImpl(KindStreamsInterface):
     kind under its registered bounds and in a group of its own: the group a
     caller names, keyed by the kind, so no kind reads another's. Every
     kind's streams count against the cache's bounds together, the step's
-    among them, as every session's do."""
+    among them, as every session's do. An append to a kind a claimant
+    reads is announced on the bus once it is held, best effort: the reader
+    that missed it reads it on its own timer."""
 
-    def __init__(self, streams: StreamsInterface, kinds: StreamKinds) -> None:
+    def __init__(
+        self, streams: StreamsInterface, kinds: StreamKinds, topics: TopicsInterface
+    ) -> None:
         self._streams = streams
         self._kinds = kinds
+        self._topics = topics
 
     async def append(
-        self, kind: str, group: UUID, stream: UUID, entries: Sequence[tuple[int, bytes]]
+        self,
+        kind: str,
+        group: UUID,
+        stream: UUID,
+        entries: Sequence[tuple[int, bytes]],
+        *,
+        org_id: UUID,
     ) -> None:
         await self._streams.append(_group(kind, group), stream, entries, self._bounds(kind))
+        if self.reader(kind) is not None:
+            await self._topics.publish(
+                Topics.STREAM_APPENDED,
+                StreamAppendedPayload(
+                    idempotency_key=new_id(),
+                    produced_at=utcnow(),
+                    org_id=org_id,
+                    kind=kind,
+                    group=group,
+                ),
+            )
 
     async def read(
         self, kind: str, group: UUID, after: Mapping[UUID, int]

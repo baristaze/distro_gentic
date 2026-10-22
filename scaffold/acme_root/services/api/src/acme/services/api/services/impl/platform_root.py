@@ -18,6 +18,7 @@ from acme.om.park_alerts import ParkAlertsManagerInterface
 from acme.om.platform_root import PlatformManagers
 from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
+from acme.om.watch.kinds import KindStreamsInterface
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_automations import AgentAutomationsServiceInterface
@@ -244,6 +245,7 @@ def build_platform_services(
     agent_playbooks: AgentPlaybooksManagerInterface,
     levers: LeversManagerInterface,
     connectors: ConnectorsManagerInterface,
+    kind_streams: KindStreamsInterface,
     products: Mapping[str, object],
 ) -> PlatformServicesInterface:
     """The engine's services, the platform's over its managers and the
@@ -251,7 +253,9 @@ def build_platform_services(
     namespace's name. In-process impls only, as the engine's are."""
     return PlatformServicesImpl(
         engine,
-        hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
+        hosts=HostsServiceImpl(
+            managers.hosts, managers.cloud_pool, infra.get_topics(), kind_streams.reader
+        ),
         agent_fleet=AgentFleetServiceImpl(managers.placement_operator, trust_operator, levers),
         exec_relay=ExecRelayServiceImpl(managers.exec_relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),

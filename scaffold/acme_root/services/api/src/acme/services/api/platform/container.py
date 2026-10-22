@@ -216,6 +216,8 @@ def build_platform_api(
             client=McpClientSdkImpl(),
             options=ConnectorsOptions(private_addresses=settings.environment == LOCAL),
         ),
+        # A claimant's control stream wakes it to read the kinds it reads.
+        kind_streams=kind_streams,
         # Each namespace the product serves, over the managers it builds and
         # the live parts built here.
         products=product_api.PRODUCT_API.services(

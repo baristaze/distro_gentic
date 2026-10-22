@@ -629,11 +629,11 @@ async def test_a_claimant_reads_the_streams_its_kind_reads_for_the_item_it_holds
     # The product's own code writes each item's cues, and another claimant
     # kind's, beside the log its node writes.
     product = build_kind_streams(container.infra, PRODUCT)
-    stream = uuid4()
-    await product.append(CUES, mine.id, stream, [(0, b"go"), (1, b"hold")])
-    for item_id in (other.id, elsewhere.id):
-        await product.append(CUES, item_id, uuid4(), [(0, b"theirs")])
-    await product.append("probe_cues", mine.id, uuid4(), [(0, b"probe")])
+    stream, alpha = uuid4(), (await tenant_of(container, owner)).org_id
+    await product.append(CUES, mine.id, stream, [(0, b"go"), (1, b"hold")], org_id=alpha)
+    for item_id, org_id in ((other.id, alpha), (elsewhere.id, beta.org_id)):
+        await product.append(CUES, item_id, uuid4(), [(0, b"theirs")], org_id=org_id)
+    await product.append("probe_cues", mine.id, uuid4(), [(0, b"probe")], org_id=alpha)
     logged = await append(client, ours, mine.id, mine_token, uuid4(), entries("log"))
     assert logged.status_code == 204, logged.text
 

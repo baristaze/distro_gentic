@@ -306,6 +306,11 @@ class WorkManagerImpl(WorkManagerInterface):
             ended.extend(batch)
         return ended
 
+    async def claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], worker_id: str, limit: int
+    ) -> list[WorkItem]:
+        return await self._storage.read_claimed_on_lanes(org_id, lanes, worker_id, limit)
+
     async def end_open_for_target(
         self, org_id: UUID, kind: str, target_id: UUID, reason: str
     ) -> list[WorkItem]:

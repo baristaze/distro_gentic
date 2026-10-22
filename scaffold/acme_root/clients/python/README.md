@@ -26,7 +26,8 @@ it, and nothing else in Python calls `/v1/*`.
   sends it once refused, waits out a failure, and keeps each report in a
   journal until the platform records it. The workspace host runs on it;
   a product's claimant does too, through `Claimant` and the
-  `/claimants/...` calls.
+  `/claimants/...` calls, with its control stream held open beside its
+  turns, so it is woken to claim, to stop, and to read, and never polls.
 
 ```python
 async with ApiClient(url, app="cli", app_version="cli@0.1.0", token=token) as api:
@@ -38,18 +39,23 @@ async with ApiClient(url, app="cli", app_version="cli@0.1.0", token=token) as ap
 ```python
 claimant = Claimant(ClaimantSettings.from_env("ACME", "scanner"), client_for)
 await claimant.start()  # enrolls once, or picks up its credential
-while True:
-    turn = await claimant.turn()  # rotates, sends the journal, claims
-    if turn.item is not None:
-        async with claimant.keeping_alive():  # rotates every beat while it works
-            outcome = await work(turn.item, claimant)
-        await claimant.report(turn.item, outcome)
-    await asyncio.sleep(turn.wait)
+async with claimant.listening():  # the control stream, open beside the turns
+    while True:
+        turn = await claimant.turn()  # rotates, sends the journal, claims
+        if turn.item is not None:
+            async with claimant.keeping_alive():  # rotates every beat while it works
+                outcome = await work(turn.item, claimant)
+            await claimant.report(turn.item, outcome)
+        await claimant.wait(turn.wait)  # a wake on the stream cuts it short
 ```
 
 Inside the loop, a work opens `claimant.client()` for each call or short
 burst and never holds one across a beat, since a rotation retires the
-token a held client carries a minute later.
+token a held client carries a minute later. It stops once
+`claimant.revoked(item)` is set: the platform took the item back. A work
+that reads a stream its kind reads waits on
+`claimant.appended(item, kind, seconds)` between reads, and the seconds
+are its slow fallback read.
 
 ```bash
 uv run pytest -q clients/python/tests

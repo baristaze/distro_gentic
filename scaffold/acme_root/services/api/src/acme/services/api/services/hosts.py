@@ -3,12 +3,14 @@ hosts and its other claimants, and where its sessions run, and what a
 host's or a product's claimant's own calls do, in views."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Sequence
 from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
 from acme.services.api.types.hosts import (
     ClaimantClaimView,
+    ClaimantControlView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
@@ -128,6 +130,20 @@ class HostsServiceInterface(ABC):
     async def held_as(
         self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
     ) -> ClaimantWorkView: ...
+
+    @abstractmethod
+    def control(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, items: Sequence[UUID]
+    ) -> AsyncIterator[ClaimantControlView]:
+        """The claimant's control stream, from inside its wall, as a host's
+        is: a wake when work of its kinds reaches its lanes, a revoke of
+        each item it held that it no longer holds under its claim, `items`
+        among them, a wake to read when a stream its kind reads gains
+        entries for an item it holds, and a ping while nothing happens. It
+        ends after its span, when the credential it opened with ends, or
+        once the claimant is revoked; the claimant opens the next with the
+        credential it holds then."""
+        ...
 
     @abstractmethod
     async def extend_as(

@@ -1,8 +1,20 @@
+import asyncio
+import random
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from datetime import datetime, timedelta
 from uuid import UUID
 
+from acme.infra.topics import (
+    StreamAppendedPayload,
+    TopicPayload,
+    Topics,
+    TopicsInterface,
+    WorkAvailablePayload,
+)
 from acme.om.base import thaw_mapping, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
+from acme.om.exceptions import CredentialExpired
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import WIRE_VERSION, WireType, at_or_above_floor
 from acme.om.hosts.types.credential import EnrollmentToken, IssuedCredential
@@ -20,10 +32,13 @@ from acme.om.hosts.types.host import (
 from acme.om.hosts.types.pool import HostPool
 from acme.om.work.types.work_item import WorkItem
 from acme.services.api.services.hosts import HostsServiceInterface
+from acme.services.api.services.impl.exec_relay import SPAN_JITTER, STREAM_SPAN
 from acme.services.api.types.hosts import (
     AdvertisementBody,
     AdvertisementView,
     ClaimantClaimView,
+    ClaimantControlKind,
+    ClaimantControlView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
     ClaimantView,
@@ -135,10 +150,49 @@ def work_view(org_id: UUID, item: WorkItem) -> ClaimantWorkView:
     )
 
 
+def _heard(
+    appended: set[tuple[UUID, str]], held: Mapping[UUID, object]
+) -> list[ClaimantControlView]:
+    """The appends to items the claimant holds, taken out of `appended`; an
+    append to any other item stays there for the next read to settle."""
+    found = sorted(entry for entry in appended if entry[0] in held)
+    appended.difference_update(found)
+    return [
+        ClaimantControlView(kind=ClaimantControlKind.APPENDED, item_id=item_id, stream_kind=kind)
+        for item_id, kind in found
+    ]
+
+
 class HostsServiceImpl(HostsServiceInterface):
-    def __init__(self, hosts: HostsManagerInterface, cloud_pool: CloudPoolManagerInterface) -> None:
+    """A claimant's control stream rides `topics`, and `reader` names the
+    claimant kind that reads a stream kind (`KindStreamsInterface.reader`).
+    `poll` is how long the stream waits for a wake before it reads the
+    claimant's holding again and pings. `spacing` is the least time between
+    two of its reads, however many wakes come: a wake is answered at once,
+    and the reads the wakes within it ask for are one read."""
+
+    def __init__(
+        self,
+        hosts: HostsManagerInterface,
+        cloud_pool: CloudPoolManagerInterface,
+        topics: TopicsInterface,
+        reader: Callable[[str], str | None] = lambda kind: None,
+        *,
+        poll: timedelta = timedelta(seconds=5),
+        spacing: timedelta = timedelta(seconds=1),
+        clock: Callable[[], datetime] = utcnow,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        jitter: Callable[[], float] = random.random,
+    ) -> None:
         self._hosts = hosts
         self._cloud_pool = cloud_pool
+        self._topics = topics
+        self._reader = reader
+        self._poll = poll
+        self._spacing = spacing
+        self._clock = clock
+        self._sleep = sleep
+        self._jitter = jitter
 
     async def create_pool(
         self, ctx: TenantContext, body: CreatePoolRequest, pool_id: UUID
@@ -277,6 +331,101 @@ class HostsServiceImpl(HostsServiceInterface):
     ) -> ClaimantWorkView:
         item = await self._hosts.held_as(rctx, claimant, item_id, claim_token)
         return work_view(claimant.org_id, item)
+
+    async def control(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, items: Sequence[UUID]
+    ) -> AsyncIterator[ClaimantControlView]:
+        try:
+            holding = await self._hosts.holding_as(rctx, claimant)
+        except CredentialExpired:
+            return
+        claims = {lane: frozenset(kinds) for lane, kinds in holding.claims}
+        woken = asyncio.Event()
+        work: list[bool] = []
+        appended: set[tuple[UUID, str]] = set()
+
+        async def on_work(payload: TopicPayload) -> None:
+            if (
+                isinstance(payload, WorkAvailablePayload)
+                and payload.org_id == claimant.org_id
+                and payload.kind in claims.get(payload.lane, frozenset())
+            ):
+                work.append(True)
+                woken.set()
+
+        async def on_append(payload: TopicPayload) -> None:
+            if (
+                isinstance(payload, StreamAppendedPayload)
+                and payload.org_id == claimant.org_id
+                and self._reader(payload.kind) == claimant.kind
+            ):
+                appended.add((payload.group, payload.kind))
+                woken.set()
+
+        consumer = f"claimant-control:{claimant.id}"
+        unsubscribes = [
+            self._topics.subscribe(Topics.WORK_AVAILABLE, consumer, on_work),
+            self._topics.subscribe(Topics.STREAM_APPENDED, consumer, on_append),
+        ]
+        try:
+            # A claimant that opens its stream claims at once: a wake it
+            # missed while it was away is not lost.
+            yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
+            # The items it names hold until the first read says otherwise.
+            held: dict[UUID, UUID | None] = dict.fromkeys(items)
+            opened = read = self._clock()
+            span = STREAM_SPAN * (1 - SPAN_JITTER * self._jitter())
+            while True:
+                if holding.whole:
+                    now_held: dict[UUID, UUID | None] = dict(holding.items)
+                    for item_id, token in held.items():
+                        if item_id not in now_held or token not in (None, now_held[item_id]):
+                            yield ClaimantControlView(
+                                kind=ClaimantControlKind.REVOKE, item_id=item_id
+                            )
+                    held = now_held
+                else:
+                    # Past the most one read returns, an item it does not
+                    # list may still be held: none is revoked on its word.
+                    held.update(holding.items)
+                for view in _heard(appended, held):
+                    yield view
+                appended.clear()
+                if work:
+                    work.clear()
+                    yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
+                now = self._clock()
+                if now >= claimant.expires_at or now - opened >= span:
+                    # It ends, and the claimant opens the next with the
+                    # credential it holds then, as a host does.
+                    return
+                wait = min(self._poll, opened + span - now)
+                try:
+                    await asyncio.wait_for(woken.wait(), wait.total_seconds())
+                except TimeoutError:
+                    yield ClaimantControlView(kind=ClaimantControlKind.PING)
+                else:
+                    # Work, and an append to an item read as held, need no
+                    # read: each is said at once.
+                    if work:
+                        work.clear()
+                        yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
+                    for view in _heard(appended, held):
+                        yield view
+                # A burst of wakes is one read, not a read each.
+                rest = read + self._spacing - self._clock()
+                if rest > timedelta(0):
+                    await self._sleep(rest.total_seconds())
+                woken.clear()
+                read = self._clock()
+                try:
+                    holding = await self._hosts.holding_as(rctx, claimant)
+                except CredentialExpired:
+                    # Revoked while its stream was open: it ends with it.
+                    return
+        finally:
+            for unsubscribe in unsubscribes:
+                unsubscribe()
 
     async def extend_as(
         self,

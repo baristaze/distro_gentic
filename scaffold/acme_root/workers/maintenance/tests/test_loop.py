@@ -169,6 +169,11 @@ class LeaseLosingWork(WorkManagerInterface):
     async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
         return await self._inner.end_open_on_lane(org_id, lane, reason)
 
+    async def claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], worker_id: str, limit: int
+    ) -> list[WorkItem]:
+        return await self._inner.claimed_on_lanes(org_id, lanes, worker_id, limit)
+
     async def end_open_for_target(
         self, org_id: UUID, kind: str, target_id: UUID, reason: str
     ) -> list[WorkItem]:

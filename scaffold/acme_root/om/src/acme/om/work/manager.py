@@ -139,6 +139,17 @@ class WorkManagerInterface(ABC):
 
     @abstractmethod
     @stageless
+    async def claimed_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], worker_id: str, limit: int
+    ) -> list[WorkItem]:
+        """System-internal: the tenant's items on `lanes` that `worker_id`
+        holds claimed now, at most `limit`, in id order: what a claimant
+        outside the platform holds there, which its control stream reads.
+        Reads only."""
+        ...
+
+    @abstractmethod
+    @stageless
     async def end_open_for_target(
         self, org_id: UUID, kind: str, target_id: UUID, reason: str
     ) -> list[WorkItem]:

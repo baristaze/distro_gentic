@@ -17,13 +17,20 @@ order, and the outcomes are the same.
 A turn rotates the credential only between works, so a work longer than
 half the credential's life would outlive it. A work runs inside
 `keeping_alive`, which rotates the credential when due every beat while
-the work runs."""
+the work runs.
+
+Beside its turns it holds its control stream open (`listening`), as a host
+does: a wake there cuts the wait between turns short, so work is claimed
+as it lands and the wait is only the slow fallback; a revoke ends what
+still works on an item the platform took back (`revoked`); and an append
+to a stream its kind reads wakes the work that reads it (`appended`)."""
 
 import asyncio
 import contextlib
 import logging
+import random
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
@@ -40,7 +47,7 @@ from acme.client.claimant.journal import Entry, Journal
 from acme.client.claimant.settings import ClaimantSettings
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
-from acme.client.types.hosts import ClaimantWorkView
+from acme.client.types.hosts import ClaimantControlKind, ClaimantControlView, ClaimantWorkView
 from acme.client.types.placement import ReportOutcome
 from acme.timing import Retries, RetryPolicy
 
@@ -53,6 +60,14 @@ could not serve, a 429, or the wire. It doubles per failure in a row from
 together; it is longer when the server asked for longer, and never past
 120 s, a 429's ask included. A caller that asks again sooner names its
 own cap."""
+
+REOPEN = RetryPolicy(base=2.0, cap=2.0, jitter=0.5)
+"""The pause before the next control stream once the platform ended one:
+2 s at most, half of it jitter, as a host's."""
+
+CONTROL_ITEMS = 64
+"""The most items the claimant names as it opens its control stream, the
+platform's own bound: the last ones it was handed."""
 
 CLAIM_LOST = frozenset({404, 409})
 """A report's answers when the item is no longer this claim's: its claim
@@ -79,6 +94,19 @@ class Sent(Enum):
     SET_ASIDE = "set_aside"
 
 
+@dataclass
+class _Held:
+    """What the control stream said of one item the claimant was handed:
+    that the platform took it back, and which of the streams its kind reads
+    gained entries since the work last waited on each."""
+
+    revoked: asyncio.Event = field(default_factory=asyncio.Event)
+    appended: dict[str, asyncio.Event] = field(default_factory=dict[str, asyncio.Event])
+
+    def stream(self, kind: str) -> asyncio.Event:
+        return self.appended.setdefault(kind, asyncio.Event())
+
+
 @dataclass(frozen=True)
 class Turn:
     """What one turn handed the work, and the wait before the next turn."""
@@ -101,7 +129,12 @@ class Claimant:
         self.enrollment = Enrollment(settings, RoutesClaimantImpl(), client_for, now)
         self.journal = Journal(settings.journal_path)
         self._send = send
-        self._retries = Retries(RETRY) if jitter is None else Retries(RETRY, draw=jitter)
+        self._draw = random.random if jitter is None else jitter
+        self._retries = Retries(RETRY, draw=self._draw)
+        self.woken = asyncio.Event()
+        """Set when the control stream says work reached the claimant's
+        lanes, or once its credential is refused."""
+        self._held: dict[UUID, _Held] = {}
 
     async def start(self) -> None:
         """Enrolls once, or picks up the credential it holds."""
@@ -132,6 +165,63 @@ class Claimant:
             return Turn(None, self._retries.failed())
         self._retries.reset()
         return Turn(item, 0.0 if item is not None else self._settings.beat_seconds)
+
+    async def wait(self, seconds: float) -> None:
+        """Waits a turn's wait, cut short once the control stream wakes the
+        claimant to claim; a wake heard during the turn holds. With no
+        stream open it is the turn's wait, the slow fallback claim."""
+        if seconds > 0:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.woken.wait(), seconds)
+        self.woken.clear()
+
+    @contextlib.asynccontextmanager
+    async def listening(self) -> AsyncIterator[None]:
+        """Holds the control stream open beside what runs inside it, and
+        opens it again whenever it ends, with the credential held then
+        (`listen`). Once the platform ended one, it pauses as `REOPEN` says;
+        once one failed, it waits as `RETRY` says, and a line heard starts
+        that wait over. A refused credential stops it, and `woken` is set,
+        so the next turn raises `CredentialRefused`."""
+        beside = asyncio.create_task(self._listening())
+        try:
+            yield
+        finally:
+            beside.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beside
+
+    async def listen(self, heard: Callable[[], None] = lambda: None) -> None:
+        """One control stream, held open until the platform ends it with the
+        credential it was opened with. It names the items the claimant
+        works on, so one taken back while no stream was open is revoked at
+        once. A wake sets `woken`; a revoke sets the item's `revoked`; an
+        append wakes `appended` for the item and the stream's kind. `heard`
+        is called on each line."""
+        items = list(self._held)[-CONTROL_ITEMS:]
+        await self._calling(lambda client: self._heard_all(client, items, heard))
+
+    def revoked(self, item: ClaimantWorkView) -> asyncio.Event:
+        """Set once the control stream says the platform no longer holds the
+        item for this claimant: its lease was taken, or it was ended. The
+        work on it stops then, and a failure it reports is not kept
+        (`report`): the item runs again where it is claimed next."""
+        return self._hold(item.id).revoked
+
+    async def appended(self, item: ClaimantWorkView, kind: str, seconds: float) -> bool:
+        """Waits until the control stream says a stream of `kind`, one this
+        claimant's kind reads, has new entries for the item, or `seconds`
+        pass: whether it was woken. The work reads the stream after either,
+        so `seconds` is its slow fallback read. An append heard since its
+        last wait on the kind holds."""
+        event = self._hold(item.id).stream(kind)
+        try:
+            await asyncio.wait_for(event.wait(), seconds)
+        except TimeoutError:
+            return False
+        finally:
+            event.clear()
+        return True
 
     @contextlib.asynccontextmanager
     async def keeping_alive(self) -> AsyncIterator[None]:
@@ -182,6 +272,13 @@ class Claimant:
             raise ValueError(f"item {item.id} is held under no claim token")
         if (outcome is ReportOutcome.failed) != (error is not None):
             raise ValueError("a failure names its reason, and a success names none")
+        held = self._held.pop(item.id, None)
+        if held is not None and held.revoked.is_set() and outcome is ReportOutcome.failed:
+            # The platform took it back before the work ended: it runs again
+            # where it is claimed next, and no failure of a stopped work
+            # lands under that claim.
+            log.warning("item %s was revoked; its failure is not kept", item.id)
+            return False
         body: dict[str, Any] = {"claim_token": str(item.claim_token), "outcome": outcome.value}
         if error is not None:
             body["error"] = error[:REASON_MAX] if error.strip() else NO_REASON
@@ -206,6 +303,49 @@ class Claimant:
             log.warning("the journal waits: %s", failure)
             return False
         return True
+
+    async def _listening(self) -> None:
+        retries = Retries(RETRY, draw=self._draw)
+        while not self.enrollment.refused:
+            try:
+                await self.listen(heard=retries.reset)
+                wait = REOPEN.wait(1, draw=self._draw)
+            except CredentialRefused:
+                break
+            except ApiError as error:
+                if refused(error):
+                    break
+                log.warning("the control stream ended: %s %s", error.status, error.code)
+                wait = retries.failed(error.retry_after)
+            except WIRE_FAILURES as error:
+                log.warning("the control stream ended: %s", error)
+                wait = retries.failed()
+            await asyncio.sleep(wait)
+        self.woken.set()
+
+    async def _heard_all(
+        self, client: ApiClient, items: list[UUID], heard: Callable[[], None]
+    ) -> None:
+        async for message in client.claimant_control_stream(items):
+            heard()
+            self._heard(message)
+
+    def _heard(self, message: ClaimantControlView) -> None:
+        if message.kind is ClaimantControlKind.wake:
+            self.woken.set()
+            return
+        held = None if message.item_id is None else self._held.get(message.item_id)
+        if held is None:
+            return  # an item it no longer works on: it reported it
+        if message.kind is ClaimantControlKind.revoke:
+            if not held.revoked.is_set():
+                log.warning("item %s is no longer this claimant's", message.item_id)
+            held.revoked.set()
+        elif message.kind is ClaimantControlKind.appended and message.stream_kind is not None:
+            held.stream(message.stream_kind).set()
+
+    def _hold(self, item_id: UUID) -> _Held:
+        return self._held.setdefault(item_id, _Held())
 
     async def _keep_alive(self, ended: asyncio.Event) -> None:
         while not self.enrollment.refused:
@@ -237,6 +377,7 @@ class Claimant:
             self.journal.keep(again)
             await self._sent(again)
             return None
+        self._held[item.id] = _Held()
         return item
 
     async def _flush(self) -> None:
