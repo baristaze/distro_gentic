@@ -166,10 +166,12 @@ def _heard(
 class HostsServiceImpl(HostsServiceInterface):
     """A claimant's control stream rides `topics`, and `reader` names the
     claimant kind that reads a stream kind (`KindStreamsInterface.reader`).
-    `poll` is how long the stream waits for a wake before it reads the
-    claimant's holding again and pings. `spacing` is the least time between
-    two of its reads, however many wakes come: a wake is answered at once,
-    and the reads the wakes within it ask for are one read."""
+    `poll` is the longest the stream goes without reading the claimant's
+    holding again, and it pings when it heard nothing for as long. `settle`
+    is how long after a wake it reads again, so the claim the wake prompts
+    has landed and an append to that item is said at once. `spacing` is the
+    least time between two of its reads, however many wakes come: a wake is
+    said at once, and the reads the wakes within it ask for are one read."""
 
     def __init__(
         self,
@@ -179,6 +181,7 @@ class HostsServiceImpl(HostsServiceInterface):
         reader: Callable[[str], str | None] = lambda kind: None,
         *,
         poll: timedelta = timedelta(seconds=5),
+        settle: timedelta = timedelta(milliseconds=500),
         spacing: timedelta = timedelta(seconds=1),
         clock: Callable[[], datetime] = utcnow,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -189,6 +192,7 @@ class HostsServiceImpl(HostsServiceInterface):
         self._topics = topics
         self._reader = reader
         self._poll = poll
+        self._settle = settle
         self._spacing = spacing
         self._clock = clock
         self._sleep = sleep
@@ -373,8 +377,11 @@ class HostsServiceImpl(HostsServiceInterface):
             yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
             # The items it names hold until the first read says otherwise.
             held: dict[UUID, UUID | None] = dict.fromkeys(items)
-            opened = read = self._clock()
+            opened = self._clock()
             span = STREAM_SPAN * (1 - SPAN_JITTER * self._jitter())
+            # The claim the wake at the open prompts is read once it lands,
+            # and the read at the open holds no later read back.
+            due, read = opened + self._settle, opened - self._spacing
             while True:
                 if holding.whole:
                     now_held: dict[UUID, UUID | None] = dict(holding.items)
@@ -394,30 +401,41 @@ class HostsServiceImpl(HostsServiceInterface):
                 if work:
                     work.clear()
                     yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
-                now = self._clock()
-                if now >= claimant.expires_at or now - opened >= span:
-                    # It ends, and the claimant opens the next with the
-                    # credential it holds then, as a host does.
-                    return
-                wait = min(self._poll, opened + span - now)
-                try:
-                    await asyncio.wait_for(woken.wait(), wait.total_seconds())
-                except TimeoutError:
-                    yield ClaimantControlView(kind=ClaimantControlKind.PING)
-                else:
-                    # Work, and an append to an item read as held, need no
-                    # read: each is said at once.
+                    due = min(due, self._clock() + self._settle)
+                # It waits for the next read: the poll's, the one a wake's
+                # claim asks for once it lands, or the one an append to an
+                # item not read as held asks for. Work, and an append to an
+                # item read as held, need no read: each is said at once.
+                while True:
+                    now = self._clock()
+                    if now >= claimant.expires_at or now - opened >= span:
+                        # It ends, and the claimant opens the next with the
+                        # credential it holds then, as a host does.
+                        return
+                    wait = min(due, opened + span) - now
+                    if wait <= timedelta(0):
+                        break
+                    try:
+                        await asyncio.wait_for(woken.wait(), wait.total_seconds())
+                    except TimeoutError:
+                        # Its read is due, or its span ends.
+                        yield ClaimantControlView(kind=ClaimantControlKind.PING)
+                        break
+                    woken.clear()
                     if work:
                         work.clear()
                         yield ClaimantControlView(kind=ClaimantControlKind.WAKE)
+                        due = min(due, self._clock() + self._settle)
                     for view in _heard(appended, held):
                         yield view
+                    if appended:
+                        due = self._clock()
                 # A burst of wakes is one read, not a read each.
                 rest = read + self._spacing - self._clock()
                 if rest > timedelta(0):
                     await self._sleep(rest.total_seconds())
-                woken.clear()
                 read = self._clock()
+                due = read + self._poll
                 try:
                     holding = await self._hosts.holding_as(rctx, claimant)
                 except CredentialExpired:

@@ -42,7 +42,9 @@ is one of them.**
   and claims with the version of `exec` work it reads, at `/hosts/...`.
   A product's claimant enrolls with its name, and claims, reads, renews,
   and reports the item it holds under its claim token, at
-  `/claimants/...`. Neither credential opens the other's calls.
+  `/claimants/...`, where it holds its control stream open too
+  ([ADR 2065](2065-a-products-claimant-is-woken-by-push-on-a-control-stream-of-its-own.md)).
+  Neither credential opens the other's calls.
 
 ## Consequences
 
