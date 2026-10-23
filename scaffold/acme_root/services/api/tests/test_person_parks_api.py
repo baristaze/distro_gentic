@@ -29,6 +29,7 @@ from api_support import (
     sign_in,
     sign_in_as,
 )
+from fastapi import FastAPI
 
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
@@ -51,6 +52,7 @@ from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.services.api.container import AppContainer
+from acme.services.api.gateway.admission import HolderCalls
 
 from contracts.loops import Build, Lookup, call, reply, said, use
 from contracts.sub_agents import spawn
@@ -442,6 +444,32 @@ async def test_a_job_is_cleared_by_its_completion(case: Case, build: Build) -> N
     )
 
     await case.runs_again(agent_session_id, completed, runs)
+
+
+def test_a_jobs_completion_is_the_one_session_route_counted_as_a_holders_call(
+    app: FastAPI,
+) -> None:
+    """A job's completion is admitted in the holds lane, as a lease's
+    renewal is: the loop closes the job at its deadline, so a completion shed
+    with the writes until then loses the job's work. A person's call that
+    clears a park, the give-back of a hand-over included, holds nothing that
+    expires, and stays in the write lane."""
+    calls = HolderCalls.of(app.routes)
+    session, key, user = new_id(), new_id(), new_id()
+    path = f"/v1/agent-sessions/{session}"
+    assert calls.match({"method": "POST", "path": f"{path}/jobs/{key}/completion"})
+    for method, other in (
+        ("POST", "/v1/agent-sessions"),
+        ("POST", f"{path}/messages"),
+        ("POST", f"{path}/controls"),
+        ("POST", f"{path}/calls/1/decision"),
+        ("PUT", f"{path}/deadline"),
+        ("PUT", f"{path}/principal"),
+        ("PUT", f"{path}/participants/{user}"),
+        ("POST", f"{path}/take-over"),
+        ("POST", f"{path}/give-back"),
+    ):
+        assert not calls.match({"method": method, "path": other}), other
 
 
 # The step guard, a spender, a lost workspace: a person who looked unlocks.
