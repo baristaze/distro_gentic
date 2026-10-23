@@ -381,6 +381,18 @@ A tool call into a customer's wall travels as `exec` work:
    the key.
 4. The runner writes the `tool_response` from that result.
 
+No file and no output rides in an item or its result. Each crosses the
+store as an object, by URLs signed for it alone, as every blob does
+([Buckets][g-buckets]): a file a write hands its host, a file a read
+uploads, and what a command printed. The item names each object, its
+size, and its digest, and the result names what its host uploaded the
+same way, so it stays small whatever the command printed. An object is
+sealed under a key of its own, which the item keeps under the session's
+key, so revoking that key leaves it noise. Nothing of a file reaches a
+workspace, or the runner, until it matches its digest. A file leaves the
+store once its item settles; an output is the item's record, and goes
+with it.
+
 A host also holds one long-lived outbound stream to the control plane,
 which carries wake-ups, cancels, interrupts, deadline cuts, and lease
 revocations, so a command starts at once and stops at once. The work row
@@ -1301,6 +1313,7 @@ price table; and the threat model each deployment writes.
 [g-ids]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#identifiers
 [g-realtime]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#realtime-at-the-edge
 [g-client]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#client-rendering
+[g-buckets]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#buckets
 [g-stateful]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#stateless-vs-stateful-services
 [g-queues]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#queues
 [g-twins]: https://github.com/baristaze/swe_guidelines/blob/v0.65.0/architecture.md#twins-for-external-services
