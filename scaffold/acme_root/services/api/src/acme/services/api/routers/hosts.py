@@ -22,6 +22,7 @@ from fastapi import APIRouter, Path, Query, Response
 
 from acme.om.watch.kinds import STREAM_KIND
 from acme.services.api.gateway.admin import OperatorCtx
+from acme.services.api.gateway.admission import HOLDER_CALL
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.hosts import Claimant, ClaimToken, EnrollmentBearer, Host
 from acme.services.api.gateway.idempotency import Idem
@@ -159,7 +160,7 @@ async def rotate(rctx: Rctx, hosts: HostsService, host: Host) -> IssuedHostCrede
     return await hosts.rotate(rctx, host)
 
 
-@router.post("/hosts/me/heartbeats", response_model=HostView)
+@router.post("/hosts/me/heartbeats", response_model=HostView, dependencies=[HOLDER_CALL])
 async def heartbeat(
     rctx: Rctx, hosts: HostsService, host: Host, body: HeartbeatRequest
 ) -> HostView:
@@ -235,7 +236,11 @@ async def held(
     return await hosts.held_as(rctx, claimant, item_id, claim_token)
 
 
-@claimants.post("/claimants/me/items/{item_id}/lease", response_model=ClaimantWorkView)
+@claimants.post(
+    "/claimants/me/items/{item_id}/lease",
+    response_model=ClaimantWorkView,
+    dependencies=[HOLDER_CALL],
+)
 async def extend(
     rctx: Rctx, hosts: HostsService, claimant: Claimant, item_id: UUID, body: ExtendLeaseRequest
 ) -> ClaimantWorkView:
@@ -243,7 +248,11 @@ async def extend(
     return await hosts.extend_as(rctx, claimant, item_id, body)
 
 
-@claimants.post("/claimants/me/items/{item_id}/report", response_model=ClaimantWorkView)
+@claimants.post(
+    "/claimants/me/items/{item_id}/report",
+    response_model=ClaimantWorkView,
+    dependencies=[HOLDER_CALL],
+)
 async def report(
     rctx: Rctx,
     hosts: HostsService,

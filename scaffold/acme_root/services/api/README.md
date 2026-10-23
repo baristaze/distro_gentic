@@ -98,7 +98,10 @@ route are in no document:
   each is held open for as long as its subscriber wants it.
 - **A holder's calls.** A route that keeps or settles what its caller
   holds carries `HOLDER_CALL` in its dependencies: the lease's renewal
-  and its release. It is counted in the holds lane
+  and its release; a host's beat, an exec item's renewal and its result,
+  and its answer to a workspace item; a claimant's renewal and its
+  report. A host's output parts and a claimant's appends stay writes.
+  Such a route is counted in the holds lane
   (`ACME_ADMISSION_LIMIT_HOLDS`) and spends its credential's holds
   budget (`ACME_CREDENTIAL_RATE_LIMIT_HOLDS`), so a write budget the
   holder's own writes have spent does not refuse it at the rate limit,

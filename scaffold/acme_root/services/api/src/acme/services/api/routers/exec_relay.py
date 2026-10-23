@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
+from acme.services.api.gateway.admission import HOLDER_CALL
 from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.hosts import Host
 from acme.services.api.gateway.platform_resolve import ExecRelayService
@@ -48,7 +49,7 @@ async def push_parts(
     await relay.push_parts(rctx, host, item_id, body)
 
 
-@router.post("/hosts/me/exec/{item_id}/result", status_code=204)
+@router.post("/hosts/me/exec/{item_id}/result", status_code=204, dependencies=[HOLDER_CALL])
 async def push_result(
     rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: ResultRequest
 ) -> None:
@@ -57,13 +58,17 @@ async def push_result(
     await relay.push_result(rctx, host, item_id, body)
 
 
-@router.post("/hosts/me/exec/{item_id}/lease", response_model=ExecLeaseView)
+@router.post(
+    "/hosts/me/exec/{item_id}/lease", response_model=ExecLeaseView, dependencies=[HOLDER_CALL]
+)
 async def extend(rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID) -> ExecLeaseView:
     """Renews the host's lease on the item while it runs."""
     return await relay.extend(rctx, host, item_id)
 
 
-@router.post("/hosts/me/workspaces/{item_id}", response_model=PreparedView)
+@router.post(
+    "/hosts/me/workspaces/{item_id}", response_model=PreparedView, dependencies=[HOLDER_CALL]
+)
 async def prepared(
     rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: PrepareRequest
 ) -> PreparedView:
@@ -73,7 +78,7 @@ async def prepared(
     return await relay.prepared(rctx, host, item_id, body)
 
 
-@router.post("/hosts/me/workspaces/{item_id}/released", status_code=204)
+@router.post("/hosts/me/workspaces/{item_id}/released", status_code=204, dependencies=[HOLDER_CALL])
 async def released(rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID) -> None:
     """The host's answer to a release, a purge, or an erase it claimed: what
     it names is gone. A release keeps the workspace's files on the host; a
@@ -82,7 +87,7 @@ async def released(rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUI
     await relay.released(rctx, host, item_id)
 
 
-@router.post("/hosts/me/workspaces/{item_id}/snapshot", status_code=204)
+@router.post("/hosts/me/workspaces/{item_id}/snapshot", status_code=204, dependencies=[HOLDER_CALL])
 async def snapshotted(
     rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: SnapshotRequest
 ) -> None:

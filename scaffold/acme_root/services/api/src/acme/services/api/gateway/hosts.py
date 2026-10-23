@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import Depends, Header, Request
 
 from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
-from acme.services.api.gateway.admission import READ_METHODS
+from acme.services.api.gateway.admission import lane_name_of
 from acme.services.api.gateway.auth import Rctx, bearer_of
 from acme.services.api.gateway.ratelimit import count, failures_counted
 from acme.services.api.gateway.resolve import container_of
@@ -35,12 +35,14 @@ async def current_host(
 ) -> HostIdentity:
     """The host behind its own credential. The lookup counts its failures
     against the client address, and the credential spends its own budget,
-    under its tenant, reads apart from writes."""
+    under its tenant: the one of the lane admission counted the call in, so
+    its output's writes never spend the beats and renewals that keep what it
+    holds (ADR 0106)."""
     hosts = container_of(request).managers.hosts
     credential = bearer_of(authorization)
     async with failures_counted(request):
         host = await hosts.authenticate(rctx, credential)
-    route = "reads" if request.method in READ_METHODS else "writes"
+    route = lane_name_of(request.scope)
     await count(request, route, host.org_id, f"cred:{host.credential_id}")
     return host
 
@@ -60,7 +62,7 @@ async def current_claimant(
     credential = bearer_of(authorization)
     async with failures_counted(request):
         claimant = await hosts.authenticate_claimant(rctx, credential)
-    route = "reads" if request.method in READ_METHODS else "writes"
+    route = lane_name_of(request.scope)
     await count(request, route, claimant.org_id, f"cred:{claimant.credential_id}")
     return claimant
 
