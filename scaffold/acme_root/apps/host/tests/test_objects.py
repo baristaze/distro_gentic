@@ -2,10 +2,11 @@
 store, by the URLs the platform signed for them alone. An upload cut off
 partway is asked for again and sends only the parts the store does not
 hold, within the item's lease as it was last renewed; one whose part the
-store keeps refusing ends in a refusal the host pushes. A write's file reaches the workspace only once it opens under its
-key and matches the size and the digest its item declares: one that does
-not, or one whose URL ran out or names another object, is refused, and
-nothing of it is written. No API request carries a file's bytes.
+store keeps refusing ends in a refusal the host pushes. A write's file
+reaches the workspace only once it opens under its key and matches the
+size and the digest its item declares: one that does not, or one whose
+URL ran out or names another object, is refused, and nothing of it is
+written. No API request carries a file's bytes.
 
 The platform is faked on the wire; the store is the local impl's, served
 in-process; the host's executor and its directory transport are the ones
