@@ -222,6 +222,16 @@ class Transport:
             },
         )
 
+    def store(self) -> httpx.AsyncClient:
+        """The object store, reached apart from the API, on a connection of
+        its own: no bearer, no app headers, no retry. A signed URL is the
+        credential, good for one part or one object for a few minutes."""
+        return httpx.AsyncClient(
+            transport=self.store_transport,
+            timeout=self.timeout,
+            verify=True if self.store_transport is not None else trust_store(),
+        )
+
     async def __aenter__(self) -> Self:
         return self
 

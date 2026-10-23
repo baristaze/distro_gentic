@@ -34,23 +34,6 @@ class ControlView(BaseModel):
     kind: ControlKind
 
 
-class ExecDetailView(BaseModel):
-    """
-    An item the host holds: the call, the workspace, and the operation.
-    """
-
-    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
-    call_id: Annotated[UUID, Field(title='Call Id')]
-    deadline: Annotated[AwareDatetime, Field(title='Deadline')]
-    effect: Annotated[str, Field(title='Effect')]
-    epoch: Annotated[int | None, Field(title='Epoch')]
-    item_id: Annotated[UUID, Field(title='Item Id')]
-    location: Annotated[str, Field(title='Location')]
-    org_id: Annotated[UUID, Field(title='Org Id')]
-    request: Annotated[dict[str, Any], Field(title='Request')]
-    spec: Annotated[dict[str, Any], Field(title='Spec')]
-
-
 class ExecLeaseView(BaseModel):
     lease_expires_at: Annotated[AwareDatetime, Field(title='Lease Expires At')]
 
@@ -60,6 +43,56 @@ class ExecState(StrEnum):
     running = 'running'
     done = 'done'
     interrupted = 'interrupted'
+
+
+class IssuedObjectPartView(BaseModel):
+    """
+    One part of an object to send, sealed: `size_bytes` bytes of the
+    sealed object from `offset`, as the body of a PUT to `url`, straight to
+    the store. The URL is signed for that length.
+    """
+
+    number: Annotated[int, Field(title='Number')]
+    offset: Annotated[int, Field(title='Offset')]
+    size_bytes: Annotated[int, Field(title='Size Bytes')]
+    url: Annotated[str, Field(title='Url')]
+
+
+class IssuedObjectSlotView(BaseModel):
+    """
+    An object the host uploads: where it is under the tenant, and the key
+    (base64) it seals it under.
+    """
+
+    key: Annotated[str, Field(title='Key')]
+    reference: Annotated[str, Field(title='Reference')]
+
+
+class IssuedObjectUploadView(BaseModel):
+    """
+    The parts of the object the store does not hold yet, at most a window
+    of them, each good until `expires_at`. `remaining` counts every part
+    still missing, these included: send these and ask again while it is
+    above zero, then push the result. Asked again after an upload was cut
+    off, it signs only the parts still missing.
+    """
+
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    parts: Annotated[list[IssuedObjectPartView], Field(title='Parts')]
+    remaining: Annotated[int, Field(title='Remaining')]
+
+
+class IssuedObjectView(BaseModel):
+    """
+    A file a write hands its host: the object that holds it under the
+    tenant, the size and the digest of the file, and the key (base64) it
+    is sealed under, which opens this object alone.
+    """
+
+    digest: Annotated[str, Field(title='Digest')]
+    key: Annotated[str, Field(title='Key')]
+    reference: Annotated[str, Field(title='Reference')]
+    size: Annotated[int, Field(title='Size')]
 
 
 class OutputStream(StrEnum):
@@ -146,6 +179,24 @@ class StopKind(StrEnum):
     revoke = 'revoke'
 
 
+class Object(StrEnum):
+    output = 'output'
+    file = 'file'
+
+
+class UploadRequest(BaseModel):
+    """
+    An object of an item the host uploads, and the bytes it seals: the
+    item's `output`, what it printed or listed, or a read's `file`.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    object: Annotated[Object, Field(title='Object')]
+    size_bytes: Annotated[int, Field(ge=0, title='Size Bytes')]
+
+
 class CrossingBody(BaseModel):
     """
     What the sender declares of the bytes it sends: what they are, their
@@ -158,6 +209,33 @@ class CrossingBody(BaseModel):
     kind: retention.CrossingKind
     sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$', title='Sha256')]
     size: Annotated[int, Field(ge=0, title='Size')]
+
+
+class ExecDetailView(BaseModel):
+    """
+    An item the host holds: the call, the workspace, the operation, and
+    the objects it moves. A write's `file_in` comes by `url`, signed for a
+    GET of it alone until `url_expires_at`; an `output` and a read's
+    `file_out` go by the parts `POST .../upload` signs.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    call_id: Annotated[UUID, Field(title='Call Id')]
+    deadline: Annotated[AwareDatetime, Field(title='Deadline')]
+    effect: Annotated[str, Field(title='Effect')]
+    epoch: Annotated[int | None, Field(title='Epoch')]
+    file_in: IssuedObjectView | None = None
+    file_out: IssuedObjectSlotView | None = None
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    location: Annotated[str, Field(title='Location')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
+    output: IssuedObjectSlotView | None = None
+    request: Annotated[dict[str, Any], Field(title='Request')]
+    spec: Annotated[dict[str, Any], Field(title='Spec')]
+    url: Annotated[str | None, Field(title='Url')] = None
+    url_expires_at: Annotated[AwareDatetime | None, Field(title='Url Expires At')] = (
+        None
+    )
 
 
 class PartRequest(BaseModel):
@@ -192,11 +270,13 @@ class PartsRequest(BaseModel):
 
 class ResultRequest(BaseModel):
     """
-    How an item ended: the JSON of an exec result, in base64.
+    How an item ended: the JSON of an exec result, in base64. It names
+    the objects its host uploaded, by their size and their digest, and
+    holds none of their bytes, so it is a few KiB.
     """
 
     model_config = ConfigDict(
         extra='forbid',
     )
     crossing: CrossingBody
-    data: Annotated[str, Field(max_length=16000000, title='Data')]
+    data: Annotated[str, Field(max_length=62698, title='Data')]

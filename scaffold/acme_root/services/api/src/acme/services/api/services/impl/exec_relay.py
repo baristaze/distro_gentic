@@ -30,12 +30,17 @@ from acme.services.api.types.exec_relay import (
     CrossingBody,
     ExecDetailView,
     ExecLeaseView,
+    IssuedObjectPartView,
+    IssuedObjectSlotView,
+    IssuedObjectUploadView,
+    IssuedObjectView,
     PartRequest,
     PartsRequest,
     PreparedView,
     PrepareRequest,
     ResultRequest,
     SnapshotRequest,
+    UploadRequest,
 )
 
 log = logging.getLogger(__name__)
@@ -101,6 +106,27 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             spec=detail.spec.model_dump(mode="json"),
             location=detail.location,
             request=REQUESTS.dump_python(detail.request, mode="json"),
+            output=None
+            if detail.output is None
+            else IssuedObjectSlotView(reference=detail.output.reference, key=detail.output.key),
+            file_in=None
+            if detail.file_in is None
+            else IssuedObjectView.model_validate(detail.file_in.model_dump()),
+            file_out=None
+            if detail.file_out is None
+            else IssuedObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
+            url=detail.url,
+            url_expires_at=detail.url_expires_at,
+        )
+
+    async def issue_upload(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: UploadRequest
+    ) -> IssuedObjectUploadView:
+        issued = await self._relay.issue_upload(rctx, host, item_id, body.object, body.size_bytes)
+        return IssuedObjectUploadView(
+            parts=[IssuedObjectPartView.model_validate(part.model_dump()) for part in issued.parts],
+            remaining=issued.remaining,
+            expires_at=issued.expires_at,
         )
 
     async def push_parts(

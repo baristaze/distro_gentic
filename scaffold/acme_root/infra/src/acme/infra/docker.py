@@ -13,6 +13,7 @@ import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 from typing import IO
 
 DOCKER_VARIABLES = (
@@ -56,17 +57,35 @@ def docker_environment(extra: Mapping[str, str] | None = None) -> dict[str, str]
 async def docker(
     *args: str,
     bound: timedelta,
-    stdin: bytes | None = None,
+    stdin: bytes | Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> DockerReply:
     """Runs `docker <args>` and answers its exit and output; a command that
     has not ended within `bound` is killed and answers no code. A command line
-    that is not installed answers 127, as a shell would."""
+    that is not installed answers 127, as a shell would. A `stdin` that is a
+    path is the file there, which the command reads straight from disk."""
+    if isinstance(stdin, Path):
+        with stdin.open("rb") as source:
+            return await _docker(args, bound, source, None, env)
+    return await _docker(args, bound, None, stdin, env)
+
+
+async def _docker(
+    args: tuple[str, ...],
+    bound: timedelta,
+    source: IO[bytes] | None,
+    stdin: bytes | None,
+    env: Mapping[str, str] | None,
+) -> DockerReply:
+    if source is not None:
+        given: IO[bytes] | int = source
+    else:
+        given = asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL
     try:
         process = await asyncio.create_subprocess_exec(
             "docker",
             *args,
-            stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+            stdin=given,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=docker_environment(env),

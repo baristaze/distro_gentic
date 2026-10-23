@@ -149,7 +149,7 @@ async def test_each_credential_opens_its_own_kinds_path_alone(
     node = await a_node(hosts, owner, pool)
     host_token = await hosts.issue_enrollment_token(owner, pool.id)
     node_token = await hosts.issue_enrollment_token(owner, pool.id, BATCH)
-    probed = Enrollment(name="host-1", advertisement=Advertisement(os="Linux"), exec_version=1)
+    probed = Enrollment(name="host-1", advertisement=Advertisement(os="Linux"), exec_version=2)
     host = await hosts.enroll(request(), host_token.token, probed)
 
     # A token enrolls the kind it names, and nothing else.

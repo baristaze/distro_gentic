@@ -71,7 +71,7 @@ async def a_host(client: httpx.AsyncClient, token: str, name: str = "host-1") ->
     enrolled = await client.post(
         "/v1/hosts/enrollments",
         headers=bearer(token),
-        json={"name": name, "advertisement": PROBED, "exec_version": 1},
+        json={"name": name, "advertisement": PROBED, "exec_version": 2},
     )
     assert enrolled.status_code == 200, enrolled.text
     return enrolled.json()
@@ -110,7 +110,7 @@ async def test_a_host_enrolls_once_and_calls_with_a_credential_of_its_own(
     named = await client.post(
         "/v1/hosts/enrollments",
         headers=bearer(token),
-        json={"name": "h", "advertisement": PROBED, "exec_version": 1, "pool_id": str(uuid4())},
+        json={"name": "h", "advertisement": PROBED, "exec_version": 2, "pool_id": str(uuid4())},
     )
     assert named.status_code == 422, named.text
     host = await a_host(client, token)
@@ -118,7 +118,7 @@ async def test_a_host_enrolls_once_and_calls_with_a_credential_of_its_own(
     beat = await client.post(
         "/v1/hosts/me/heartbeats",
         headers=bearer(host["token"]),
-        json={"advertisement": PROBED, "exec_version": 1},
+        json={"advertisement": PROBED, "exec_version": 2},
     )
     assert beat.status_code == 200, beat.text
     assert beat.json()["online"] and beat.json()["advertisement"]["isolation_modes"] == [
@@ -132,7 +132,7 @@ async def test_a_host_enrolls_once_and_calls_with_a_credential_of_its_own(
     assert tenant_route.status_code == 401, tenant_route.text
     for credential in (owner["Authorization"].removeprefix("Bearer "), token):
         refused = await client.post(
-            "/v1/hosts/me/claims", headers=bearer(credential), json={"exec_version": 1}
+            "/v1/hosts/me/claims", headers=bearer(credential), json={"exec_version": 2}
         )
         assert refused.status_code == 401, refused.text
     # Rotated, the next credential works, and the last one for its grace.
@@ -142,14 +142,14 @@ async def test_a_host_enrolls_once_and_calls_with_a_credential_of_its_own(
     assert rotated.json()["host_id"] == host["host_id"]
     for credential in (rotated.json()["token"], host["token"]):
         claimed = await client.post(
-            "/v1/hosts/me/claims", headers=bearer(credential), json={"exec_version": 1}
+            "/v1/hosts/me/claims", headers=bearer(credential), json={"exec_version": 2}
         )
         assert claimed.status_code == 200 and claimed.json() == {"item": None}
     # Revoked, it is refused at once.
     revoked = await client.delete(f"/v1/hosts/{host['host_id']}", headers=owner)
     assert revoked.status_code == 200 and revoked.json()["revoked_at"] is not None
     after = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(rotated.json()["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(rotated.json()["token"]), json={"exec_version": 2}
     )
     assert after.status_code == 401, after.text
 
@@ -168,25 +168,25 @@ async def test_a_claim_names_only_its_version_and_is_handed_only_its_pools_work(
     asking = await client.post(
         "/v1/hosts/me/claims",
         headers=bearer(host["token"]),
-        json={"exec_version": 1, "pool_id": theirs, "lane": f"pool:{theirs}"},
+        json={"exec_version": 2, "pool_id": theirs, "lane": f"pool:{theirs}"},
     )
     assert asking.status_code == 422, asking.text
     # A version below the floor is handed nothing.
-    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 2)
+    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 3)
     stale = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )
     assert stale.status_code == 426 and stale.json()["error"]["code"] == "version_below_floor"
-    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 1)
+    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 2)
     claimed = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )
     assert claimed.status_code == 200, claimed.text
     item = claimed.json()["item"]
-    assert (item["id"], item["kind"], item["wire_version"]) == (str(mine.id), "WORKSPACE", 1)
+    assert (item["id"], item["kind"], item["wire_version"]) == (str(mine.id), "WORKSPACE", 2)
     assert item["payload"]["pool_id"] == ours
     nothing = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )
     assert nothing.json() == {"item": None}
     assert UUID(item["id"]) != elsewhere.id

@@ -39,6 +39,7 @@ HOST_ROUTES = {
     ("POST", "/v1/hosts/me/claims"),
     ("GET", "/v1/hosts/me/exec/{item_id}"),
     ("POST", "/v1/hosts/me/exec/{item_id}/parts"),
+    ("POST", "/v1/hosts/me/exec/{item_id}/upload"),
     ("POST", "/v1/hosts/me/exec/{item_id}/result"),
     ("POST", "/v1/hosts/me/exec/{item_id}/lease"),
     ("POST", "/v1/hosts/me/workspaces/{item_id}"),
@@ -91,7 +92,7 @@ async def a_held_item(
     )
     item = await managers.exec_relay.send(RUNNER, ctx.org_id, call, 0)
     claimed = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["item"]["payload"]["item_id"] == str(item.id)
@@ -183,8 +184,8 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
     push = {"parts": [part]}
     refused = await client.post(f"{path}/parts", headers=bearer(host["token"]), json=push)
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "crossing_refused"
-    result = json.dumps({"outcome": {"exit_code": 0}, "output": {"stdout": "ok"}}).encode()
-    forged = json.dumps({"outcome": {"exit_code": 0}, "output": {"stdout": "no"}}).encode()
+    result = json.dumps({"outcome": {"exit_code": 0}, "detail": "ok"}).encode()
+    forged = json.dumps({"outcome": {"exit_code": 0}, "detail": "no"}).encode()
     for crossing, data in (
         (declared("result", result), forged),
         (declared("stream_part", result), result),
@@ -209,4 +210,4 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused_at_the_r
     assert done.status_code == 204, done.text
     progress = await container.managers.exec_relay.watch(RUNNER, ctx.org_id, item_id, -1)
     assert [(p.seq, p.text) for p in progress.parts] == [(0, "deployed\n"), (1, "deployed\n")]
-    assert progress.output is not None and progress.output.stdout == "ok"
+    assert progress.output is not None and progress.output.detail == "ok"

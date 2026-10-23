@@ -154,7 +154,7 @@ async def enrolled(
 ) -> IssuedCredential:
     issued = await hosts.issue_enrollment_token(owner, pool.id)
     return await hosts.enroll(
-        request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=1)
+        request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=2)
     )
 
 
@@ -171,7 +171,7 @@ async def test_a_host_enrolls_into_its_tokens_pool_with_a_credential_of_its_own(
     assert issued.token.startswith(ENROLLMENT_PREFIX)
     assert issued.token not in issued.enrollment.digest
     credential = await hosts.enroll(
-        request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
+        request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=2)
     )
     assert credential.credential.startswith(HOST_PREFIX)
     assert credential.pool_id == pool.id
@@ -197,7 +197,7 @@ async def test_only_a_live_enrollment_token_enrolls_a_host(
     pool = await hosts.create_pool(owner, a_pool())
     host = await enrolled(hosts, owner, pool)
     key = await managers.tenancy.credentials.create_api_key(owner, "ci", Role.MEMBER)
-    enrollment = Enrollment(name="host-2", advertisement=PROBED, exec_version=1)
+    enrollment = Enrollment(name="host-2", advertisement=PROBED, exec_version=2)
     # A platform credential, the host's own, and a forged token are refused.
     for credential in (key.key, host.credential, ENROLLMENT_PREFIX + "forged"):
         with pytest.raises(InvalidCredential):
@@ -228,7 +228,7 @@ async def test_a_token_whose_issuer_left_or_was_lowered_enrolls_nothing(
     kept = await hosts.issue_enrollment_token(owner, pool.id)
     await managers.tenancy.members.remove_member(owner, leaving.user_id)
     await managers.tenancy.members.update_membership_role(owner, lowered.user_id, Role.MEMBER)
-    enrollment = Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
+    enrollment = Enrollment(name="host-1", advertisement=PROBED, exec_version=2)
     for token in (left_token, lowered_token):
         with pytest.raises(CredentialExpired):
             await hosts.enroll(request(), token.token, enrollment)
@@ -245,7 +245,7 @@ async def test_a_host_credential_is_no_platform_credential_and_no_other_is_a_hos
     pool = await hosts.create_pool(owner, a_pool())
     token = await hosts.issue_enrollment_token(owner, pool.id)
     host = await hosts.enroll(
-        request(), token.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
+        request(), token.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=2)
     )
     # The tenant's transitions refuse it: a host acts for no person.
     with pytest.raises(InvalidCredential):
@@ -366,11 +366,11 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
         await hosts.authenticate(request(), host.credential)
     # A call that resolved its credential before the revoke is handed nothing.
     with pytest.raises(CredentialExpired):
-        await hosts.claim(request(), identity, 1)
+        await hosts.claim(request(), identity, 2)
     with pytest.raises(CredentialExpired):
         await hosts.rotate(request(), identity)
     with pytest.raises(CredentialExpired):
-        await hosts.heartbeat(request(), identity, HostReport(advertisement=PROBED, exec_version=1))
+        await hosts.heartbeat(request(), identity, HostReport(advertisement=PROBED, exec_version=2))
     assert await hosts.get_hosts(owner, pool.id) == ()
     status = await hosts.get_host(owner, pool.id, host.claimant_id)
     assert status is not None and status.host.revoked_at is not None and not status.online
@@ -427,14 +427,14 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
     assert (mine.lane, pinned_elsewhere.lane) == (pool_lane(ours.id), pool_lane(theirs.id))
     assert on_their_host.lane == host_lane(theirs_host.claimant_id)
     identity = await hosts.authenticate(request(), ours_host.credential)
-    claimed = await hosts.claim(request(), identity, 1)
+    claimed = await hosts.claim(request(), identity, 2)
     assert claimed is not None and claimed[1].id == mine.id
     assert claimed[1].claimed_by == f"host:{ours_host.claimant_id}"
-    assert await hosts.claim(request(), identity, 1) is None
+    assert await hosts.claim(request(), identity, 2) is None
     # What was pinned elsewhere waits there, unclaimed, for its own hosts.
     theirs_identity = await hosts.authenticate(request(), theirs_host.credential)
     handed = set()
-    while (next_one := await hosts.claim(request(), theirs_identity, 1)) is not None:
+    while (next_one := await hosts.claim(request(), theirs_identity, 2)) is not None:
         handed.add(next_one[1].id)
     assert handed == {pinned_elsewhere.id, on_their_host.id}
     assert from_another_tenant.id not in handed
@@ -484,7 +484,7 @@ async def test_a_vms_host_names_its_session_and_is_handed_no_other_sessions_work
             tenants.id,
             owner.user_id,
             new_id(),
-            Enrollment(name="vm", advertisement=PROBED, exec_version=1),
+            Enrollment(name="vm", advertisement=PROBED, exec_version=2),
         )
     issued = await hosts.admit_vm(
         request(),
@@ -492,7 +492,7 @@ async def test_a_vms_host_names_its_session_and_is_handed_no_other_sessions_work
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=2),
     )
     identity = await hosts.authenticate(request(), issued.credential)
     assert (identity.pool_id, identity.agent_session_id) == (pool.id, mine.id)
@@ -501,12 +501,12 @@ async def test_a_vms_host_names_its_session_and_is_handed_no_other_sessions_work
     stray = await managers.work.enqueue(
         owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(host_id, other.id))
     )
-    assert await hosts.claim(request(), identity, 1) is None
+    assert await hosts.claim(request(), identity, 2) is None
     assert stray.lane == host_lane(host_id)
     own = await managers.work.enqueue(
         owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(host_id, mine.id))
     )
-    claimed = await hosts.claim(request(), identity, 1)
+    claimed = await hosts.claim(request(), identity, 2)
     assert claimed is not None and claimed[1].id == own.id
 
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
@@ -528,7 +528,7 @@ async def test_no_person_revokes_a_vms_host_and_the_pool_reads_when_it_ended(
         pool.id,
         owner.user_id,
         new_id(),
-        Enrollment(name="vm", advertisement=PROBED, exec_version=1),
+        Enrollment(name="vm", advertisement=PROBED, exec_version=2),
     )
     host_id = issued.claimant_id
     # Its VM would run on with no host: the host ends with its VM.
@@ -557,23 +557,26 @@ async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
     identity = await hosts.authenticate(request(), host.credential)
     with pytest.raises(VersionBelowFloor):
         await hosts.claim(request(), identity, 0)
-    # A breaking change raised the floor: the host that still reads version 1
-    # is handed nothing, enrolls nothing, and serves its pool no more.
-    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 2)
+    # The floor is version 2: a host that reads version 1 is handed nothing.
     with pytest.raises(VersionBelowFloor):
         await hosts.claim(request(), identity, 1)
+    # A breaking change raised the floor: the host that still reads version 2
+    # is handed nothing, enrolls nothing, and serves its pool no more.
+    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 3)
+    with pytest.raises(VersionBelowFloor):
+        await hosts.claim(request(), identity, 2)
     token = await hosts.issue_enrollment_token(owner, pool.id)
     with pytest.raises(VersionBelowFloor):
         await hosts.enroll(
-            request(), token.token, Enrollment(name="old", advertisement=PROBED, exec_version=1)
+            request(), token.token, Enrollment(name="old", advertisement=PROBED, exec_version=2)
         )
     (status,) = await hosts.get_hosts(owner, pool.id)
     assert not status.online
     # Upgraded, it claims what waited for it.
-    claimed = await hosts.claim(request(), identity, 2)
+    claimed = await hosts.claim(request(), identity, 3)
     assert claimed is not None and claimed[1].id == item.id
     (status,) = await hosts.get_hosts(owner, pool.id)
-    assert status.online and status.host.exec_version == 2
+    assert status.online and status.host.exec_version == 3
 
 
 async def test_the_platform_keeps_what_a_host_advertised_and_adds_nothing(
@@ -585,11 +588,11 @@ async def test_the_platform_keeps_what_a_host_advertised_and_adds_nothing(
     identity = await hosts.authenticate(request(), host.credential)
     fewer = PROBED.model_copy(update={"isolation_modes": (), "capabilities": ()})
     seen = await hosts.heartbeat(
-        request(), identity, HostReport(advertisement=fewer, exec_version=1)
+        request(), identity, HostReport(advertisement=fewer, exec_version=2)
     )
     assert seen.advertisement == fewer
     # A claim renews the host and keeps what it last advertised.
-    await hosts.claim(request(), identity, 1)
+    await hosts.claim(request(), identity, 2)
     (status,) = await hosts.get_hosts(owner, pool.id)
     assert status.host.advertisement == fewer
 
@@ -624,7 +627,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
     host = await enrolled(hosts, owner, pool)
     assert not (await hosts.placement_of(owner, session.id)).waiting
     identity = await hosts.authenticate(request(), host.credential)
-    claimed = await hosts.claim(request(), identity, 1)
+    claimed = await hosts.claim(request(), identity, 2)
     assert claimed is not None and claimed[1].id == prepare.id
     # The host goes silent: the session waits again, still pinned.
     clock.advance(HostsOptions().online_window)

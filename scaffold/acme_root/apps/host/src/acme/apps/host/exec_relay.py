@@ -25,18 +25,27 @@ detail's read and its prepare included, the host renews its lease, and a
 stop from the control stream ends the command at once: the transport ends
 its whole process tree.
 
-The host holds no key of the platform's. Its transport's record keeps how a
-command ended without its output, and the platform keeps the output sealed
-under the session's key."""
+No file and no output crosses in an item or its result. A write's file is
+downloaded from the store, checked against its size and its digest, and
+only then written into the workspace; a read's file and what an item
+printed or listed are uploaded to the store as objects (`objects.py`), and
+the result names them by their size and their digest, so it is a few KiB,
+sent as UTF-8 JSON. The lease is renewed until the result is pushed, the
+transfers included.
+
+The host holds no key of the platform's: an item's detail hands it the
+key of each object it moves, which opens that object alone. Its
+transport's record keeps how a command ended without its output, and the
+platform keeps the output sealed."""
 
 import asyncio
-import base64
 import json
 import logging
 import random
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -46,6 +55,7 @@ from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
 from acme.apps.host.mcp import HostServers
+from acme.apps.host.objects import HostObjects, PartRefused, Spooled, removed
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
@@ -64,10 +74,12 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
+    CapabilityMissing,
     CommandSpec,
     CredentialBrokerInterface,
     RecordSeal,
     TransportInterface,
+    WritesFromFile,
     secret_held,
 )
 from acme.timing import Every, Retries, RetryPolicy
@@ -83,6 +95,12 @@ PUSH_BYTES = 128_000
 PUSH_PARTS = 256
 """The most bytes of output, and the most parts, one push carries, as the
 platform bounds a push."""
+DETAIL_CHARS = 1000
+"""The most characters of why the host refused an item a result carries, as
+the platform bounds it."""
+NOT_SENT = (ApiError, InfraException, PartRefused, *WIRE_FAILURES)
+"""What a transfer of an object raises when it gives up: the item's result
+then says so, and is pushed."""
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
@@ -154,14 +172,28 @@ def outlasted(error: Exception) -> bool:
 
 
 @dataclass
+class Ended:
+    """How an item ended here: its result as `_result` builds it, what it
+    printed or listed included, and a read's file, spooled."""
+
+    result: dict[str, Any]
+    file: Spooled | None = None
+
+
+@dataclass
 class Running:
     """One item while it is here: the operation in flight, what stopped it,
     and what it printed so far, for the result a stop answers with."""
 
-    operation: asyncio.Future[dict[str, Any]] | None = None
+    operation: asyncio.Future[Ended] | None = None
     stopped: str | None = None
     held_until: float = 0.0  # when its lease ends, by this host's clock
     printed: dict[str, list[str]] = field(default_factory=lambda: {"stdout": [], "stderr": []})
+
+    def lease_end(self) -> float:
+        """When its lease ends as it was last renewed: what a transfer that
+        outlasts one lease is tried again within."""
+        return self.held_until
 
 
 class ExecutorRelayImpl(ExecutorInterface):
@@ -174,7 +206,9 @@ class ExecutorRelayImpl(ExecutorInterface):
     renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts
-    at a quarter of a renewal's period and doubles, never past the lease."""
+    at a quarter of a renewal's period and doubles, never past the lease, as
+    a transfer of an object is. A transfer spools under `spool`, the host's
+    own folder for it, or a temporary one made as it is first needed."""
 
     def __init__(
         self,
@@ -188,6 +222,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         broker: CredentialBrokerInterface | None = None,
         servers: HostServers | None = None,
         base_options: Mapping[str, Any] | None = None,
+        spool: Path | None = None,
         flush_seconds: float = 0.25,
         window_chars: int = 32_000,
         renew_seconds: float = 20.0,
@@ -217,6 +252,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         # before it used most of the lease, and still lands past it.
         self._outlast = RetryPolicy(base=renew_seconds / 4, cap=self._lease_seconds, jitter=0.5)
         self._jitter = jitter
+        self._objects = HostObjects(client, spool, self._outlast, jitter)
         self._running: dict[UUID, Running] = {}
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
@@ -249,9 +285,8 @@ class ExecutorRelayImpl(ExecutorInterface):
         item_id = UUID(str(item.payload["item_id"]))
         detail = "this host refused it: " + "; ".join(reasons)
         held_until = time.monotonic() + self._lease_seconds
-        await self._push(
-            item_id, _result(refused=("refused_by_host", 403), detail=detail), held_until
-        )
+        refused = _small(_result(refused=("refused_by_host", 403), detail=detail))
+        await self._push(item_id, refused, held_until)
 
     def stop(self, item_id: UUID, kind: str) -> bool:
         """Ends the item at once if it is here: cancelling its operation ends
@@ -266,21 +301,31 @@ class ExecutorRelayImpl(ExecutorInterface):
         return True
 
     async def _run(self, item_id: UUID, running: Running, ask: Ask) -> None:
-        """Renews the item's lease from its claim until its outcome is known,
-        then pushes it: the read of its detail, which carries the bytes a
-        write sends, may outlast a lease, as its prepare may."""
+        """Renews the item's lease from its claim until its result is pushed:
+        the read of its detail may outlast a lease, as its prepare may, and
+        so may the transfer of an object it moves."""
         renewal = asyncio.ensure_future(self._renew(item_id, running))
+        ended = Ended(_result())
         try:
-            result = await self._outcome(item_id, running, ask)
+            detail, ended = await self._outcome(item_id, running, ask)
+            if running.stopped == "revoke":
+                log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
+                return
+            result = await self._kept(item_id, detail, ended, running)
+            if running.stopped == "revoke":
+                log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
+                return
+            await self._push(item_id, result, running.held_until)
         finally:
             renewal.cancel()
-        if running.stopped == "revoke":
-            log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
-            return
-        await self._push(item_id, result, running.held_until)
+            if ended.file is not None:
+                await removed(ended.file.path)
 
-    async def _outcome(self, item_id: UUID, running: Running, ask: Ask) -> dict[str, Any]:
-        """How the item ended here, or why this host refused it."""
+    async def _outcome(
+        self, item_id: UUID, running: Running, ask: Ask
+    ) -> tuple[ExecDetailView | None, Ended]:
+        """How the item ended here, or why this host refused it, with the
+        detail it was read by."""
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
         spec = IsolationSpec.model_validate(detail.spec)
@@ -288,63 +333,111 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs = unlike(ask, spec, reads)
         if differs is not None:
             why = "this host refused it: " + differs
-            return _result(refused=("refused_by_host", 403), detail=why)
+            return detail, Ended(_result(refused=("refused_by_host", 403), detail=why))
         if detail.request.get("operation") == MCP_CALL:
-            return await self._call_server(running, detail)
+            return detail, await self._call_server(running, detail)
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
-            return _result(refused=("capability_missing", 501), detail=why)
+            return detail, Ended(_result(refused=("capability_missing", 501), detail=why))
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._window_chars)
-        result: dict[str, Any] | None = None
+        ended: Ended | None = None
         try:
             workspace = await self._held(detail, spec)
         except InfraException as error:
-            result = _result(refused=(error.code, error.http_status), detail=error.message)
+            ended = Ended(_result(refused=(error.code, error.http_status), detail=error.message))
         else:
             if running.stopped is None:
                 running.operation = asyncio.ensure_future(
-                    _operate(transport, workspace, detail, parts.take)
+                    _operate(transport, self._objects, workspace, detail, parts.take)
                 )
                 await asyncio.wait({running.operation})
-                result = _ended(running.operation)
+                ended = _ended(running.operation)
         await parts.flush()
-        if result is None:
-            result = _result(
-                stopped=running.stopped or "cancel",
-                stdout="".join(running.printed["stdout"]),
-                stderr="".join(running.printed["stderr"]),
+        if ended is None:
+            ended = Ended(
+                _result(
+                    stopped=running.stopped or "cancel",
+                    stdout="".join(running.printed["stdout"]),
+                    stderr="".join(running.printed["stderr"]),
+                )
             )
-        return result
+        return detail, ended
 
-    async def _call_server(self, running: Running, detail: ExecDetailView) -> dict[str, Any]:
+    async def _kept(
+        self, item_id: UUID, detail: ExecDetailView | None, ended: Ended, running: Running
+    ) -> dict[str, Any]:
+        """The result to push once the objects it names are in the store:
+        what the item printed or listed, as its output, and a read's file,
+        each uploaded and named by its size and its digest. An output that
+        is not kept is said in the result; a read whose file is not sent is
+        refused."""
+        result = ended.result
+        small = _small(result)
+        if detail is None:
+            return small
+        output = result["output"]
+        if detail.output is not None and result["outcome"]["refused"] is None:
+            printed = json.dumps(
+                {
+                    "stdout": output["stdout"],
+                    "stderr": output["stderr"],
+                    "entries": output["entries"],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode()
+            try:
+                size, digest = await self._objects.send(
+                    item_id, "output", detail.output, printed, running.lease_end
+                )
+            except NOT_SENT as error:
+                log.warning("item %s: its output was not kept: %s", item_id, error)
+                small["detail"] = _cut(small["detail"] or f"its output was not kept: {error}")
+            else:
+                small["output"] = {"size": size, "digest": digest}
+        if detail.file_out is not None and ended.file is not None:
+            try:
+                size, digest = await self._objects.send(
+                    item_id, "file", detail.file_out, ended.file, running.lease_end
+                )
+            except NOT_SENT as error:
+                log.warning("item %s: the file it read was not sent: %s", item_id, error)
+                why = f"the file it read was not sent: {error}"
+                return _small(_result(refused=("object_not_sent", 503), detail=why))
+            small["file"] = {"size": size, "digest": digest}
+        return small
+
+    async def _call_server(self, running: Running, detail: ExecDetailView) -> Ended:
         """A call of a tool of a server this host runs: it needs no workspace
         and no transport. The server starts for the call, and a stop ends
         it with its process."""
         if running.stopped is None:
             running.operation = asyncio.ensure_future(self._answered(detail))
             await asyncio.wait({running.operation})
-            result = _ended(running.operation)
-            if result is not None:
-                return result
-        return _result(stopped=running.stopped or "cancel")
+            ended = _ended(running.operation)
+            if ended is not None:
+                return ended
+        return Ended(_result(stopped=running.stopped or "cancel"))
 
-    async def _answered(self, detail: ExecDetailView) -> dict[str, Any]:
+    async def _answered(self, detail: ExecDetailView) -> Ended:
         """The server's answer, its own word that the tool failed as an exit
         of 1, and the secret it carried, by name."""
         if self._servers is None:
-            return _result(
-                refused=("capability_missing", 501), detail="this host runs no MCP server"
+            return Ended(
+                _result(refused=("capability_missing", 501), detail="this host runs no MCP server")
             )
         try:
             answer = await self._servers.call(detail)
         except TimeoutError:
-            return _result(timed_out=True, detail="the server did not answer in time")
+            return Ended(_result(timed_out=True, detail="the server did not answer in time"))
         used = self._servers.credential_of(str(detail.request.get("server", "")))
-        return _result(
-            exit_code=1 if answer.is_error else 0,
-            stdout=answer.text,
-            secrets=[used] if used is not None else [],
+        return Ended(
+            _result(
+                exit_code=1 if answer.is_error else 0,
+                stdout=answer.text,
+                secrets=[used] if used is not None else [],
+            )
         )
 
     async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> AgentWorkspace:
@@ -698,8 +791,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             running.held_until = time.monotonic() + self._lease_seconds
 
     async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
-        """Pushes how the item ended, tried again while its lease lasts."""
-        data = json.dumps(result, separators=(",", ":")).encode()
+        """Pushes how the item ended, tried again while its lease lasts: its
+        JSON as UTF-8."""
+        data = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()
         try:
             await self._outlasting(
                 lambda client: client.push_exec_result(item_id, data), held_until
@@ -735,11 +829,14 @@ class ExecutorRelayImpl(ExecutorInterface):
 
 async def _operate(
     transport: TransportInterface,
+    objects: HostObjects,
     workspace: AgentWorkspace,
     detail: ExecDetailView,
     on_output: Sink,
-) -> dict[str, Any]:
-    """The one operation the item names, through the host's transport."""
+) -> Ended:
+    """The one operation the item names, through the host's transport. A
+    read's file is spooled for its upload; a write's is downloaded and
+    checked before a byte of it reaches the workspace."""
     request = detail.request
     match request["operation"]:
         case "run":
@@ -757,42 +854,57 @@ async def _operate(
                 }
             )
             ran = await transport.run(workspace, command, on_output, seal=NO_SEAL)
-            return _result(
-                exit_code=ran.exit_code,
-                timed_out=ran.timed_out,
-                truncated=ran.truncated,
-                secrets=list(ran.secrets),
-                stdout=ran.stdout,
-                stderr=ran.stderr,
+            return Ended(
+                _result(
+                    exit_code=ran.exit_code,
+                    timed_out=ran.timed_out,
+                    truncated=ran.truncated,
+                    secrets=list(ran.secrets),
+                    stdout=ran.stdout,
+                    stderr=ran.stderr,
+                )
             )
         case "read_file":
+            if detail.file_out is None:
+                raise CapabilityMissing("the read names no object to upload its file to")
             offset = request.get("offset", 0)
-            data = await transport.read_file(
-                workspace, request["path"], request["max_bytes"], offset
+            spooled = await objects.spool_read(
+                transport, workspace, request["path"], request["max_bytes"], offset
             )
-            return _result(data=base64.b64encode(data).decode(), offset=offset)
+            return Ended(_result(offset=offset), file=spooled)
         case "write_file":
-            data = base64.b64decode(request["data"])
-            await transport.write_file(workspace, request["path"], data, detail.epoch or 0)
-            return _result()
+            if detail.file_in is None or detail.url is None:
+                raise CapabilityMissing("the write names no object to download its file from")
+            if not isinstance(transport, WritesFromFile):
+                raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
+            spooled = await objects.fetch(detail.file_in, detail.url)
+            try:
+                await transport.write_file_from(
+                    workspace, request["path"], spooled.path, detail.epoch or 0
+                )
+            finally:
+                await removed(spooled.path)
+            return Ended(_result())
         case "list_files":
             entries = await transport.list_files(workspace, request["path"], request["limit"])
-            return _result(entries=[entry.model_dump(mode="json") for entry in entries])
+            return Ended(_result(entries=[entry.model_dump(mode="json") for entry in entries]))
         case operation:
-            return _result(refused=("validation_failed", 422), detail=f"no operation {operation!r}")
+            return Ended(
+                _result(refused=("validation_failed", 422), detail=f"no operation {operation!r}")
+            )
 
 
-def _ended(operation: asyncio.Future[dict[str, Any]]) -> dict[str, Any] | None:
+def _ended(operation: asyncio.Future[Ended]) -> Ended | None:
     """How the operation ended: its result, its transport's refusal, or None
     when a stop ended it."""
     if operation.cancelled():
         return None
     error = operation.exception()
     if isinstance(error, InfraException):
-        return _result(refused=(error.code, error.http_status), detail=error.message)
+        return Ended(_result(refused=(error.code, error.http_status), detail=error.message))
     if error is not None:
         log.error("an exec operation failed", exc_info=error)
-        return _result(refused=("host_failed", 500), detail=type(error).__name__)
+        return Ended(_result(refused=("host_failed", 500), detail=type(error).__name__))
     return operation.result()
 
 
@@ -893,15 +1005,14 @@ def _result(
     secrets: list[str] | None = None,
     stdout: str = "",
     stderr: str = "",
-    data: str | None = None,
     offset: int = 0,
     entries: list[dict[str, Any]] | None = None,
     detail: str = "",
 ) -> dict[str, Any]:
-    """An exec result as the platform reads it: how the item ended, in the
-    clear, and what it printed or read, which the platform seals. A read
+    """How an item ended here: its outcome, in the clear, and what it
+    printed or listed, which goes as its output object (`_kept`). A read
     past the start echoes the offset it read from, which the runner checks;
-    a read from the start carries none, as a host before it answered."""
+    a read from the start carries none."""
     return {
         "outcome": {
             "exit_code": exit_code,
@@ -915,9 +1026,24 @@ def _result(
         "output": {
             "stdout": stdout,
             "stderr": stderr,
-            "data": data,
             **({"offset": offset} if offset else {}),
             "entries": entries or [],
             "detail": detail,
         },
     }
+
+
+def _small(result: dict[str, Any]) -> dict[str, Any]:
+    """The result as the platform takes it: the outcome, why the host
+    refused it, and the offset a read echoes, with no output in it."""
+    output = result["output"]
+    offset = output.get("offset", 0)
+    return {
+        "outcome": result["outcome"],
+        "detail": _cut(output["detail"]),
+        **({"offset": offset} if offset else {}),
+    }
+
+
+def _cut(detail: str) -> str:
+    return detail if len(detail) <= DETAIL_CHARS else detail[: DETAIL_CHARS - 1] + "…"

@@ -512,3 +512,34 @@ finished.
 **Severity.** high
 
 **Check.** review
+
+## PLC-22 A file or an output crosses as a sealed object, never in an item
+
+**Principle.** No file and no output rides in an `exec` item or its
+result. Each crosses the store as an object, by URLs signed for it
+alone: a file a write hands its host, a file a read uploads, and what a
+command printed. The item names each object, its size, and its digest,
+and the result names what its host uploaded the same way. An object is
+sealed under a key of its own, which the item keeps under the session's
+key. Nothing of a file reaches a workspace, or the runner, until it
+matches its digest. A file leaves the store once its item settles; an
+output goes with the item.
+
+**Source.** Placement and Workspace Hosts, The Exec Relay Transport.
+
+**Look for.** What an item's detail and a host's result carry; what a
+host is handed to read or write an object, and for how long; where an
+object's digest is checked before its bytes are used; what removes an
+object when its item settles or its session is purged.
+
+**Violation.** A file's or an output's bytes in an item, a result, or any
+request to the API; an object sealed under the session's key itself, or
+under none, so a host could open another object; a URL signed for more
+than one object, or with no expiry; bytes written into a workspace, or
+handed to the runner, before their digest matched; a file left in the
+store after its item settled. (A holder's call that carries bulk bytes
+is the guideline's NET-37.)
+
+**Severity.** high
+
+**Check.** review

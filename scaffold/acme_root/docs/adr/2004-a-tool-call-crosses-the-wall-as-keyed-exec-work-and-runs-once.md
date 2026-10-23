@@ -35,12 +35,14 @@ repeated.
 
 **What crosses the queue is ids.** The queue row names the item, the
 call, the effect, the isolation, and what it asks of its host's
-ceilings. The command, the path, and the bytes are the session's
-content, sealed under its key in the exec relay's record, and the host
-reads them through the gateway while it holds the item. The output and
-the result are sealed the same way, so revoking the session's key erases
-them. A session that keeps no content at rest has none of its commands
-relayed.
+ceilings. The command and the path are the session's content, sealed
+under its key in the exec relay's record, and the host reads them
+through the gateway while it holds the item. A file and an output cross
+as objects in the store, each sealed under a key the item keeps sealed
+the same way
+([ADR 2066](2066-every-file-and-output-an-exec-item-moves-crosses-the-store-by-a-url-signed-for-it-alone.md)),
+so revoking the session's key erases them. A session that keeps no
+content at rest has none of its commands relayed.
 
 **An unsafe item is claimed once.** Its queue row takes one attempt, so
 the queue's own sweep fails it when its lease runs out, whatever else
@@ -82,9 +84,10 @@ directory must not, so the host refuses an item at that mode.
 
 ## Consequences
 
-- One relayed operation is one queue row, a claim, a read, and a push:
-  slower than a local command, and bounded by the host's claim and the
-  runner's wait, which backs off to a second.
+- One relayed operation is one queue row, a claim, a read, and a push,
+  and the transfer of each object it moves: slower than a local command,
+  and bounded by the host's claim and the runner's wait, which backs off
+  to a second.
 - A host that is lost leaves its items running until their lease ends, a
   minute by default, then `interrupted` or back on its lane.
 - The same operation twice in one call is two items only within one

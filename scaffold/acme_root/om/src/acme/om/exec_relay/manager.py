@@ -2,7 +2,10 @@
 work. The runner's exec relay transport sends each operation of a call and waits
 for it; the host that holds the session's workspace claims it under a
 lease, reads it, streams its output, and pushes how it ended, which is
-stored under the call's key; a host's control stream stops it at once."""
+stored under the call's key; a host's control stream stops it at once. A
+file an item moves crosses as an object in the store, sealed under a key of
+its own, by URLs signed for that object alone; it leaves the store once
+its item settles and what it held was taken."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -19,6 +22,8 @@ from acme.om.exec_relay.types.exec import (
     ExecDetail,
     ExecItem,
     ExecProgress,
+    IssuedObjectUpload,
+    ObjectKind,
     PrepareAnswer,
     SentPart,
     SnapshotAnswer,
@@ -217,18 +222,37 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     @transition
     async def send(
-        self, rctx: RequestContext, org_id: UUID, call: ExecCall, occurrence: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        call: ExecCall,
+        occurrence: int,
+        content: bytes | None = None,
     ) -> ExecItem:
         """System-internal: the item of one operation of a call, made and
         put on the queue of the host that holds the session's workspace, or
         met when the same call sent it before (`rules.exec_id`). One met is
         answered as it stands, so a resumed run attaches to the first
         execution or reads its result; only a repeatable one whose last run
-        was stopped or lost is put on the queue again. `StaleExec` for a
-        command whose epoch is below the session's; `NoWorkspaceHost` when no
-        live host of the session's pool holds the workspace, one revoked
-        included; `ContentNotKept` when the session keeps no content at
-        rest."""
+        was stopped or lost is put on the queue again. A write's `content`
+        is sealed under a key of its own and put in the store, and the item
+        names the object; a read's item names the object its host uploads,
+        whose upload starts here. `StaleExec` for a command whose epoch is
+        below the session's; `NoWorkspaceHost` when no live host of the
+        session's pool holds the workspace, one revoked included;
+        `ContentNotKept` when the session keeps no content at rest;
+        `ValidationFailed` for a write with no content, or content for any
+        other operation."""
+        ...
+
+    @abstractmethod
+    @transition
+    async def take(self, rctx: RequestContext, org_id: UUID, item_id: UUID) -> bytes:
+        """System-internal: the file a done read's host uploaded, read from
+        the store, opened, and checked against the size and the digest the
+        host declared, then removed from the store. `ObjectRefused` for an
+        object that does not open to them; `NotFound` once it was taken, or
+        when the session's content is gone."""
         ...
 
     @abstractmethod
@@ -238,7 +262,8 @@ class ExecRelayManagerInterface(ABC):
     ) -> ExecProgress:
         """System-internal: the item's state, the parts of its output after
         `after_seq` the shared cache still holds, opened, and how it ended
-        once it has, with all it printed."""
+        once it has, with all it printed: its output object, read from the
+        store and opened once it matches what its host declared."""
         ...
 
     @abstractmethod
@@ -297,8 +322,25 @@ class ExecRelayManagerInterface(ABC):
     @abstractmethod
     @transition
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
-        """System-internal: what the host that holds the item runs, opened.
-        `ItemNotHeld` for any other host, and once the item is settled."""
+        """System-internal: what the host that holds the item runs, opened,
+        and for a write a URL signed for a GET of its object alone, good for
+        the options' `object_ttl`. `ItemNotHeld` for any other host, and once
+        the item is settled."""
+        ...
+
+    @abstractmethod
+    @transition
+    async def issue_upload(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, kind: ObjectKind, size: int
+    ) -> IssuedObjectUpload:
+        """System-internal: for an item the host holds, the parts of its
+        object of `kind` sealing `size` bytes that the store does not hold
+        yet, each by a URL signed for its number and its length, good for
+        the options' `object_ttl`; asked again, only those still missing, so
+        an upload cut off resumes. An item's `output` is what it printed or
+        listed, and a read's `file` the file it read. `ValidationFailed` for
+        an item that uploads no such object, or a size past its bound (a
+        read's, what it asked); `ItemNotHeld` as `detail` says."""
         ...
 
     @abstractmethod
@@ -330,7 +372,10 @@ class ExecRelayManagerInterface(ABC):
         result for an item its lease, a stop, or the sweep settled already,
         or one another claim holds now, is `ItemNotHeld`, and lands nothing.
         A renewal of the same claim that lands meanwhile settles nothing,
-        so the result still lands."""
+        so the result still lands. The result names the objects its host
+        uploaded, whose uploads it completes: an output not whole in the
+        store is not kept, and a read whose file is not is kept as refused.
+        A write's file leaves the store."""
         ...
 
     @abstractmethod
@@ -385,8 +430,8 @@ class ExecRelayManagerInterface(ABC):
     @stageless
     async def purge_agent_session(self, org_id: UUID, agent_session_id: UUID) -> None:
         """System-internal: what the exec relay keeps of a session the sweep
-        purges: its items with their queue rows, their output, its controls,
-        and its binding."""
+        purges: its items with their queue rows, their output, the objects
+        they moved, its controls, and its binding."""
         ...
 
     @abstractmethod

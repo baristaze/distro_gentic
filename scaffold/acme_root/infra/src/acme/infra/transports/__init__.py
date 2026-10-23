@@ -33,8 +33,8 @@ from collections.abc import AsyncIterable, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from pathlib import PurePosixPath
-from typing import Literal, Self
+from pathlib import Path, PurePosixPath
+from typing import Literal, Protocol, Self, runtime_checkable
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -59,6 +59,7 @@ __all__ = [
     "SecretVia",
     "StaleCommand",
     "TransportInterface",
+    "WritesFromFile",
     "file_offset",
     "relative_path",
     "require_mode",
@@ -307,6 +308,20 @@ class TransportInterface(ABC):
 
     @abstractmethod
     async def close(self) -> None: ...
+
+
+@runtime_checkable
+class WritesFromFile(Protocol):
+    """A transport that also writes a file into a workspace from a file on
+    its own machine, a chunk at a time, so a file of any size holds a chunk
+    of it in memory: how a host writes a file it downloaded and checked."""
+
+    async def write_file_from(
+        self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
+    ) -> None:
+        """Writes the file at `source` whole at `path`, fenced like a
+        command, as `write_file` writes its bytes."""
+        ...
 
 
 class CredentialBrokerInterface(ABC):

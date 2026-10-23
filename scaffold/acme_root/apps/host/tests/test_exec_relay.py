@@ -150,6 +150,7 @@ async def relay_to(
             app_version="host@test",
             token=token,
             transport=wire or api.transport,
+            store_transport=api.store,
         ),
         executor,
         now=now or (lambda: datetime.now(UTC)),
@@ -281,7 +282,7 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
 
 class Crossed(httpx.AsyncBaseTransport):
     """The stack, noting the operation each `exec` item's detail hands the
-    host, and the output of each result the host pushes."""
+    host, and each result the host pushes."""
 
     def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
         self._inner = inner
@@ -292,7 +293,7 @@ class Crossed(httpx.AsyncBaseTransport):
         path = request.url.path
         if request.method == "POST" and path.endswith("/result"):
             pushed = json.loads(await request.aread())["data"]
-            self.answered.append(json.loads(base64.b64decode(pushed))["output"])
+            self.answered.append(json.loads(base64.b64decode(pushed)))
         response = await self._inner.handle_async_request(request)
         if request.method != "GET" or DETAIL.fullmatch(path) is None:
             return response
@@ -320,6 +321,43 @@ async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_c
     # sent: neither names an offset. The read past it is echoed.
     assert [read.get("offset") for read in wire.asked] == [None, 5]
     assert [answer.get("offset") for answer in wire.answered] == [None, 5]
+
+
+class Sized(httpx.AsyncBaseTransport):
+    """The stack, noting the path and the size of every request the host
+    sends it."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.sent: list[tuple[str, int]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.sent.append((request.url.path, len(await request.aread())))
+        return await self._inner.handle_async_request(request)
+
+
+# Check 6: a command whose stdout and stderr each hold max_output settles
+# with a result request of a few KiB, and its output reads back whole.
+
+
+async def test_a_command_that_fills_both_streams_settles_with_a_result_of_a_few_kib(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Sized(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    most = CommandSpec.model_fields["max_output"].default
+    script = f"import sys; sys.stdout.write('o' * {most}); sys.stderr.write('é' * {most})"
+    spec = command(relayed.epoch, "python3", "-c", script)
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    await claims(relayed.host, waiting)
+    ran = await waiting
+    assert (ran.exit_code, ran.truncated) == (0, False)
+    assert (ran.stdout, ran.stderr) == ("o" * most, "é" * most), "read back whole"
+    (result,) = [size for path, size in wire.sent if path.endswith("/result")]
+    print(f"a result request of {result} bytes; both streams of {most} read back whole")
+    assert result < 2048, f"a result request of {result} bytes"
+    uploads = [size for path, size in wire.sent if path.endswith("/upload")]
+    assert uploads and max(uploads) < 1024, "the output went straight to the store"
 
 
 @pytest.mark.parametrize("kind", [StopKind.CANCEL, StopKind.INTERRUPT])

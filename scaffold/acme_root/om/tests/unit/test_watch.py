@@ -22,6 +22,7 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationSpec,
 )
+from acme.infra.buckets import BucketsInterface
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
 from acme.infra.streams.memory import StreamsMemoryImpl
@@ -53,9 +54,6 @@ from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
 from acme.om.exec_relay.types.exec import (
     ExecCall,
-    ExecOutcome,
-    ExecOutput,
-    ExecResult,
     ExecState,
     RunRequest,
     StopKind,
@@ -66,7 +64,6 @@ from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.types.work import ExecPayload
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
-from acme.om.retention.crossing import CrossingKind, declared
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolRuntime
@@ -86,6 +83,7 @@ from acme.om.watch.rules import signed, verified, verified_item
 from acme.om.watch.types.control import HandCommand
 from acme.om.watch.types.live import ItemGrant, Seen
 
+from contracts import exec_objects
 from contracts.agent_session_storage import make_agent_session
 from contracts.loops import ASSISTANT, Clock, Lookup, reply, said, use
 from contracts.platform_loops import platform_loop_over
@@ -132,13 +130,15 @@ class Watched:
     stream: StreamServiceImpl
     watch: WatchManagerInterface
     clock: Clock
+    buckets: BucketsInterface
 
 
 @pytest.fixture
 async def watched(tmp_path: Path) -> Watched:
+    platform_infra = InfraLocalImpl(tmp_path)
     managers = build_platform_managers(
         StorageMemoryImpl(),
-        InfraLocalImpl(tmp_path),
+        platform_infra,
         platform_root_options=PlatformRootOptions(
             hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
             relay_options=ExecRelayOptions(lease=timedelta(seconds=30)),
@@ -161,7 +161,7 @@ async def watched(tmp_path: Path) -> Watched:
     )
     issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
     credential = await managers.hosts.enroll(
-        request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
+        request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=2)
     )
     host = await managers.hosts.authenticate(request(), credential.credential)
     session = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
@@ -175,7 +175,18 @@ async def watched(tmp_path: Path) -> Watched:
         StreamsMemoryImpl(clock), infra.get_topics(), lambda: managers.change_events, EACH_PART
     )
     watch = build_watch(managers, stream, WatchOptions(live_read_key=KEY), clock=clock)
-    return Watched(managers, owner, in_person(owner), host, session.id, epoch, stream, watch, clock)
+    return Watched(
+        managers,
+        owner,
+        in_person(owner),
+        host,
+        session.id,
+        epoch,
+        stream,
+        watch,
+        clock,
+        platform_infra.get_buckets(),
+    )
 
 
 async def _nothing(data: bytes) -> bytes | None:
@@ -573,7 +584,7 @@ async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_i
 
 async def claim(watched: Watched) -> ExecPayload | None:
     for _ in range(50):
-        claimed = await watched.managers.hosts.claim(request(), watched.host, 1)
+        claimed = await watched.managers.hosts.claim(request(), watched.host, 2)
         if claimed is not None:
             return ExecPayload.model_validate(claimed[1].payload)
         await asyncio.sleep(0.002)
@@ -581,10 +592,8 @@ async def claim(watched: Watched) -> ExecPayload | None:
 
 
 async def finish(watched: Watched, payload: ExecPayload, stdout: str) -> None:
-    result = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout=stdout))
-    data = result.model_dump_json().encode()
-    await watched.managers.exec_relay.push_result(
-        request(), watched.host, payload.item_id, declared(CrossingKind.RESULT, data), data
+    await exec_objects.finish(
+        watched.managers.exec_relay, watched.buckets, watched.host, payload.item_id, stdout=stdout
     )
 
 

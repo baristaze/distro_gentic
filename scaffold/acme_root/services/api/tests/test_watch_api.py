@@ -15,10 +15,9 @@ from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode,
 from acme.om.agent_steps.types.stream import TextPart
 from acme.om.base import new_id
 from acme.om.exceptions import Unavailable
-from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
-from acme.om.retention.crossing import CrossingKind, declared
 from acme.services.api.container import AppContainer
 
+from contracts import exec_objects
 from contracts.agent_session_storage import make_agent_session
 from contracts.tools import stand_ins
 
@@ -127,14 +126,16 @@ async def test_a_person_takes_control_runs_a_command_as_theirs_and_gives_it_back
     assert run["user_id"] == str(ctx.user_id) and run["state"] == "queued"
 
     claimed = await client.post(
-        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+        "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
     )
     assert claimed.json()["item"]["payload"]["item_id"] == run["item_id"], claimed.text
     identity = await managers.hosts.authenticate(seed_request(), host["token"])
-    result = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="ok\n"))
-    data = result.model_dump_json().encode()
-    await managers.exec_relay.push_result(
-        seed_request(), identity, UUID(run["item_id"]), declared(CrossingKind.RESULT, data), data
+    await exec_objects.finish(
+        managers.exec_relay,
+        container.infra.get_buckets(),
+        identity,
+        UUID(run["item_id"]),
+        stdout="ok\n",
     )
 
     ended = await client.get(f"{control}/commands/{run['command_key']}", headers=owner)

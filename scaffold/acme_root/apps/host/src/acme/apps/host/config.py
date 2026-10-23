@@ -32,6 +32,7 @@ engine's own default, which holds Python and `git`."""
 CEILINGS_FILE = "ceilings.toml"
 SECRETS_FILE = "secrets"
 RECORDS_FOLDER = "records"
+TRANSFERS_FOLDER = "transfers"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,6 +70,12 @@ class Settings(ClaimantSettings):
     def records_path(self) -> Path:
         """Where its transport records how each command ended."""
         return self.home / RECORDS_FOLDER
+
+    @property
+    def transfers_path(self) -> Path:
+        """Where a file an item moves is spooled while it crosses,
+        owner-only; each spool goes once its transfer ends."""
+        return self.home / TRANSFERS_FOLDER
 
 
 def _seconds(name: str, default: float) -> float:

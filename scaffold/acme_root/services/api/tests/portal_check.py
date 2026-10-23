@@ -690,7 +690,7 @@ async def stand_in_host(root: Path, slug: str, agent_session_id: UUID, api: str)
             enrolled = await client.post(
                 "/v1/hosts/enrollments",
                 headers=host_headers(issued.token),
-                json={"name": "this-vm", "advertisement": ADVERTISED, "exec_version": 1},
+                json={"name": "this-vm", "advertisement": ADVERTISED, "exec_version": 2},
             )
             enrolled.raise_for_status()
             host = enrolled.json()
@@ -726,15 +726,13 @@ def host_headers(token: str) -> dict[str, str]:
 
 async def run_one(client: Any, headers: dict[str, str], work: Path) -> None:
     """Claims the first command sent within two minutes, runs it in `work`,
-    and settles it with what it printed."""
-    import base64
-    import hashlib
-
-    from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+    and settles it with what it printed, sent straight to the store."""
+    import httpx
+    from exec_hosts import settle_exec
 
     for _ in range(240):
         claimed = await client.post(
-            "/v1/hosts/me/claims", headers=headers, json={"exec_version": 1}
+            "/v1/hosts/me/claims", headers=headers, json={"exec_version": 2}
         )
         claimed.raise_for_status()
         item = claimed.json().get("item")
@@ -756,23 +754,16 @@ async def run_one(client: Any, headers: dict[str, str], work: Path) -> None:
         timeout=120,
     )
     print(f"ran {' '.join(request['argv'])}: exit {ran.returncode}", flush=True)
-    settled = ExecResult(
-        outcome=ExecOutcome(exit_code=ran.returncode),
-        output=ExecOutput(stdout=ran.stdout, stderr=ran.stderr),
-    )
-    data = settled.model_dump_json().encode()
-    pushed = await client.post(
-        f"/v1/hosts/me/exec/{item_id}/result",
-        headers=headers,
-        json={
-            "data": base64.b64encode(data).decode(),
-            "crossing": {
-                "kind": "result",
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "size": len(data),
-            },
-        },
-    )
+    async with httpx.AsyncClient() as store:
+        pushed = await settle_exec(
+            client,
+            headers,
+            item_id,
+            store,
+            exit_code=ran.returncode,
+            stdout=ran.stdout,
+            stderr=ran.stderr,
+        )
     pushed.raise_for_status()
 
 

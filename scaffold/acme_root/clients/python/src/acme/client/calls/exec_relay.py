@@ -1,13 +1,15 @@
 """The exec_relay namespace's calls: the exec work a host holds, and its
 control stream. Each push carries the bytes as they cross, in base64,
 and the hash the host declares of them, which the platform checks before
-it reads them. None is retried here: the host decides what a lost answer
-means for the item it holds."""
+it reads them. The files and the output an item moves never cross here:
+each goes straight to the store, by URLs the platform signs for it alone
+(`issue_exec_upload`, and a detail's `url`). None is retried here: the
+host decides what a lost answer means for the item it holds."""
 
 import base64
 import hashlib
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from acme.client.transport import Transport
@@ -15,6 +17,7 @@ from acme.client.types.exec_relay import (
     ControlView,
     ExecDetailView,
     ExecLeaseView,
+    IssuedObjectUploadView,
     OutputStream,
     PreparedView,
 )
@@ -70,6 +73,19 @@ class ExecRelayCalls(Transport):
                 "crossing": _declared(CrossingKind.result, data),
             },
         )
+
+    async def issue_exec_upload(
+        self, item_id: UUID, kind: Literal["output", "file"], size_bytes: int
+    ) -> IssuedObjectUploadView:
+        """The parts of an object of the item that the store does not hold
+        yet, sealing `size_bytes` bytes, each with the URL signed for it;
+        asked again, only the parts still missing."""
+        answer = await self.request(
+            "POST",
+            f"/v1/hosts/me/exec/{item_id}/upload",
+            json={"object": kind, "size_bytes": size_bytes},
+        )
+        return IssuedObjectUploadView.model_validate(answer)
 
     async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:
         answer = await self.request("POST", f"/v1/hosts/me/exec/{item_id}/lease")

@@ -1,11 +1,13 @@
 """The wire types of the exec relay: what a host reads of an `exec` item it
 holds, what it pushes as the item runs and ends, and the messages of its
 control stream. Each part and each result carries the bytes as they crossed
-the wall, in base64, and the hash its sender declared of them."""
+the wall, in base64, and the hash its sender declared of them. No file and
+no output rides here: each crosses as an object in the store, by URLs
+signed for it alone, and a host is handed the key that opens it."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -75,10 +77,20 @@ class PartsRequest(RequestBody):
 
 
 class ResultRequest(RequestBody):
-    """How an item ended: the JSON of an exec result, in base64."""
+    """How an item ended: the JSON of an exec result, in base64. It names
+    the objects its host uploaded, by their size and their digest, and
+    holds none of their bytes, so it is a few KiB."""
 
     data: str = Field(max_length=RESULT_CHARS)
     crossing: CrossingBody
+
+
+class UploadRequest(RequestBody):
+    """An object of an item the host uploads, and the bytes it seals: the
+    item's `output`, what it printed or listed, or a read's `file`."""
+
+    object: Literal["output", "file"]
+    size_bytes: int = Field(ge=0)
 
 
 class PrepareRequest(RequestBody):
@@ -114,8 +126,30 @@ class PreparedView(View):
     held: bool
 
 
+class IssuedObjectView(View):
+    """A file a write hands its host: the object that holds it under the
+    tenant, the size and the digest of the file, and the key (base64) it
+    is sealed under, which opens this object alone."""
+
+    reference: str
+    size: int
+    digest: str
+    key: str
+
+
+class IssuedObjectSlotView(View):
+    """An object the host uploads: where it is under the tenant, and the key
+    (base64) it seals it under."""
+
+    reference: str
+    key: str
+
+
 class ExecDetailView(View):
-    """An item the host holds: the call, the workspace, and the operation."""
+    """An item the host holds: the call, the workspace, the operation, and
+    the objects it moves. A write's `file_in` comes by `url`, signed for a
+    GET of it alone until `url_expires_at`; an `output` and a read's
+    `file_out` go by the parts `POST .../upload` signs."""
 
     item_id: UUID
     call_id: UUID  # the tool request's id: the call's idempotency key
@@ -127,6 +161,34 @@ class ExecDetailView(View):
     spec: dict[str, Any]
     location: str
     request: dict[str, Any]
+    output: IssuedObjectSlotView | None = None
+    file_in: IssuedObjectView | None = None
+    file_out: IssuedObjectSlotView | None = None
+    url: str | None = None
+    url_expires_at: datetime | None = None
+
+
+class IssuedObjectPartView(View):
+    """One part of an object to send, sealed: `size_bytes` bytes of the
+    sealed object from `offset`, as the body of a PUT to `url`, straight to
+    the store. The URL is signed for that length."""
+
+    number: int
+    offset: int
+    size_bytes: int
+    url: str
+
+
+class IssuedObjectUploadView(View):
+    """The parts of the object the store does not hold yet, at most a window
+    of them, each good until `expires_at`. `remaining` counts every part
+    still missing, these included: send these and ask again while it is
+    above zero, then push the result. Asked again after an upload was cut
+    off, it signs only the parts still missing."""
+
+    parts: list[IssuedObjectPartView]
+    remaining: int
+    expires_at: datetime
 
 
 class ExecLeaseView(View):

@@ -26,6 +26,7 @@ INFRA_INTERFACE_MODULES = frozenset(
         "acme.infra.cache",
         "acme.infra.cache.read",
         "acme.infra.buckets",
+        "acme.infra.buckets.sealed",
         "acme.infra.topics",
         "acme.infra.queues",
         "acme.infra.secrets",
@@ -39,10 +40,12 @@ INFRA_INTERFACE_MODULES = frozenset(
     }
 )
 """A capability's interface is its package; every module beneath it, and
-everything under `acme.infra.impl`, is an impl. The read cache is the one
-module beneath a package that is not: a typed reader over the cache's
-interface, with no impl behind it to choose, which a manager takes through
-its constructor (ADR 0095)."""
+everything under `acme.infra.impl`, is an impl. Two modules beneath a
+package are not, since neither has an impl behind it to choose: the read
+cache, a typed reader over the cache's interface, which a manager takes
+through its constructor (ADR 0095), and the sealed format of an object in
+a bucket, pure functions the platform and its hosts both read (ADR
+2066)."""
 
 
 def package_root(name: str) -> Path:

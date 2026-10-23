@@ -56,6 +56,7 @@ async def api(tmp_path: Path) -> AsyncIterator[Stack]:
             "environment": "local",
             "cache_backend": "valkey",
             "valkey_url": InfraSettings().valkey_url,
+            "buckets_backend": "local",
             "buckets_root": tmp_path / "buckets",
         }
     )

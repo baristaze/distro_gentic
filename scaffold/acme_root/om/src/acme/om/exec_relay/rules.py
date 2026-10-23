@@ -1,7 +1,8 @@
 """Pure rules of the exec relay: the ids an item and its queue rows take from the
 call's key, what a repeat of an item may do, what an item asks of its host,
-which writer epoch is stale, and how a settled item reads. Values in, values
-out; no clock, no storage, no settings."""
+which writer epoch is stale, how a settled item reads, and where the object
+a file item moves lives. Values in, values out; no clock, no storage, no
+settings."""
 
 import hashlib
 from datetime import UTC, datetime
@@ -9,7 +10,14 @@ from uuid import UUID
 
 from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec
 from acme.om.base import derived_id, thaw_mapping
-from acme.om.exec_relay.types.exec import ExecItem, ExecState
+from acme.om.exec_relay.types.exec import (
+    DETAIL_CHARS,
+    OUTPUT_CHARS,
+    SECRETS,
+    ExecItem,
+    ExecState,
+    ObjectKind,
+)
 from acme.om.placement.types.work import ExecEffect, HostIsolation
 from acme.om.work.types.work_item import WorkItem
 
@@ -28,9 +36,26 @@ UNSAFE_ATTEMPTS = 1
 """An unsafe item's row is claimed once. When its lease runs out the queue's
 own sweep fails it rather than requeue it, whatever else runs first."""
 
-RESULT_CHARS = 16_000_000
+ESCAPED_BYTES = 6
+"""The most bytes one character takes in a result's JSON, sent as UTF-8: a
+control character's escape."""
+
+SECRET_NAME_CHARS = 200
+"""The longest name of a secret a command uses."""
+
+RESULT_CHARS = 4 * (2048 + ESCAPED_BYTES * (DETAIL_CHARS + SECRETS * (SECRET_NAME_CHARS + 3))) // 3
 """The most a host's result of one item carries across the wall: the
-characters of its JSON in base64."""
+characters of its JSON in base64. A result holds how the item ended, the
+names of the secrets it used, why its host refused it, the offset a read
+was answered from, and the size and the digest of each object it uploaded:
+what it printed and what it read cross as those objects, never in it. So
+it is a few KiB, as a holder's call is (its route is one), whatever the
+command printed."""
+
+OUTPUT_BYTES = 2 * OUTPUT_CHARS * ESCAPED_BYTES + 1024 * 1024
+"""The most an item's output object holds: both streams of a command at
+`OUTPUT_CHARS`, as UTF-8 JSON, with room for a listing. A host whose output
+is past it keeps none, and says so."""
 
 PUSH_BYTES = 128_000
 """The most bytes of output one push of a host carries: one flush window's,
@@ -40,11 +65,8 @@ output."""
 PUSH_PARTS = 256
 """The most parts one push carries: a run of one stream's text each."""
 
-READ_BYTES = 8 * 1024 * 1024
-"""The most of a file one relayed read carries. Its bytes ride in the
-result in base64, and the result in base64 again, so a read of one byte
-more than this still crosses within `RESULT_CHARS`, with room for the rest
-of the result. A longer file is refused at once, never waited on."""
+OBJECTS = "exec_relay/"
+"""Where, under its tenant, the objects the items of a session move live."""
 
 HOST_ISOLATION: dict[IsolationMode, HostIsolation] = {
     IsolationMode.VM: "vm",
@@ -69,6 +91,29 @@ def exec_id(key: UUID, request: bytes, occurrence: int) -> UUID:
     the same order, so it meets the same items."""
     digest = hashlib.sha256(request).hexdigest()
     return derived_id(key, key_time(key), f"exec:{digest}:{occurrence}")
+
+
+def session_objects(agent_session_id: UUID) -> str:
+    """The prefix of every object a session's items move."""
+    return f"{OBJECTS}{agent_session_id}/"
+
+
+def item_objects(agent_session_id: UUID, item_id: UUID) -> str:
+    """The prefix of every object one item moves, on each of its dispatches."""
+    return f"{session_objects(agent_session_id)}{item_id}/"
+
+
+def dispatch_objects(agent_session_id: UUID, item_id: UUID, dispatch: int) -> str:
+    """The prefix of the objects an item moves on its `dispatch`th time on
+    the queue: an item sent again moves new ones."""
+    return f"{item_objects(agent_session_id, item_id)}{dispatch}/"
+
+
+def object_reference(agent_session_id: UUID, item_id: UUID, dispatch: int, kind: ObjectKind) -> str:
+    """An object an item moves on its `dispatch`th time on the queue, named
+    by what it is, so the relay finds it to remove with nothing of the item
+    opened."""
+    return f"{dispatch_objects(agent_session_id, item_id, dispatch)}{kind}"
 
 
 def row_id(item_id: UUID, dispatch: int) -> UUID:

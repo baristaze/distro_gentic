@@ -16,12 +16,14 @@ from acme.services.api.gateway.platform_resolve import ExecRelayService
 from acme.services.api.types.exec_relay import (
     ExecDetailView,
     ExecLeaseView,
+    IssuedObjectUploadView,
     PartRequest,
     PartsRequest,
     PreparedView,
     PrepareRequest,
     ResultRequest,
     SnapshotRequest,
+    UploadRequest,
 )
 
 router = APIRouter(tags=["exec_relay"])
@@ -30,8 +32,9 @@ router = APIRouter(tags=["exec_relay"])
 @router.get("/hosts/me/exec/{item_id}", response_model=ExecDetailView)
 async def detail(rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID) -> ExecDetailView:
     """What the host runs for an item it holds: the command or the file
-    operation, opened, with its deadline, its writer epoch, and where the
-    workspace is."""
+    operation, opened, with its deadline, its writer epoch, where the
+    workspace is, and the objects it moves, each with the key that opens it
+    alone and, for a write's file, a URL signed for a GET of it."""
     return await relay.detail(rctx, host, item_id)
 
 
@@ -47,6 +50,23 @@ async def push_parts(
     or one part alone, as a host whose pushes hold one part sends it. A push
     sent again lands once."""
     await relay.push_parts(rctx, host, item_id, body)
+
+
+@router.post(
+    "/hosts/me/exec/{item_id}/upload",
+    response_model=IssuedObjectUploadView,
+    dependencies=[HOLDER_CALL],
+)
+async def issue_upload(
+    rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: UploadRequest
+) -> IssuedObjectUploadView:
+    """The parts of an object of the item the store does not hold yet, each
+    by a URL signed for its number and its length, which the host sends
+    straight to the store: the item's output, or a read's file. Asked
+    again, only those still missing, so an upload cut off resumes. It
+    settles what the host holds and carries no bytes, so it is a holder's
+    call."""
+    return await relay.issue_upload(rctx, host, item_id, body)
 
 
 @router.post("/hosts/me/exec/{item_id}/result", status_code=204, dependencies=[HOLDER_CALL])

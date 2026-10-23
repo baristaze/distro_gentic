@@ -31,6 +31,7 @@ from acme.client.types.hosts import IsolationMode
 from acme.infra.agent_workspaces import AgentWorkspaceProviderInterface
 from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
+from acme.infra.buckets.local import BucketsLocalImpl
 from acme.infra.docker import docker
 from acme.infra.root import InfraInterface
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -198,10 +199,18 @@ class Stack:
     container: AppContainer
     transport: httpx.AsyncBaseTransport
     owner: TenantContext
+    # The store a URL the platform signs names: the local impl's, in-process,
+    # or, over the compose stack, the network's.
+    store: httpx.AsyncBaseTransport | None = None
 
     def client(self, token: str | None) -> ApiClient:
         return ApiClient(
-            "http://test", app="api", app_version="host@test", token=token, transport=self.transport
+            "http://test",
+            app="api",
+            app_version="host@test",
+            token=token,
+            transport=self.transport,
+            store_transport=self.store,
         )
 
     def settings(self, home: Path, token: str | None) -> Settings:
@@ -246,7 +255,13 @@ async def stack(
             seed_request(), "Ajax", slug, email, "Ann"
         )
         transport = Dated(Streamed(app))
-        yield Stack(container=container, transport=transport, owner=owner)
+        buckets = container.infra.get_buckets()
+        store = (
+            httpx.ASGITransport(app=buckets.store)
+            if isinstance(buckets, BucketsLocalImpl)
+            else None
+        )
+        yield Stack(container=container, transport=transport, owner=owner, store=store)
 
 
 def postgres() -> StoragePostgresImpl:

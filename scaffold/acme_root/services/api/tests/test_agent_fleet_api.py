@@ -334,7 +334,7 @@ async def test_a_hosts_standing_names_its_state_and_what_its_lanes_hold(
         json={
             "name": "host-1",
             "advertisement": {"os": "Linux 6.8", "isolation_modes": ["container"]},
-            "exec_version": 1,
+            "exec_version": 2,
         },
     )
     assert enrolled.status_code == 200, enrolled.text
@@ -346,8 +346,8 @@ async def test_a_hosts_standing_names_its_state_and_what_its_lanes_hold(
     assert (body["state"], body["revoked"], body["exec_version"], body["exec_floor"]) == (
         "online",
         False,
-        1,
-        1,
+        2,
+        2,
     )
     assert body["advertisement"]["isolation_modes"] == ["container"]
     assert body["lanes"] == []

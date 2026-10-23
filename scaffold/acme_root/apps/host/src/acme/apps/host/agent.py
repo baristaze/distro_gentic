@@ -48,7 +48,7 @@ from acme.timing import Retries
 
 log = logging.getLogger(__name__)
 
-EXEC_VERSION = 1
+EXEC_VERSION = 2
 """The version of `exec` work this build of the host reads."""
 
 ENDS_THE_HOST = REFUSED | {426}

@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
@@ -142,6 +143,12 @@ class TransportTwinImpl(TransportInterface):
         self._serve(workspace)
         self._admit(workspace.id, epoch)
         self._files.setdefault(workspace.id, {})[str(relative_path(path))] = data
+
+    async def write_file_from(
+        self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
+    ) -> None:
+        """The twin keeps its files in memory, so it reads the file whole."""
+        await self.write_file(workspace, path, await asyncio.to_thread(source.read_bytes), epoch)
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         self._serve(workspace)

@@ -5,7 +5,6 @@ operation of a call travels as keyed `exec` work to the host that holds the
 workspace and the runner waits for its result."""
 
 import asyncio
-import base64
 import hashlib
 import logging
 from collections import OrderedDict
@@ -20,7 +19,6 @@ from acme.infra.transports import (
     CommandResult,
     CommandSpec,
     FileEntry,
-    FileTooLarge,
     OutputSink,
     RecordSeal,
     StaleCommand,
@@ -34,8 +32,8 @@ from acme.om.context import RequestContext
 from acme.om.exceptions import OmException, ToolFailed, Unavailable
 from acme.om.exec_relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
-from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.exec_relay.types.exec import (
+    OUTPUT_CHARS,
     REQUESTS,
     ExecCall,
     ExecItem,
@@ -127,7 +125,9 @@ class TransportRelayImpl(TransportInterface):
             cwd=command.cwd,
             env=command.env,
             secrets=command.secrets,
-            max_output=command.max_output,
+            # What a relayed command keeps of each stream is bounded, as
+            # its output object is.
+            max_output=min(command.max_output, OUTPUT_CHARS),
         )
         call = self._call(
             workspace, request, command.key, command.effect, command.deadline, command.epoch
@@ -168,9 +168,12 @@ class TransportRelayImpl(TransportInterface):
         if progress is None or progress.state is not ExecState.DONE:
             return None
         outcome = progress.outcome or ExecOutcome()
+        output = progress.output or ExecOutput()
         if outcome.stopped is not None or outcome.refused is not None:
             return None  # cut off before it ended, or never ran
-        return _command_result(key, outcome, progress.output or ExecOutput())
+        if not output.kept:
+            return None  # how it ended is not whole: never an empty success
+        return _command_result(key, outcome, output)
 
     async def purge_records(self, agent_workspace_id: UUID) -> None:
         """The exec relay's records of a session go with it in the sweep's purge;
@@ -180,17 +183,15 @@ class TransportRelayImpl(TransportInterface):
     async def read_file(
         self, workspace: AgentWorkspace, path: str, max_bytes: int, offset: int = 0
     ) -> bytes:
-        """One item, whose result crosses the wall whole: it asks for no more
-        than `READ_BYTES` and a byte from `offset`, which the host's transport
-        reads from, so a longer rest of the file is refused at once
-        (`FileTooLarge`), never waited on as a result that cannot cross. A
-        host echoes the offset it read from; an answer that does not echo
-        it came from a host that read from the start, and is refused
-        (`CapabilityMissing`), never handed back as the bytes after it."""
-        request = ReadRequest(
-            path=path, max_bytes=min(max_bytes, READ_BYTES + 1), offset=file_offset(offset)
-        )
-        progress = await self._file(workspace, request, "read_only", None)
+        """One item: its host reads up to `max_bytes` from `offset` and
+        uploads them as the item's file, which is taken from the store once
+        the item is done, checked against the size and the digest its host
+        declared. A host echoes the offset it read from; an answer that does
+        not echo it came from a host that read from the start, and is
+        refused (`CapabilityMissing`), never handed back as the bytes after
+        it."""
+        request = ReadRequest(path=path, max_bytes=max_bytes, offset=file_offset(offset))
+        item, progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
         _completed(outcome, output)
         if output.offset != request.offset:
@@ -198,23 +199,24 @@ class TransportRelayImpl(TransportInterface):
                 f"the workspace's host did not read from offset {request.offset}: a host "
                 "of an earlier release reads a file only from its start"
             )
-        data = base64.b64decode(output.data or "")
-        if len(data) > READ_BYTES:
-            raise FileTooLarge(READ_BYTES)
-        return data
+        if output.file is None:
+            raise CapabilityMissing("the workspace's host uploaded no file for the read")
+        return await self._exec_relay().take(self._stage(), workspace.org_id, item.id)
 
     async def write_file(
         self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
     ) -> None:
-        request = WriteRequest(path=path, data=base64.b64encode(data).decode())
-        progress = await self._file(workspace, request, "idempotent", epoch)
+        """One item, whose file crosses as an object its host downloads."""
+        request = WriteRequest(path=path)
+        _, progress = await self._file(workspace, request, "idempotent", epoch, data)
         _completed(*_ended(progress))
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         request = ListRequest(path=path, limit=limit)
-        progress = await self._file(workspace, request, "read_only", None)
+        _, progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
         _completed(outcome, output)
+        _whole(outcome, output)
         return list(output.entries)
 
     def describe(self) -> str:
@@ -229,15 +231,20 @@ class TransportRelayImpl(TransportInterface):
     # Helpers.
 
     async def _file(
-        self, workspace: AgentWorkspace, request: ExecRequest, effect: ExecEffect, epoch: int | None
-    ) -> ExecProgress:
+        self,
+        workspace: AgentWorkspace,
+        request: ExecRequest,
+        effect: ExecEffect,
+        epoch: int | None,
+        content: bytes | None = None,
+    ) -> tuple[ExecItem, ExecProgress]:
         """A file operation. The engine's carry no call's key, so each is an
         item keyed by itself: a read, or a whole file written under the
         run's epoch, which a repeat cannot harm."""
         call = self._call(
             workspace, request, new_id(), effect, self._clock() + self._file_time, epoch
         )
-        return await self._through(workspace, call, 0, None)
+        return await self._relayed(workspace, call, 0, None, content)
 
     async def call_mcp(
         self,
@@ -261,6 +268,7 @@ class TransportRelayImpl(TransportInterface):
         if outcome.stopped is StopKind.DEADLINE or outcome.timed_out:
             raise ToolFailed(ToolFailure.TIMEOUT, f"{request.server} did not answer in time")
         _completed(outcome, output)
+        _whole(outcome, output)
         return McpAnswer(text=output.stdout, is_error=outcome.exit_code not in (0, None))
 
     @staticmethod
@@ -291,11 +299,23 @@ class TransportRelayImpl(TransportInterface):
         occurrence: int,
         on_output: OutputSink | None,
     ) -> ExecProgress:
+        _, progress = await self._relayed(workspace, call, occurrence, on_output, None)
+        return progress
+
+    async def _relayed(
+        self,
+        workspace: AgentWorkspace,
+        call: ExecCall,
+        occurrence: int,
+        on_output: OutputSink | None,
+        content: bytes | None,
+    ) -> tuple[ExecItem, ExecProgress]:
+        """The item sent, and how it settled."""
         epoch = call.epoch
         rctx = self._stage()
         org_id = workspace.org_id
         try:
-            item = await self._exec_relay().send(rctx, org_id, call, occurrence)
+            item = await self._exec_relay().send(rctx, org_id, call, occurrence, content)
         except StaleExec as error:
             raise StaleCommand(error.message) from error
         except (NoWorkspaceHost, ContentNotKept) as error:
@@ -307,7 +327,7 @@ class TransportRelayImpl(TransportInterface):
             await asyncio.shield(self._stop(rctx, org_id, item.id, StopKind.CANCEL, epoch))
             raise
         assert progress is not None  # a wait that does not attach never gives up
-        return progress
+        return item, progress
 
     async def _wait(
         self,
@@ -496,11 +516,25 @@ def _completed(outcome: ExecOutcome, output: ExecOutput) -> None:
         )
 
 
+def _whole(outcome: ExecOutcome, output: ExecOutput) -> None:
+    """Fails an item that ran and whose output was not kept whole: what it
+    printed or listed is unknown, so it is never read as nothing."""
+    if output.kept:
+        return
+    exited = "" if outcome.exit_code is None else f" and exited {outcome.exit_code}"
+    raise ToolFailed(
+        ToolFailure.INTERRUPTED,
+        f"it ran on its host{exited}, but {output.detail}; what it printed is unknown, "
+        "so check the workspace before you run it again",
+    )
+
+
 def _command_result(key: UUID, outcome: ExecOutcome, output: ExecOutput) -> CommandResult:
     if outcome.refused is not None:
         raise HostRefused(
             outcome.refused_status or 500, outcome.refused, output.detail or outcome.refused
         )
+    _whole(outcome, output)
     return CommandResult(
         key=key,
         exit_code=outcome.exit_code,
