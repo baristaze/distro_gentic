@@ -81,10 +81,16 @@ def marked(app: FastAPI, leaving_out: Iterable[APIRouter] = ()) -> set[tuple[str
     }
 
 
+BOOTED = tuple(product_api.PRODUCT_API.hosted().values())
+"""The product's routers as `HOSTED` took them at import, read before any
+case serves a product of its own."""
+
+
 def the_platforms(app: FastAPI) -> set[tuple[str, str]]:
     """The holder's calls the platform marks: the product's routers
-    (`PRODUCT_API`) are left out, since a product marks its own."""
-    hosted = product_api.PRODUCT_API.hosted().values()
+    (`PRODUCT_API`), those `HOSTED` took at import and those a case serves,
+    are left out, since a product marks its own."""
+    hosted = [*BOOTED, *product_api.PRODUCT_API.hosted().values()]
     return marked(app, [router for routers in hosted for router in routers])
 
 
