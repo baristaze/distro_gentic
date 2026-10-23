@@ -10,7 +10,9 @@ image built and a container run of it. The loop's end keeps the VM
 whole: the host's credential ends, the VM stops, and its disk is kept
 as the session's snapshot; then the VM goes. The next loop starts a
 VM from that snapshot, whose new host finds the same file and the same
-image. The host's environment holds nothing of the platform's.
+image. The host's environment holds nothing of the platform's. What a
+command printed crosses the store, here the local impl's, served on this
+host's loopback beside the API, which the guest reaches the same way.
 
 Needs a migrated database (`make migrate`), Lima and a hypervisor, and the
 pool's image, which it builds when it is missing
@@ -27,6 +29,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import uvicorn
@@ -40,6 +43,8 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationSpec,
 )
+from acme.infra.buckets.local import BucketsLocalImpl
+from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.platform_root import PlatformInfra
 from acme.infra.vms import VmState
 from acme.infra.vms.lima import VmsLimaImpl, hypervisor
@@ -63,6 +68,7 @@ from acme.workers.agent_session_runner.settings import AgentSessionRunnerSetting
 PREFIX = os.environ.get("ACME_VM_PREFIX", "acme-test-")
 IMAGE = f"{PREFIX}image"
 PORT = int(os.environ.get("ACME_TEST_API_PORT", "8191"))
+STORE_PORT = int(os.environ.get("ACME_TEST_STORE_PORT", str(PORT + 1)))
 KEPT = IsolationSpec(
     mode=IsolationMode.VM,
     egress=EgressPolicy(mode=EgressMode.OPEN),
@@ -125,30 +131,41 @@ def image() -> str:
     return IMAGE
 
 
+async def served(app: Any, port: int) -> tuple[uvicorn.Server, asyncio.Future[None]]:
+    """`app` served on this host's loopback at `port`, once it listens."""
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, lifespan="off", log_level="warning")
+    )
+    serving = asyncio.ensure_future(server.serve())
+    for _ in range(400):
+        if server.started:
+            break
+        await asyncio.sleep(0.05)
+    return server, serving
+
+
 @pytest.fixture
 async def api(tmp_path: Path) -> AsyncIterator[Stack]:
-    """The API over Postgres, served on this host's loopback, which a Lima
-    guest reaches as `host.lima.internal`."""
+    """The API over Postgres, and the local store, each served on this
+    host's loopback, which a Lima guest reaches as `host.lima.internal`:
+    the store signs its URLs for that name."""
     storage = postgres()
-    async with stack(tmp_path / "api", storage) as running:
-        config = uvicorn.Config(
-            create_app(running.container),
-            host="127.0.0.1",
-            port=PORT,
-            lifespan="off",
-            log_level="warning",
-        )
-        server = uvicorn.Server(config)
-        serving = asyncio.ensure_future(server.serve())
-        for _ in range(400):
-            if server.started:
-                break
-            await asyncio.sleep(0.05)
+    infra = InfraLocalImpl(tmp_path / "infra")
+    buckets = BucketsLocalImpl(
+        tmp_path / "infra" / "buckets", url=f"http://host.lima.internal:{STORE_PORT}"
+    )
+    infra._buckets = buckets  # pyright: ignore[reportPrivateUsage]
+    async with stack(tmp_path / "api", storage, infra) as running:
+        servers = [
+            await served(create_app(running.container), PORT),
+            await served(buckets.store, STORE_PORT),
+        ]
         try:
             yield running
         finally:
-            server.should_exit = True
-            await serving
+            for server, serving in servers:
+                server.should_exit = True
+                await serving
     await storage.close()
 
 

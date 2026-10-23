@@ -1,27 +1,37 @@
-"""A host that writes one large file into a directory workspace, in a process
-of its own, so the memory it reports is the host's alone. Its platform is
-faked on the wire: it answers one `write_file` item's detail with the
-object and the URL the spec names, renews its lease, and takes its result,
-and it records the size of every request the host sends it and when each
-renewal lands. Its store is the real one the URL names. It prints, as one
-line of JSON, its peak resident memory before and after, those sizes, the
-renewals' times, and the result it was pushed.
+"""The two sides of a large write over the compose stack's store, each in a
+process of its own, so neither shares the test's process and the memory
+the host reports is the host's alone. Each prints one line of JSON.
 
-    python big_write.py '<spec as JSON>'
+    python big_write.py put '<spec>'     # the platform's side
+    python big_write.py host '<spec>'    # the host's side
+    python big_write.py delete '<spec>'
 
-The spec names `url`, `reference`, `size`, `digest`, `key`, `workspace`,
-`home`, and `renew_seconds`."""
+`put` seals a file of `size` bytes, whose bytes repeat one random frame's,
+and sends it to the store's own `tool-outputs` bucket a part at a time
+under the tenant and the reference the spec names, as a host sends one;
+it prints its digest, its key, and a URL signed for a GET of it. `host`
+runs a host that writes that file into a directory workspace: its platform
+is faked on the wire, answering one `write_file` item's detail with the
+object and the URL, renewing its lease, and taking its result, and it
+records the size of every request the host sends it and when each renewal
+lands. It prints its peak resident memory before and after the write,
+those sizes, the renewals' times, and the result it was pushed. `delete`
+removes the object."""
 
 import asyncio
 import base64
+import hashlib
 import json
 import resource
+import secrets
 import sys
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
+import aioboto3
 import httpx
 
 from acme.apps.host.ceilings import Ask
@@ -30,10 +40,24 @@ from acme.client.client import ApiClient
 from acme.client.types.hosts import ClaimedWorkView
 from acme.client.types.hosts import IsolationMode as HostMode
 from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.buckets import Buckets
+from acme.infra.buckets.s3 import BucketsS3Impl
+from acme.infra.buckets.sealed import (
+    DIGEST_SCHEME,
+    FRAME_PLAIN,
+    frame_slices,
+    new_key,
+    seal_frame,
+    sealed_parts,
+    sealed_size,
+)
+from acme.infra.impl.settings import InfraSettings
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.om.base import new_id
+
+BUCKET = Buckets.TOOL_OUTPUTS
 
 
 def peak() -> int:
@@ -42,8 +66,77 @@ def peak() -> int:
     return most if sys.platform == "darwin" else most * 1024
 
 
-async def main(spec: dict[str, Any]) -> dict[str, Any]:
-    item_id, org_id, workspace = new_id(), new_id(), str(spec["workspace"])
+def store() -> BucketsS3Impl:
+    """The stack's MinIO and its own buckets, signing for `localhost` while
+    talking to `127.0.0.1`."""
+    settings = InfraSettings()
+    endpoint = settings.s3_endpoint_url or "http://127.0.0.1:59000"
+    return BucketsS3Impl(
+        aioboto3.Session(
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            region_name=settings.aws_region,
+        ),
+        endpoint_url=endpoint,
+        region=settings.aws_region,
+        bucket_prefix=settings.s3_bucket_prefix,
+        timeout=timedelta(seconds=60),
+        presign_endpoint_url=endpoint.replace("127.0.0.1", "localhost"),
+    )
+
+
+async def put(spec: dict[str, Any]) -> dict[str, Any]:
+    org_id, reference, size = UUID(spec["org_id"]), spec["reference"], int(spec["size"])
+    key = new_key()
+    frame = secrets.token_bytes(FRAME_PLAIN)
+    hasher = hashlib.sha256()
+    buckets = store()
+    await buckets.start()
+    try:
+        upload_id = await buckets.start_upload(
+            org_id, BUCKET, reference, "application/octet-stream"
+        )
+        async with httpx.AsyncClient(timeout=120) as wire:
+            for part in sealed_parts(size):
+                frames = []
+                for index, last, _, length in frame_slices(size, part.first_frame, part.frames):
+                    plain = frame[:length]
+                    hasher.update(plain)
+                    frames.append(seal_frame(key, reference, index, last, plain))
+                url = await buckets.presign_part(
+                    org_id,
+                    BUCKET,
+                    reference,
+                    upload_id,
+                    part.number,
+                    part.size_bytes,
+                    timedelta(minutes=15),
+                )
+                sent = await wire.put(url, content=b"".join(frames))
+                sent.raise_for_status()
+        await buckets.complete_upload(org_id, BUCKET, reference, upload_id, sealed_size(size))
+        url = await buckets.presign_get(org_id, BUCKET, reference, timedelta(minutes=15))
+    finally:
+        await buckets.close()
+    return {
+        "digest": DIGEST_SCHEME + hasher.hexdigest(),
+        "key": base64.b64encode(key).decode(),
+        "url": url,
+    }
+
+
+async def delete(spec: dict[str, Any]) -> dict[str, Any]:
+    buckets = store()
+    await buckets.start()
+    try:
+        await buckets.delete(UUID(spec["org_id"]), BUCKET, spec["reference"])
+    finally:
+        await buckets.close()
+    return {"deleted": spec["reference"]}
+
+
+async def host(spec: dict[str, Any]) -> dict[str, Any]:
+    item_id, org_id, workspace = new_id(), UUID(spec["org_id"]), str(spec["workspace"])
     sizes: list[int] = []
     renewed: list[float] = []
     results: list[dict[str, Any]] = []
@@ -134,5 +227,7 @@ async def main(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+SIDES = {"put": put, "host": host, "delete": delete}
+
 if __name__ == "__main__":
-    print(json.dumps(asyncio.run(main(json.loads(sys.argv[1])))))
+    print(json.dumps(asyncio.run(SIDES[sys.argv[1]](json.loads(sys.argv[2])))))
