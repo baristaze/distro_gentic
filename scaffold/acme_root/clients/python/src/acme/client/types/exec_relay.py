@@ -7,9 +7,9 @@ from acme.client.schema.exec_relay import (
     ExecDetailView,
     ExecLeaseView,
     IssuedObjectPartView,
+    IssuedObjectSlotView,
     IssuedObjectUploadView,
-    ObjectRefView,
-    ObjectSlotView,
+    IssuedObjectView,
     OutputStream,
     PreparedView,
 )
@@ -20,9 +20,9 @@ __all__ = [
     "ExecDetailView",
     "ExecLeaseView",
     "IssuedObjectPartView",
+    "IssuedObjectSlotView",
     "IssuedObjectUploadView",
-    "ObjectRefView",
-    "ObjectSlotView",
+    "IssuedObjectView",
     "OutputStream",
     "PreparedView",
 ]

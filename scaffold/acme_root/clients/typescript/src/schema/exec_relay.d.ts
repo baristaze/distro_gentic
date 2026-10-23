@@ -124,7 +124,9 @@ export interface paths {
          * @description The parts of an object of the item the store does not hold yet, each
          *     by a URL signed for its number and its length, which the host sends
          *     straight to the store: the item's output, or a read's file. Asked
-         *     again, only those still missing, so an upload cut off resumes.
+         *     again, only those still missing, so an upload cut off resumes. It
+         *     settles what the host holds and carries no bytes, so it is a holder's
+         *     call.
          */
         post: operations["issue_upload"];
         delete?: never;
@@ -261,8 +263,8 @@ export interface components {
             effect: string;
             /** Epoch */
             epoch: number | null;
-            file_in?: components["schemas"]["ObjectRefView"] | null;
-            file_out?: components["schemas"]["ObjectSlotView"] | null;
+            file_in?: components["schemas"]["IssuedObjectView"] | null;
+            file_out?: components["schemas"]["IssuedObjectSlotView"] | null;
             /**
              * Item Id
              * Format: uuid
@@ -275,7 +277,7 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
-            output?: components["schemas"]["ObjectSlotView"] | null;
+            output?: components["schemas"]["IssuedObjectSlotView"] | null;
             /** Request */
             request: {
                 [key: string]: unknown;
@@ -319,6 +321,17 @@ export interface components {
             url: string;
         };
         /**
+         * IssuedObjectSlotView
+         * @description An object the host uploads: where it is under the tenant, and the key
+         *     (base64) it seals it under.
+         */
+        IssuedObjectSlotView: {
+            /** Key */
+            key: string;
+            /** Reference */
+            reference: string;
+        };
+        /**
          * IssuedObjectUploadView
          * @description The parts of the object the store does not hold yet, at most a window
          *     of them, each good until `expires_at`. `remaining` counts every part
@@ -338,12 +351,12 @@ export interface components {
             remaining: number;
         };
         /**
-         * ObjectRefView
+         * IssuedObjectView
          * @description A file a write hands its host: the object that holds it under the
          *     tenant, the size and the digest of the file, and the key (base64) it
          *     is sealed under, which opens this object alone.
          */
-        ObjectRefView: {
+        IssuedObjectView: {
             /** Digest */
             digest: string;
             /** Key */
@@ -352,17 +365,6 @@ export interface components {
             reference: string;
             /** Size */
             size: number;
-        };
-        /**
-         * ObjectSlotView
-         * @description An object the host uploads: where it is under the tenant, and the key
-         *     (base64) it seals it under.
-         */
-        ObjectSlotView: {
-            /** Key */
-            key: string;
-            /** Reference */
-            reference: string;
         };
         /**
          * OutputStream

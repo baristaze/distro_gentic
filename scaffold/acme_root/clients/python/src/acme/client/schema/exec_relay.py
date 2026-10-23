@@ -58,6 +58,16 @@ class IssuedObjectPartView(BaseModel):
     url: Annotated[str, Field(title='Url')]
 
 
+class IssuedObjectSlotView(BaseModel):
+    """
+    An object the host uploads: where it is under the tenant, and the key
+    (base64) it seals it under.
+    """
+
+    key: Annotated[str, Field(title='Key')]
+    reference: Annotated[str, Field(title='Reference')]
+
+
 class IssuedObjectUploadView(BaseModel):
     """
     The parts of the object the store does not hold yet, at most a window
@@ -72,7 +82,7 @@ class IssuedObjectUploadView(BaseModel):
     remaining: Annotated[int, Field(title='Remaining')]
 
 
-class ObjectRefView(BaseModel):
+class IssuedObjectView(BaseModel):
     """
     A file a write hands its host: the object that holds it under the
     tenant, the size and the digest of the file, and the key (base64) it
@@ -83,16 +93,6 @@ class ObjectRefView(BaseModel):
     key: Annotated[str, Field(title='Key')]
     reference: Annotated[str, Field(title='Reference')]
     size: Annotated[int, Field(title='Size')]
-
-
-class ObjectSlotView(BaseModel):
-    """
-    An object the host uploads: where it is under the tenant, and the key
-    (base64) it seals it under.
-    """
-
-    key: Annotated[str, Field(title='Key')]
-    reference: Annotated[str, Field(title='Reference')]
 
 
 class OutputStream(StrEnum):
@@ -224,12 +224,12 @@ class ExecDetailView(BaseModel):
     deadline: Annotated[AwareDatetime, Field(title='Deadline')]
     effect: Annotated[str, Field(title='Effect')]
     epoch: Annotated[int | None, Field(title='Epoch')]
-    file_in: ObjectRefView | None = None
-    file_out: ObjectSlotView | None = None
+    file_in: IssuedObjectView | None = None
+    file_out: IssuedObjectSlotView | None = None
     item_id: Annotated[UUID, Field(title='Item Id')]
     location: Annotated[str, Field(title='Location')]
     org_id: Annotated[UUID, Field(title='Org Id')]
-    output: ObjectSlotView | None = None
+    output: IssuedObjectSlotView | None = None
     request: Annotated[dict[str, Any], Field(title='Request')]
     spec: Annotated[dict[str, Any], Field(title='Spec')]
     url: Annotated[str | None, Field(title='Url')] = None

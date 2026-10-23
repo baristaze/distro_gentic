@@ -32,7 +32,11 @@ import httpx
 
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
-from acme.client.types.exec_relay import IssuedObjectPartView, ObjectRefView, ObjectSlotView
+from acme.client.types.exec_relay import (
+    IssuedObjectPartView,
+    IssuedObjectSlotView,
+    IssuedObjectView,
+)
 from acme.infra.agent_workspaces import AgentWorkspace
 from acme.infra.buckets.sealed import (
     DIGEST_SCHEME,
@@ -103,7 +107,7 @@ class HostObjects:
         self._spool.mkdir(mode=0o700, parents=True, exist_ok=True)
         return self._spool / uuid4().hex
 
-    async def fetch(self, named: ObjectRefView, url: str) -> Spooled:
+    async def fetch(self, named: IssuedObjectView, url: str) -> Spooled:
         """The file a write hands the host, downloaded by `url` into a spool
         and checked: every frame opens under its key at its place, and the
         whole is the size and the digest the item declares. `ObjectRefused`
@@ -166,7 +170,7 @@ class HostObjects:
         self,
         item_id: UUID,
         kind: ObjectKind,
-        slot: ObjectSlotView,
+        slot: IssuedObjectSlotView,
         source: Spooled | bytes,
         until: float,
     ) -> tuple[int, str]:

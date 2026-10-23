@@ -31,9 +31,9 @@ from acme.services.api.types.exec_relay import (
     ExecDetailView,
     ExecLeaseView,
     IssuedObjectPartView,
+    IssuedObjectSlotView,
     IssuedObjectUploadView,
-    ObjectRefView,
-    ObjectSlotView,
+    IssuedObjectView,
     PartRequest,
     PartsRequest,
     PreparedView,
@@ -108,13 +108,13 @@ class ExecRelayServiceImpl(ExecRelayServiceInterface):
             request=REQUESTS.dump_python(detail.request, mode="json"),
             output=None
             if detail.output is None
-            else ObjectSlotView(reference=detail.output.reference, key=detail.output.key),
+            else IssuedObjectSlotView(reference=detail.output.reference, key=detail.output.key),
             file_in=None
             if detail.file_in is None
-            else ObjectRefView.model_validate(detail.file_in.model_dump()),
+            else IssuedObjectView.model_validate(detail.file_in.model_dump()),
             file_out=None
             if detail.file_out is None
-            else ObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
+            else IssuedObjectSlotView(reference=detail.file_out.reference, key=detail.file_out.key),
             url=detail.url,
             url_expires_at=detail.url_expires_at,
         )

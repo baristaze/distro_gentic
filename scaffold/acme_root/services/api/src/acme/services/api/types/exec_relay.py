@@ -126,7 +126,7 @@ class PreparedView(View):
     held: bool
 
 
-class ObjectRefView(View):
+class IssuedObjectView(View):
     """A file a write hands its host: the object that holds it under the
     tenant, the size and the digest of the file, and the key (base64) it
     is sealed under, which opens this object alone."""
@@ -137,7 +137,7 @@ class ObjectRefView(View):
     key: str
 
 
-class ObjectSlotView(View):
+class IssuedObjectSlotView(View):
     """An object the host uploads: where it is under the tenant, and the key
     (base64) it seals it under."""
 
@@ -161,9 +161,9 @@ class ExecDetailView(View):
     spec: dict[str, Any]
     location: str
     request: dict[str, Any]
-    output: ObjectSlotView | None = None
-    file_in: ObjectRefView | None = None
-    file_out: ObjectSlotView | None = None
+    output: IssuedObjectSlotView | None = None
+    file_in: IssuedObjectView | None = None
+    file_out: IssuedObjectSlotView | None = None
     url: str | None = None
     url_expires_at: datetime | None = None
 

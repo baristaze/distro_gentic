@@ -113,7 +113,7 @@
           "file_in": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ObjectRefView"
+                "$ref": "#/components/schemas/IssuedObjectView"
               },
               {
                 "type": "null"
@@ -123,7 +123,7 @@
           "file_out": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ObjectSlotView"
+                "$ref": "#/components/schemas/IssuedObjectSlotView"
               },
               {
                 "type": "null"
@@ -147,7 +147,7 @@
           "output": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ObjectSlotView"
+                "$ref": "#/components/schemas/IssuedObjectSlotView"
               },
               {
                 "type": "null"
@@ -256,6 +256,25 @@
         "title": "IssuedObjectPartView",
         "type": "object"
       },
+      "IssuedObjectSlotView": {
+        "description": "An object the host uploads: where it is under the tenant, and the key\n(base64) it seals it under.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "key"
+        ],
+        "title": "IssuedObjectSlotView",
+        "type": "object"
+      },
       "IssuedObjectUploadView": {
         "description": "The parts of the object the store does not hold yet, at most a window\nof them, each good until `expires_at`. `remaining` counts every part\nstill missing, these included: send these and ask again while it is\nabove zero, then push the result. Asked again after an upload was cut\noff, it signs only the parts still missing.",
         "properties": {
@@ -284,7 +303,7 @@
         "title": "IssuedObjectUploadView",
         "type": "object"
       },
-      "ObjectRefView": {
+      "IssuedObjectView": {
         "description": "A file a write hands its host: the object that holds it under the\ntenant, the size and the digest of the file, and the key (base64) it\nis sealed under, which opens this object alone.",
         "properties": {
           "digest": {
@@ -310,26 +329,7 @@
           "digest",
           "key"
         ],
-        "title": "ObjectRefView",
-        "type": "object"
-      },
-      "ObjectSlotView": {
-        "description": "An object the host uploads: where it is under the tenant, and the key\n(base64) it seals it under.",
-        "properties": {
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "reference": {
-            "title": "Reference",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reference",
-          "key"
-        ],
-        "title": "ObjectSlotView",
+        "title": "IssuedObjectView",
         "type": "object"
       },
       "OutputStream": {
@@ -1053,7 +1053,7 @@
     },
     "/v1/hosts/me/exec/{item_id}/upload": {
       "post": {
-        "description": "The parts of an object of the item the store does not hold yet, each\nby a URL signed for its number and its length, which the host sends\nstraight to the store: the item's output, or a read's file. Asked\nagain, only those still missing, so an upload cut off resumes.",
+        "description": "The parts of an object of the item the store does not hold yet, each\nby a URL signed for its number and its length, which the host sends\nstraight to the store: the item's output, or a read's file. Asked\nagain, only those still missing, so an upload cut off resumes. It\nsettles what the host holds and carries no bytes, so it is a holder's\ncall.",
         "operationId": "issue_upload",
         "parameters": [
           {

@@ -635,7 +635,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 "host of its pool; its workspace is made again before its calls run"
             )
         contents = await self._contents(
-            org_id, call.agent_session_id, item_id, 1, call.request, content
+            ctx, call.agent_session_id, item_id, 1, call.request, content
         )
         sealed = await self._seal.seal(
             ctx, call.agent_session_id, call.key, contents.model_dump_json().encode()
@@ -978,7 +978,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if contents is None:
             result = result.model_copy(update={"output": None, "file": None})
         else:
-            result = await self._landed(host.org_id, contents, result)
+            result = await self._landed(ctx, contents, result)
         kept = ResultContent.model_validate(result.model_dump(exclude={"outcome"}))
         sealed = await self._seal.seal(
             ctx, item.agent_session_id, item.key, kept.model_dump_json().encode()
@@ -1310,7 +1310,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             except NotFound:
                 last = None
             contents = await self._contents(
-                ctx.org_id, item.agent_session_id, item.id, dispatch, call.request, content
+                ctx, item.agent_session_id, item.id, dispatch, call.request, content
             )
             sealed = await self._seal.seal(
                 ctx, item.agent_session_id, item.key, contents.model_dump_json().encode()
@@ -1478,7 +1478,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     async def _contents(
         self,
-        org_id: UUID,
+        ctx: TenantContext,
         agent_session_id: UUID,
         item_id: UUID,
         dispatch: int,
@@ -1492,7 +1492,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
         async def slot(kind: ObjectKind) -> ObjectSlot:
             reference = object_reference(agent_session_id, item_id, dispatch, kind)
-            upload_id = await self._buckets.start_upload(org_id, BUCKET, reference, OCTETS)
+            upload_id = await self._buckets.start_upload(
+                ctx.org_id, BUCKET, reference, OCTETS, deadline=ctx.deadline
+            )
             return ObjectSlot(reference=reference, key=_b64(new_key()), upload_id=upload_id)
 
         if isinstance(request, WriteRequest):
@@ -1573,7 +1575,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         )
         return Printed.model_validate_json(opened)
 
-    async def _landed(self, org_id: UUID, contents: ItemContent, result: ExecResult) -> ExecResult:
+    async def _landed(
+        self, ctx: TenantContext, contents: ItemContent, result: ExecResult
+    ) -> ExecResult:
         """The result once each object it names is whole in the store: its
         upload completed to the plan of the size its host declared, within
         its bound, before the result lands, so whoever reads the item done
@@ -1585,16 +1589,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         if output_slot is None and result.output is not None:
             raise ValidationFailed("an item that prints nothing uploads no output")
         if output_slot is not None and result.output is not None:
-            if not await self._completed(org_id, output_slot, result.output, most):
+            if not await self._completed(ctx, output_slot, result.output, most):
                 detail = "its output was not kept whole in the store"
                 result = result.model_copy(update={"output": None, "detail": detail})
         file_slot, most = _uploaded(contents, "file")
         if file_slot is None and result.file is not None:
             raise ValidationFailed("an item that reads nothing uploads no file")
         if file_slot is not None and result.outcome.refused is None:
-            if result.file is None or not await self._completed(
-                org_id, file_slot, result.file, most
-            ):
+            if result.file is None or not await self._completed(ctx, file_slot, result.file, most):
                 refused = ExecOutcome(refused=ObjectRefused.code, refused_status=422)
                 detail = "the file it read was not kept whole in the store"
                 result = result.model_copy(
@@ -1605,7 +1607,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         return result
 
     async def _completed(
-        self, org_id: UUID, slot: ObjectSlot, stored: StoredObject, most: int
+        self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject, most: int
     ) -> bool:
         """Whether the object its host declared is whole in the store now:
         within its bound, and its upload completed to the plan of its size."""
@@ -1613,7 +1615,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             return False
         try:
             await self._buckets.complete_upload(
-                org_id, BUCKET, slot.reference, slot.upload_id, sealed_size(stored.size)
+                ctx.org_id,
+                BUCKET,
+                slot.reference,
+                slot.upload_id,
+                sealed_size(stored.size),
+                deadline=ctx.deadline,
             )
         except (UploadRefused, UploadNotFound) as error:
             log.warning("%s: %s", slot.reference, error.message)
@@ -1645,7 +1652,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         async def again(slot: ObjectSlot | None) -> ObjectSlot | None:
             if slot is None:
                 return None
-            upload_id = await self._buckets.start_upload(ctx.org_id, BUCKET, slot.reference, OCTETS)
+            upload_id = await self._buckets.start_upload(
+                ctx.org_id, BUCKET, slot.reference, OCTETS, deadline=ctx.deadline
+            )
             return slot.model_copy(update={"upload_id": upload_id})
 
         fresh = last.model_copy(

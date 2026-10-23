@@ -52,14 +52,20 @@ async def push_parts(
     await relay.push_parts(rctx, host, item_id, body)
 
 
-@router.post("/hosts/me/exec/{item_id}/upload", response_model=IssuedObjectUploadView)
+@router.post(
+    "/hosts/me/exec/{item_id}/upload",
+    response_model=IssuedObjectUploadView,
+    dependencies=[HOLDER_CALL],
+)
 async def issue_upload(
     rctx: Rctx, relay: ExecRelayService, host: Host, item_id: UUID, body: UploadRequest
 ) -> IssuedObjectUploadView:
     """The parts of an object of the item the store does not hold yet, each
     by a URL signed for its number and its length, which the host sends
     straight to the store: the item's output, or a read's file. Asked
-    again, only those still missing, so an upload cut off resumes."""
+    again, only those still missing, so an upload cut off resumes. It
+    settles what the host holds and carries no bytes, so it is a holder's
+    call."""
     return await relay.issue_upload(rctx, host, item_id, body)
 
 
