@@ -1,7 +1,8 @@
 """A host moves the objects an `exec` item names straight to and from the
 store, by the URLs the platform signed for them alone. An upload cut off
 partway is asked for again and sends only the parts the store does not
-hold. A write's file reaches the workspace only once it opens under its
+hold, within the item's lease as it was last renewed; one whose part the
+store keeps refusing ends in a refusal the host pushes. A write's file reaches the workspace only once it opens under its
 key and matches the size and the digest its item declares: one that does
 not, or one whose URL ran out or names another object, is refused, and
 nothing of it is written. No API request carries a file's bytes.
@@ -10,8 +11,10 @@ The platform is faked on the wire; the store is the local impl's, served
 in-process; the host's executor and its directory transport are the ones
 a host runs."""
 
+import asyncio
 import base64
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -68,6 +71,7 @@ class Platform:
     results: list[dict[str, Any]] = field(default_factory=list)
     sizes: list[int] = field(default_factory=list)
     issued: list[list[int]] = field(default_factory=list)
+    renewed: int = 0
 
     def client(self, store: httpx.AsyncBaseTransport) -> Callable[[], ApiClient]:
         def built() -> ApiClient:
@@ -88,6 +92,7 @@ class Platform:
         if not call:
             return httpx.Response(200, json=self.detail)
         if call == "lease":
+            self.renewed += 1
             return httpx.Response(200, json={"lease_expires_at": datetime.now(UTC).isoformat()})
         if call == "upload":
             asked = json.loads(request.content)
@@ -129,21 +134,37 @@ class Platform:
 
 class Store(httpx.AsyncBaseTransport):
     """The local store, in-process, recording each part a PUT sends by its
-    number, and failing the first PUT of each number in `drops` on the
-    wire, as a connection cut partway does."""
+    number and when, by this host's clock. It fails the first PUT of each
+    number in `drops` on the wire, as a connection cut partway does, answers
+    every PUT of a number in `refuses` with a 503, and takes `slow` seconds
+    over each part it holds, as a slow link does."""
 
-    def __init__(self, buckets: BucketsLocalImpl, drops: frozenset[int] = frozenset()) -> None:
+    def __init__(
+        self,
+        buckets: BucketsLocalImpl,
+        drops: frozenset[int] = frozenset(),
+        *,
+        refuses: frozenset[int] = frozenset(),
+        slow: float = 0.0,
+    ) -> None:
         self._inner = httpx.ASGITransport(app=buckets.store)
         self._drops = set(drops)
+        self._refuses = refuses
+        self._slow = slow
         self.put: list[int] = []
+        self.at: list[float] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         if request.method == "PUT":
             number = int(request.url.params["partNumber"])
             self.put.append(number)
+            self.at.append(time.monotonic())
             if number in self._drops:
                 self._drops.discard(number)
                 raise httpx.WriteError("the connection was cut", request=request)
+            if number in self._refuses:
+                return httpx.Response(503, text="the store is busy")
+            await asyncio.sleep(self._slow)
         return await self._inner.handle_async_request(request)
 
 
@@ -212,12 +233,20 @@ def buckets(tmp_path: Path) -> BucketsLocalImpl:
     return BucketsLocalImpl(tmp_path / "buckets")
 
 
-# Check 2: an upload cut off partway resumes and sends only the missing parts.
+@dataclass(frozen=True)
+class Read:
+    """A read of `out.bin` whose file its host uploads: the item, the
+    platform's side of it, and the upload its file lands by."""
+
+    item: ClaimedWorkView
+    platform: Platform
+    data: bytes
+    reference: str
+    key: bytes
+    upload_id: str
 
 
-async def test_an_upload_cut_off_partway_resumes_and_sends_only_the_missing_parts(
-    tmp_path: Path, where: Path, buckets: BucketsLocalImpl
-) -> None:
+async def read_of(where: Path, buckets: BucketsLocalImpl) -> Read:
     data = bytes(range(256)) * (BIG // 256) + b"tail"
     (where / "out.bin").write_bytes(data)
     item = claimed()
@@ -228,9 +257,28 @@ async def test_an_upload_cut_off_partway_resumes_and_sends_only_the_missing_part
     )
     request = {"operation": "read_file", "path": "out.bin", "max_bytes": 64 * MIB}
     platform = Platform(buckets, item.org_id, detail_of(item, where, request))
-    slot = {"reference": reference, "key": b64(key), "upload_id": upload_id}
     platform.detail["file_out"] = {"reference": reference, "key": b64(key)}
-    platform.slots["file"] = slot
+    platform.slots["file"] = {"reference": reference, "key": b64(key), "upload_id": upload_id}
+    return Read(item, platform, data, reference, key, upload_id)
+
+
+async def held_whole(buckets: BucketsLocalImpl, read: Read) -> bytes:
+    """The read's file as the store holds it once its upload completes."""
+    org_id, reference = read.item.org_id, read.reference
+    size = sealed_size(len(read.data))
+    await buckets.complete_upload(org_id, BUCKET, reference, read.upload_id, size)
+    held = await buckets.get(org_id, BUCKET, reference)
+    return open_object(read.key, reference, len(read.data), digest_of(read.data), held)
+
+
+# Check 2: an upload cut off partway resumes and sends only the missing parts.
+
+
+async def test_an_upload_cut_off_partway_resumes_and_sends_only_the_missing_parts(
+    tmp_path: Path, where: Path, buckets: BucketsLocalImpl
+) -> None:
+    read = await read_of(where, buckets)
+    item, platform, data = read.item, read.platform, read.data
     store = Store(buckets, drops=frozenset({2}))
     # A spool a host left as it stopped mid-transfer goes as the next starts.
     (tmp_path / "transfers").mkdir()
@@ -244,12 +292,54 @@ async def test_an_upload_cut_off_partway_resumes_and_sends_only_the_missing_part
     assert len(sealed_parts(len(data))) == 3
     assert store.put == [1, 2, 2, 3], "part 2 again after the cut, part 1 never again"
     assert platform.issued == [[1, 2, 3], [2, 3], []], "each ask signs only what is missing"
-    size = sealed_size(len(data))
-    await buckets.complete_upload(item.org_id, BUCKET, reference, upload_id, size)
-    held = await buckets.get(item.org_id, BUCKET, reference)
-    assert open_object(key, reference, len(data), digest_of(data), held) == data
+    assert await held_whole(buckets, read) == data
     assert max(platform.sizes) < 4096, "no request to the platform carries the file's bytes"
     assert list((tmp_path / "transfers").iterdir()) == [], "the spool goes once it is sent"
+
+
+# Check 8: an upload that outlasts its item's first lease resumes after a
+# cut part, and a part the store keeps refusing ends the item with a refusal
+# its host pushes, never with its lease running out.
+
+LEASE = 3 * 0.2
+"""The lease a renewal holds, at the executor's `renew_seconds`."""
+
+
+async def test_an_upload_that_outlasts_its_first_lease_resumes_after_a_cut_part(
+    tmp_path: Path, where: Path, buckets: BucketsLocalImpl
+) -> None:
+    read = await read_of(where, buckets)
+    platform, data = read.platform, read.data
+    store = Store(buckets, drops=frozenset({3}), slow=0.4)
+    claimed_at = time.monotonic()
+
+    await executor_of(platform, store, tmp_path).run(read.item, asked(where))
+
+    assert store.put == [1, 2, 3, 3], "part 3 again after the cut, the others never"
+    assert store.at[2] - claimed_at > LEASE, "the part was cut past the item's first lease"
+    assert platform.renewed >= 2, "its lease was renewed while it uploaded"
+    (result,) = platform.results
+    assert result["outcome"]["refused"] is None, result
+    assert result["file"] == {"size": len(data), "digest": digest_of(data)}
+    assert await held_whole(buckets, read) == data
+
+
+async def test_a_part_the_store_keeps_refusing_ends_the_item_with_a_refusal_its_host_pushes(
+    tmp_path: Path, where: Path, buckets: BucketsLocalImpl
+) -> None:
+    read = await read_of(where, buckets)
+    platform = read.platform
+    store = Store(buckets, refuses=frozenset({3}), slow=0.4)
+    claimed_at = time.monotonic()
+
+    await executor_of(platform, store, tmp_path).run(read.item, asked(where))
+
+    assert store.put == [1, 2, 3, 3, 3], "a refused part is sent again, a bounded few times"
+    assert store.at[2] - claimed_at > LEASE, "the store refused it past the item's first lease"
+    (result,) = platform.results
+    assert result["outcome"]["refused"] == "object_not_sent", result
+    assert "the store kept no part 3" in result["detail"]
+    assert list((tmp_path / "transfers").iterdir()) == [], "the spool goes all the same"
 
 
 # Check 5: a file whose digest or size does not match is refused, and

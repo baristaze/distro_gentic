@@ -180,7 +180,7 @@ class HostObjects:
         kind: ObjectKind,
         slot: IssuedObjectSlotView,
         source: Spooled | bytes,
-        until: float,
+        until: Callable[[], float],
     ) -> tuple[int, str]:
         """The object of `kind` sealed from `source` and sent a part at a
         time, each straight to the store by the URL the platform signed for
@@ -188,8 +188,8 @@ class HostObjects:
         what it sealed. A failure the host outlasts, a part the store
         refused included, is waited out and the parts still missing asked
         for again, so a part the store holds is never sent twice; one that
-        would land past `until`, by this host's clock, is raised, as a
-        refusal is."""
+        would land past `until()`, the end of the item's lease as it was
+        last renewed, by this host's clock, is raised, as a refusal is."""
         if isinstance(source, bytes):
             size, digest = len(source), DIGEST_SCHEME + hashlib.sha256(source).hexdigest()
         else:
@@ -219,7 +219,7 @@ class HostObjects:
                         raise
                     asked = error.retry_after if isinstance(error, ApiError) else None
                     wait = retries.failed(asked)
-                    if time.monotonic() + wait >= until:
+                    if time.monotonic() + wait >= until():
                         raise
                     log.info("an upload of %s failed (%s); asking again", slot.reference, error)
                     await asyncio.sleep(wait)

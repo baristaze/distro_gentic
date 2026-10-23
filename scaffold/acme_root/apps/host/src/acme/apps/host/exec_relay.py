@@ -55,7 +55,7 @@ from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
 from acme.apps.host.mcp import HostServers
-from acme.apps.host.objects import HostObjects, Spooled, removed
+from acme.apps.host.objects import HostObjects, PartRefused, Spooled, removed
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
@@ -98,6 +98,9 @@ platform bounds a push."""
 DETAIL_CHARS = 1000
 """The most characters of why the host refused an item a result carries, as
 the platform bounds it."""
+NOT_SENT = (ApiError, InfraException, PartRefused, *WIRE_FAILURES)
+"""What a transfer of an object raises when it gives up: the item's result
+then says so, and is pushed."""
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
@@ -186,6 +189,11 @@ class Running:
     stopped: str | None = None
     held_until: float = 0.0  # when its lease ends, by this host's clock
     printed: dict[str, list[str]] = field(default_factory=lambda: {"stdout": [], "stderr": []})
+
+    def lease_end(self) -> float:
+        """When its lease ends as it was last renewed: what a transfer that
+        outlasts one lease is tried again within."""
+        return self.held_until
 
 
 class ExecutorRelayImpl(ExecutorInterface):
@@ -381,9 +389,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             ).encode()
             try:
                 size, digest = await self._objects.send(
-                    item_id, "output", detail.output, printed, running.held_until
+                    item_id, "output", detail.output, printed, running.lease_end
                 )
-            except (ApiError, InfraException, *WIRE_FAILURES) as error:
+            except NOT_SENT as error:
                 log.warning("item %s: its output was not kept: %s", item_id, error)
                 small["detail"] = _cut(small["detail"] or f"its output was not kept: {error}")
             else:
@@ -391,9 +399,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         if detail.file_out is not None and ended.file is not None:
             try:
                 size, digest = await self._objects.send(
-                    item_id, "file", detail.file_out, ended.file, running.held_until
+                    item_id, "file", detail.file_out, ended.file, running.lease_end
                 )
-            except (ApiError, InfraException, *WIRE_FAILURES) as error:
+            except NOT_SENT as error:
                 log.warning("item %s: the file it read was not sent: %s", item_id, error)
                 why = f"the file it read was not sent: {error}"
                 return _small(_result(refused=("object_not_sent", 503), detail=why))
