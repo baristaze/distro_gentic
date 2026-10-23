@@ -129,10 +129,19 @@ def frame_slices(size: int, first: int, frames: int) -> Iterator[tuple[int, bool
 
 def seal_object(key: bytes, reference: str, data: bytes) -> bytes:
     """A whole file sealed: what a service `put`s."""
+    return _sealed(key, reference, data, 0, frame_count(len(data)))
+
+
+def seal_part(key: bytes, reference: str, data: bytes, part: SealedPart) -> bytes:
+    """One part of the upload of a file held whole in memory, sealed."""
+    return _sealed(key, reference, data, part.first_frame, part.frames)
+
+
+def _sealed(key: bytes, reference: str, data: bytes, first: int, frames: int) -> bytes:
     view = memoryview(data)
     return b"".join(
         seal_frame(key, reference, index, last, bytes(view[start : start + length]))
-        for index, last, start, length in frame_slices(len(data), 0, frame_count(len(data)))
+        for index, last, start, length in frame_slices(len(data), first, frames)
     )
 
 

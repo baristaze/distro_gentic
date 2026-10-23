@@ -831,6 +831,12 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._work.fail_for_good(ctx, row, "a command of a run that lost its session")
             OUTCOMES.labels(subsystem="exec_relay", outcome="stale").inc()
             return False
+        request, last, fresh = item.request, None, None
+        if row.attempts > 1:
+            # An earlier claim may have sent parts of this one's uploads: a
+            # host uploads only what its own claim sealed, so each starts
+            # anew, and what the earlier one sent goes.
+            request, last, fresh = await self._fresh_uploads(ctx, item)
         now = self._clock()
         started = _copy(
             item,
@@ -838,11 +844,16 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             state=ExecState.RUNNING,
             claim=row.model_dump(mode="json"),
             lease_expires_at=row.lease_expires_at,
+            request=request,
         )
         if await self._storage.write_item(ctx.org_id, started, item.version) is None:
             # A stop or the sweep moved it meanwhile; the next claim decides.
+            if fresh is not None:
+                await self._abort_uploads(ctx.org_id, fresh)
             await self._work.release(ctx, row)
             return False
+        if last is not None:
+            await self._abort_uploads(ctx.org_id, last)
         return True
 
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
@@ -1005,9 +1016,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             await self._delete_under(
                 host.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
             )
-        elif contents.file_in is not None:
-            # What a write handed its host leaves once it settles.
-            await self._delete(host.org_id, contents.file_in.reference)
+        else:
+            await self._kept_objects(host.org_id, contents, result)
         try:
             await self._work.complete(ctx, claimed_row(item))
         except LeaseLost, NotFound:
@@ -1565,39 +1575,41 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
 
     async def _landed(self, org_id: UUID, contents: ItemContent, result: ExecResult) -> ExecResult:
         """The result once each object it names is whole in the store: its
-        upload completed to the plan of the size the host declared. An
-        output that is not whole is not kept, and the result says so; a
-        read whose file is not whole is refused. An upload the result names
-        nothing of is let go."""
+        upload completed to the plan of the size its host declared, within
+        its bound, before the result lands, so whoever reads the item done
+        finds its objects. An output that is not whole is not kept, and the
+        result says so; a read whose file is not whole is refused. A result
+        that then lands nothing leaves what it completed to the item's next
+        claim, whose uploads are its own (`_fresh_uploads`)."""
         output_slot, most = _uploaded(contents, "output")
-        if output_slot is not None:
-            if not await self._completed(org_id, output_slot, result.output, most):
-                if result.output is not None:
-                    detail = "its output was not kept whole in the store"
-                    result = result.model_copy(update={"output": None, "detail": detail})
-        elif result.output is not None:
+        if output_slot is None and result.output is not None:
             raise ValidationFailed("an item that prints nothing uploads no output")
+        if output_slot is not None and result.output is not None:
+            if not await self._completed(org_id, output_slot, result.output, most):
+                detail = "its output was not kept whole in the store"
+                result = result.model_copy(update={"output": None, "detail": detail})
         file_slot, most = _uploaded(contents, "file")
-        if file_slot is not None:
-            if not await self._completed(org_id, file_slot, result.file, most):
-                if result.file is not None or result.outcome.refused is None:
-                    refused = ExecOutcome(refused=ObjectRefused.code, refused_status=422)
-                    detail = "the file it read was not kept whole in the store"
-                    result = result.model_copy(
-                        update={"outcome": refused, "file": None, "detail": detail}
-                    )
-        elif result.file is not None:
+        if file_slot is None and result.file is not None:
             raise ValidationFailed("an item that reads nothing uploads no file")
+        if file_slot is not None and result.outcome.refused is None:
+            if result.file is None or not await self._completed(
+                org_id, file_slot, result.file, most
+            ):
+                refused = ExecOutcome(refused=ObjectRefused.code, refused_status=422)
+                detail = "the file it read was not kept whole in the store"
+                result = result.model_copy(
+                    update={"outcome": refused, "file": None, "detail": detail}
+                )
+        if result.outcome.refused is not None:
+            result = result.model_copy(update={"file": None})
         return result
 
     async def _completed(
-        self, org_id: UUID, slot: ObjectSlot, stored: StoredObject | None, most: int
+        self, org_id: UUID, slot: ObjectSlot, stored: StoredObject, most: int
     ) -> bool:
-        """Whether the object a host declared is whole in the store now. One
-        it declared nothing of, past its bound, or short of its plan, is let
-        go."""
-        if stored is None or stored.size > most:
-            await self._let_go(org_id, slot)
+        """Whether the object its host declared is whole in the store now:
+        within its bound, and its upload completed to the plan of its size."""
+        if stored.size > most:
             return False
         try:
             await self._buckets.complete_upload(
@@ -1605,9 +1617,57 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             )
         except (UploadRefused, UploadNotFound) as error:
             log.warning("%s: %s", slot.reference, error.message)
-            await self._let_go(org_id, slot)
             return False
         return True
+
+    async def _kept_objects(self, org_id: UUID, contents: ItemContent, result: ExecResult) -> None:
+        """Once a result lands: each upload it names nothing of let go, and
+        a write's file removed, since it settled."""
+        for slot, stored in ((contents.output, result.output), (contents.file_out, result.file)):
+            if slot is not None and stored is None:
+                await self._let_go(org_id, slot)
+        if contents.file_in is not None:
+            await self._delete(org_id, contents.file_in.reference)
+
+    async def _fresh_uploads(
+        self, ctx: TenantContext, item: ExecItem
+    ) -> tuple[bytes, ItemContent | None, ItemContent | None]:
+        """The item's sealed contents with a new upload of each object its
+        host uploads, the contents it had, and the new ones; as it stands
+        when it uploads nothing, or its key went."""
+        try:
+            last = await self._contents_of(ctx, item)
+        except NotFound:
+            return item.request, None, None
+        if last.output is None and last.file_out is None:
+            return item.request, None, None
+
+        async def again(slot: ObjectSlot | None) -> ObjectSlot | None:
+            if slot is None:
+                return None
+            upload_id = await self._buckets.start_upload(ctx.org_id, BUCKET, slot.reference, OCTETS)
+            return slot.model_copy(update={"upload_id": upload_id})
+
+        fresh = last.model_copy(
+            update={"output": await again(last.output), "file_out": await again(last.file_out)}
+        )
+        sealed = await self._seal.seal(
+            ctx, item.agent_session_id, item.key, fresh.model_dump_json().encode()
+        )
+        if sealed is None:
+            await self._abort_uploads(ctx.org_id, fresh)
+            return item.request, None, None
+        return sealed, last, fresh
+
+    async def _abort_uploads(self, org_id: UUID, contents: ItemContent) -> None:
+        """The uploads `contents` names, aborted, with no object removed."""
+        for slot in (contents.output, contents.file_out):
+            if slot is None:
+                continue
+            try:
+                await self._buckets.abort_upload(org_id, BUCKET, slot.reference, slot.upload_id)
+            except InfraException as error:
+                log.warning("%s: its upload was not aborted: %s", slot.reference, error.message)
 
     async def _let_go_of(self, ctx: TenantContext, item: ExecItem) -> None:
         """What an item that ended `interrupted` moved: no result names its
