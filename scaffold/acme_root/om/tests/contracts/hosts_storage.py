@@ -12,6 +12,7 @@ import pytest
 
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
+from acme.om.hosts.rules import WIRE_VERSION, WireType
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import (
@@ -107,7 +108,7 @@ def make_host(pool_id: UUID) -> Host:
         name="host-7",
         enrolled_with=new_id(),
         advertisement=ADVERTISED,
-        exec_version=1,
+        exec_version=WIRE_VERSION[WireType.EXEC],
         last_seen_at=now,
     )
 
@@ -195,7 +196,7 @@ class HostsStorageContract:
                     update={"exec_version": 2, "last_seen_at": now - timedelta(minutes=5)}
                 ),
             ),
-            (second, make_host(new_id())),
+            (second, make_host(new_id()).model_copy(update={"exec_version": 1})),
             (first, make_host(new_id()).model_copy(update={"revoked_at": now})),
         )
         for org, host in rows:

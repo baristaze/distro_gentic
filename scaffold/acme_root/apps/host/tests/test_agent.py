@@ -17,7 +17,7 @@ import httpx
 import pytest
 from host_support import Stack, probes
 
-from acme.apps.host.agent import ExecutorInterface, HostAgent
+from acme.apps.host.agent import EXEC_VERSION, ExecutorInterface, HostAgent
 from acme.apps.host.ceilings import Ask, Ceilings
 from acme.apps.host.config import BadSetting, settings_from_env
 from acme.client.claimant.claimant import RETRY
@@ -285,7 +285,7 @@ async def test_a_host_below_the_floor_is_handed_nothing(
             {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)},
         ),
     )
-    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, 2)
+    monkeypatch.setitem(rules.WIRE_FLOOR, WireType.EXEC, EXEC_VERSION + 1)
     with pytest.raises(ApiError) as refused:
         await host.claim_once()
     assert (refused.value.status, refused.value.code) == (426, "version_below_floor")
