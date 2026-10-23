@@ -78,7 +78,7 @@
         "type": "object"
       },
       "ExecDetailView": {
-        "description": "An item the host holds: the call, the workspace, and the operation.",
+        "description": "An item the host holds: the call, the workspace, the operation, and\nthe objects it moves. A write's `file_in` comes by `url`, signed for a\nGET of it alone until `url_expires_at`; an `output` and a read's\n`file_out` go by the parts `POST .../upload` signs.",
         "properties": {
           "agent_session_id": {
             "format": "uuid",
@@ -110,6 +110,26 @@
             ],
             "title": "Epoch"
           },
+          "file_in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObjectRefView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "file_out": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObjectSlotView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "item_id": {
             "format": "uuid",
             "title": "Item Id",
@@ -124,6 +144,16 @@
             "title": "Org Id",
             "type": "string"
           },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObjectSlotView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "request": {
             "additionalProperties": true,
             "title": "Request",
@@ -133,6 +163,29 @@
             "additionalProperties": true,
             "title": "Spec",
             "type": "object"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "url_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Expires At"
           }
         },
         "required": [
@@ -173,6 +226,111 @@
         ],
         "title": "ExecState",
         "type": "string"
+      },
+      "IssuedObjectPartView": {
+        "description": "One part of an object to send, sealed: `size_bytes` bytes of the\nsealed object from `offset`, as the body of a PUT to `url`, straight to\nthe store. The URL is signed for that length.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "offset",
+          "size_bytes",
+          "url"
+        ],
+        "title": "IssuedObjectPartView",
+        "type": "object"
+      },
+      "IssuedObjectUploadView": {
+        "description": "The parts of the object the store does not hold yet, at most a window\nof them, each good until `expires_at`. `remaining` counts every part\nstill missing, these included: send these and ask again while it is\nabove zero, then push the result. Asked again after an upload was cut\noff, it signs only the parts still missing.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/IssuedObjectPartView"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "parts",
+          "remaining",
+          "expires_at"
+        ],
+        "title": "IssuedObjectUploadView",
+        "type": "object"
+      },
+      "ObjectRefView": {
+        "description": "A file a write hands its host: the object that holds it under the\ntenant, the size and the digest of the file, and the key (base64) it\nis sealed under, which opens this object alone.",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reference",
+          "size",
+          "digest",
+          "key"
+        ],
+        "title": "ObjectRefView",
+        "type": "object"
+      },
+      "ObjectSlotView": {
+        "description": "An object the host uploads: where it is under the tenant, and the key\n(base64) it seals it under.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "key"
+        ],
+        "title": "ObjectSlotView",
+        "type": "object"
       },
       "OutputStream": {
         "enum": [
@@ -292,13 +450,13 @@
       },
       "ResultRequest": {
         "additionalProperties": false,
-        "description": "How an item ended: the JSON of an exec result, in base64.",
+        "description": "How an item ended: the JSON of an exec result, in base64. It names\nthe objects its host uploaded, by their size and their digest, and\nholds none of their bytes, so it is a few KiB.",
         "properties": {
           "crossing": {
             "$ref": "#/components/schemas/CrossingBody"
           },
           "data": {
-            "maxLength": 16000000,
+            "maxLength": 62698,
             "title": "Data",
             "type": "string"
           }
@@ -377,6 +535,31 @@
         ],
         "title": "StopKind",
         "type": "string"
+      },
+      "UploadRequest": {
+        "additionalProperties": false,
+        "description": "An object of an item the host uploads, and the bytes it seals: the\nitem's `output`, what it printed or listed, or a read's `file`.",
+        "properties": {
+          "object": {
+            "enum": [
+              "output",
+              "file"
+            ],
+            "title": "Object",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "object",
+          "size_bytes"
+        ],
+        "title": "UploadRequest",
+        "type": "object"
       }
     }
   },
@@ -488,7 +671,7 @@
     },
     "/v1/hosts/me/exec/{item_id}": {
       "get": {
-        "description": "What the host runs for an item it holds: the command or the file\noperation, opened, with its deadline, its writer epoch, and where the\nworkspace is.",
+        "description": "What the host runs for an item it holds: the command or the file\noperation, opened, with its deadline, its writer epoch, where the\nworkspace is, and the objects it moves, each with the key that opens it\nalone and, for a write's file, a URL signed for a GET of it.",
         "operationId": "detail",
         "parameters": [
           {
@@ -863,6 +1046,108 @@
           }
         },
         "summary": "Push Result",
+        "tags": [
+          "exec_relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/upload": {
+      "post": {
+        "description": "The parts of an object of the item the store does not hold yet, each\nby a URL signed for its number and its length, which the host sends\nstraight to the store: the item's output, or a read's file. Asked\nagain, only those still missing, so an upload cut off resumes.",
+        "operationId": "issue_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedObjectUploadView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Upload",
         "tags": [
           "exec_relay"
         ]

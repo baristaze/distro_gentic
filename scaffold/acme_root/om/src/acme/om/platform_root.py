@@ -1234,6 +1234,9 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 outbox,
                 self._records,
                 infra.get_streams(),
+                # The files and the output its items move, each sealed under
+                # a key of its own that the item keeps under the session's.
+                infra.get_buckets(),
                 options.relay_options or ExecRelayOptions(),
                 # A snapshot a host answers is recorded where it lives.
                 kept=self._held_to_pins.keep_on_host,

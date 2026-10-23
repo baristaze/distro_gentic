@@ -11,12 +11,14 @@ from acme.services.api.types.exec_relay import (
     ControlView,
     ExecDetailView,
     ExecLeaseView,
+    IssuedObjectUploadView,
     PartRequest,
     PartsRequest,
     PreparedView,
     PrepareRequest,
     ResultRequest,
     SnapshotRequest,
+    UploadRequest,
 )
 
 
@@ -41,6 +43,11 @@ class ExecRelayServiceInterface(ABC):
     async def push_result(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: ResultRequest
     ) -> None: ...
+
+    @abstractmethod
+    async def issue_upload(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: UploadRequest
+    ) -> IssuedObjectUploadView: ...
 
     @abstractmethod
     async def prepared(

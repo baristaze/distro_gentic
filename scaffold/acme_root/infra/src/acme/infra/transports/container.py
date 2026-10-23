@@ -20,6 +20,7 @@ from acme.infra.transports import (
     OutputSink,
     RecordSeal,
     TransportInterface,
+    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -29,6 +30,10 @@ from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 
 log = logging.getLogger(__name__)
+
+WRITE_RATE = 32 * 1024 * 1024
+"""The slowest a file is taken to stream into a container, in bytes a
+second: what a write from disk is given beyond the timeout."""
 
 LAUNCHER = 'echo $$ > "$1"; shift; exec "$@"'
 """Writes the command's own pid where the end of its tree finds it, then
@@ -89,7 +94,7 @@ def exec_argv(
     ]
 
 
-class TransportContainerImpl(TransportInterface):
+class TransportContainerImpl(TransportInterface, WritesFromFileInterface):
     """Runs commands in a container workspace through `docker exec`. A
     command's environment inside is the image's, the workspace as its home,
     a locale, its own variables, its injected secrets (`exec_argv`), and,
@@ -216,6 +221,25 @@ class TransportContainerImpl(TransportInterface):
     async def write_file(
         self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
     ) -> None:
+        await self._write(workspace, path, data, epoch, self._timeout)
+
+    async def write_file_from(
+        self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
+    ) -> None:
+        """The file streamed into the container from disk, given a while
+        past the timeout for each `WRITE_RATE` bytes of it."""
+        size = (await asyncio.to_thread(source.stat)).st_size
+        bound = self._timeout + timedelta(seconds=size / WRITE_RATE)
+        await self._write(workspace, path, source, epoch, bound)
+
+    async def _write(
+        self,
+        workspace: AgentWorkspace,
+        path: str,
+        data: bytes | Path,
+        epoch: int,
+        bound: timedelta,
+    ) -> None:
         name = self._container(workspace)
         await asyncio.to_thread(self._book.admit, workspace.id, epoch)
         target = _inside(path)
@@ -229,7 +253,7 @@ class TransportContainerImpl(TransportInterface):
             "sh",
             target,
             stdin=data,
-            bound=self._timeout,
+            bound=bound,
         )
         if not reply.ok:
             raise BackendFailed("docker", "exec write", reply.reason())

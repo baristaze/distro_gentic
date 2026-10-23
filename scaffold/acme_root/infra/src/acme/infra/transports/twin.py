@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
@@ -21,6 +22,7 @@ from acme.infra.transports import (
     RecordSeal,
     StaleCommand,
     TransportInterface,
+    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -46,7 +48,7 @@ async def _quiet(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
     return TwinReply()
 
 
-class TransportTwinImpl(TransportInterface):
+class TransportTwinImpl(TransportInterface, WritesFromFileInterface):
     """The transport's twin, over the twin's workspaces: files in memory, and
     each command answered by a handler a test sets, with no process. It
     fences, injects, redacts, streams, and records as the real transports
@@ -142,6 +144,12 @@ class TransportTwinImpl(TransportInterface):
         self._serve(workspace)
         self._admit(workspace.id, epoch)
         self._files.setdefault(workspace.id, {})[str(relative_path(path))] = data
+
+    async def write_file_from(
+        self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
+    ) -> None:
+        """The twin keeps its files in memory, so it reads the file whole."""
+        await self.write_file(workspace, path, await asyncio.to_thread(source.read_bytes), epoch)
 
     async def list_files(self, workspace: AgentWorkspace, path: str, limit: int) -> list[FileEntry]:
         self._serve(workspace)

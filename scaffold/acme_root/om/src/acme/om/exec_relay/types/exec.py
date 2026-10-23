@@ -1,7 +1,10 @@
 """An `exec` item as the relay keeps it: one operation of a tool call into a
 customer's wall, the state its host moves it through, and how it ended.
 What it runs and what it printed are the session's content, sealed under
-the session's key; what recovery decides by stays in the clear."""
+the session's key; what recovery decides by stays in the clear. No file
+and no output rides in it or in its result: each crosses as an object in
+the store, sealed under a key of its own, and the item carries the
+object's reference, its size, its digest, and that key."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -18,6 +21,22 @@ from acme.om.placement.types.work import ExecEffect, ExecOperation
 from acme.om.retention.crossing import Crossing
 
 Stream = Literal["stdout", "stderr"]
+
+ObjectKind = Literal["output", "file"]
+"""The objects an item moves: its `output`, what it printed or listed, and
+a read's or a write's `file`."""
+
+OUTPUT_CHARS = 1_000_000
+"""The most characters of each stream a relayed command keeps: the engine's
+own default. Past them its head and its tail are kept."""
+
+DETAIL_CHARS = 1000
+"""The most characters of why a host refused an item, or what it says of how
+it ended, that a result carries."""
+
+SECRETS = 32
+"""The most secrets one relayed command uses, so a result that names them
+stays small."""
 
 
 def _from_the_start(offset: int) -> bool:
@@ -50,8 +69,38 @@ class RunRequest(OmBase):
     argv: tuple[str, ...] = Field(min_length=1)
     cwd: str = "."
     env: tuple[tuple[str, str], ...] = ()
-    secrets: tuple[SecretUse, ...] = ()  # by name; a host resolves them inside its wall
-    max_output: int = Field(default=1_000_000, gt=0)
+    # By name; a host resolves them inside its wall.
+    secrets: tuple[SecretUse, ...] = Field(default=(), max_length=SECRETS)
+    max_output: int = Field(default=OUTPUT_CHARS, gt=0, le=OUTPUT_CHARS)
+
+
+class ObjectRef(OmBase):
+    """A file a write hands its host, as the object that holds it: where it
+    is under the tenant, the size and the digest of the file, and the key it
+    is sealed under (base64), which opens this object and no other."""
+
+    reference: str = Field(min_length=1, max_length=512)
+    size: int = Field(ge=0)
+    digest: str = Field(pattern=DIGEST)
+    key: str = Field(min_length=1, max_length=64)
+
+
+class ObjectSlot(OmBase):
+    """An object an item's host uploads: where it is under the tenant, the
+    key it seals it under (base64), and the store's multipart upload of
+    it."""
+
+    reference: str = Field(min_length=1, max_length=512)
+    key: str = Field(min_length=1, max_length=64)
+    upload_id: str = Field(min_length=1, max_length=1024)
+
+
+class StoredObject(OmBase):
+    """What a host declares of an object it uploaded: the size and the
+    digest of what it sealed, which what the object opens to must match."""
+
+    size: int = Field(ge=0)
+    digest: str = Field(pattern=DIGEST)
 
 
 class ReadRequest(OmBase):
@@ -64,9 +113,10 @@ class ReadRequest(OmBase):
 
 
 class WriteRequest(OmBase):
+    """A whole file written; its bytes cross as the item's `file_in`."""
+
     operation: Literal[ExecOperation.WRITE_FILE] = ExecOperation.WRITE_FILE
     path: str
-    data: str  # base64
 
 
 class ListRequest(OmBase):
@@ -97,7 +147,20 @@ ExecRequest = Annotated[
 host that holds the item and for nobody else."""
 
 REQUESTS: TypeAdapter[ExecRequest] = TypeAdapter(ExecRequest)
-"""Reads and writes an `ExecRequest` whole, as it is sealed and opened."""
+"""Reads and writes an `ExecRequest` whole, as an item's id derives from it."""
+
+
+class ItemContent(OmBase):
+    """What an item seals under the session's key: the operation, and each
+    object it moves with the key that object is sealed under, so revoking
+    the session's key leaves every one of them noise. A command, a call of
+    a server's tool, and a listing have an `output`; a write hands its host
+    a `file_in`, and a read's host uploads a `file_out`."""
+
+    request: ExecRequest
+    output: ObjectSlot | None = None
+    file_in: ObjectRef | None = None
+    file_out: ObjectSlot | None = None
 
 
 class ExecCall(OmBase):
@@ -126,28 +189,49 @@ class ExecOutcome(OmBase):
     # such as a stale epoch or a path outside the workspace.
     refused: str | None = Field(default=None, max_length=64)
     refused_status: int | None = None
-    secrets: tuple[str, ...] = ()  # the secrets it used, by name
+    # The secrets it used, by name.
+    secrets: tuple[str, ...] = Field(default=(), max_length=SECRETS)
 
 
-class ExecOutput(OmBase):
-    """What it printed or read, or why its host refused it: content."""
+class Printed(OmBase):
+    """What an item's output object holds: what it printed, or listed."""
 
     stdout: str = ""
     stderr: str = ""
-    data: str | None = None  # a file's bytes, in base64
-    # The offset a read was answered from: a host echoes the one it read
-    # from past the start. A host before it echoes none, so the runner
-    # refuses its answer to such a read.
+    entries: tuple[FileEntry, ...] = ()
+
+
+class ResultContent(OmBase):
+    """What a result says beyond how the item ended, kept sealed under the
+    session's key: why its host refused it, the offset a read was answered
+    from (a host echoes the one it read from past the start), and the
+    objects it uploaded."""
+
+    detail: str = Field(default="", max_length=DETAIL_CHARS)
+    offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
+    output: StoredObject | None = None
+    file: StoredObject | None = None
+
+
+class ExecResult(ResultContent):
+    """What a host pushes once an item ends, as it crosses the wall: how it
+    ended, and what it says of it. What it printed and what it read are in
+    the objects it names, never here."""
+
+    outcome: ExecOutcome
+
+
+class ExecOutput(OmBase):
+    """What it printed or read, or why its host refused it, as the runner
+    reads it: the output object opened, and the file a read uploaded, by
+    its size and its digest, which the runner takes from the store."""
+
+    stdout: str = ""
+    stderr: str = ""
+    file: StoredObject | None = None
     offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
     entries: tuple[FileEntry, ...] = ()
     detail: str = ""
-
-
-class ExecResult(OmBase):
-    """What a host pushes once an item ends, as it crosses the wall."""
-
-    outcome: ExecOutcome
-    output: ExecOutput = ExecOutput()
 
 
 class ExecItem(Identifiable, Trackable):
@@ -167,7 +251,7 @@ class ExecItem(Identifiable, Trackable):
     spec: IsolationSpec
     deadline: datetime
     epoch: int | None = Field(default=None, ge=0)
-    request: bytes = Field(repr=False)  # the sealed `ExecRequest`
+    request: bytes = Field(repr=False)  # the sealed `ItemContent`
     state: ExecState = ExecState.QUEUED
     dispatch: int = Field(default=1, ge=1)
     row_id: UUID
@@ -176,7 +260,7 @@ class ExecItem(Identifiable, Trackable):
     claim: FrozenMapping | None = None
     lease_expires_at: datetime | None = None
     outcome: ExecOutcome | None = None
-    output: bytes | None = Field(default=None, repr=False)  # the sealed `ExecOutput`
+    output: bytes | None = Field(default=None, repr=False)  # the sealed `ResultContent`
     result_sha256: str | None = None  # the hash its result crossed with
     settled_at: datetime | None = None
     version: int = Field(default=1, ge=1)
@@ -216,7 +300,8 @@ class ExecProgress(OmBase):
 
 class ExecDetail(OmBase):
     """What the host that holds an item reads of it: the call, where the
-    workspace is, and the operation opened."""
+    workspace is, the operation opened, and each object it moves with the
+    key that opens that object alone."""
 
     item_id: UUID
     key: UUID
@@ -228,6 +313,31 @@ class ExecDetail(OmBase):
     spec: IsolationSpec
     location: str
     request: ExecRequest
+    output: ObjectSlot | None = None
+    file_in: ObjectRef | None = None
+    file_out: ObjectSlot | None = None
+    # A write's `file_in`, signed for a GET of it alone, and when that ends.
+    url: str | None = None
+    url_expires_at: datetime | None = None
+
+
+class IssuedObjectPart(OmBase):
+    """One part of a read's object its host is to send, by the URL signed
+    for its number and its length."""
+
+    number: int = Field(ge=1)
+    offset: int = Field(ge=0)
+    size_bytes: int = Field(gt=0)
+    url: str
+
+
+class IssuedObjectUpload(OmBase):
+    """The parts of a read's object the store does not hold yet, a window of
+    them at a time, and how many are missing in all."""
+
+    parts: tuple[IssuedObjectPart, ...]
+    remaining: int = Field(ge=0)
+    expires_at: datetime
 
 
 class ExecControl(Identifiable, Trackable):

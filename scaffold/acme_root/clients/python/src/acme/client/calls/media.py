@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import httpx
 
-from acme.client.transport import LIMIT_MAX, ApiError, Transport, trust_store
+from acme.client.transport import LIMIT_MAX, ApiError, Transport
 from acme.client.types.media import (
     FilePageView,
     FileView,
@@ -84,16 +84,6 @@ class MediaCalls(Transport):
     async def storage_usage(self) -> StorageUsageView:
         return StorageUsageView.model_validate(await self.request("GET", "/v1/media/usage"))
 
-    def _store(self) -> httpx.AsyncClient:
-        """The object store, reached apart from the API: no bearer, no app
-        headers, no retry. A signed URL is the credential, good for one part
-        or one file for a few minutes."""
-        return httpx.AsyncClient(
-            transport=self.store_transport,
-            timeout=self.timeout,
-            verify=True if self.store_transport is not None else trust_store(),
-        )
-
     async def upload(self, started: FileView, source: Path | bytes) -> FileView:
         """The parts of a started upload, then its confirm. Each part goes
         straight to the store by the URL the API signed for it, read from
@@ -111,7 +101,7 @@ class MediaCalls(Transport):
                 f"{started.name} is {size} bytes; its upload started at {started.size_bytes}"
             )
         sent: set[int] = set()
-        async with self._store() as store:
+        async with self.store() as store:
             while (issued := await self.issue_upload(started.id)).parts:
                 for part in issued.parts:
                     if part.number in sent:
@@ -125,7 +115,7 @@ class MediaCalls(Transport):
     async def download(self, file_id: UUID) -> bytes:
         """A stored file's bytes, straight from the store by its signed link."""
         link = await self.issue_download(file_id)
-        async with self._store() as store:
+        async with self.store() as store:
             fetched = await store.get(link.url)
         if fetched.is_error:
             raise ApiError(fetched.status_code, "download_refused", fetched.text[:200], None)

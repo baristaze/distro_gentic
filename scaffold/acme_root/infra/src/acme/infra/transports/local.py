@@ -2,6 +2,7 @@ import asyncio
 import errno
 import os
 import re
+import shutil
 import stat
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -29,6 +30,7 @@ from acme.infra.transports import (
     PathOutsideAgentWorkspace,
     RecordSeal,
     TransportInterface,
+    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -54,7 +56,7 @@ DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 FILE = os.O_NOFOLLOW | os.O_NONBLOCK | os.O_NOCTTY
 
 
-class TransportLocalImpl(TransportInterface):
+class TransportLocalImpl(TransportInterface, WritesFromFileInterface):
     """Runs commands in this process's host, in a workspace that is a
     directory on it: the transport of the host provider. A command is a
     process of its own session, whose environment is built from nothing: the
@@ -215,6 +217,16 @@ class TransportLocalImpl(TransportInterface):
     async def write_file(
         self, workspace: AgentWorkspace, path: str, data: bytes, epoch: int
     ) -> None:
+        await self._write(workspace, path, data, epoch)
+
+    async def write_file_from(
+        self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
+    ) -> None:
+        await self._write(workspace, path, source, epoch)
+
+    async def _write(
+        self, workspace: AgentWorkspace, path: str, data: bytes | Path, epoch: int
+    ) -> None:
         root = self._root(workspace)
         await asyncio.to_thread(self._book.admit, workspace.id, epoch)
         if self._account is not None:
@@ -225,7 +237,10 @@ class TransportLocalImpl(TransportInterface):
 
         def write() -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+            if isinstance(data, Path):
+                shutil.copyfile(data, target)
+            else:
+                target.write_bytes(data)
 
         await asyncio.to_thread(write)
 
@@ -378,15 +393,19 @@ def _read(
         return handle.read(max_bytes)
 
 
-def _write(root: Path, path: str, data: bytes, owners: Collection[int]) -> None:
-    """The file written whole; one this process makes is its group's to
-    change too."""
+def _write(root: Path, path: str, data: bytes | Path, owners: Collection[int]) -> None:
+    """The file written whole, from bytes or from a file on this host a
+    chunk at a time; one this process makes is its group's to change too."""
     fd = _file(root, path, os.O_WRONLY | os.O_CREAT, owners)
     with os.fdopen(fd, "wb") as handle:
         os.ftruncate(fd, 0)
         if os.fstat(fd).st_uid == os.getuid():
             os.fchmod(fd, 0o660)
-        handle.write(data)
+        if isinstance(data, Path):
+            with data.open("rb") as source:
+                shutil.copyfileobj(source, handle)
+        else:
+            handle.write(data)
 
 
 def _listed(root: Path, path: str, limit: int) -> list[FileEntry]:

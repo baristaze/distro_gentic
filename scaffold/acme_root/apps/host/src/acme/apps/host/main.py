@@ -126,6 +126,7 @@ def run() -> None:
                 ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
             ),
             kept_whole=KEPT_WHOLE if settings.vm else frozenset(),
+            spool=settings.transfers_path,
             # The servers the owner names, each started for one call with a
             # credential from the host's own store.
             servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),

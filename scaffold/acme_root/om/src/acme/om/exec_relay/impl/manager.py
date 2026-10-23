@@ -1,3 +1,5 @@
+import asyncio
+import base64
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
@@ -7,6 +9,17 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.infra.agent_workspaces import IsolationSpec
+from acme.infra.buckets import Buckets, BucketsInterface
+from acme.infra.buckets.sealed import (
+    ObjectRefused,
+    digest_of,
+    new_key,
+    open_object,
+    seal_object,
+    sealed_parts,
+    sealed_size,
+)
+from acme.infra.exceptions import BlobNotFound, InfraException, UploadNotFound, UploadRefused
 from acme.infra.observability import OUTCOMES
 from acme.infra.streams import StreamBounds, StreamsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
@@ -25,16 +38,21 @@ from acme.om.exec_relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspa
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import (
     CONTROL_KIND,
+    OBJECTS,
+    OUTPUT_BYTES,
     PUSH_BYTES,
     PUSH_PARTS,
     asks,
     claimed_row,
+    dispatch_objects,
     exec_id,
     held_by,
     max_attempts,
+    object_reference,
     repeatable,
     resent,
     row_id,
+    session_objects,
     setup_reaches,
     stale,
 )
@@ -50,13 +68,25 @@ from acme.om.exec_relay.types.exec import (
     ExecOutcome,
     ExecOutput,
     ExecProgress,
+    ExecRequest,
     ExecResult,
     ExecState,
+    IssuedObjectPart,
+    IssuedObjectUpload,
+    ItemContent,
+    ObjectKind,
+    ObjectRef,
+    ObjectSlot,
     PartText,
     PrepareAnswer,
+    Printed,
+    ReadRequest,
+    ResultContent,
     SentPart,
     SnapshotAnswer,
     StopKind,
+    StoredObject,
+    WriteRequest,
 )
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
@@ -81,6 +111,11 @@ log = logging.getLogger(__name__)
 
 BINDING_KIND = "exec_relay.agent_workspace_binding.updated"
 
+BUCKET = Buckets.TOOL_OUTPUTS
+"""Where the files the items move live while they cross: a session's tool
+content, under its tenant and `rules.OBJECTS`."""
+OCTETS = "application/octet-stream"
+
 STREAMS = frozenset({"stdout", "stderr"})
 
 
@@ -102,6 +137,10 @@ class ExecRelayOptions(OmBase):
     # How long a prepare a host refused waits before a host of the pool may
     # claim it again.
     prepare_retry: timedelta = timedelta(seconds=30)
+    # How long a URL signed for a host lets it start reading or sending its
+    # item's object; a transfer under way finishes past it.
+    object_ttl: timedelta = timedelta(minutes=15)
+    parts_per_issue: int = 100  # the parts of an object one ask of a host signs
 
 
 def worker_of(host: HostIdentity) -> str:
@@ -139,7 +178,9 @@ by one, or failed once its attempts were spent. Its reason stays with it."""
 
 class ExecRelayManagerImpl(ExecRelayManagerInterface):
     """`kept` records each snapshot a host keeps; with none, every one a host
-    answers is refused, since nothing could record where it lives."""
+    answers is refused, since nothing could record where it lives. `buckets`
+    holds the objects the items that move a file name, each sealed under a
+    key of its own that the item keeps under the session's key."""
 
     def __init__(
         self,
@@ -152,12 +193,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
         streams: StreamsInterface,
+        buckets: BucketsInterface,
         options: ExecRelayOptions,
         clock: Callable[[], datetime] = utcnow,
         *,
         kept: KeptOnHost | None = None,
     ) -> None:
         self._kept = kept
+        self._buckets = buckets
         self._storage = storage
         self._work = work
         self._steps = steps
@@ -560,15 +603,22 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     # The runner's side.
 
     async def send(
-        self, rctx: RequestContext, org_id: UUID, call: ExecCall, occurrence: int
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        call: ExecCall,
+        occurrence: int,
+        content: bytes | None = None,
     ) -> ExecItem:
+        if (content is not None) != isinstance(call.request, WriteRequest):
+            raise ValidationFailed("a write carries its content, and no other operation does")
         ctx = await self._service(rctx, org_id)
         await self._admit(ctx, call.agent_session_id, call.epoch)
         request = REQUESTS.dump_json(call.request)
         item_id = exec_id(call.key, request, occurrence)
         stored = await self._storage.read_item(org_id, item_id)
         if stored is not None:
-            return await self._attach(ctx, stored, call)
+            return await self._attach(ctx, stored, call, content)
         binding = await self._storage.read_binding(org_id, call.agent_session_id)
         if binding is None:
             raise NoWorkspaceHost(
@@ -584,8 +634,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 f"the host that held session {call.agent_session_id}'s workspace is no longer a live "
                 "host of its pool; its workspace is made again before its calls run"
             )
-        sealed = await self._seal.seal(ctx, call.agent_session_id, call.key, request)
+        contents = await self._contents(
+            org_id, call.agent_session_id, item_id, 1, call.request, content
+        )
+        sealed = await self._seal.seal(
+            ctx, call.agent_session_id, call.key, contents.model_dump_json().encode()
+        )
         if sealed is None:
+            await self._abort(org_id, contents)
             raise ContentNotKept(
                 f"session {call.agent_session_id} keeps no content at rest, so its commands "
                 "are not relayed into its tenant's wall"
@@ -610,13 +666,47 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             row_id=row_id(item_id, 1),
         )
         if not await self._storage.create_item(org_id, item):
+            await self._abort(org_id, contents)
             met = await self._storage.read_item(org_id, item_id)
             if met is None:
                 raise NotFound(f"exec item {item_id} not found")
-            return await self._attach(ctx, met, call)
+            return await self._attach(ctx, met, call, content)
+        if content is not None:
+            # Put once the item is made and before it is queued, so no host
+            # is handed a write whose object is not there.
+            try:
+                await self._put(ctx, contents, content)
+            except Exception:
+                outcome = ExecOutcome(refused="object_not_kept", refused_status=503)
+                await self._settle(ctx, item, outcome)
+                raise
         await self._enqueue(ctx, item, call.by_person, binding.instance_of or item.agent_session_id)
         OUTCOMES.labels(subsystem="exec_relay", outcome="sent").inc()
         return item
+
+    async def take(self, rctx: RequestContext, org_id: UUID, item_id: UUID) -> bytes:
+        ctx = await self._service(rctx, org_id)
+        item = await self._item(org_id, item_id)
+        contents = await self._contents_of(ctx, item)
+        result = await self._result_of(ctx, item)
+        if (
+            item.state is not ExecState.DONE
+            or contents.file_out is None
+            or result is None
+            or result.file is None
+        ):
+            raise NotFound(f"exec item {item_id} holds no file to take")
+        slot, stored = contents.file_out, result.file
+        try:
+            sealed = await self._buckets.get(org_id, BUCKET, slot.reference, deadline=ctx.deadline)
+        except BlobNotFound:
+            raise NotFound(f"the file of exec item {item_id} was taken") from None
+        try:
+            return await asyncio.to_thread(
+                open_object, _key(slot.key), slot.reference, stored.size, stored.digest, sealed
+            )
+        finally:
+            await self._delete(org_id, slot.reference)
 
     async def watch(
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, after_seq: int
@@ -638,8 +728,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             # whole, never its tail alone.
             if texts and texts[0].seq != after_seq + 1:
                 texts = []
-            opened = await self._opened(ctx, item, item.output)
-            output = ExecOutput.model_validate_json(opened) if opened else ExecOutput()
+            output = await self._output_of(ctx, item)
         return ExecProgress(
             state=item.state, parts=tuple(texts), outcome=item.outcome, output=output
         )
@@ -759,9 +848,14 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def detail(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> ExecDetail:
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
-        opened = await self._seal.open(ctx, item.agent_session_id, item.key, item.request)
-        if opened is None:
-            raise NotFound(f"exec item {item_id}: its session's content is gone")
+        contents = await self._contents_of(ctx, item)
+        url = expires_at = None
+        if contents.file_in is not None:
+            ttl = self._options.object_ttl
+            expires_at = self._clock() + ttl
+            url = await self._buckets.presign_get(
+                host.org_id, BUCKET, contents.file_in.reference, ttl
+            )
         return ExecDetail(
             item_id=item.id,
             key=item.key,
@@ -772,8 +866,51 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             epoch=item.epoch,
             spec=item.spec,
             location=item.location,
-            request=REQUESTS.validate_json(opened),
+            request=contents.request,
+            output=contents.output,
+            file_in=contents.file_in,
+            file_out=contents.file_out,
+            url=url,
+            url_expires_at=expires_at,
         )
+
+    async def issue_upload(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, kind: ObjectKind, size: int
+    ) -> IssuedObjectUpload:
+        ctx = await self._service(rctx, host.org_id)
+        item = await self._held(host, item_id)
+        contents = await self._contents_of(ctx, item)
+        slot, most = _uploaded(contents, kind)
+        if slot is None:
+            raise ValidationFailed(f"exec item {item_id} uploads no {kind}")
+        if not 0 <= size <= most:
+            raise ValidationFailed(f"the {kind} of exec item {item_id} is 0 to {most} bytes")
+        plan = sealed_parts(size)
+        held = await self._buckets.list_parts(
+            host.org_id, BUCKET, slot.reference, slot.upload_id, len(plan), deadline=ctx.deadline
+        )
+        have = {part.number: part.size_bytes for part in held}
+        missing = [part for part in plan if have.get(part.number) != part.size_bytes]
+        ttl = self._options.object_ttl
+        expires_at = self._clock() + ttl
+        parts = [
+            IssuedObjectPart(
+                number=part.number,
+                offset=part.offset,
+                size_bytes=part.size_bytes,
+                url=await self._buckets.presign_part(
+                    host.org_id,
+                    BUCKET,
+                    slot.reference,
+                    slot.upload_id,
+                    part.number,
+                    part.size_bytes,
+                    ttl,
+                ),
+            )
+            for part in missing[: self._options.parts_per_issue]
+        ]
+        return IssuedObjectUpload(parts=tuple(parts), remaining=len(missing), expires_at=expires_at)
 
     async def push_parts(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, parts: Sequence[SentPart]
@@ -823,8 +960,17 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             raise ValidationFailed(f"a result that is no exec result: {error}"[:500]) from None
         ctx = await self._service(rctx, host.org_id)
         item = await self._held(host, item_id)
+        try:
+            contents: ItemContent | None = await self._contents_of(ctx, item)
+        except NotFound:
+            contents = None  # its key went: what it printed or read is noise
+        if contents is None:
+            result = result.model_copy(update={"output": None, "file": None})
+        else:
+            result = await self._landed(host.org_id, contents, result)
+        kept = ResultContent.model_validate(result.model_dump(exclude={"outcome"}))
         sealed = await self._seal.seal(
-            ctx, item.agent_session_id, item.key, result.output.model_dump_json().encode()
+            ctx, item.agent_session_id, item.key, kept.model_dump_json().encode()
         )
         token = claimed_row(item).claim_token
         while True:
@@ -855,6 +1001,13 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             ):
                 raise ItemNotHeld(f"exec item {item_id} was settled before its result arrived")
             item = moved
+        if contents is None:
+            await self._delete_under(
+                host.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
+            )
+        elif contents.file_in is not None:
+            # What a write handed its host leaves once it settles.
+            await self._delete(host.org_id, contents.file_in.reference)
         try:
             await self._work.complete(ctx, claimed_row(item))
         except LeaseLost, NotFound:
@@ -944,6 +1097,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         await self._work.end_open_for_target(
             org_id, PlacementWorkKind.EXEC, agent_session_id, "its session was purged"
         )
+        # Its objects go before its items, so none outlives the record of it.
+        await self._delete_under(org_id, session_objects(agent_session_id), purged=True)
         while await self._storage.purge_agent_session(
             org_id, agent_session_id, self._options.purge_batch
         ):
@@ -953,6 +1108,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
             return 0
+        await self._delete_under(ctx.org_id, OBJECTS, purged=True)
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
     # Helpers.
@@ -1126,16 +1282,35 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
         return status is not None and status.host.revoked_at is None
 
-    async def _attach(self, ctx: TenantContext, item: ExecItem, call: ExecCall) -> ExecItem:
+    async def _attach(
+        self, ctx: TenantContext, item: ExecItem, call: ExecCall, content: bytes | None
+    ) -> ExecItem:
         """The item a call that sent it before meets: as it stands, so the
         run attaches to its execution or reads its result; or put on the
         queue again, when a repeat cannot harm it and its last run did not
-        end its command."""
+        end its command. Sent again, it moves objects of its own dispatch,
+        and what its last one moved goes."""
         if item.agent_session_id != call.agent_session_id:
             raise ValidationFailed(f"exec item {item.id} is another session's")
         now = self._clock()
         if resent(item):
             dispatch = item.dispatch + 1
+            try:
+                last: ItemContent | None = await self._contents_of(ctx, item)
+            except NotFound:
+                last = None
+            contents = await self._contents(
+                ctx.org_id, item.agent_session_id, item.id, dispatch, call.request, content
+            )
+            sealed = await self._seal.seal(
+                ctx, item.agent_session_id, item.key, contents.model_dump_json().encode()
+            )
+            if sealed is None:
+                await self._abort(ctx.org_id, contents)
+                raise ContentNotKept(
+                    f"session {item.agent_session_id} keeps no content at rest, so its commands "
+                    "are not relayed into its tenant's wall"
+                )
             again = _copy(
                 item,
                 now,
@@ -1144,6 +1319,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 row_id=row_id(item.id, dispatch),
                 epoch=call.epoch,
                 deadline=call.deadline,
+                request=sealed,
                 claim=None,
                 lease_expires_at=None,
                 outcome=None,
@@ -1153,7 +1329,15 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             )
             written = await self._storage.write_item(ctx.org_id, again, item.version)
             if written is None:
+                await self._abort(ctx.org_id, contents)
                 raise PreconditionFailed(f"exec item {item.id} moved while it was sent again")
+            if last is not None:
+                await self._abort(ctx.org_id, last)
+            await self._delete_under(
+                ctx.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
+            )
+            if content is not None:
+                await self._put(ctx, contents, content)
             binding = await self._storage.read_binding(ctx.org_id, item.agent_session_id)
             owner = (
                 item.agent_session_id
@@ -1235,6 +1419,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         written = await self._storage.write_item(ctx.org_id, ended, item.version)
         if written is not None and revoke:
             await self._control(ctx, item, StopKind.REVOKE)
+        if written is not None:
+            await self._let_go_of(ctx, written)
         return written
 
     async def _end_row(self, ctx: TenantContext, item: ExecItem) -> None:
@@ -1278,12 +1464,222 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             raise ItemNotHeld(f"exec item {item_id} is not held by this host")
         return item
 
-    async def _opened(self, ctx: TenantContext, item: ExecItem, sealed: bytes | None) -> str:
-        """Sealed content of the item, opened; empty once its key is gone."""
-        if sealed is None:
-            return ""
-        opened = await self._seal.open(ctx, item.agent_session_id, item.key, sealed)
-        return "" if opened is None else opened.decode()
+    # The objects an item moves.
+
+    async def _contents(
+        self,
+        org_id: UUID,
+        agent_session_id: UUID,
+        item_id: UUID,
+        dispatch: int,
+        request: ExecRequest,
+        content: bytes | None,
+    ) -> ItemContent:
+        """What an item seals on its `dispatch`th time on the queue: its
+        operation, and each object it moves under a key of its own. A
+        write's names its file, put once the item is made; an object its
+        host uploads has its upload started here."""
+
+        async def slot(kind: ObjectKind) -> ObjectSlot:
+            reference = object_reference(agent_session_id, item_id, dispatch, kind)
+            upload_id = await self._buckets.start_upload(org_id, BUCKET, reference, OCTETS)
+            return ObjectSlot(reference=reference, key=_b64(new_key()), upload_id=upload_id)
+
+        if isinstance(request, WriteRequest):
+            if content is None:
+                raise ValidationFailed("a write carries its content")
+            named = ObjectRef(
+                reference=object_reference(agent_session_id, item_id, dispatch, "file"),
+                size=len(content),
+                digest=await asyncio.to_thread(digest_of, content),
+                key=_b64(new_key()),
+            )
+            return ItemContent(request=request, file_in=named)
+        if isinstance(request, ReadRequest):
+            return ItemContent(request=request, file_out=await slot("file"))
+        return ItemContent(request=request, output=await slot("output"))
+
+    async def _put(self, ctx: TenantContext, contents: ItemContent, content: bytes) -> None:
+        """A write's file, sealed under its object's key: the platform's own
+        write, a `put`."""
+        named = contents.file_in
+        assert named is not None  # a write's contents name its file
+        sealed = await asyncio.to_thread(seal_object, _key(named.key), named.reference, content)
+        await self._buckets.put(
+            ctx.org_id, BUCKET, named.reference, sealed, OCTETS, deadline=ctx.deadline
+        )
+
+    async def _contents_of(self, ctx: TenantContext, item: ExecItem) -> ItemContent:
+        opened = await self._seal.open(ctx, item.agent_session_id, item.key, item.request)
+        if opened is None:
+            raise NotFound(f"exec item {item.id}: its session's content is gone")
+        return ItemContent.model_validate_json(opened)
+
+    async def _result_of(self, ctx: TenantContext, item: ExecItem) -> ResultContent | None:
+        """What the item's result says, opened; None before it has one, and
+        once its key is gone."""
+        if item.output is None:
+            return None
+        opened = await self._seal.open(ctx, item.agent_session_id, item.key, item.output)
+        return None if opened is None else ResultContent.model_validate_json(opened)
+
+    async def _output_of(self, ctx: TenantContext, item: ExecItem) -> ExecOutput:
+        """A done item's output as the runner reads it: its output object
+        read from the store and opened, once it matches what its host
+        declared, with the rest of its result. Empty once its key is gone."""
+        result = await self._result_of(ctx, item)
+        if result is None:
+            return ExecOutput()
+        printed = Printed()
+        detail = result.detail
+        if result.output is not None:
+            try:
+                slot = (await self._contents_of(ctx, item)).output
+                if slot is not None:
+                    printed = await self._printed(ctx, slot, result.output)
+            except NotFound:
+                pass  # its key went since: so did what it printed
+            except ObjectRefused as error:
+                log.warning("exec item %s: %s", item.id, error.message)
+                detail = detail or "its output did not open to what its host declared of it"
+        return ExecOutput(
+            stdout=printed.stdout,
+            stderr=printed.stderr,
+            entries=printed.entries,
+            file=result.file,
+            offset=result.offset,
+            detail=detail,
+        )
+
+    async def _printed(self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject) -> Printed:
+        try:
+            sealed = await self._buckets.get(
+                ctx.org_id, BUCKET, slot.reference, deadline=ctx.deadline
+            )
+        except BlobNotFound:
+            raise NotFound(f"no output at {slot.reference}") from None
+        opened = await asyncio.to_thread(
+            open_object, _key(slot.key), slot.reference, stored.size, stored.digest, sealed
+        )
+        return Printed.model_validate_json(opened)
+
+    async def _landed(self, org_id: UUID, contents: ItemContent, result: ExecResult) -> ExecResult:
+        """The result once each object it names is whole in the store: its
+        upload completed to the plan of the size the host declared. An
+        output that is not whole is not kept, and the result says so; a
+        read whose file is not whole is refused. An upload the result names
+        nothing of is let go."""
+        output_slot, most = _uploaded(contents, "output")
+        if output_slot is not None:
+            if not await self._completed(org_id, output_slot, result.output, most):
+                if result.output is not None:
+                    detail = "its output was not kept whole in the store"
+                    result = result.model_copy(update={"output": None, "detail": detail})
+        elif result.output is not None:
+            raise ValidationFailed("an item that prints nothing uploads no output")
+        file_slot, most = _uploaded(contents, "file")
+        if file_slot is not None:
+            if not await self._completed(org_id, file_slot, result.file, most):
+                if result.file is not None or result.outcome.refused is None:
+                    refused = ExecOutcome(refused=ObjectRefused.code, refused_status=422)
+                    detail = "the file it read was not kept whole in the store"
+                    result = result.model_copy(
+                        update={"outcome": refused, "file": None, "detail": detail}
+                    )
+        elif result.file is not None:
+            raise ValidationFailed("an item that reads nothing uploads no file")
+        return result
+
+    async def _completed(
+        self, org_id: UUID, slot: ObjectSlot, stored: StoredObject | None, most: int
+    ) -> bool:
+        """Whether the object a host declared is whole in the store now. One
+        it declared nothing of, past its bound, or short of its plan, is let
+        go."""
+        if stored is None or stored.size > most:
+            await self._let_go(org_id, slot)
+            return False
+        try:
+            await self._buckets.complete_upload(
+                org_id, BUCKET, slot.reference, slot.upload_id, sealed_size(stored.size)
+            )
+        except (UploadRefused, UploadNotFound) as error:
+            log.warning("%s: %s", slot.reference, error.message)
+            await self._let_go(org_id, slot)
+            return False
+        return True
+
+    async def _let_go_of(self, ctx: TenantContext, item: ExecItem) -> None:
+        """What an item that ended `interrupted` moved: no result names its
+        objects now, so its uploads and its files go."""
+        try:
+            contents = await self._contents_of(ctx, item)
+        except NotFound:
+            contents = None  # its key went: what it moved is noise, and goes
+        if contents is not None:
+            await self._abort(ctx.org_id, contents)
+        await self._delete_under(
+            ctx.org_id, dispatch_objects(item.agent_session_id, item.id, item.dispatch)
+        )
+
+    async def _abort(self, org_id: UUID, contents: ItemContent) -> None:
+        """Lets go of every object `contents` names."""
+        for slot in (contents.output, contents.file_out):
+            if slot is not None:
+                await self._let_go(org_id, slot)
+        if contents.file_in is not None:
+            await self._delete(org_id, contents.file_in.reference)
+
+    async def _let_go(self, org_id: UUID, slot: ObjectSlot) -> None:
+        try:
+            await self._buckets.abort_upload(org_id, BUCKET, slot.reference, slot.upload_id)
+        except InfraException as error:
+            # The store's own rule ends an upload a day on.
+            log.warning("%s: its upload was not aborted: %s", slot.reference, error.message)
+        await self._delete(org_id, slot.reference)
+
+    async def _delete(self, org_id: UUID, reference: str) -> None:
+        try:
+            await self._buckets.delete(org_id, BUCKET, reference)
+        except InfraException as error:
+            # Sealed, and the session's purge takes it.
+            log.warning("%s: it was not removed: %s", reference, error.message)
+
+    async def _delete_under(self, org_id: UUID, prefix: str, *, purged: bool = False) -> None:
+        """Every object under `prefix`, a page at a time. One the store
+        fails to list or remove is left, sealed, to the session's purge,
+        whose own failure is raised, so the sweep purges it again."""
+        batch = self._options.purge_batch
+        after: str | None = None
+        try:
+            while keys := await self._buckets.list(org_id, BUCKET, prefix, batch, after):
+                for key in keys:
+                    await self._buckets.delete(org_id, BUCKET, key)
+                if len(keys) < batch:
+                    return
+                after = keys[-1]
+        except InfraException as error:
+            if purged:
+                raise
+            log.warning("%s: its objects were not all removed: %s", prefix, error.message)
+
+
+def _b64(key: bytes) -> str:
+    return base64.b64encode(key).decode()
+
+
+def _key(text: str) -> bytes:
+    return base64.b64decode(text)
+
+
+def _uploaded(contents: ItemContent, kind: ObjectKind) -> tuple[ObjectSlot | None, int]:
+    """The object of `kind` an item's host uploads, and the most it holds:
+    an output within `OUTPUT_BYTES`, a read's file within what it asked."""
+    if kind == "output":
+        return contents.output, OUTPUT_BYTES
+    request = contents.request
+    most = request.max_bytes if isinstance(request, ReadRequest) else 0
+    return contents.file_out, most
 
 
 def _crossed(kind: CrossingKind, crossing: Crossing, data: bytes) -> bytes:

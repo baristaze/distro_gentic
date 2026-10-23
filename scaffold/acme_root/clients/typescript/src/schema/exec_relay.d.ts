@@ -34,8 +34,9 @@ export interface paths {
         /**
          * Detail
          * @description What the host runs for an item it holds: the command or the file
-         *     operation, opened, with its deadline, its writer epoch, and where the
-         *     workspace is.
+         *     operation, opened, with its deadline, its writer epoch, where the
+         *     workspace is, and the objects it moves, each with the key that opens it
+         *     alone and, for a write's file, a URL signed for a GET of it.
          */
         get: operations["detail"];
         put?: never;
@@ -103,6 +104,29 @@ export interface paths {
          *     settlement wins: one its lease or a stop settled already is refused.
          */
         post: operations["push_result"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/exec/{item_id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Upload
+         * @description The parts of an object of the item the store does not hold yet, each
+         *     by a URL signed for its number and its length, which the host sends
+         *     straight to the store: the item's output, or a read's file. Asked
+         *     again, only those still missing, so an upload cut off resumes.
+         */
+        post: operations["issue_upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -212,7 +236,10 @@ export interface components {
         };
         /**
          * ExecDetailView
-         * @description An item the host holds: the call, the workspace, and the operation.
+         * @description An item the host holds: the call, the workspace, the operation, and
+         *     the objects it moves. A write's `file_in` comes by `url`, signed for a
+         *     GET of it alone until `url_expires_at`; an `output` and a read's
+         *     `file_out` go by the parts `POST .../upload` signs.
          */
         ExecDetailView: {
             /**
@@ -234,6 +261,8 @@ export interface components {
             effect: string;
             /** Epoch */
             epoch: number | null;
+            file_in?: components["schemas"]["ObjectRefView"] | null;
+            file_out?: components["schemas"]["ObjectSlotView"] | null;
             /**
              * Item Id
              * Format: uuid
@@ -246,6 +275,7 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+            output?: components["schemas"]["ObjectSlotView"] | null;
             /** Request */
             request: {
                 [key: string]: unknown;
@@ -254,6 +284,10 @@ export interface components {
             spec: {
                 [key: string]: unknown;
             };
+            /** Url */
+            url?: string | null;
+            /** Url Expires At */
+            url_expires_at?: string | null;
         };
         /** ExecLeaseView */
         ExecLeaseView: {
@@ -268,6 +302,68 @@ export interface components {
          * @enum {string}
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
+        /**
+         * IssuedObjectPartView
+         * @description One part of an object to send, sealed: `size_bytes` bytes of the
+         *     sealed object from `offset`, as the body of a PUT to `url`, straight to
+         *     the store. The URL is signed for that length.
+         */
+        IssuedObjectPartView: {
+            /** Number */
+            number: number;
+            /** Offset */
+            offset: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Url */
+            url: string;
+        };
+        /**
+         * IssuedObjectUploadView
+         * @description The parts of the object the store does not hold yet, at most a window
+         *     of them, each good until `expires_at`. `remaining` counts every part
+         *     still missing, these included: send these and ask again while it is
+         *     above zero, then push the result. Asked again after an upload was cut
+         *     off, it signs only the parts still missing.
+         */
+        IssuedObjectUploadView: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Parts */
+            parts: components["schemas"]["IssuedObjectPartView"][];
+            /** Remaining */
+            remaining: number;
+        };
+        /**
+         * ObjectRefView
+         * @description A file a write hands its host: the object that holds it under the
+         *     tenant, the size and the digest of the file, and the key (base64) it
+         *     is sealed under, which opens this object alone.
+         */
+        ObjectRefView: {
+            /** Digest */
+            digest: string;
+            /** Key */
+            key: string;
+            /** Reference */
+            reference: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * ObjectSlotView
+         * @description An object the host uploads: where it is under the tenant, and the key
+         *     (base64) it seals it under.
+         */
+        ObjectSlotView: {
+            /** Key */
+            key: string;
+            /** Reference */
+            reference: string;
+        };
         /**
          * OutputStream
          * @enum {string}
@@ -332,7 +428,9 @@ export interface components {
         };
         /**
          * ResultRequest
-         * @description How an item ended: the JSON of an exec result, in base64.
+         * @description How an item ended: the JSON of an exec result, in base64. It names
+         *     the objects its host uploaded, by their size and their digest, and
+         *     holds none of their bytes, so it is a few KiB.
          */
         ResultRequest: {
             crossing: components["schemas"]["CrossingBody"];
@@ -363,6 +461,20 @@ export interface components {
          * @enum {string}
          */
         StopKind: "cancel" | "interrupt" | "deadline" | "revoke";
+        /**
+         * UploadRequest
+         * @description An object of an item the host uploads, and the bytes it seals: the
+         *     item's `output`, what it printed or listed, or a read's `file`.
+         */
+        UploadRequest: {
+            /**
+             * Object
+             * @enum {string}
+             */
+            object: "output" | "file";
+            /** Size Bytes */
+            size_bytes: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -563,6 +675,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_upload: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedObjectUploadView"];
+                };
             };
             /** @description Validation Error */
             422: {
