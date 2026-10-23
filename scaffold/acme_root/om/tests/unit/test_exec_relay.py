@@ -5,12 +5,13 @@ attaches to it rather than starting another. An expired lease completes an
 unsafe item `interrupted` and requeues a repeatable one to its workspace's
 host alone. A stop reaches the host's control stream at once, and nothing a
 stale writer sends acts. A part or a result whose hash does not verify is
-refused at the exec relay. A file is read in one item, whose result crosses
-whole: a file longer than one carries is refused at once."""
+refused at the exec relay. A file is read in one item, whose host uploads
+it as an object of the store that the runner takes once the item is done."""
 
 import asyncio
 import base64
 import json
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -27,6 +28,8 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationSpec,
 )
+from acme.infra.buckets import Buckets, BucketsInterface
+from acme.infra.buckets.sealed import digest_of
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams import StreamBounds
@@ -34,7 +37,6 @@ from acme.infra.transports import (
     CapabilityMissing,
     CommandResult,
     CommandSpec,
-    FileTooLarge,
     RecordSeal,
     StaleCommand,
 )
@@ -47,11 +49,10 @@ from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.impl.manager import ExecRelayOptions
 from acme.om.exec_relay.impl.placement import PlacementRelayedImpl
-from acme.om.exec_relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
+from acme.om.exec_relay.impl.transport import HostRefused, TransportPlacedImpl, TransportRelayImpl
 from acme.om.exec_relay.rules import (
     PUSH_BYTES,
     PUSH_PARTS,
-    READ_BYTES,
     RESULT_CHARS,
     exec_id,
     key_time,
@@ -70,6 +71,7 @@ from acme.om.exec_relay.types.exec import (
     RunRequest,
     SentPart,
     StopKind,
+    StoredObject,
 )
 from acme.om.hosts.exceptions import PinnedToHosts
 from acme.om.hosts.impl.manager import HostsOptions
@@ -93,6 +95,7 @@ from acme.om.storage.impl.memory_base import MemoryStorageBase
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 
+from contracts import exec_objects
 from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_agent_session
 from contracts.hosts_storage import make_credential, make_host
@@ -134,6 +137,7 @@ class Wall:
     other: HostIdentity
     workspace: AgentWorkspace
     epoch: int
+    buckets: BucketsInterface
 
 
 @pytest.fixture
@@ -164,13 +168,15 @@ async def enrolled(
 ) -> HostIdentity:
     issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
     credential = await managers.hosts.enroll(
-        request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=1)
+        request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=2)
     )
     return await managers.hosts.authenticate(request(), credential.credential)
 
 
 @pytest.fixture
-async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
+async def wall(
+    managers: PlatformManagers, storage: StorageMemoryImpl, infra: InfraLocalImpl
+) -> Wall:
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
     now = utcnow()
     pool = await managers.hosts.create_pool(
@@ -192,7 +198,9 @@ async def wall(managers: PlatformManagers, storage: StorageMemoryImpl) -> Wall:
     await managers.exec_relay.bind_workspace(owner, session.id, holder.host_id, WHERE)
     epoch = await managers.agent_steps.begin_run(owner, session.id)
     workspace = AgentWorkspace(id=session.id, org_id=owner.org_id, spec=CONTAINER, location="")
-    return Wall(managers, storage, owner, pool, holder, other, workspace, epoch)
+    return Wall(
+        managers, storage, owner, pool, holder, other, workspace, epoch, infra.get_buckets()
+    )
 
 
 def transport(managers: PlatformManagers) -> TransportRelayImpl:
@@ -227,16 +235,18 @@ def command(
 
 class Host:
     """A host as the exec relay sees it: it claims through placement, reads what
-    it holds, streams parts, and pushes how the command ended, each with the
-    hash it declares. It counts what it was handed."""
+    it holds, streams parts, uploads what it printed or read to the store, and
+    pushes how the command ended, each with the hash it declares. It counts
+    what it was handed."""
 
-    def __init__(self, managers: PlatformManagers, identity: HostIdentity) -> None:
-        self.managers = managers
+    def __init__(self, wall: Wall, identity: HostIdentity) -> None:
+        self.managers = wall.managers
+        self.buckets = wall.buckets
         self.identity = identity
         self.handed: list[WorkItem] = []
 
     async def claim(self) -> WorkItem | None:
-        claimed = await self.managers.hosts.claim(request(), self.identity, 1)
+        claimed = await self.managers.hosts.claim(request(), self.identity, 2)
         if claimed is None:
             return None
         self.handed.append(claimed[1])
@@ -269,19 +279,17 @@ class Host:
         stdout: str = "",
         data: bytes | None = None,
         offset: int = 0,
+        outcome: ExecOutcome | None = None,
     ) -> None:
-        read = None if data is None else base64.b64encode(data).decode()
-        result = ExecResult(
-            outcome=ExecOutcome(exit_code=exit_code),
-            output=ExecOutput(stdout=stdout, data=read, offset=offset),
-        )
-        data = result.model_dump_json().encode()
-        await self.managers.exec_relay.push_result(
-            request(),
+        await exec_objects.finish(
+            self.managers.exec_relay,
+            self.buckets,
             self.identity,
             self.item_id(row),
-            declared(CrossingKind.RESULT, data),
-            data,
+            outcome or ExecOutcome(exit_code=exit_code),
+            stdout=stdout,
+            file=data,
+            offset=offset,
         )
 
 
@@ -298,8 +306,8 @@ async def item_of(wall: Wall, row: WorkItem):
 async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_its_key(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
-    elsewhere = Host(wall.managers, wall.other)
+    host = Host(wall, wall.holder)
+    elsewhere = Host(wall, wall.other)
     printed: list[tuple[str, str]] = []
 
     async def sink(stream: str, text: str) -> None:
@@ -347,7 +355,7 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
 async def test_a_resumed_run_attaches_to_the_first_execution_and_never_starts_another(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     spec = command(wall.epoch)
     lost = asyncio.ensure_future(transport(wall.managers).run(wall.workspace, spec, seal=NO_SEAL))
     row = await host.claim_soon()
@@ -385,7 +393,7 @@ async def test_a_resumed_run_attaches_to_the_first_execution_and_never_starts_an
 async def test_an_unsafe_items_lease_runs_out_and_it_completes_interrupted_never_requeued(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
     )
@@ -412,8 +420,8 @@ async def test_an_unsafe_items_lease_runs_out_and_it_completes_interrupted_never
 async def test_a_repeatable_items_lease_runs_out_and_it_goes_back_to_its_workspaces_host_alone(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
-    elsewhere = Host(wall.managers, wall.other)
+    host = Host(wall, wall.holder)
+    elsewhere = Host(wall, wall.other)
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(
             wall.workspace,
@@ -463,7 +471,7 @@ def before_the_result_lands(
 async def test_a_renewal_that_lands_while_its_result_is_written_costs_the_result_nothing(
     wall: Wall, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
     )
@@ -483,7 +491,7 @@ async def test_a_renewal_that_lands_while_its_result_is_written_costs_the_result
 async def test_a_result_of_a_claim_its_item_was_taken_from_lands_nothing(
     wall: Wall, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(
             wall.workspace, command(wall.epoch, "idempotent"), seal=NO_SEAL
@@ -536,7 +544,7 @@ async def test_revoking_a_host_ends_the_work_on_its_lane_and_settles_its_command
     wall: Wall,
 ) -> None:
     relay, work, org = wall.managers.exec_relay, wall.managers.work, wall.owner.org_id
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     running = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
     await host.claim_soon()
     queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
@@ -562,7 +570,7 @@ async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) 
 
     row = await work.get_item(wall.owner, queued.row_id)
     assert (row.status, row.last_error) == (WorkStatus.DONE, "its session was purged")
-    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await Host(wall, wall.holder).claim() is None
     assert await work.oldest_ready_age() == timedelta(0)
 
 
@@ -593,12 +601,12 @@ async def test_stopping_a_command_no_host_took_ends_its_queue_row(wall: Wall) ->
         WorkStatus.DONE,
         "its command was stopped before a host took it",
     )
-    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await Host(wall, wall.holder).claim() is None
     assert await work.oldest_ready_age() == timedelta(0)
 
 
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     for kind in (StopKind.CANCEL, StopKind.INTERRUPT):
         waiting = asyncio.ensure_future(
@@ -619,7 +627,7 @@ async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: W
 
 
 async def test_a_stop_no_host_took_yet_means_it_never_runs(wall: Wall) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     sent = await relay.send(
         request(),
@@ -634,7 +642,7 @@ async def test_a_stop_no_host_took_yet_means_it_never_runs(wall: Wall) -> None:
 
 
 async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     stale = wall.epoch
     queued = await relay.send(request(), wall.owner.org_id, _call(wall, command(stale)), 0)
@@ -710,7 +718,7 @@ def flaky(wall: Wall) -> tuple[TransportRelayImpl, Flaky]:
 
 
 async def test_a_progress_read_that_fails_for_now_is_waited_out(wall: Wall) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     runner, relay = flaky(wall)
     waiting = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
     row = await host.claim_soon()
@@ -727,7 +735,7 @@ async def test_a_progress_read_that_fails_for_now_is_waited_out(wall: Wall) -> N
 async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrupted(
     wall: Wall, lost: str
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     runner, relay = flaky(wall)
     spec = command(wall.epoch, seconds=30 if lost == "refused" else 0.3)
     waiting = asyncio.ensure_future(runner.run(wall.workspace, spec, seal=NO_SEAL))
@@ -750,7 +758,7 @@ async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrup
 
 
 async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wall) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
@@ -764,8 +772,8 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wa
     )
     with pytest.raises(CrossingRefused):
         await relay.push_parts(request(), wall.holder, item_id, [forged_part])
-    real = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="ok"))
-    forged = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="forged"))
+    real = ExecResult(outcome=ExecOutcome(exit_code=0), detail="ok")
+    forged = ExecResult(outcome=ExecOutcome(exit_code=1), detail="forged")
     for crossing, data in (
         (
             declared(CrossingKind.RESULT, real.model_dump_json().encode()),
@@ -782,50 +790,50 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wa
     assert (await waiting).stdout == "ok"
 
 
-# A file crosses whole in one item's result, or is refused at once.
+# A file crosses as an object of the store, never in an item's result.
 
 
-async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once(
+async def test_a_relayed_read_crosses_as_an_object_up_to_what_it_asks_and_no_further(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     asked: list[ReadRequest] = []
+    relay = wall.managers.exec_relay
 
     async def answers(data: bytes) -> None:
         row = await host.claim_soon()
-        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
+        detail = await relay.detail(request(), wall.holder, host.item_id(row))
         asked.append(cast(ReadRequest, detail.request))
         await host.finish(row, data=data)
 
-    # A bound past what one result carries asks for that much and a byte.
     bound = 64 * 1024 * 1024 + 1
     reads = transport(wall.managers)
-    short = b'{"kind": "end", "outcome": "passed"}\n'
+    # Past what a result once carried, it crosses whole.
+    longer = bytes(range(256)) * (9 * 4096 + 1)
     read, _ = await asyncio.gather(
-        reads.read_file(wall.workspace, "out/0-0.jsonl", bound), answers(short)
+        reads.read_file(wall.workspace, "out/0-0.jsonl", bound), answers(longer)
     )
-    assert read == short
-    longer = b"r" * (READ_BYTES + 1)
-    with pytest.raises(FileTooLarge, match=f"past the {READ_BYTES} bytes"):
-        await asyncio.wait_for(
-            asyncio.gather(
-                reads.read_file(wall.workspace, "out/0-1.jsonl", bound), answers(longer)
-            ),
-            timeout=10,
-        )
-    assert [read.max_bytes for read in asked] == [READ_BYTES + 1] * 2
-    # And the most it asks for crosses within what a host's result carries.
+    assert read == longer
+    assert [read.max_bytes for read in asked] == [bound]
+    # A host's upload past what the read asked is refused before a part is signed.
+    waiting = asyncio.ensure_future(reads.read_file(wall.workspace, "out/0-1.jsonl", 16))
+    row = await host.claim_soon()
+    with pytest.raises(ValidationFailed, match="0 to 16 bytes"):
+        await relay.issue_upload(request(), wall.holder, host.item_id(row), "file", 17)
+    await host.finish(row, data=b"sixteen bytes ok")
+    assert await waiting == b"sixteen bytes ok"
+    # And the result that names it is a few KiB, whatever the file's size.
     result = ExecResult(
         outcome=ExecOutcome(exit_code=0),
-        output=ExecOutput(data=base64.b64encode(longer).decode()),
+        file=StoredObject(size=len(longer), digest=digest_of(longer)),
     )
-    assert len(base64.b64encode(result.model_dump_json().encode())) <= RESULT_CHARS
+    assert len(base64.b64encode(result.model_dump_json().encode())) < 1024 < RESULT_CHARS
 
 
 async def test_a_relayed_read_asks_from_its_offset_and_a_negative_one_sends_nothing(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     asked: list[ReadRequest] = []
 
     async def answers(data: bytes) -> None:
@@ -848,7 +856,7 @@ async def test_a_relayed_read_asks_from_its_offset_and_a_negative_one_sends_noth
 async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_is_refused(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     sent: list[dict[str, object]] = []
 
     async def answers(data: bytes) -> None:
@@ -866,7 +874,7 @@ async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_
     # it and as its API and its hosts read it, and so does its answer.
     assert read == b"head,tail"
     assert sent == [{"operation": "read_file", "path": "out/0-0.jsonl", "max_bytes": 64}]
-    assert "offset" not in json.loads(ExecOutput(data="").model_dump_json())
+    assert "offset" not in json.loads(ExecResult(outcome=ExecOutcome()).model_dump_json())
     # A read past the start that such a host answers is refused, never
     # handed back as the bytes after the offset.
     with pytest.raises(CapabilityMissing, match="did not read from offset 5"):
@@ -877,6 +885,166 @@ async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_
             timeout=10,
         )
     assert sent[1]["offset"] == 5
+
+
+# The objects an item moves: each read only by the host that holds the
+# item, by a URL signed for it alone, unreadable once its session's key
+# goes, and gone from the store once its item settles.
+
+
+async def under(wall: Wall, agent_session_id: UUID | None = None) -> list[str]:
+    """The objects the store holds for the session's items."""
+    session = agent_session_id or wall.workspace.id
+    prefix = f"exec_relay/{session}/"
+    return await wall.buckets.list(wall.owner.org_id, Buckets.TOOL_OUTPUTS, prefix, 100)
+
+
+async def test_an_objects_url_reads_it_alone_until_it_runs_out_and_only_its_host_gets_one(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relay = wall.managers.exec_relay
+    host, elsewhere = Host(wall, wall.holder), Host(wall, wall.other)
+    data = b"the file a write hands its host\n" * 64
+    writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(wall.workspace, "notes.md", data, wall.epoch)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    # Another host of the tenant reads nothing of an item it does not hold:
+    # no detail, so no key and no URL, and no part of its uploads.
+    with pytest.raises(ItemNotHeld):
+        await relay.detail(request(), wall.other, item_id)
+    with pytest.raises(ItemNotHeld):
+        await relay.issue_upload(request(), wall.other, item_id, "file", 1)
+    # Nor does the holder of another session's item reach this one, or that
+    # one reach its.
+    second = await wall.managers.agent_sessions.create_agent_session(
+        wall.owner, make_agent_session()
+    )
+    await wall.managers.hosts.place_session(wall.owner, second.id, wall.pool.id)
+    await relay.bind_workspace(wall.owner, second.id, wall.other.host_id, WHERE)
+    other_run = await wall.managers.agent_steps.begin_run(wall.owner, second.id)
+    theirs = AgentWorkspace(id=second.id, org_id=wall.owner.org_id, spec=CONTAINER, location="")
+    their_writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(theirs, "theirs.md", b"theirs\n", other_run)
+    )
+    their_row = await elsewhere.claim_soon()
+    with pytest.raises(ItemNotHeld):
+        await relay.detail(request(), wall.holder, elsewhere.item_id(their_row))
+    assert await exec_objects.handed(relay, wall.buckets, wall.holder, item_id) == data
+    detail = await relay.detail(request(), wall.holder, item_id)
+    assert detail.url is not None and detail.file_in is not None
+    async with exec_objects.store_of(wall.buckets) as store:
+        assert (await store.get(detail.url)).status_code == 200
+        # Signed for one object, its path pointed at another: refused.
+        their_detail = await relay.detail(request(), wall.other, elsewhere.item_id(their_row))
+        assert their_detail.file_in is not None
+        moved = detail.url.replace(detail.file_in.reference, their_detail.file_in.reference)
+        assert (await store.get(moved)).status_code == 403
+        # Past its time: refused.
+        later = time.time() + ExecRelayOptions().object_ttl.total_seconds() + 1
+        with monkeypatch.context() as clock:
+            clock.setattr("acme.infra.buckets.local.time.time", lambda: later)
+            expired = await store.get(detail.url)
+    assert (expired.status_code, expired.text) == (403, "the URL has expired")
+    for running, held, as_host in ((writing, row, host), (their_writing, their_row, elsewhere)):
+        await as_host.finish(held)
+        await running
+
+
+async def test_a_sessions_objects_are_unreadable_once_its_key_is_revoked(wall: Wall) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    data = b"the deploy key is in vault\n" * 1000
+    writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(wall.workspace, "secret.md", data, wall.epoch)
+    )
+    row = await host.claim_soon()
+    item_id = host.item_id(row)
+    (reference,) = await under(wall)
+    held = await wall.buckets.get(wall.owner.org_id, Buckets.TOOL_OUTPUTS, reference)
+    assert b"deploy key" not in held, "the store holds the file sealed"
+    await wall.managers.privacy.revoke_key(wall.owner, wall.workspace.id)
+    # The key that opens the object was kept under the session's: what
+    # names it, and so what reads it, is gone.
+    with pytest.raises(NotFound, match="content is gone"):
+        await relay.detail(request(), wall.holder, item_id)
+    with pytest.raises(NotFound, match="content is gone"):
+        await relay.issue_upload(request(), wall.holder, item_id, "file", 1)
+    writing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await writing
+
+
+async def test_a_done_commands_output_is_unreadable_once_its_key_is_revoked(wall: Wall) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    running = asyncio.ensure_future(
+        transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
+    )
+    row = await host.claim_soon()
+    await host.finish(row, 0, "the deploy key is in vault\n")
+    assert (await running).stdout == "the deploy key is in vault\n"
+    (reference,) = await under(wall)
+    held = await wall.buckets.get(wall.owner.org_id, Buckets.TOOL_OUTPUTS, reference)
+    assert b"deploy key" not in held, "the store holds the output sealed"
+    await wall.managers.privacy.revoke_key(wall.owner, wall.workspace.id)
+    progress = await relay.watch(request(), wall.owner.org_id, host.item_id(row), -1)
+    assert progress.output == ExecOutput(), "what it printed goes with its key"
+
+
+async def test_an_item_that_settles_leaves_no_file_behind_and_its_output_goes_with_its_purge(
+    wall: Wall,
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    runner = transport(wall.managers)
+    # A write's file goes once its host settles it.
+    writing = asyncio.ensure_future(runner.write_file(wall.workspace, "a.md", b"a\n", wall.epoch))
+    row = await host.claim_soon()
+    assert len(await under(wall)) == 1
+    await host.finish(row)
+    await writing
+    assert await under(wall) == []
+    # A read's file goes once the runner takes it.
+    read, _ = await asyncio.gather(
+        runner.read_file(wall.workspace, "b.md", 64), answered(host, b"b\n")
+    )
+    assert read == b"b\n" and await under(wall) == []
+    # One its host refused, and one stopped before a host took it, leave
+    # nothing, nor any upload.
+    refused = asyncio.ensure_future(runner.read_file(wall.workspace, "c.md", 64))
+    row = await host.claim_soon()
+    await host.finish(row, outcome=ExecOutcome(refused="not_found", refused_status=404))
+    with pytest.raises(HostRefused):
+        await refused
+    assert await under(wall) == []
+    stopped = asyncio.ensure_future(runner.write_file(wall.workspace, "d.md", b"d", wall.epoch))
+    for _ in range(500):
+        if await under(wall):
+            break
+        await asyncio.sleep(0.002)
+    stopped.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stopped
+    for _ in range(500):
+        if not await under(wall):
+            break
+        await asyncio.sleep(0.002)
+    assert await under(wall) == [], "a stop settles it, and its file goes"
+    # A command's output is its record: it stays until its session's purge.
+    ran = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
+    row = await host.claim_soon()
+    await host.finish(row, 0, "ok\n")
+    await ran
+    assert len(await under(wall)) == 1
+    await relay.purge_agent_session(wall.owner.org_id, wall.workspace.id)
+    assert await under(wall) == []
+
+
+async def answered(host: Host, data: bytes) -> None:
+    row = await host.claim_soon()
+    await host.finish(row, data=data)
 
 
 # Where a call runs: the placement picks the transport, and names the host.
@@ -984,8 +1152,8 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     assert not await managers.exec_relay.ask_release(owner, agent_session_id, CONTAINER), (
         "one at a time"
     )
-    assert await Host(managers, wall.other).claim() is None, "no other host of the pool takes it"
-    row = await Host(managers, wall.holder).claim_soon()
+    assert await Host(wall, wall.other).claim() is None, "no other host of the pool takes it"
+    row = await Host(wall, wall.holder).claim_soon()
     payload = WorkspacePayload.model_validate(row.payload)
     assert (payload.operation, payload.agent_session_id) == (
         WorkspaceOperation.RELEASE,
@@ -1043,8 +1211,8 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     await managers.exec_relay.ask_instance(owner, agent_session_id, instance, CONTAINER)
 
     for outside in (elsewhere, foreign):
-        assert await Host(managers, outside).claim() is None, "no host outside the pool"
-    row = await Host(managers, wall.other).claim_soon()
+        assert await Host(wall, outside).claim() is None, "no host outside the pool"
+    row = await Host(wall, wall.other).claim_soon()
     payload = WorkspacePayload.model_validate(row.payload)
     assert (payload.operation, payload.agent_session_id, payload.instance_of) == (
         WorkspaceOperation.PREPARE,
@@ -1069,14 +1237,14 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     workspace = AgentWorkspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
     sent = asyncio.ensure_future(transport(managers).run(workspace, command(1), seal=NO_SEAL))
     for outside in (wall.holder, elsewhere, foreign):
-        assert await Host(managers, outside).claim() is None
-    ran = await Host(managers, wall.other).claim_soon()
+        assert await Host(wall, outside).claim() is None
+    ran = await Host(wall, wall.other).claim_soon()
     exec_payload = ExecPayload.model_validate(ran.payload)
     assert (exec_payload.agent_session_id, exec_payload.agent_project_id) == (
         instance,
         agent_project_id,
     )
-    await Host(managers, wall.other).finish(ran, stdout="ok")
+    await Host(wall, wall.other).finish(ran, stdout="ok")
     assert (await sent).stdout == "ok"
 
     # Its run ends: the host that holds it is asked to purge it, and only it
@@ -1085,8 +1253,8 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
     await managers.exec_relay.purge_agent_session(owner.org_id, instance)
     assert await managers.exec_relay.binding_of(owner, instance) is None
     for outside in (wall.holder, elsewhere, foreign):
-        assert await Host(managers, outside).claim() is None
-    purge = await Host(managers, wall.other).claim_soon()
+        assert await Host(wall, outside).claim() is None
+    purge = await Host(wall, wall.other).claim_soon()
     purged = WorkspacePayload.model_validate(purge.payload)
     assert (purged.operation, purged.agent_session_id) == (WorkspaceOperation.PURGE, instance)
     with pytest.raises(ItemNotHeld):
@@ -1103,7 +1271,7 @@ async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall:
 
     assert not await managers.exec_relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
 
-    assert await Host(managers, wall.other).claim() is None, "the prepare that waited is ended"
+    assert await Host(wall, wall.other).claim() is None, "the prepare that waited is ended"
     ended = await managers.work.latest_for_target(owner, PlacementWorkKind.WORKSPACE, instance)
     assert ended is not None and ended.status is WorkStatus.DONE
 
@@ -1181,7 +1349,7 @@ async def live(infra: InfraLocalImpl, item_id: UUID) -> list[tuple[int, bytes]]:
 async def test_a_commands_output_reaches_the_watch_in_order_through_the_cache_and_no_row(
     wall: Wall, infra: InfraLocalImpl, written: list[str]
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     printed: list[tuple[str, str]] = []
 
     async def sink(stream: str, text: str) -> None:
@@ -1215,7 +1383,7 @@ async def test_a_commands_output_reaches_the_watch_in_order_through_the_cache_an
 async def test_a_push_of_a_windows_parts_is_sealed_once_and_read_from_any_part_of_it(
     wall: Wall, infra: InfraLocalImpl, seals: list[bytes]
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
@@ -1244,7 +1412,7 @@ async def test_a_push_of_a_windows_parts_is_sealed_once_and_read_from_any_part_o
 async def test_a_push_out_of_its_order_past_its_bounds_or_on_no_stream_is_refused(
     wall: Wall, infra: InfraLocalImpl
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     waiting = asyncio.ensure_future(
         transport(wall.managers).run(wall.workspace, command(wall.epoch), seal=NO_SEAL)
@@ -1270,7 +1438,7 @@ async def test_a_push_out_of_its_order_past_its_bounds_or_on_no_stream_is_refuse
 async def test_the_live_output_is_sealed_on_the_cache_and_reads_as_nothing_once_its_key_goes(
     wall: Wall, infra: InfraLocalImpl
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     org = wall.owner.org_id
     waiting = asyncio.ensure_future(
@@ -1302,7 +1470,7 @@ async def test_the_live_output_is_sealed_on_the_cache_and_reads_as_nothing_once_
 async def test_a_reader_behind_a_trimmed_or_expired_stream_reads_the_whole_output_once_done(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     org = wall.owner.org_id
     waiting = asyncio.ensure_future(
@@ -1330,7 +1498,7 @@ async def test_a_reader_behind_a_trimmed_or_expired_stream_reads_the_whole_outpu
 async def test_a_done_command_whose_stream_let_its_readers_next_part_go_reads_as_its_output(
     wall: Wall,
 ) -> None:
-    host = Host(wall.managers, wall.holder)
+    host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay
     org = wall.owner.org_id
     waiting = asyncio.ensure_future(

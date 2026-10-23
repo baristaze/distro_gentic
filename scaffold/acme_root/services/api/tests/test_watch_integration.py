@@ -4,13 +4,12 @@ command the host claims and settles through its own routes, recorded in
 the tenant's event stream as theirs, while the run that held the loop is
 fenced, and gives it back."""
 
-import base64
-import hashlib
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import pytest
+from exec_hosts import settle_exec, store_for
 from test_hosts_api import a_host, a_pool, a_token, bearer, created, tenant_of
 from test_rate_limits_integration import over_the_stack
 
@@ -19,7 +18,6 @@ from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.stream import TextPart
 from acme.om.base import new_id
 from acme.om.exceptions import StaleWriter
-from acme.om.exec_relay.types.exec import ExecOutcome, ExecOutput, ExecResult
 from acme.om.watch.impl.manager import SENT
 
 from contracts.agent_session_storage import make_agent_session
@@ -70,26 +68,14 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         assert sent.status_code == 201, sent.text
         run = sent.json()
         claimed = await client.post(
-            "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 1}
+            "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
         )
         item_id = claimed.json()["item"]["payload"]["item_id"]
         assert item_id == run["item_id"], claimed.text
         held = await client.get(f"/v1/hosts/me/exec/{item_id}", headers=bearer(host["token"]))
         assert held.json()["request"]["argv"] == ["make", "test"]
-        result = ExecResult(outcome=ExecOutcome(exit_code=0), output=ExecOutput(stdout="ok\n"))
-        data = result.model_dump_json().encode()
-        pushed = await client.post(
-            f"/v1/hosts/me/exec/{item_id}/result",
-            headers=bearer(host["token"]),
-            json={
-                "data": base64.b64encode(data).decode(),
-                "crossing": {
-                    "kind": "result",
-                    "sha256": hashlib.sha256(data).hexdigest(),
-                    "size": len(data),
-                },
-            },
-        )
+        async with store_for(container.infra.get_buckets()) as store:
+            pushed = await settle_exec(client, bearer(host["token"]), item_id, store, stdout="ok\n")
         assert pushed.status_code == 204, pushed.text
 
         ended = await client.get(f"{control}/commands/{run['command_key']}", headers=owner)

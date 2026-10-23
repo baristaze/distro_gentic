@@ -214,7 +214,7 @@ async def test_a_claimants_credential_crosses_no_kind_pool_or_tenant_and_a_revok
     host = await client.post(
         "/v1/hosts/enrollments",
         headers=bearer(host_token),
-        json={"name": "host-1", "advertisement": PROBED, "exec_version": 1},
+        json={"name": "host-1", "advertisement": PROBED, "exec_version": 2},
     )
     assert host.status_code == 200, host.text
 
@@ -235,12 +235,12 @@ async def test_a_claimants_credential_crosses_no_kind_pool_or_tenant_and_a_revok
     # Each credential opens its own kind's path alone.
     crossings = (
         ("/v1/claimants/me/claims", host.json()["token"], None),
-        ("/v1/hosts/me/claims", node["token"], {"exec_version": 1}),
+        ("/v1/hosts/me/claims", node["token"], {"exec_version": 2}),
         ("/v1/claimants/enrollments", host_token, {"name": "n"}),
         (
             "/v1/hosts/enrollments",
             await a_token(client, owner, ours),
-            {"name": "h", "advertisement": PROBED, "exec_version": 1},
+            {"name": "h", "advertisement": PROBED, "exec_version": 2},
         ),
         ("/v1/claimants/me/claims", owner["Authorization"].removeprefix("Bearer "), None),
     )
@@ -270,7 +270,7 @@ async def test_an_owner_lists_a_pools_claimants_and_revokes_one_by_the_id_the_li
     host = await client.post(
         "/v1/hosts/enrollments",
         headers=bearer(await a_token(client, owner, pool_id, kind=None)),
-        json={"name": "host-1", "advertisement": PROBED, "exec_version": 1},
+        json={"name": "host-1", "advertisement": PROBED, "exec_version": 2},
     )
     assert host.status_code == 200, host.text
 

@@ -47,7 +47,6 @@ from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import WorkProduct
-from acme.om.exec_relay.rules import READ_BYTES
 from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.platform_root import PlatformPorts, ProductKinds
@@ -75,21 +74,23 @@ SILENT = CheckDeclaration(
     schema_version=1,
 )
 """A check that runs and writes no results stream."""
+LONG_BYTES = 16 * 1024 * 1024
+"""Twice what a relayed read once carried, and well within a run's bound."""
 LONG = CheckDeclaration(
     name="unit",
     version="1",
     command=(
         "python3",
         "-c",
-        f"import sys; open(sys.argv[2], 'w').write('r' * {2 * READ_BYTES})",
+        f"import sys; open(sys.argv[2], 'w').write('r' * {LONG_BYTES})",
         "{version}",
         "{out}",
     ),
     kind="suite",
     schema_version=1,
 )
-"""A check whose results stream is longer than one relayed result carries,
-and well within the run's bound."""
+"""A check whose results stream is longer than one relayed result once
+carried, and well within the run's bound; it holds no record."""
 
 
 class ReadBack(TransportLocalImpl):
@@ -397,7 +398,7 @@ async def test_the_instance_goes_when_its_check_ends_the_run(
     assert gone(host.root / owner.org_id.hex)
 
 
-async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_read_once(
+async def test_a_results_stream_longer_than_a_result_once_carried_is_read_whole_in_one_read(
     api: Stack, over_memory: Runner, tmp_path: Path
 ) -> None:
     owner, managers = api.owner, over_memory.container.managers
@@ -415,6 +416,6 @@ async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_r
 
     (record,) = (await managers.evidence.get_runs(owner, agent_session_id, None, 10)).items
     assert validation.records == (record.id,) and record.outcome is RunOutcome.ERRORED
-    ((_, read),) = host.transport.read
-    assert len(read) == READ_BYTES + 1, "one read, of what crosses, and no more"
+    read = b"".join(data for _, data in host.transport.read)
+    assert read == b"r" * LONG_BYTES, "one relayed read, whole, its host's chunks joined"
     assert await host.provider.held_instances() == [], "and the instance went"

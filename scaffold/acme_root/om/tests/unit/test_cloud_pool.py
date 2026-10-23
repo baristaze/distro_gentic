@@ -70,7 +70,7 @@ KEPT = OPEN.model_copy(update={"durability": Durability.SNAPSHOT})
 ENROLLMENT = Enrollment(
     name="vm",
     advertisement=Advertisement(os="Linux", isolation_modes=(HostMode.VM,)),
-    exec_version=1,
+    exec_version=2,
 )
 
 

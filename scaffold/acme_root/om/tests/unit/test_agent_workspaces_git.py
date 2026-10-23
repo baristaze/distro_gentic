@@ -809,7 +809,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
     probed = Advertisement(os="Linux 6.8", shell="/bin/bash", isolation_modes=(Mode.DIRECTORY,))
     enrolled = await managers.hosts.enroll(
-        request(), issued.token, Enrollment(name="host-1", advertisement=probed, exec_version=1)
+        request(), issued.token, Enrollment(name="host-1", advertisement=probed, exec_version=2)
     )
     holder = await managers.hosts.authenticate(request(), enrolled.credential)
     made = make_agent_session().model_copy(update={"kind": WORKER.name, "tools": ()})

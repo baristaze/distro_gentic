@@ -30,6 +30,7 @@ from acme.services.api.gateway.admission import holder_call
 HOLDER_CALLS = {
     ("POST", "/v1/hosts/me/heartbeats"),
     ("POST", "/v1/hosts/me/exec/{item_id}/lease"),
+    ("POST", "/v1/hosts/me/exec/{item_id}/upload"),
     ("POST", "/v1/hosts/me/exec/{item_id}/result"),
     ("POST", "/v1/hosts/me/workspaces/{item_id}"),
     ("POST", "/v1/hosts/me/workspaces/{item_id}/released"),
@@ -105,9 +106,9 @@ async def test_a_host_whose_output_spent_its_writes_still_renews_beats_and_settl
         beat = await client.post(
             "/v1/hosts/me/heartbeats",
             headers=headers,
-            json={"advertisement": PROBED, "exec_version": 1},
+            json={"advertisement": PROBED, "exec_version": 2},
         )
-        result = json.dumps({"outcome": {"exit_code": 0}, "output": {"stdout": "ok"}}).encode()
+        result = json.dumps({"outcome": {"exit_code": 0}}).encode()
         settled = await client.post(
             f"{path}/result",
             headers=headers,

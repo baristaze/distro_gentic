@@ -116,7 +116,6 @@ def test_every_client_construction_names_a_timeout() -> None:
     found = client_constructions()
     sites = {site.split(":")[0] for site, _ in found}
     assert sites >= {
-        "clients/python/src/acme/client/calls/media.py",
         "clients/python/src/acme/client/realtime.py",
         "clients/python/src/acme/client/transport.py",
         "infra/src/acme/infra/buckets/s3.py",
