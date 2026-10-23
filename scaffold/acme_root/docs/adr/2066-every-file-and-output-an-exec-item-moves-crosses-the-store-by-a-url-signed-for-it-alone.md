@@ -63,7 +63,10 @@ of it reaches the workspace until its size and its digest match; the
 host's transport then writes it from disk (`WritesFromFile`). A
 read is spooled from the workspace a chunk at a time, and sealed a frame
 at a time as each part is sent. The lease is renewed until the result is
-pushed, the transfers included.
+pushed, the transfers included, and a part cut off is sent again while
+the lease, as it was last renewed, lasts. A part the store keeps
+refusing ends the item with a result its host pushes, never with the
+lease running out.
 
 **A result is a few KiB.** It holds the outcome, why its host refused
 the item (1,000 characters at most), the offset a read echoes, and each
@@ -75,11 +78,15 @@ calls, and neither carries bytes.
 
 **The platform reads only what matches.** A result completes the upload
 of each object it names before it lands, so whoever reads the item done
-finds its objects whole. An output that is not whole is not kept, and
-the result says so; a read whose file is not is refused. The runner
-reads an output, or takes a read's file, from the store and opens it
-against the size and the digest its host declared; one that does not
-match is refused. The platform's own write, a write's file, is a `put`,
+finds its objects whole. A result its host sends again, after a first
+push that completed an upload and then failed, finds that upload gone
+and the object at its reference, which stands for it. An output that is
+not whole is not kept, and the result says so; a read whose file is not
+is refused. The runner reads an output, or takes a read's file, from the
+store and opens it against the size and the digest its host declared;
+one that does not match is refused. A command, a listing, or a server's
+answer whose output was not kept fails: the runner never answers it as
+printing nothing. The platform's own write, a write's file, is a `put`,
 as ADR 0107 has a service write.
 
 **An object lives as long as what it carries.** A write's file leaves
