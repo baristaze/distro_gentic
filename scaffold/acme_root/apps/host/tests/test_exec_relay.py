@@ -354,6 +354,7 @@ async def test_a_command_that_fills_both_streams_settles_with_a_result_of_a_few_
     assert (ran.exit_code, ran.truncated) == (0, False)
     assert (ran.stdout, ran.stderr) == ("o" * most, "é" * most), "read back whole"
     (result,) = [size for path, size in wire.sent if path.endswith("/result")]
+    print(f"a result request of {result} bytes; both streams of {most} read back whole")
     assert result < 2048, f"a result request of {result} bytes"
     uploads = [size for path, size in wire.sent if path.endswith("/upload")]
     assert uploads and max(uploads) < 1024, "the output went straight to the store"
