@@ -73,7 +73,6 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
 )
-from acme.infra.buckets.sealed import ObjectRefused
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import (
     CapabilityMissing,
@@ -81,7 +80,7 @@ from acme.infra.transports import (
     CredentialBrokerInterface,
     RecordSeal,
     TransportInterface,
-    WritesFromFileInterface,
+    WritesFromFile,
     secret_held,
 )
 from acme.timing import Every, Retries, RetryPolicy
@@ -387,7 +386,7 @@ class ExecutorRelayImpl(ExecutorInterface):
                 size, digest = await self._objects.send(
                     item_id, "output", detail.output, printed, running.held_until
                 )
-            except (ApiError, ObjectRefused, *WIRE_FAILURES) as error:
+            except (ApiError, InfraException, *WIRE_FAILURES) as error:
                 log.warning("item %s: its output was not kept: %s", item_id, error)
                 small["detail"] = _cut(small["detail"] or f"its output was not kept: {error}")
             else:
@@ -397,7 +396,7 @@ class ExecutorRelayImpl(ExecutorInterface):
                 size, digest = await self._objects.send(
                     item_id, "file", detail.file_out, ended.file, running.held_until
                 )
-            except (ApiError, ObjectRefused, *WIRE_FAILURES) as error:
+            except (ApiError, InfraException, *WIRE_FAILURES) as error:
                 log.warning("item %s: the file it read was not sent: %s", item_id, error)
                 why = f"the file it read was not sent: {error}"
                 return _small(_result(refused=("object_not_sent", 503), detail=why))
@@ -871,7 +870,7 @@ async def _operate(
         case "write_file":
             if detail.file_in is None or detail.url is None:
                 raise CapabilityMissing("the write names no object to download its file from")
-            if not isinstance(transport, WritesFromFileInterface):
+            if not isinstance(transport, WritesFromFile):
                 raise CapabilityMissing(f"{transport.describe()} writes no file from disk")
             spooled = await objects.fetch(detail.file_in, detail.url)
             try:

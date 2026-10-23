@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Literal, Self
+from typing import Literal, Protocol, Self, runtime_checkable
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -59,7 +59,7 @@ __all__ = [
     "SecretVia",
     "StaleCommand",
     "TransportInterface",
-    "WritesFromFileInterface",
+    "WritesFromFile",
     "file_offset",
     "relative_path",
     "require_mode",
@@ -310,12 +310,12 @@ class TransportInterface(ABC):
     async def close(self) -> None: ...
 
 
-class WritesFromFileInterface(ABC):
-    """A transport that writes a file into a workspace from a file on its
-    own machine, a chunk at a time, so a file of any size holds a chunk of
-    it in memory: how a host writes a file it downloaded and checked."""
+@runtime_checkable
+class WritesFromFile(Protocol):
+    """A transport that also writes a file into a workspace from a file on
+    its own machine, a chunk at a time, so a file of any size holds a chunk
+    of it in memory: how a host writes a file it downloaded and checked."""
 
-    @abstractmethod
     async def write_file_from(
         self, workspace: AgentWorkspace, path: str, source: Path, epoch: int
     ) -> None:

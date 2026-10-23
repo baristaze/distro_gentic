@@ -30,7 +30,6 @@ from acme.infra.transports import (
     PathOutsideAgentWorkspace,
     RecordSeal,
     TransportInterface,
-    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -56,7 +55,7 @@ DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 FILE = os.O_NOFOLLOW | os.O_NONBLOCK | os.O_NOCTTY
 
 
-class TransportLocalImpl(TransportInterface, WritesFromFileInterface):
+class TransportLocalImpl(TransportInterface):
     """Runs commands in this process's host, in a workspace that is a
     directory on it: the transport of the host provider. A command is a
     process of its own session, whose environment is built from nothing: the

@@ -19,7 +19,7 @@ from acme.infra.buckets.sealed import (
     sealed_parts,
     sealed_size,
 )
-from acme.infra.exceptions import BlobNotFound, InfraException, UploadNotFound, UploadRefused
+from acme.infra.exceptions import InfraException, UploadNotFound, UploadRefused
 from acme.infra.observability import OUTCOMES
 from acme.infra.streams import StreamBounds, StreamsInterface
 from acme.om.agent_projects import AgentProjectsManagerInterface
@@ -115,6 +115,7 @@ BUCKET = Buckets.TOOL_OUTPUTS
 """Where the files the items move live while they cross: a session's tool
 content, under its tenant and `rules.OBJECTS`."""
 OCTETS = "application/octet-stream"
+MISSING = 404
 
 STREAMS = frozenset({"stdout", "stderr"})
 
@@ -699,7 +700,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         slot, stored = contents.file_out, result.file
         try:
             sealed = await self._buckets.get(org_id, BUCKET, slot.reference, deadline=ctx.deadline)
-        except BlobNotFound:
+        except InfraException as error:
+            if error.http_status != MISSING:
+                raise
             raise NotFound(f"the file of exec item {item_id} was taken") from None
         try:
             return await asyncio.to_thread(
@@ -1551,7 +1554,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                     printed = await self._printed(ctx, slot, result.output)
             except NotFound:
                 pass  # its key went since: so did what it printed
-            except ObjectRefused as error:
+            except InfraException as error:
+                if error.code != ObjectRefused.code:
+                    raise
                 log.warning("exec item %s: %s", item.id, error.message)
                 detail = detail or "its output did not open to what its host declared of it"
         return ExecOutput(
@@ -1568,7 +1573,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             sealed = await self._buckets.get(
                 ctx.org_id, BUCKET, slot.reference, deadline=ctx.deadline
             )
-        except BlobNotFound:
+        except InfraException as error:
+            if error.http_status != MISSING:
+                raise
             raise NotFound(f"no output at {slot.reference}") from None
         opened = await asyncio.to_thread(
             open_object, _key(slot.key), slot.reference, stored.size, stored.digest, sealed
@@ -1622,7 +1629,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 sealed_size(stored.size),
                 deadline=ctx.deadline,
             )
-        except (UploadRefused, UploadNotFound) as error:
+        except InfraException as error:
+            if error.code not in (UploadRefused.code, UploadNotFound.code):
+                raise
             log.warning("%s: %s", slot.reference, error.message)
             return False
         return True

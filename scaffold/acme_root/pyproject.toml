@@ -125,6 +125,14 @@ path = "apps/host/src/acme/apps/host/exec_relay.py"
 adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
 reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
 
+# A host seals, opens, and spools the objects an item moves on its own
+# disk, and moves them straight to the store by the URLs it is handed.
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/objects.py"
+adr = "docs/adr/2066-every-file-and-output-an-exec-item-moves-crosses-the-store-by-a-url-signed-for-it-alone.md"
+reason = "a host seals and opens an item's objects with the platform's sealed format and its own transport on its own disk, and reaches the platform through the client alone"
+
 [[tool.distro-check.exception]]
 rule = "PLC-10"
 path = "apps/host/src/acme/apps/host/mcp.py"

@@ -60,7 +60,7 @@ transfer runs on a store connection of its own, does its sealing, its
 hashing, and its disk in a thread, and spools on the host's disk. A
 download is opened frame by frame and hashed as it arrives, and nothing
 of it reaches the workspace until its size and its digest match; the
-host's transport then writes it from disk (`WritesFromFileInterface`). A
+host's transport then writes it from disk (`WritesFromFile`). A
 read is spooled from the workspace a chunk at a time, and sealed a frame
 at a time as each part is sent. The lease is renewed until the result is
 pushed, the transfers included.
@@ -113,9 +113,9 @@ second path.
   0107 has no shortcut for a small file.
 - The runner still holds a write's file and a read's file whole, since
   the engine's transport hands and takes bytes.
-- The engine's transport types gain `WritesFromFileInterface`, which the
-  local, container, and twin transports implement, so the next move of
-  the base merges over it. The client's `Transport` gains `store()`,
+- The engine's transport types gain `WritesFromFile`, a protocol the
+  local, container, and twin transports meet, so the next move of the
+  base merges over it. The client's `Transport` gains `store()`,
   which the media calls use too.
 - An object the store fails to remove is left, sealed, to the session's
   purge; an upload left open is ended by the bucket's own rule a day on.

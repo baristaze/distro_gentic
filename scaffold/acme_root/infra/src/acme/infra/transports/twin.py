@@ -22,7 +22,6 @@ from acme.infra.transports import (
     RecordSeal,
     StaleCommand,
     TransportInterface,
-    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -48,7 +47,7 @@ async def _quiet(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
     return TwinReply()
 
 
-class TransportTwinImpl(TransportInterface, WritesFromFileInterface):
+class TransportTwinImpl(TransportInterface):
     """The transport's twin, over the twin's workspaces: files in memory, and
     each command answered by a handler a test sets, with no process. It
     fences, injects, redacts, streams, and records as the real transports

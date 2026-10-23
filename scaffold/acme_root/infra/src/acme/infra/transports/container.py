@@ -20,7 +20,6 @@ from acme.infra.transports import (
     OutputSink,
     RecordSeal,
     TransportInterface,
-    WritesFromFileInterface,
     file_offset,
     relative_path,
     require_mode,
@@ -94,7 +93,7 @@ def exec_argv(
     ]
 
 
-class TransportContainerImpl(TransportInterface, WritesFromFileInterface):
+class TransportContainerImpl(TransportInterface):
     """Runs commands in a container workspace through `docker exec`. A
     command's environment inside is the image's, the workspace as its home,
     a locale, its own variables, its injected secrets (`exec_argv`), and,
