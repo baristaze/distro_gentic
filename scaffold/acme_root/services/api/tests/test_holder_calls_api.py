@@ -7,9 +7,8 @@ claimant's appends, do not. A product marks its own routes the same way, and
 the platform's set is read without them."""
 
 import base64
-import importlib
 import json
-from collections.abc import AsyncIterator, Iterable, Iterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
@@ -113,17 +112,16 @@ RENEWAL = ("POST", "/v1/claimants/me/parcels/{item_id}/lease")
 
 
 @pytest.fixture
-def a_product_marks_its_own(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def a_product_marks_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
     """A product that serves `parcels`, its claimant's renewal marked a
-    holder's call; the routers' registry is read again, as a process reads it
-    at boot, and once more after."""
+    holder's call, its routers hosted after the platform's as `HOSTED` takes a
+    product's at boot. Each name is set back to the very object it held, so
+    no other test reads what this one served."""
     parcels = ProductApiNamespace(NAMESPACE, (parcels_claimant,), lambda own, _, __: own)
-    monkeypatch.setattr(product_api, "PRODUCT_API", ProductApi((parcels,)))
+    product = ProductApi((parcels,))
+    monkeypatch.setattr(product_api, "PRODUCT_API", product)
     monkeypatch.setattr(product_namespaces, "PRODUCT_NAMESPACES", NAMESPACES)
-    importlib.reload(routers)
-    yield
-    monkeypatch.undo()
-    importlib.reload(routers)
+    monkeypatch.setattr(routers, "HOSTED", {**routers.HOSTED, **product.hosted()})
 
 
 @pytest.mark.usefixtures("a_product_marks_its_own")
