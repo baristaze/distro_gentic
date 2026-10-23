@@ -3,29 +3,38 @@ refusal costs the caller what it holds go through while its own writes, or
 everyone's, are spent. A host's beat, an exec item's renewal and result, and
 its answers to a workspace item carry `HOLDER_CALL`, as do a claimant's
 renewal and report; the bulk writes beside them, a host's output parts and a
-claimant's appends, do not."""
+claimant's appends, do not. A product marks its own routes the same way, and
+the platform's set is read without them."""
 
 import base64
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import UUID
 
 import httpx
+import pytest
 import test_claimants_api as claimants
 from api_support import SMALL_BUDGET, build_container, sign_in
-from fastapi import FastAPI
-from fastapi.routing import iter_route_contexts
+from fastapi import APIRouter, FastAPI
+from fastapi.routing import APIRoute, iter_route_contexts
 from httpx import ASGITransport
 from test_admission import hold
 from test_exec_relay_api import a_held_item, declared
 from test_hosts_api import ASSISTANT, PROBED, bearer
 
+from acme.om import product_namespaces
 from acme.om.platform_root import PlatformPorts
 from acme.om.work.types.work_item import WorkStatus
+from acme.services.api import product_api, routers
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
-from acme.services.api.gateway.admission import holder_call
+from acme.services.api.gateway.admission import HOLDER_CALL, holder_call
+from acme.services.api.products import ProductApi, ProductApiNamespace
+from acme.services.api.routers import hosts
+
+from contracts.product_namespace import NAMESPACE, NAMESPACES, PARCELS
 
 HOLDER_CALLS = {
     ("POST", "/v1/hosts/me/heartbeats"),
@@ -39,6 +48,9 @@ HOLDER_CALLS = {
     ("POST", "/v1/claimants/me/items/{item_id}/report"),
 }
 """The calls of a host and of a claimant that keep or settle what it holds."""
+
+OWN = ("/v1/hosts/me/", "/v1/claimants/me/")
+"""The paths a host and a claimant call under their own credential."""
 
 WRITES = 2
 """Two writes in flight, so two held requests fill the write lane."""
@@ -54,6 +66,28 @@ async def served(container: AppContainer) -> AsyncIterator[tuple[FastAPI, httpx.
             yield app, client
 
 
+def marked(app: FastAPI, leaving_out: Iterable[APIRouter] = ()) -> set[tuple[str, str]]:
+    """Each route of a host's or a claimant's own that carries `HOLDER_CALL`,
+    as its method and its path, but those the routers `leaving_out` serve."""
+    theirs = {
+        route.endpoint for router in leaving_out for route in iter_route_contexts(router.routes)
+    }
+    return {
+        (method, route.path)
+        for route in iter_route_contexts(app.routes)
+        if route.endpoint not in theirs and route.path and route.path.startswith(OWN)
+        for method in route.methods or ()
+        if any(depends.dependency is holder_call for depends in route.dependencies)
+    }
+
+
+def the_platforms(app: FastAPI) -> set[tuple[str, str]]:
+    """The holder's calls the platform marks: the product's routers
+    (`PRODUCT_API`) are left out, since a product marks its own."""
+    hosted = product_api.PRODUCT_API.hosted().values()
+    return marked(app, [router for routers in hosted for router in routers])
+
+
 def test_a_hosts_and_a_claimants_holder_calls_are_these_and_no_bulk_write(
     tmp_path: Path,
 ) -> None:
@@ -62,15 +96,64 @@ def test_a_hosts_and_a_claimants_holder_calls_are_these_and_no_bulk_write(
     caller holds. A bulk write marked by mistake would take the lane and the
     budget a renewal needs."""
     app = create_app(build_container(tmp_path))
-    own = ("/v1/hosts/me/", "/v1/claimants/me/")
-    marked = {
-        (method, route.path)
-        for route in iter_route_contexts(app.routes)
-        if (route.path or "").startswith(own)
-        for method in route.methods or ()
-        if any(depends.dependency is holder_call for depends in route.dependencies)
-    }
-    assert marked == HOLDER_CALLS
+    assert the_platforms(app) == HOLDER_CALLS
+
+
+parcels_claimant = APIRouter(prefix="/claimants/me/parcels", tags=[PARCELS])
+
+
+@parcels_claimant.post("/{item_id}/lease", status_code=204, dependencies=[HOLDER_CALL])
+async def renew_parcel(item_id: UUID) -> None:
+    """A product's claimant renews the parcel it holds."""
+
+
+RENEWAL = ("POST", "/v1/claimants/me/parcels/{item_id}/lease")
+"""The product's own holder's call, beside the platform's."""
+
+
+@pytest.fixture
+def a_product_marks_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A product that serves `parcels`, its claimant's renewal marked a
+    holder's call, its routers hosted after the platform's as `HOSTED` takes a
+    product's at boot. Each name is set back to the very object it held, so
+    no other test reads what this one served."""
+    parcels = ProductApiNamespace(NAMESPACE, (parcels_claimant,), lambda own, _, __: own)
+    product = ProductApi((parcels,))
+    monkeypatch.setattr(product_api, "PRODUCT_API", product)
+    monkeypatch.setattr(product_namespaces, "PRODUCT_NAMESPACES", NAMESPACES)
+    monkeypatch.setattr(routers, "HOSTED", {**routers.HOSTED, **product.hosted()})
+
+
+@pytest.mark.usefixtures("a_product_marks_its_own")
+def test_a_products_own_holder_call_leaves_the_platforms_set_as_it_is(tmp_path: Path) -> None:
+    """The app serves the product's renewal as a holder's call, and the
+    platform's set is still its own."""
+    app = create_app(build_container(tmp_path))
+    assert RENEWAL in marked(app)
+    assert the_platforms(app) == HOLDER_CALLS
+
+
+@pytest.mark.usefixtures("a_product_marks_its_own")
+@pytest.mark.parametrize(
+    ("path", "mark"),
+    [("/claimants/me/claims", True), ("/claimants/me/items/{item_id}/lease", False)],
+    ids=["a claim gains the mark", "a renewal loses it"],
+)
+def test_a_platform_route_that_gains_or_loses_the_mark_breaks_the_platforms_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str, mark: bool
+) -> None:
+    """With the product's own marked beside them, a platform route that
+    gains the mark or loses it still breaks the platform's set."""
+    (route,) = (
+        route
+        for route in hosts.claimants.routes
+        if isinstance(route, APIRoute) and route.path == path
+    )
+    kept = [depends for depends in route.dependencies if depends.dependency is not holder_call]
+    monkeypatch.setattr(route, "dependencies", [*kept, HOLDER_CALL] if mark else kept)
+    app = create_app(build_container(tmp_path))
+    assert RENEWAL in marked(app)
+    assert the_platforms(app) ^ HOLDER_CALLS == {("POST", f"/v1{path}")}
 
 
 async def test_a_host_whose_output_spent_its_writes_still_renews_beats_and_settles(
