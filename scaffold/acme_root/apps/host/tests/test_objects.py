@@ -232,6 +232,9 @@ async def test_an_upload_cut_off_partway_resumes_and_sends_only_the_missing_part
     platform.detail["file_out"] = {"reference": reference, "key": b64(key)}
     platform.slots["file"] = slot
     store = Store(buckets, drops=frozenset({2}))
+    # A spool a host left as it stopped mid-transfer goes as the next starts.
+    (tmp_path / "transfers").mkdir()
+    (tmp_path / "transfers" / "left").write_bytes(b"what a crash cut")
 
     await executor_of(platform, store, tmp_path).run(item, asked(where))
 

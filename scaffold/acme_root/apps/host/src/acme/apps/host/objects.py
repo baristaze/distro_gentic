@@ -21,6 +21,7 @@ import asyncio
 import base64
 import hashlib
 import logging
+import tempfile
 import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
@@ -82,19 +83,24 @@ class PartRefused(Exception):
 
 
 class HostObjects:
-    """The objects an item moves, spooled under `spool`. `client` calls with
+    """The objects an item moves, spooled under `spool`, or a temporary
+    folder of its own made as the first transfer starts. A spool left by a
+    host that stopped mid-transfer goes as the next starts. `client` calls with
     the host's credential as it is now; a failure the host outlasts is
     waited out after `retry`'s waits, while the item's lease lasts."""
 
     def __init__(
         self,
         client: ClientFactory,
-        spool: Path,
+        spool: Path | None,
         retry: RetryPolicy,
         jitter: Callable[[], float],
     ) -> None:
         self._client = client
         self._spool = spool
+        if spool is not None and spool.is_dir():
+            for left in spool.iterdir():
+                left.unlink(missing_ok=True)
         self._retry = retry
         self._jitter = jitter
 
@@ -104,6 +110,8 @@ class HostObjects:
             return client.store()
 
     def _new_spool(self) -> Path:
+        if self._spool is None:
+            self._spool = Path(tempfile.mkdtemp(prefix="transfers-"))
         self._spool.mkdir(mode=0o700, parents=True, exist_ok=True)
         return self._spool / uuid4().hex
 

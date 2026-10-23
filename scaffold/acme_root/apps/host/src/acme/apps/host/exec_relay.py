@@ -42,7 +42,6 @@ import asyncio
 import json
 import logging
 import random
-import tempfile
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -201,7 +200,7 @@ class ExecutorRelayImpl(ExecutorInterface):
     fails to take is tried again within the lease, after a wait that starts
     at a quarter of a renewal's period and doubles, never past the lease, as
     a transfer of an object is. A transfer spools under `spool`, the host's
-    own folder for it, or a temporary one."""
+    own folder for it, or a temporary one made as it is first needed."""
 
     def __init__(
         self,
@@ -245,9 +244,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         # before it used most of the lease, and still lands past it.
         self._outlast = RetryPolicy(base=renew_seconds / 4, cap=self._lease_seconds, jitter=0.5)
         self._jitter = jitter
-        self._objects = HostObjects(
-            client, spool or Path(tempfile.mkdtemp(prefix="transfers-")), self._outlast, jitter
-        )
+        self._objects = HostObjects(client, spool, self._outlast, jitter)
         self._running: dict[UUID, Running] = {}
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
