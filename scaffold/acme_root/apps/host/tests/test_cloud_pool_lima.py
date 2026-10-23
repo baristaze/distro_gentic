@@ -133,9 +133,15 @@ def image() -> str:
 
 async def served(app: Any, port: int) -> tuple[uvicorn.Server, asyncio.Future[None]]:
     """`app` served on this host's loopback at `port`, once it listens."""
-    server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, lifespan="off", log_level="warning")
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        lifespan="off",
+        log_level="warning",
+        interface="asgi3",
     )
+    server = uvicorn.Server(config)
     serving = asyncio.ensure_future(server.serve())
     for _ in range(400):
         if server.started:
