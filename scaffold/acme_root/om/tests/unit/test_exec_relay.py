@@ -66,6 +66,7 @@ from acme.om.exec_relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    ObjectKind,
     PrepareAnswer,
     ReadRequest,
     RunRequest,
@@ -1045,6 +1046,92 @@ async def test_an_item_that_settles_leaves_no_file_behind_and_its_output_goes_wi
 async def answered(host: Host, data: bytes) -> None:
     row = await host.claim_soon()
     await host.finish(row, data=data)
+
+
+# Check 7: a result its host sends again, after a first push that completed
+# its uploads and then failed, lands with its objects whole; an output not
+# kept whole fails its call, never reads as an empty success.
+
+
+async def _blinks(item_id: UUID) -> None:
+    raise Unavailable("the database blinked")
+
+
+async def pushed(wall: Wall, row: WorkItem, result: ExecResult) -> None:
+    data = result.model_dump_json().encode()
+    item_id = ExecPayload.model_validate(row.payload).item_id
+    crossing = declared(CrossingKind.RESULT, data)
+    await wall.managers.exec_relay.push_result(request(), wall.holder, item_id, crossing, data)
+
+
+async def test_a_result_sent_again_after_its_first_push_failed_lands_with_its_objects_whole(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relay = wall.managers.exec_relay
+    host = Host(wall, wall.holder)
+    runner = transport(wall.managers)
+    stdout = "all 412 tests passed\n"
+    data = b"the file a read uploads\n" * 512
+
+    async def answered_twice(kind: ObjectKind, sent: bytes) -> None:
+        row = await host.claim_soon()
+        item_id = host.item_id(row)
+        named = await exec_objects.uploaded(relay, wall.buckets, wall.holder, item_id, kind, sent)
+        result = ExecResult(
+            outcome=ExecOutcome(exit_code=0),
+            output=named if kind == "output" else None,
+            file=named if kind == "file" else None,
+        )
+        # Its first push completes the upload, then fails to land, as a host
+        # reads a 5xx; the host sends the same result again.
+        before_the_result_lands(wall, monkeypatch, _blinks)
+        with pytest.raises(Unavailable):
+            await pushed(wall, row, result)
+        await pushed(wall, row, result)
+
+    ran, _ = await asyncio.gather(
+        runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL),
+        answered_twice("output", exec_objects.printed(stdout)),
+    )
+    assert (ran.exit_code, ran.stdout) == (0, stdout), "its output whole, never empty"
+    read, _ = await asyncio.gather(
+        runner.read_file(wall.workspace, "b.md", len(data)), answered_twice("file", data)
+    )
+    assert read == data, "its file kept, and taken"
+    assert len(await under(wall)) == 1, "the output stays, as its item's record"
+
+
+async def test_an_output_not_kept_whole_fails_its_call_and_never_reads_as_empty(
+    wall: Wall,
+) -> None:
+    host = Host(wall, wall.holder)
+    runner = transport(wall.managers)
+    printed = exec_objects.printed("ok\n")
+    # A result naming an output whose parts its host never sent, and one
+    # whose host says it kept none.
+    unsent = ExecResult(
+        outcome=ExecOutcome(exit_code=0),
+        output=StoredObject(size=len(printed), digest=digest_of(printed)),
+    )
+    unkept = ExecResult(
+        outcome=ExecOutcome(exit_code=0),
+        detail="its output was not kept: the store refused part 1 with 503",
+    )
+    for result in (unsent, unkept):
+        spec = command(wall.epoch)
+        running = asyncio.ensure_future(runner.run(wall.workspace, spec, seal=NO_SEAL))
+        await pushed(wall, await host.claim_soon(), result)
+        with pytest.raises(ToolFailed, match="exited 0, but its output was not kept") as failed:
+            await running
+        assert failed.value.failure is ToolFailure.INTERRUPTED
+        # A run that resumes the call reads no outcome of it, never an empty one.
+        assert await runner.outcome(wall.workspace, spec.key, wall.epoch, seal=NO_SEAL) is None
+    # A listing whose entries were not kept fails the same way.
+    listing = asyncio.ensure_future(runner.list_files(wall.workspace, ".", 10))
+    await pushed(wall, await host.claim_soon(), unsent)
+    with pytest.raises(ToolFailed, match="its output was not kept whole"):
+        await listing
+    assert await under(wall) == [], "an output not kept whole leaves nothing"
 
 
 # Where a call runs: the placement picks the transport, and names the host.

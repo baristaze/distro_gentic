@@ -1541,34 +1541,48 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
     async def _output_of(self, ctx: TenantContext, item: ExecItem) -> ExecOutput:
         """A done item's output as the runner reads it: its output object
         read from the store and opened, once it matches what its host
-        declared, with the rest of its result. Empty once its key is gone."""
+        declared, with the rest of its result. Empty once its key is gone.
+        An item that prints into an object, ran, and has none whole to read
+        is not `kept`: its result kept none, or the store holds none that
+        opens to what its host declared."""
         result = await self._result_of(ctx, item)
         if result is None:
             return ExecOutput()
-        printed = Printed()
+        printed: Printed | None = Printed()
         detail = result.detail
-        if result.output is not None:
+        try:
+            slot = (await self._contents_of(ctx, item)).output
+        except NotFound:
+            slot = None  # its key went since: so did what it printed
+        refused = item.outcome is not None and item.outcome.refused is not None
+        if slot is not None and result.output is None and not refused:
+            printed = None
+        elif slot is not None and result.output is not None:
             try:
-                slot = (await self._contents_of(ctx, item)).output
-                if slot is not None:
-                    printed = await self._printed(ctx, slot, result.output)
-            except NotFound:
-                pass  # its key went since: so did what it printed
+                printed = await self._printed(ctx, slot, result.output)
             except InfraException as error:
                 if error.code != ObjectRefused.code:
                     raise
                 log.warning("exec item %s: %s", item.id, error.message)
                 detail = detail or "its output did not open to what its host declared of it"
+                printed = None
+        if printed is None:
+            detail = detail or "its output was not kept whole in the store"
         return ExecOutput(
-            stdout=printed.stdout,
-            stderr=printed.stderr,
-            entries=printed.entries,
+            stdout="" if printed is None else printed.stdout,
+            stderr="" if printed is None else printed.stderr,
+            entries=() if printed is None else printed.entries,
             file=result.file,
             offset=result.offset,
             detail=detail,
+            kept=printed is not None,
         )
 
-    async def _printed(self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject) -> Printed:
+    async def _printed(
+        self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject
+    ) -> Printed | None:
+        """What the output object holds, opened; None once the store holds
+        none."""
         try:
             sealed = await self._buckets.get(
                 ctx.org_id, BUCKET, slot.reference, deadline=ctx.deadline
@@ -1576,7 +1590,7 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         except InfraException as error:
             if error.http_status != MISSING:
                 raise
-            raise NotFound(f"no output at {slot.reference}") from None
+            return None
         opened = await asyncio.to_thread(
             open_object, _key(slot.key), slot.reference, stored.size, stored.digest, sealed
         )
@@ -1617,7 +1631,11 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         self, ctx: TenantContext, slot: ObjectSlot, stored: StoredObject, most: int
     ) -> bool:
         """Whether the object its host declared is whole in the store now:
-        within its bound, and its upload completed to the plan of its size."""
+        within its bound, and its upload completed to the plan of its size.
+        A result sent again finds the upload its first push completed gone,
+        and the object at its reference, which stands for it: the store
+        answers no object's size, so its reader holds it to the size and
+        the digest its host declared, as it holds every object."""
         if stored.size > most:
             return False
         try:
@@ -1632,6 +1650,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         except InfraException as error:
             if error.code not in (UploadRefused.code, UploadNotFound.code):
                 raise
+            if error.code == UploadNotFound.code and await self._buckets.exists(
+                ctx.org_id, BUCKET, slot.reference, deadline=ctx.deadline
+            ):
+                return True
             log.warning("%s: %s", slot.reference, error.message)
             return False
         return True

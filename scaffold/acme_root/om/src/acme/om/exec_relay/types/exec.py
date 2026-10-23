@@ -232,6 +232,9 @@ class ExecOutput(OmBase):
     offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
     entries: tuple[FileEntry, ...] = ()
     detail: str = ""
+    # False once an item that prints into an object ran and none is whole to
+    # read: what it printed is unknown, never nothing.
+    kept: bool = True
 
 
 class ExecItem(Identifiable, Trackable):

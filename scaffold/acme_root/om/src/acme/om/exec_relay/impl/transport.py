@@ -168,9 +168,12 @@ class TransportRelayImpl(TransportInterface):
         if progress is None or progress.state is not ExecState.DONE:
             return None
         outcome = progress.outcome or ExecOutcome()
+        output = progress.output or ExecOutput()
         if outcome.stopped is not None or outcome.refused is not None:
             return None  # cut off before it ended, or never ran
-        return _command_result(key, outcome, progress.output or ExecOutput())
+        if not output.kept:
+            return None  # how it ended is not whole: never an empty success
+        return _command_result(key, outcome, output)
 
     async def purge_records(self, agent_workspace_id: UUID) -> None:
         """The exec relay's records of a session go with it in the sweep's purge;
@@ -213,6 +216,7 @@ class TransportRelayImpl(TransportInterface):
         _, progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
         _completed(outcome, output)
+        _whole(outcome, output)
         return list(output.entries)
 
     def describe(self) -> str:
@@ -264,6 +268,7 @@ class TransportRelayImpl(TransportInterface):
         if outcome.stopped is StopKind.DEADLINE or outcome.timed_out:
             raise ToolFailed(ToolFailure.TIMEOUT, f"{request.server} did not answer in time")
         _completed(outcome, output)
+        _whole(outcome, output)
         return McpAnswer(text=output.stdout, is_error=outcome.exit_code not in (0, None))
 
     @staticmethod
@@ -511,11 +516,25 @@ def _completed(outcome: ExecOutcome, output: ExecOutput) -> None:
         )
 
 
+def _whole(outcome: ExecOutcome, output: ExecOutput) -> None:
+    """Fails an item that ran and whose output was not kept whole: what it
+    printed or listed is unknown, so it is never read as nothing."""
+    if output.kept:
+        return
+    exited = "" if outcome.exit_code is None else f" and exited {outcome.exit_code}"
+    raise ToolFailed(
+        ToolFailure.INTERRUPTED,
+        f"it ran on its host{exited}, but {output.detail}; what it printed is unknown, "
+        "so check the workspace before you run it again",
+    )
+
+
 def _command_result(key: UUID, outcome: ExecOutcome, output: ExecOutput) -> CommandResult:
     if outcome.refused is not None:
         raise HostRefused(
             outcome.refused_status or 500, outcome.refused, output.detail or outcome.refused
         )
+    _whole(outcome, output)
     return CommandResult(
         key=key,
         exit_code=outcome.exit_code,
