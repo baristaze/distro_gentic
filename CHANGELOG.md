@@ -5,28 +5,51 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.26.0 (2026-10-22)
+## 0.27.0 (2026-10-23)
 
-The platform's base moves to the engine's v0.22.0, on the guideline's
-v0.64.0: a copy's gates take less time, its suites on every core and side
-by side. Minor.
+The platform's base moves to the engine's v0.23.0, on the guideline's
+v0.65.0: a host's and a claimant's calls that keep what they hold go
+through under load, and every file and output an exec item moves
+crosses the store by a URL signed for it alone. A claimant is woken by
+push. Minor, with the base's reversals: the presigned POST and the
+presign that may answer `None` go, and CTX-07 allows a second context
+variable. The exec wire moves to version 2, and a host of an earlier
+release is refused.
+
+### Added
+
+- A product's claimant has a control stream of its own,
+  `GET /v1/claimants/me/control`, as a host has. It says `wake` on work,
+  `revoke` when an item leaves its claim, and `appended` when a stream
+  its kind reads grows. The kit gains `listening()`, `wait()`,
+  `revoked(item)`, and `appended(...)`, and keeps no report of a revoked
+  item, which runs again. `KindStreamsInterface.append` takes `org_id`.
+  ADR 2065 (#195).
 
 ### Changed
 
-- The base moves to the engine's v0.22.0. A copy's `make test-unit` runs
-  on one worker per core and ends on its ten slowest tests (ADR 0105: a
-  unit test holds nothing another can reach, its id fixed at
-  collection); its CI starts the integration, telemetry, and image jobs
-  beside the fast gate; the integration wipe empties only the tables
-  written since the last one; `make openapi` cuts the schema in linear
-  time; and arch-check is pinned at v0.64.0 (#191).
-- This repository's CI runs each copy's fast gate and integration suite
-  as jobs of their own, side by side (#189).
+- The base moves to the engine's v0.23.0, on the guideline's v0.65.0.
+  `HOLDER_CALL` marks a host's heartbeat, an exec item's renewal and
+  result, its workspace answers, and a claimant's renewal and report;
+  output parts, appends, and claims stay writes. A host's and a
+  claimant's credential spend the lane's budget. The API pool falls to
+  5 at XS and 8 at S, so the reserves fit the connection budget. Every
+  blob crosses by a presigned URL, as a multipart upload (#196).
+- An exec item and its result carry no file and no output. Each crosses
+  the `tool-outputs` bucket as an object sealed under its own key, kept
+  under the session's key, by URLs signed for it alone: a GET, or the
+  parts of a resumable multipart upload. The host moves objects off its
+  lease loop, spooled on disk, and writes nothing whose digest and size
+  do not match. A write's file leaves at its item's settle, an output at
+  its session's purge. A result sent again keeps what its first push
+  completed, and a call whose output was not kept fails as interrupted.
+  `RESULT_CHARS` falls to 62,698, and relayed reads are no longer cut at
+  8 MiB. The exec wire and its floor move to 2. ADR 2066, PLC-22 (#197).
+- The scaffold's `host` job starts beside the fast gate (#193).
 
 ### Fixed
 
-- The unit suite holds no wall-clock bound a loaded runner can miss: the
-  evidence rules' refused runs carry a fixed time, so their ids are the
-  same in every collection; the exec relay's stop test holds the stop
-  against the command's own run; and the watch test's bound on writes
-  grows with the time its parts took (#190).
+- A host keeps the leases it holds while it reads a large item or
+  snapshots a workspace: an exec item's lease is renewed from its claim,
+  and a snapshot's scan, digest, and archive run off the host's loop,
+  the archive held once (#194).
