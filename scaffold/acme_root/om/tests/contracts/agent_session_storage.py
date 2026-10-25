@@ -334,7 +334,7 @@ class AgentSessionStorageContract:
         cuts = (now - timedelta(hours=1), now - timedelta(days=1))
         before = await storage.count_parked(cuts)
         first, second = new_id(), new_id()
-        fresh, stale, old, idle, gone = (make_agent_session() for _ in range(5))
+        fresh, stale, old, idle, gone = (stored_session() for _ in range(5))
         for org, session in ((first, fresh), (first, stale), (second, old), (first, idle)):
             assert await storage.create_agent_session(org, session, ())
         assert await storage.create_agent_session(second, gone, ())
@@ -366,7 +366,7 @@ class AgentSessionStorageContract:
         tenant, oldest write first, a batch at most; never one written since
         the slice, one before it, one in another status, or one marked."""
         first, second, now = new_id(), new_id(), utcnow()
-        old, older, recent, ancient, idle, hidden = (make_agent_session() for _ in range(6))
+        old, older, recent, ancient, idle, hidden = (stored_session() for _ in range(6))
         writes = {
             (first, old): now - timedelta(hours=1),
             (second, older): now - timedelta(hours=2),
@@ -476,7 +476,7 @@ class AgentSessionStorageContract:
         self, storage: AgentSessionStorageInterface
     ) -> None:
         org = new_id()
-        sessions = sorted((make_agent_session() for _ in range(5)), key=lambda s: s.id)
+        sessions = sorted((stored_session() for _ in range(5)), key=lambda s: s.id)
         for session in sessions:
             assert await storage.create_agent_session(org, session, ())
         first = await storage.read_agent_sessions(org, None, None, 2)

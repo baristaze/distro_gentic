@@ -54,11 +54,11 @@ class ReadTitleImpl(NativeToolImpl):
         return Target(attributes={"outward": False})
 
     async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
-        session = await self._managers().agent_sessions.get_agent_session(
-            ctx, runtime.agent_session_id
-        )
-        self._read.append(session.title)
-        return Title(title=session.title)
+        sessions = self._managers().agent_sessions
+        session = await sessions.get_agent_session(ctx, runtime.agent_session_id)
+        (opened,) = await sessions.open_titles(ctx, [session])
+        self._read.append(opened.title.said())
+        return Title(title=opened.title.said())
 
 
 LEDGER = AgentKind(

@@ -11,7 +11,7 @@ from uuid import UUID
 import pytest
 from worker_support import request
 
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import AgentSession, Title
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
@@ -54,7 +54,7 @@ def a_session() -> AgentSession:
         updated_at=now,
         created_by=by,
         updated_by=by,
-        title="a session past its content's life",
+        title=Title(text="a session past its content's life"),
         kind="delivery",
         kind_version=1,
         root_id=agent_session_id,

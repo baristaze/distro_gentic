@@ -147,8 +147,9 @@ async def test_a_revoked_sessions_title_reads_absent_and_the_session_keeps_its_p
     await managers.privacy.revoke_key(ctx, gone)
     page = await managers.agent_sessions.get_agent_sessions(ctx, None, None, 50, Among.VISIBLE)
     shown = await managers.agent_sessions.open_titles(ctx, page.items)
+    # The platform lists the newest first.
     assert [(s.id, s.kind) for s in shown] == [
-        (s.id, s.kind) for s in sorted(made, key=lambda s: s.id)
+        (s.id, s.kind) for s in sorted(made, key=lambda s: s.id, reverse=True)
     ]
     assert {s.id: s.title.said() for s in shown} == {
         made[0].id: "title 0",
