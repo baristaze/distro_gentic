@@ -234,8 +234,7 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(PLAN_WITH_VALUES)
             return [
-                (row.org_id, to_session(row))
-                for row in (await session.execute(stmt)).scalars()
+                (row.org_id, to_session(row)) for row in (await session.execute(stmt)).scalars()
             ]
 
     async def tree_holds_others(self, org_id: UUID, root_id: UUID, agent_session_id: UUID) -> bool:
