@@ -227,6 +227,40 @@ async def test_a_sessions_children_are_listed_with_their_parent(
     assert rest.json()["next_cursor"] is None
 
 
+async def test_each_page_opens_its_titles_and_a_revoked_one_reads_absent_in_its_place(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """Storage keeps every title sealed, and each read opens its page's
+    titles at once: the tenant's list, a parent's children, and an archive
+    answer a title as it was given, and one whose key is revoked as absent,
+    the session still listed in its place."""
+    kept = await start(client, owner, "why the object drops")
+    gone = await start(client, owner, "the weekly total")
+    parent = await start(client, owner, "the parent")
+    children = sorted([await spawn(container, owner, parent["id"]) for _ in range(2)])
+    ctx = await context_of(container, owner)
+    for revoked in (gone["id"], children[0]):
+        await container.managers.privacy.revoke_key(ctx, UUID(revoked))
+
+    listed = await client.get("/v1/agent-sessions", headers=owner)
+    below = await client.get(f"/v1/agent-sessions/{parent['id']}/children", headers=owner)
+    archived = await client.post(f"/v1/agent-sessions/{gone['id']}/archive", headers=owner)
+
+    assert listed.status_code == 200, listed.text
+    roots = [(s["id"], s["title"]) for s in listed.json()["items"] if s["parent_id"] is None]
+    assert roots == [
+        (parent["id"], "the parent"),
+        (gone["id"], ""),
+        (kept["id"], "why the object drops"),
+    ]
+    assert below.status_code == 200, below.text
+    assert [(c["id"], c["title"]) for c in below.json()["items"]] == [
+        (children[0], ""),
+        (children[1], "the weekly report is missing a total"),
+    ]
+    assert (archived.status_code, archived.json()["title"]) == (200, ""), archived.text
+
+
 async def test_a_deleted_child_leaves_its_parents_children_until_it_is_restored(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:

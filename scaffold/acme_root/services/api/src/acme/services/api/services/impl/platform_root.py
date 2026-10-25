@@ -263,7 +263,7 @@ def build_platform_services(
         agent_billing=AgentBillingServiceImpl(agent_billing),
         agent_automations=AgentAutomationsServiceImpl(agent_automations),
         park_alerts=ParkAlertsServiceImpl(park_alerts),
-        watch=WatchServiceImpl(watch),
+        watch=WatchServiceImpl(watch, managers.agent_sessions),
         matrix=MatrixServiceImpl(matrix.matrix, matrix.matrix_operator),
         provider_keys=ProviderKeysServiceImpl(trust),
         benchmarks=BenchmarksServiceImpl(managers.benchmarks),

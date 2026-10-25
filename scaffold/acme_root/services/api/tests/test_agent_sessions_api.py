@@ -366,7 +366,9 @@ async def test_a_title_reads_opened_and_as_absent_once_its_key_is_revoked(
     made = []
     for title in titles:
         answered = await client.post(
-            "/v1/agent-sessions", headers=created(owner), json={"kind": "assistant", "title": title}
+            "/v1/agent-sessions",
+            headers=created(owner),
+            json={"kind": "assistant", "title": title, "agent_project_id": AGENT_PROJECT_ID},
         )
         assert answered.status_code == 201, answered.text
         assert answered.json()["title"] == title
@@ -382,7 +384,8 @@ async def test_a_title_reads_opened_and_as_absent_once_its_key_is_revoked(
 
     assert listed.status_code == 200, listed.text
     items = {item["id"]: item for item in listed.json()["items"]}
-    assert [item["id"] for item in listed.json()["items"]] == sorted(made)
+    # The platform lists the newest first.
+    assert [item["id"] for item in listed.json()["items"]] == sorted(made, reverse=True)
     assert {i: (items[i]["title"], items[i]["kind"]) for i in made} == {
         made[0]: ("", "assistant"),
         made[1]: (titles[1], "assistant"),

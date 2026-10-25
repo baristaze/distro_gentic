@@ -363,17 +363,23 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
     async def archive_agent_session(
         self, ctx: TenantContext, agent_session_id: UUID
     ) -> AgentSessionView:
-        return agent_session_view(await self._sessions.archive_agent_session(ctx, agent_session_id))
+        return await self._viewed(
+            ctx, await self._sessions.archive_agent_session(ctx, agent_session_id)
+        )
 
     async def delete_agent_session(
         self, ctx: TenantContext, agent_session_id: UUID
     ) -> AgentSessionView:
-        return agent_session_view(await self._sessions.delete_agent_session(ctx, agent_session_id))
+        return await self._viewed(
+            ctx, await self._sessions.delete_agent_session(ctx, agent_session_id)
+        )
 
     async def restore_agent_session(
         self, ctx: TenantContext, agent_session_id: UUID
     ) -> AgentSessionView:
-        return agent_session_view(await self._sessions.restore_agent_session(ctx, agent_session_id))
+        return await self._viewed(
+            ctx, await self._sessions.restore_agent_session(ctx, agent_session_id)
+        )
 
     async def add_participant(
         self, ctx: TenantContext, agent_session_id: UUID, user_id: UUID
