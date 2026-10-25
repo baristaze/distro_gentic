@@ -199,7 +199,8 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
         runs = await platform.agent_automations.get_runs(owner, mine.id, 10)
         assert len(runs) == slot and {r.status for r in runs} == {RunStatus.STARTED}
         page = await platform.managers.agent_sessions.get_agent_sessions(owner, None, None, 100)
-        started = [s for s in page.items if s.title == "the nightly records"]
+        opened = await platform.managers.agent_sessions.open_titles(owner, page.items)
+        started = [s for s in opened if s.title.said() == "the nightly records"]
         assert len(started) == slot
         assert {s.id for s in started} == {r.agent_session_id for r in runs}
         platform.clock.now += timedelta(hours=1)
