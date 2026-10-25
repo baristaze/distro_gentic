@@ -391,7 +391,9 @@ async def a_software_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     assert parked.end is RunEnd.PARKED and parked.park == CHILDREN_PARK
     await a_parked_root(platform, root)
     page = await platform.managers.agent_sessions.get_children(platform.owner, root, None, 50)
-    first, second = sorted(page.items, key=lambda child: [t for t, _ in split].index(child.title))
+    opened = await platform.managers.agent_sessions.open_titles(platform.owner, page.items)
+    titles = [t for t, _ in split]
+    first, second = sorted(opened, key=lambda child: titles.index(child.title.said()))
     assert [(child.kind, child.depth) for child in (first, second)] == [(kinds.ANALYSIS, 2)] * 2
     failure, text = await platform.answer(root, "use_wait_1")
     assert failure is None and str(first.id) in text and str(second.id) in text

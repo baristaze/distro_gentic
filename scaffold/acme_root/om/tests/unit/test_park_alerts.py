@@ -200,8 +200,10 @@ async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> 
 
 
 SAYS_A_QUESTION_WAITS = (
-    "the records asks you a question: read it in the session, and answer with a message."
+    "A session asks you a question: read it in the session, and answer with a message."
 )
+"""What a question's row says: it names no title, which is the session's
+sealed content, as the question is."""
 
 
 async def asked(platform: Wired, requester: TenantContext, question: str) -> LoopRun:
@@ -236,6 +238,7 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     assert routed(notified)
     # The post quotes the question, on one line, escaped, and cut short.
     (posted,) = platform.chat.posted
+    assert posted.text.startswith("the records asks you: ")
     assert 'asks you: "Which week\'s report is \\"wrong\\"? The last one, or the one' in posted.text
     assert '…" Answer with a message' in posted.text and len(posted.text) < 400
     assert posted.text.endswith(f" {link}")
@@ -244,13 +247,29 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     (text,) = {n.text for n in notified}
     assert text == SAYS_A_QUESTION_WAITS
     for kept in await platform.park_alerts.get_park_alerts(requester, 10):
-        assert "week" not in kept.text.lower()
+        assert "week" not in kept.text.lower() and "the records" not in kept.text
     # The answer is a message, and clears the park: nothing is told again.
     resumed = await run_after(platform, requester, run.agent_session_id, "Week 12.")
     assert resumed.end is RunEnd.ENDED
     assert await platform.park_alerts.notify_park(platform.service, resumed) == ()
     mine = await platform.park_alerts.get_park_alerts(requester, 10)
     assert set(mine) == set(notified) and len(platform.chat.posted) == 1
+
+
+async def test_a_revoked_sessions_post_names_no_title(platform: Wired) -> None:
+    """A session whose key is revoked has no title to name: its post names
+    it as its row does."""
+    found = await people(platform)
+    run = await parked_on(
+        platform, found[Role.MEMBER], Park(reason=ParkReason.PERSON, unlock=ANOMALY_UNLOCK)
+    )
+    await platform.managers.privacy.revoke_key(platform.owner, run.agent_session_id)
+
+    notified = await platform.park_alerts.notify_park(platform.service, run)
+
+    (posted,) = platform.chat.posted
+    assert posted.text.startswith("A session: a call costs far more")
+    assert {n.text for n in notified} == {posted.text.removesuffix(f" {notified[0].link}")}
 
 
 async def test_a_question_that_holds_a_link_is_not_quoted(platform: Wired) -> None:
@@ -312,8 +331,11 @@ async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_request
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
     approval = f"/v1/agent-sessions/{run.agent_session_id}/cost-approval"
     assert {(n.action, n.link) for n in notified} == {("approve_call", approval)}
+    # The post names the session by its title; the row, by none.
     (posted,) = platform.chat.posted
-    assert posted.text == f"{next(n.text for n in notified if n.channel == 'chat')} {approval}"
+    (row,) = {n.text for n in notified}
+    says = ": a call costs far more than the session's others, and waits for your approval."
+    assert (posted.text, row) == (f"the records{says} {approval}", f"A session{says}")
 
 
 async def test_every_link_a_park_alert_carries_is_a_route_of_the_api(

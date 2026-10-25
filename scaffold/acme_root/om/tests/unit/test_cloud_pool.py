@@ -59,7 +59,7 @@ from acme.om.platform_root import PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import hash_token
 
-from contracts.agent_session_storage import make_agent_session
+from contracts.agent_session_storage import stored_session
 from contracts.doubles import context
 from contracts.factories import make_org
 
@@ -652,7 +652,7 @@ async def test_a_deleted_tenants_vm_goes_at_the_next_sweep(tmp_path: Path) -> No
     deleted = make_org("Deleted")
     for org in (deleted, make_org("Kept")):
         await orgs.write_org(org.id, org)
-        session = make_agent_session()
+        session = stored_session()
         await storage.get_agent_session_storage().create_agent_session(org.id, session, ())
         now = utcnow()
         held[org.name] = PoolVm(

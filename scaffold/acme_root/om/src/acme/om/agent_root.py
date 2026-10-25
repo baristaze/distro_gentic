@@ -59,6 +59,7 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_agent_steps import AgentStepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_agent_steps import AgentStepStorageSealedImpl
 from acme.om.privacy.impl.snapshots import SnapshotSealKeysImpl
+from acme.om.privacy.impl.titles import TitleSealKeysImpl
 from acme.om.privacy.impl.tool_outputs import ToolOutputSealKeysImpl
 from acme.om.privacy.keys import AgentSessionKeysInterface
 from acme.om.root_hooks import RootHooksInterface, RootHooksNullImpl
@@ -305,6 +306,9 @@ def build_agent_managers(
                 managers, org_id, agent_session_id, tree_id
             )
         ),
+        # A title is content: sealed on its way in, under a key of the
+        # session's own that the privacy namespace keeps (ADR 1042).
+        titles=TitleSealKeysImpl(agent_session_keys),
     )
     privacy = PrivacyManagerImpl(
         storage.get_privacy_storage(),

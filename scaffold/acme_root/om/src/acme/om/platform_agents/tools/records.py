@@ -4,7 +4,7 @@ agent automations, each through the asking person's own permissions. The
 draft of the tenant's tool policy, which reads the live policy and writes
 nothing, sits here too."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from typing import Self
 from uuid import UUID
@@ -43,7 +43,8 @@ from acme.om.work.types.work_item import WorkStatus
 # The assistant's readers. Each reads through the asking person's own
 # permissions: the call's context is theirs, so a row of another tenant's,
 # or one marked deleted, is not found, as one that never existed is not. Each
-# answers a record's shape, never a session's content, and bounds its list.
+# answers a record's shape, and a session's title opened as the person sees
+# it, never what a session's steps say, and bounds its list.
 
 SESSION_SCAN = 100
 """The root sessions one list_agent_sessions call reads at most, newest first,
@@ -188,10 +189,11 @@ class ReadSessionImpl(NativeToolImpl):
                 ChildLine(agent_session_id=child.id, kind=child.kind, status=child.status)
                 for child in page.items
             )
+        (opened,) = await self._sessions().open_titles(ctx, [session])
         return AuthSessionState(
             kind=session.kind,
             kind_version=session.kind_version,
-            title=session.title,
+            title=opened.title.said(),
             started_by=session.created_by,
             agent_project_id=None if agent_project is None else agent_project.id,
             parent_id=session.parent_id,
@@ -287,49 +289,63 @@ class ListSessionsImpl(NativeToolImpl):
         # A sub-agent waits under a root in any status, an idle one included,
         # so the scan reads every root, and the filter reads each session.
         page = await self._sessions().get_agent_sessions(ctx, None, call_input.before, SESSION_SCAN)
-        found: list[SessionLine] = []
+        found: list[AgentSession] = []
         listed: UUID | None = None  # the last root whose tree the answer holds
         for root in page.items:
             lines = [
-                line
+                session
                 for session in await tree_of(self._sessions(), ctx, root)
-                if (line := await self._line(ctx, session, call_input)) is not None
+                if await self._passes(ctx, session, call_input)
             ]
             if found and len(found) + len(lines) > call_input.limit:
-                return SessionList(sessions=tuple(found), next=listed)
+                return await self._listed(ctx, found, listed)
             found.extend(lines)
             listed = root.id
             if len(found) >= call_input.limit:
                 more = root.id != page.items[-1].id or page.has_more
-                return SessionList(sessions=tuple(found), next=root.id if more else None)
+                return await self._listed(ctx, found, root.id if more else None)
         last = page.items[-1].id if page.items and page.has_more else None
-        return SessionList(sessions=tuple(found), next=last)
+        return await self._listed(ctx, found, last)
 
-    async def _line(
+    async def _passes(
         self, ctx: TenantContext, session: AgentSession, query: SessionsQuery
-    ) -> SessionLine | None:
-        """The session's line when it passes the query's filters. A sub-agent
-        marked deleted is read through to its own, and listed on no line."""
+    ) -> bool:
+        """Whether the session passes the query's filters. A sub-agent marked
+        deleted is read through to its own, and listed on no line."""
         if session.deleted_at is not None:
-            return None
+            return False
         reason = query.park_reason
         status = AgentSessionStatus.PARKED if reason is not None else query.status
         if status is not None and session.status is not status:
-            return None
+            return False
         if reason is not None and (session.park is None or session.park.reason is not reason):
-            return None
+            return False
         if query.agent_project_id is not None:
             agent_project = await self._agent_projects().agent_project_of(ctx, session.id)
             if agent_project is None or agent_project.id != query.agent_project_id:
-                return None
-        return SessionLine(
-            agent_session_id=session.id,
-            title=session.title,
-            kind=session.kind,
-            status=session.status,
-            park_reason=None if session.park is None else session.park.reason,
-            started_by=session.created_by,
-            created_at=session.created_at,
+                return False
+        return True
+
+    async def _listed(
+        self, ctx: TenantContext, found: Sequence[AgentSession], next_: UUID | None
+    ) -> SessionList:
+        """The answer's lines, their titles opened at once: absent once a
+        session's key is revoked, and the session still listed."""
+        opened = await self._sessions().open_titles(ctx, found)
+        return SessionList(
+            sessions=tuple(
+                SessionLine(
+                    agent_session_id=session.id,
+                    title=session.title.said(),
+                    kind=session.kind,
+                    status=session.status,
+                    park_reason=None if session.park is None else session.park.reason,
+                    started_by=session.created_by,
+                    created_at=session.created_at,
+                )
+                for session in opened
+            ),
+            next=next_,
         )
 
 

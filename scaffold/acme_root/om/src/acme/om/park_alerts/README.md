@@ -45,6 +45,11 @@ of thing [Acme is made of](../../../../README.md).
   budget's amount, a call's approval past its norm, or the provider's
   key. Topping up and a fix at a model provider are made outside the
   API: their park alerts name the park and carry no link.
+- **The title is told, never kept.** A session's title is its content,
+  sealed under its key. A post on an integration names the session by
+  its title, opened as it is told; the platform's own list, which keeps
+  its rows, names none. A session whose key is revoked is named by
+  neither.
 - **A question is quoted, never a link in it.** A question's
   park alert quotes it on one line, cut short and escaped. One that
   holds a URL, an image, or an element that loads one is not quoted: the

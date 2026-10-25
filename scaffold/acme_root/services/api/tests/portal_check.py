@@ -489,9 +489,9 @@ async def written(container: Any, owner: Any, agent_session_id: UUID, steps: lis
 async def write_tree(slug: str) -> None:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from acme.om.agent_sessions.rules import parked_step
-    from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+    from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus, Title
     from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
-    from acme.om.agent_steps.types.content import Content, TextBlock
+    from acme.om.agent_steps.types.content import Content, ContentState, TextBlock
     from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
     from acme.om.agents.loop_rules import ended_step
     from acme.om.agents.types.report import Report
@@ -500,11 +500,28 @@ async def write_tree(slug: str) -> None:
     from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
     from acme.om.base import new_id, utcnow
     from acme.om.platform_agents.kinds import ANALYSIS, SOFTWARE_ENGINEER
+    from acme.om.privacy.impl.keys import AgentSessionKeysImpl
+    from acme.om.privacy.impl.titles import TitleSealKeysImpl
+    from acme.om.retention.impl.keys import (
+        KeyServiceByTenantImpl,
+        KeyServiceLocalImpl,
+        TenantKeysImpl,
+    )
 
     container, owner = await scene_owner(slug)
     try:
         managers = container.managers
         trees = container.storage.get_agent_storage()
+        # A sub-agent written here takes its title sealed, as the manager
+        # seals one, under the local stack's keys (ADR 1042).
+        titles = TitleSealKeysImpl(
+            AgentSessionKeysImpl(
+                container.storage.get_privacy_storage(),
+                KeyServiceByTenantImpl(
+                    TenantKeysImpl(KeyServiceLocalImpl(container.infra.get_keys()))
+                ),
+            )
+        )
         person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
         # The tree began a minute ago: its sessions and their steps alike.
         began = utcnow() - timedelta(minutes=1)
@@ -540,7 +557,10 @@ async def write_tree(slug: str) -> None:
                 updated_at=made,
                 created_by=owner.user_id,
                 updated_by=owner.user_id,
-                title=title,
+                title=Title(
+                    state=ContentState.SEALED,
+                    sealed=await titles.seal(owner.org_id, child_id, title),
+                ),
                 participants=(owner.user_id,),
                 kind=ANALYSIS,
                 kind_version=1,

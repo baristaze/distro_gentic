@@ -10,6 +10,7 @@ from uuid import UUID
 import pytest
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import (
     UPDATED,
@@ -50,6 +51,8 @@ from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Vali
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.platform_root import PlatformManagers, build_platform_managers
+from acme.om.privacy.impl.keys import AgentSessionKeysImpl
+from acme.om.privacy.impl.titles import TitleSealKeysImpl
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
 from contracts.agent_session_storage import make_agent_session
@@ -511,6 +514,7 @@ async def test_a_projection_behind_another_writer_reads_again_and_folds_on(
         managers.outbox,
         AgentSessionsOptions(project_attempts=2),
         purged=nothing_held,
+        titles=sealing(storage),
     )
     ctx = context(Role.MEMBER)
     created = await sessions.create_agent_session(ctx, make_agent_session())
@@ -547,6 +551,7 @@ async def test_a_deleted_tenants_purge_takes_up_at_most_a_batch_of_sessions_a_ca
         managers.outbox,
         AgentSessionsOptions(purge_batch=1000, purge_sessions=2),
         purged=held,
+        titles=sealing(storage),
     )
     ctx = context(Role.MEMBER)
     for _ in range(3):
@@ -707,6 +712,7 @@ async def test_a_loop_open_below_a_session_refuses_its_delete(tmp_path: Path) ->
         managers.outbox,
         AgentSessionsOptions(max_limit=1),
         purged=nothing_held,
+        titles=sealing(storage),
     )
     ctx = context(Role.MEMBER)
     root = await sessions.create_agent_session(ctx, make_agent_session())
@@ -732,6 +738,13 @@ async def test_a_loop_open_below_a_session_refuses_its_delete(tmp_path: Path) ->
         (second.id, second.kind),
         (root.id, root.kind),
     ]
+
+
+def sealing(storage: StorageMemoryImpl) -> TitleSealKeysImpl:
+    """The title seal over the storage's privacy, under a key twin of its own."""
+    return TitleSealKeysImpl(
+        AgentSessionKeysImpl(storage.get_privacy_storage(), KeyServiceMemoryImpl())
+    )
 
 
 class Clock:
@@ -769,6 +782,7 @@ def purging(
         AgentSessionsOptions(retention=timedelta(days=30)),
         clock=clock,
         purged=nothing_held,
+        titles=sealing(storage),
     )
 
 

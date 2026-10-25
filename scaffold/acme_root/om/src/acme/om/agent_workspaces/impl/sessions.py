@@ -46,6 +46,11 @@ class AgentSessionsPinnedImpl(AgentSessionsManagerInterface):
         await self._agent_workspaces.pin(ctx, session, at_rest=at_rest)
         return await self._inner.create_agent_session(ctx, session)
 
+    async def open_titles(
+        self, ctx: TenantContext, sessions: Sequence[AgentSession]
+    ) -> list[AgentSession]:
+        return await self._inner.open_titles(ctx, sessions)
+
     async def get_agent_session(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSession:
         return await self._inner.get_agent_session(ctx, agent_session_id)
 
@@ -142,6 +147,9 @@ class AgentSessionsPinnedImpl(AgentSessionsManagerInterface):
         self, after: datetime, before: datetime, limit: int
     ) -> list[tuple[UUID, AgentSession]]:
         return await self._inner.pending_across_tenants(after, before, limit)
+
+    async def seal_titles_across_tenants(self) -> int:
+        return await self._inner.seal_titles_across_tenants()
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)

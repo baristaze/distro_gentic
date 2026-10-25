@@ -22,7 +22,7 @@ from acme.om.agent_billing.sweep import ProviderBillsInterface
 from acme.om.agent_billing.types.spend_ledger import FundedHold, PricedAt
 from acme.om.agent_sessions.kinds import AgentSessionWorkKind, LoopPayload
 from acme.om.agent_sessions.rules import resumed_step
-from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus, Title
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader, ModelRequestHeader
@@ -98,7 +98,7 @@ def a_session() -> AgentSession:
         updated_at=now,
         created_by=by,
         updated_by=by,
-        title="the pump's pressure log",
+        title=Title(text="the pump's pressure log"),
         kind="delivery",
         kind_version=1,
         root_id=agent_session_id,

@@ -2,6 +2,8 @@ import base64
 from collections.abc import Sequence
 from uuid import UUID
 
+from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.stream import StreamPart, TextPart, ThinkingPart, ToolInputPart
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
@@ -91,8 +93,16 @@ def part_view(part: StreamPart) -> LivePartView:
 
 
 class WatchServiceImpl(WatchServiceInterface):
-    def __init__(self, watch: WatchManagerInterface) -> None:
+    def __init__(
+        self, watch: WatchManagerInterface, sessions: AgentSessionsManagerInterface
+    ) -> None:
         self._watch = watch
+        self._sessions = sessions
+
+    async def _viewed(self, ctx: TenantContext, session: AgentSession) -> AgentSessionView:
+        """The session the hand took or gave back, its title opened."""
+        (opened,) = await self._sessions.open_titles(ctx, [session])
+        return agent_session_view(opened)
 
     async def open_live(self, ctx: TenantContext, agent_session_id: UUID) -> LiveReadView:
         live = await self._watch.open_live(ctx, agent_session_id)
@@ -153,7 +163,7 @@ class WatchServiceImpl(WatchServiceInterface):
         return item_page_view(await self._watch.read_item_live(rctx, handle, item_seen_of(after)))
 
     async def take_control(self, ctx: TenantContext, agent_session_id: UUID) -> AgentSessionView:
-        return agent_session_view(await self._watch.take_control(ctx, agent_session_id))
+        return await self._viewed(ctx, await self._watch.take_control(ctx, agent_session_id))
 
     async def run_command(
         self, ctx: TenantContext, agent_session_id: UUID, body: CommandRequest, key: UUID
@@ -202,6 +212,6 @@ class WatchServiceImpl(WatchServiceInterface):
     async def give_back(
         self, ctx: TenantContext, agent_session_id: UUID, body: ControlGiveBackRequest
     ) -> AgentSessionView:
-        return agent_session_view(
-            await self._watch.give_back(ctx, agent_session_id, body.summary, body.stop)
+        return await self._viewed(
+            ctx, await self._watch.give_back(ctx, agent_session_id, body.summary, body.stop)
         )
