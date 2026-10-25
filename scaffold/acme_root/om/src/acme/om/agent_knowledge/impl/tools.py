@@ -60,8 +60,9 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             # No model request yet: this loop starts the session.
             page = await self._steps().get_agent_steps(ctx, agent_session_id, 0, FIRST_STEPS)
             said = [step.as_text() for step in page.items if principal_authored(step)]
+            (opened,) = await self._sessions().open_titles(ctx, [session])
             await self._agent_knowledge().recall(
-                ctx, agent_session_id, "\n".join([session.title, *said])
+                ctx, agent_session_id, "\n".join([opened.title.said(), *said])
             )
         return workspace
 
