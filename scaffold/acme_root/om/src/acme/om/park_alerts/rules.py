@@ -255,10 +255,23 @@ def quoted(question: str) -> str | None:
     return json.dumps(line, ensure_ascii=False)
 
 
+UNNAMED = "A session"
+"""What a park alert's row calls its session. A session's title is content,
+sealed under its key, so the row names none; a post on an integration names
+the title, opened, and this once its key is revoked."""
+
+
+def named(title: str) -> str:
+    """The name a post gives its session: its title, opened, or `UNNAMED`
+    once the title is absent."""
+    return title or UNNAMED
+
+
 def question_text(title: str, question: str | None) -> str:
     """What a question's park alert says: the question, quoted, when it
     can be and is given; else that one waits in the session. The row a
-    park alert leaves is told none, so it quotes nothing sealed."""
+    park alert leaves is told none, and names its session `UNNAMED`, so it
+    quotes nothing sealed."""
     shown = None if question is None else quoted(question)
     if shown is None:
         return f"{title} asks you a question: read it in the session, and answer with a message."

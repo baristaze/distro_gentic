@@ -29,6 +29,7 @@ from acme.om.park_alerts.rules import (
     NO_ROUTE,
     SAVES_KEYS,
     SETS_SPEND_BUDGETS,
+    UNNAMED,
     answer_link,
     approval_link,
     as_budget,
@@ -43,6 +44,7 @@ from acme.om.park_alerts.rules import (
     key_link,
     message_link,
     missing_key,
+    named,
     needs_person,
     park_alert_id,
     parked_step,
@@ -63,6 +65,21 @@ class ParkAlertsOptions(OmBase):
     page: int = Field(default=200, gt=0)
     max_page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
+
+
+def asked(
+    action: str,
+    link: str,
+    say: Callable[[str], str],
+    title: str,
+    recipients: tuple[UUID, ...],
+) -> Ask:
+    """An ask that `say`s what waits: its row of the session `UNNAMED`, and a
+    post of the session by its `title`, opened, so the row quotes nothing
+    sealed."""
+    return Ask(
+        action=action, link=link, text=say(UNNAMED), posted=say(title), recipients=recipients
+    )
 
 
 class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
@@ -142,7 +159,10 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
         history: Sequence[AgentStep],
         members: Sequence[Membership],
     ) -> list[Ask]:
-        title = session.title
+        # The title is content: the row names the session `UNNAMED`, and a
+        # post names it by its title, opened here.
+        (opened,) = await self._sessions.open_titles(ctx, [session])
+        title = named(opened.title.said())
         if park.reason is ParkReason.PERSON and park.unlock == APPROVAL_UNLOCK:
             policy = await self._tools.get_policy(ctx)
             asks: list[Ask] = []
@@ -151,57 +171,65 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                 assert isinstance(header, ToolRequestHeader)
                 roles = approver_roles(policy, header.authorization_class)
                 asks.append(
-                    Ask(
-                        action="decide_call",
-                        link=decision_link(session.id, request),
-                        text=f"{title}: a call to {header.tool} waits for your decision.",
-                        recipients=holding(members, roles),
+                    asked(
+                        "decide_call",
+                        decision_link(session.id, request),
+                        lambda name, tool=header.tool: (
+                            f"{name}: a call to {tool} waits for your decision."
+                        ),
+                        title,
+                        holding(members, roles),
                     )
                 )
             return asks
         budget = as_budget(park.unlock) if park.reason is ParkReason.SPEND_BUDGET else None
         if budget is not None:
             return [
-                Ask(
-                    action="raise_budget",
-                    link=budget_link(budget),
-                    text=f"{title} waits for a raise of budget {budget}.",
-                    recipients=holding_permission(members, SETS_SPEND_BUDGETS),
+                asked(
+                    "raise_budget",
+                    budget_link(budget),
+                    lambda name: f"{name} waits for a raise of budget {budget}.",
+                    title,
+                    holding_permission(members, SETS_SPEND_BUDGETS),
                 )
             ]
         if park.reason is ParkReason.SPEND_BUDGET and park.unlock == FUNDS_UNLOCK:
             return [
-                Ask(
-                    action="top_up",
-                    link=NO_ROUTE,
-                    text=f"{title} waits for funds: the account is spent.",
-                    recipients=holding_permission(members, SETS_SPEND_BUDGETS),
+                asked(
+                    "top_up",
+                    NO_ROUTE,
+                    lambda name: f"{name} waits for funds: the account is spent.",
+                    title,
+                    holding_permission(members, SETS_SPEND_BUDGETS),
                 )
             ]
         if park.reason is ParkReason.PERSON and park.unlock == ANOMALY_UNLOCK:
             # The requester cannot clear it: approving a call past its
             # session's norm is agent billing's, and takes its permission.
             return [
-                Ask(
-                    action="approve_call",
-                    link=approval_link(session.id),
-                    text=(
-                        f"{title}: a call costs far more than the session's others,"
+                asked(
+                    "approve_call",
+                    approval_link(session.id),
+                    lambda name: (
+                        f"{name}: a call costs far more than the session's others,"
                         " and waits for your approval."
                     ),
-                    recipients=holding_permission(members, APPROVES_CALLS),
+                    title,
+                    holding_permission(members, APPROVES_CALLS),
                 )
             ]
         provider = fixed_at_provider(park)
         if provider is not None:
             # Fixed at the provider, and nothing tells the platform: the
             # session tries again by itself, and takes the fix at its next try.
+            cause = park.cause
             return [
-                Ask(
-                    action="fix_at_provider",
-                    link=NO_ROUTE,
-                    text=f"{title} waits: {park.cause}. It tries again by itself.",
-                    recipients=holding_permission(members, FIXES_AT_PROVIDER),
+                asked(
+                    "fix_at_provider",
+                    NO_ROUTE,
+                    lambda name: f"{name} waits: {cause}. It tries again by itself.",
+                    title,
+                    holding_permission(members, FIXES_AT_PROVIDER),
                 )
             ]
         provider = missing_key(park)
@@ -210,11 +238,12 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
             # those who manage it, and its other sessions wait on the same key.
             why = park.cause or f"the org holds no {provider} key"
             return [
-                Ask(
-                    action="save_key",
-                    link=key_link(provider),
-                    text=f"{title} waits: {why}.",
-                    recipients=holding_permission(members, SAVES_KEYS),
+                asked(
+                    "save_key",
+                    key_link(provider),
+                    lambda name: f"{name} waits: {why}.",
+                    title,
+                    holding_permission(members, SAVES_KEYS),
                 )
             ]
         # A question, and any other park on a person, waits on the person who
@@ -228,17 +257,19 @@ class ParkAlertsManagerImpl(ParkAlertsManagerInterface):
                 Ask(
                     action=ANSWER_QUESTION,
                     link=message_link(session.id),
-                    text=question_text(title, None),
+                    text=question_text(UNNAMED, None),
                     posted=question_text(title, asked_question(history)),
                     recipients=recipients,
                 )
             ]
+        unlock = park.unlock
         return [
-            Ask(
-                action=park.unlock,
-                link=answer_link(session.id),
-                text=f"{title} waits for you: {park.unlock}.",
-                recipients=recipients,
+            asked(
+                unlock,
+                answer_link(session.id),
+                lambda name: f"{name} waits for you: {unlock}.",
+                title,
+                recipients,
             )
         ]
 
