@@ -18,7 +18,7 @@ from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.transports.redaction import forms, marker
 from acme.om.agent_root import AgentRootOptions
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import AgentSession, Title
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -92,7 +92,7 @@ async def an_agent_session(managers: PlatformManagers, owner: TenantContext) -> 
         updated_at=now,
         created_by=owner.user_id,
         updated_by=owner.user_id,
-        title="a call over Postgres",
+        title=Title(text="a call over Postgres"),
         kind="ops_analyst",
         kind_version=1,
         root_id=agent_session_id,
