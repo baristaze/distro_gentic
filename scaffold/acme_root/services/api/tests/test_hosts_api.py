@@ -270,14 +270,14 @@ async def test_a_token_issued_on_a_key_enrolls_nothing_once_the_key_is_revoked_o
     await a_host(client, on_revoked, "before-the-revoke")
     revoked = await client.delete(f"/v1/api-keys/{revoked_id}", headers=owner)
     assert revoked.status_code == 200, revoked.text
-    refused(await enroll_with(client, on_revoked, "after-the-revoke"), 401, "credential_expired")
+    refused(await enroll_with(client, on_revoked, "after-the-revoke"), 401, "not_authenticated")
     # Past the key's day, the token issued on it lets nothing in, though
     # the token's own day has not ended; one issued in person still does.
     later = utcnow() + timedelta(days=1, minutes=1)
     with monkeypatch.context() as past_the_key:
         past_the_key.setattr(tenancy_manager, "utcnow", lambda: later)
         expired = await enroll_with(client, on_expiring, "after-the-key-expired")
-        refused(expired, 401, "credential_expired")
+        refused(expired, 401, "not_authenticated")
         await a_host(client, in_person, "in-person")
     listed = await client.get(f"/v1/host-pools/{pool_id}/hosts", headers=owner)
     assert sorted(h["name"] for h in listed.json()) == ["before-the-revoke", "in-person"]
