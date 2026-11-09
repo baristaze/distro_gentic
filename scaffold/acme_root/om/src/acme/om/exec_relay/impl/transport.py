@@ -29,9 +29,10 @@ from acme.integrations.mcp import McpAnswer
 from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
-from acme.om.exceptions import OmException, ToolFailed, Unavailable
+from acme.om.exceptions import NotFound, OmException, ToolFailed, Unavailable
 from acme.om.exec_relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
+from acme.om.exec_relay.rules import exec_id
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
     REQUESTS,
@@ -76,9 +77,9 @@ class TransportRelayImpl(TransportInterface):
     key (`rules.exec_id`), so a run that resumes the call meets the items
     it sent before: it attaches to an execution still running, or reads its
     stored result, and never starts a second. While it waits, the parts of
-    the output stream to `on_output`. A run cancelled while it waits stops
-    the item over its host's control stream; one whose deadline passes by
-    this clock cuts it there.
+    the output stream to `on_output`. A run cancelled while it sends or
+    waits stops the item over its host's control stream; one whose deadline
+    passes by this clock cuts it there.
 
     It runs below any context, so `exec_relay` is the manager it reaches, bound
     at call time as the root builds it, and `stage` mints the request stage
@@ -314,20 +315,34 @@ class TransportRelayImpl(TransportInterface):
         epoch = call.epoch
         rctx = self._stage()
         org_id = workspace.org_id
+        item_id = exec_id(call.key, REQUESTS.dump_json(call.request), occurrence)
         try:
-            item = await self._exec_relay().send(rctx, org_id, call, occurrence, content)
+            item = await self._send(rctx, org_id, call, occurrence, content)
+            progress = await self._wait(rctx, org_id, item, on_output, epoch, attach=False)
+        except asyncio.CancelledError:
+            # The run stopped: the item stops on its host at once. A host may
+            # claim it once its row lands, before the send returns, so the
+            # stop names it by the id the call derives.
+            await asyncio.shield(self._stop(rctx, org_id, item_id, StopKind.CANCEL, epoch))
+            raise
+        assert progress is not None  # a wait that does not attach never gives up
+        return item, progress
+
+    async def _send(
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        call: ExecCall,
+        occurrence: int,
+        content: bytes | None,
+    ) -> ExecItem:
+        """The item sent, each refusal as the engine reads it."""
+        try:
+            return await self._exec_relay().send(rctx, org_id, call, occurrence, content)
         except StaleExec as error:
             raise StaleCommand(error.message) from error
         except (NoWorkspaceHost, ContentNotKept) as error:
             raise CapabilityMissing(error.message) from error
-        try:
-            progress = await self._wait(rctx, org_id, item, on_output, epoch, attach=False)
-        except asyncio.CancelledError:
-            # The run stopped waiting: the item stops on its host at once.
-            await asyncio.shield(self._stop(rctx, org_id, item.id, StopKind.CANCEL, epoch))
-            raise
-        assert progress is not None  # a wait that does not attach never gives up
-        return item, progress
 
     async def _wait(
         self,
@@ -388,9 +403,12 @@ class TransportRelayImpl(TransportInterface):
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
     ) -> None:
         """Stops the item; a stop the exec relay refuses, such as one from a run
-        that lost the session, leaves the item to the run that holds it."""
+        that lost the session, leaves the item to the run that holds it. One
+        whose row never landed has nothing to stop."""
         try:
             await self._exec_relay().stop(rctx, org_id, item_id, kind, epoch)
+        except NotFound:
+            return
         except Exception:
             log.warning("exec item %s: the %s was not sent", item_id, kind.value, exc_info=True)
 
