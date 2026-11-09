@@ -40,10 +40,13 @@ class CheckDeclaration(OmBase):
     the tree, as a user of its own, who writes no file the run protects,
     never the results stream, and nowhere in the tree; `{work}` is a folder
     of its trial's own that it writes in. The runner then runs as the
-    instance's own user and scores what the head's part left in `{work}`,
-    so the head's code reaches nothing that writes a result. A runner that
-    loads the head's code itself is one the head's code can write a passing
-    result for, whatever runs it.
+    instance's own user, in a copy of the files the run protects, never in
+    the tree, and scores what the head's part left in `{work}`. What each
+    part runs is the check's own, so its author keeps the rest: the head's
+    part leaves answers, never verdicts, since the head's code decides
+    whatever is decided there; and the runner never imports or runs the
+    head's code, nor what `{work}` holds, since that code would run as the
+    runner's user and could write a passing result.
 
     The templates are checked when they are declared: each parses and names
     those fields alone, each bare; `command` names `{out}`, so a runner it

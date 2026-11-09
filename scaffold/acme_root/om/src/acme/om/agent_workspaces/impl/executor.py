@@ -21,16 +21,22 @@ tree, under the environment of the instance's image and its transport,
 never one an agent set.
 
 A check that runs the head apart (`CheckDeclaration.head`) runs that part
-first, as the head's own user (`ExecutorOptions.head_user`), in a folder
-of the trial's own (`{work}`), then its runner, as the instance's own user.
-The head's user owns nothing the instance's own commands write, run, or
-read: no file of the tree, no results stream, no folder on the path. So the
-head's code writes no result, changes no file the run protects, and puts
-no `stat` or `sha256sum` of its own where the digest finds it. A runner
-that loads the head's code itself runs it as the instance's own user, so
-there that code may write a result, and fake the digest with its own
-`stat` or `sha256sum` first on the path; a hidden suite never has that
-shape (`scenario_refusal`). Each trial's results stream is read back within the bound,
+first, in the tree, as the head's own user (`ExecutorOptions.head_user`),
+with a folder of the trial's own to write in (`{work}`). Its runner runs
+next, as the instance's own user, in a copy of the files the run protects
+(`SUITE`), never in the tree: a tool that reads its configuration or its
+modules from its folder, or from one above it, finds nothing of the head's
+there. The head's user owns no file of the tree or of that copy, no
+results stream, and no folder on the path. So the head's code writes no
+result, changes no file the run protects, and puts no `stat` or
+`sha256sum` of its own where the digest finds it, and what it leaves in
+`{work}` is all of it the runner reads. The check's author keeps the rest:
+its head part leaves answers, never verdicts, since the head's code decides
+whatever is decided there; and its runner never imports or runs the head's
+code, nor what `{work}` holds, since that code would run as the instance's
+own user, write a result, and fake the digest. A scenario refuses a hidden
+check that declares no head part (`scenario_refusal`), and holds no more
+than that. Each trial's results stream is read back within the bound,
 and within what one read of its transport carries, and the executor hashes
 what it read. Every trial counts: one that ran past its time, or wrote no
 stream the collector reads as one run of its check at the version asked,
@@ -113,6 +119,18 @@ UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 OPEN = 'mkdir -p -- "$1" && chmod -- 1777 "$1"'
 """Makes a trial's folder for its head part, which any user writes in and
 none removes another's file from."""
+SUITE = "suite"
+"""Where the runner of a check that runs the head apart runs: a copy of the
+files the run protects, beside the tree, never in it, so a tool the runner
+starts finds nothing of the head's in its folder or in one above it."""
+COPY = (
+    'to=$1 from=$2 && shift 2 && mkdir -p -- "$to" && if [ "$#" -gt 0 ]; then'
+    ' tar -cf "$to.tar" -C "$from" -- "$@" && tar -xf "$to.tar" -C "$to"'
+    ' && rm -f -- "$to.tar"; fi'
+)
+"""Copies the files and links a run protects from the tree into `SUITE`, at
+the paths the tree holds them: each is the protected source's or the
+base's, never the head's."""
 LOCK = 'chmod -- a-w "$@"'
 """Makes each file of the tree a run protects read-only, and never a
 folder: no process of the check writes the file without changing its mode,
@@ -352,6 +370,17 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                     f"the instance's own user is the head's, {uid}, or unknown, so no head "
                     "runs apart from what scores it there"
                 )
+            copied = await self._command(
+                transport,
+                workspace,
+                ("sh", "-c", COPY, "sh", SUITE, TREE, *guarded),
+                ".",
+                self._options.setup_time,
+            )
+            if copied.exit_code != 0:
+                raise Unavailable(
+                    f"no copy of what the run protects for its runners: {copied.stderr[-300:]}"
+                )
         if locked:
             made = await self._command(
                 transport,
@@ -407,8 +436,9 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         """One trial of `check`, named `trial` under the instance's `root`
         (`place`): its head part, when it declares one, run in the tree as
         the head's user, with `{work}` the trial's own folder; then its
-        runner, with `{out}` where it writes its results stream, run in the
-        tree as the instance's own user, the two within one trial's time;
+        runner, with `{out}` where it writes its results stream, run as the
+        instance's own user, in the tree, or in `SUITE` for a check with a
+        head part, the two within one trial's time;
         the stream read back from the instance's root, within what is left
         of the bound; and the run it holds. The head part's exit decides
         nothing: the runner scores what it left. A trial that ran past its
@@ -443,7 +473,8 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         if ran is None or not ran.timed_out:
             argv = tuple(part.format(**fields) for part in check.command)
             left_time = self._options.trial_time - (self._clock() - started)
-            ran = await self._command(transport, workspace, argv, TREE, left_time)
+            folder = SUITE if check.head else TREE
+            ran = await self._command(transport, workspace, argv, folder, left_time)
         left = self._options.max_results_bytes - read
         stream, why = b"", None
         guarded, sealed = seal

@@ -228,9 +228,9 @@ async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refu
         await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
 
 
-async def test_a_hidden_check_whose_runner_runs_the_heads_code_is_refused() -> None:
-    """A runner that loads the head's code is one that code can write a
-    passing result for, so a hidden suite never has that shape."""
+async def test_a_hidden_check_that_declares_no_head_part_is_refused() -> None:
+    """A hidden check with no head part runs the head's code in its runner,
+    which that code can write a passing result for."""
     run = await scripted()
     result = await whole(run)
     together = COMPLETE.model_copy(update={"head": (), "command": ("complete-suite", "{out}")})

@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -36,6 +37,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterface
 from acme.om.agent_workspaces.impl.executor import (
     ARCHIVE,
+    COPY,
     LOCK,
     OPEN,
     SEEN,
@@ -272,8 +274,9 @@ class Ran:
     """An instance's commands run for real: the tree the executor wrote is
     unpacked in a directory of its own, the paths the executor protects
     made read-only there and their digest taken as `SEEN` takes it, and
-    each check runs there, its results stream handed back to the transport
-    where the executor reads it. `trees` keeps each tree's files, as the
+    copied beside it for the runners as `COPY` copies them; each command
+    runs in the folder it names, a check's results stream handed back to
+    the transport where the executor reads it. `trees` keeps each tree's files, as the
     executor wrote them, and `users` each command's argv with the user it
     names, which the twin runs as this process."""
 
@@ -292,6 +295,12 @@ class Ran:
         self.users.append((command.argv, command.user))
         if command.argv[:3] == ("sh", "-c", OPEN):
             (instance / command.argv[4]).mkdir(parents=True)
+            return TwinReply()
+        if command.argv[:3] == ("sh", "-c", COPY):
+            for name in command.argv[6:]:
+                copy = instance / command.argv[4] / name
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(instance / command.argv[5] / name, copy, follow_symlinks=False)
             return TwinReply()
         if command.argv[:3] == ("sh", "-c", LOCK):
             for name in command.argv[4:]:
@@ -314,7 +323,7 @@ class Ran:
         argv = [sys.executable if part == "python3" else part for part in command.argv]
         done = await asyncio.create_subprocess_exec(
             *argv,
-            cwd=instance / "tree",
+            cwd=instance / command.cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

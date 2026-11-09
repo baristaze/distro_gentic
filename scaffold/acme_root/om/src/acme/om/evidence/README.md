@@ -101,9 +101,12 @@ of](../../../../README.md).
   writable: a check, or the head's code, may add a new file in a
   protected folder, and no trial errors for that. Each of its checks
   runs the head's code apart, as a user of its own, and its runner
-  scores what that part left, so the head's code writes no result and
-  plants no tool the digest runs; a scenario whose hidden check runs it
-  in its runner is refused
+  scores what that part left from a copy of the files the run protects,
+  where no tool it starts finds a file of the head's. So the head's code
+  writes no result and plants no tool the digest runs. A scenario whose
+  hidden check declares no head part is refused. The suite's author
+  keeps the rest: the head part leaves answers, never verdicts, and the
+  runner never imports or runs the head's code
   ([ADR 2067](../../../../../docs/adr/2067-a-hidden-suite-runs-the-heads-code-apart-from-what-scores-it.md)).
   A scan of every surface the agent reads finds any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at

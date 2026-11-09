@@ -28,17 +28,35 @@ runner as the instance's own user, and the runner scores what the head's
 part left there. The head's part names `{version}` and `{work}`, never
 `{out}`. Its exit decides nothing, and both parts share one trial's time.
 
-**The head's user owns nothing that scores.** The tree, the results
-streams, and every folder on the path are the instance's own user's, so
-the head's code writes no result, changes no protected file, and plants
-no tool the digest runs. Its user is `65534:65534` unless a root names
-another, by its id and its group's. An instance whose own user is the
-head's refuses the checks before any runs.
+**The runner runs outside the tree.** Its folder is a copy of the files
+the run protects, at the paths the tree holds them, and nothing else of
+the tree. Many tools read their configuration or their modules from the
+folder they start in, or from one above it: pytest a `conftest.py` and a
+`pyproject.toml`, `python3 -m` and `-c` the modules there before the
+standard library's. In the tree, the head could hold such a file and the
+runner would load it. In the copy, each one is the protected source's or
+the base's.
+
+**The head's user owns nothing that scores.** The tree, the runner's
+copy, the results streams, and every folder on the path are the
+instance's own user's, so the head's code writes no result, changes no
+protected file, and plants no tool the digest runs. What it leaves in
+`{work}` is all of it the runner reads. Its user is `65534:65534` unless
+a root names another, by its id and its group's. An instance whose own
+user is the head's refuses the checks before any runs.
 
 **A hidden suite has that shape.** A scenario whose hidden check has no
 `head` is refused: its runner would load the head's code, which could
 write its result. A check of the visible suite may keep one command; the
 hidden link is what catches a head that games it.
+
+**The suite's author keeps what the platform cannot read.** What each
+part runs is the suite's own: the platform holds that both are declared,
+and where and as whom each runs, never what they do. So the head's part
+leaves answers, never verdicts: the head's code runs there, and decides
+whatever is decided there, a test run's report included. And the runner
+never imports or runs the head's code, nor what `{work}` holds: that
+code would run as the runner's user, and could write a passing result.
 
 **The transport carries the user.** A command names the user it runs as
 (`CommandSpec.user`), by its id and its group's; one that names none runs
@@ -58,8 +76,13 @@ relay refuses to send it one that names a user.
 ## Consequences
 
 - A hidden suite written as one command is refused until its head's
-  code moves into `head`. Its runner reads the answers that part wrote,
-  never the head's modules.
+  code moves into `head`. That part calls the head's code and writes
+  what it answers into `{work}`. The runner reads those answers and
+  decides each case: a suite written with pytest runs its tests there,
+  in the runner, over the answers, never in the head's part.
+- A runner reads nothing of the tree but the files the run protects. A
+  check that needs another file of the head's has its head part leave
+  it in `{work}`, as data, never as code the runner runs.
 - The head's part writes nothing in the tree. A suite that builds the
   head copies it into `{work}` and builds there.
 - A hidden suite runs only where a command can run as a user of its own:

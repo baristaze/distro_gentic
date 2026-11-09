@@ -24,9 +24,10 @@ def scenario_refusal(scenario: Scenario) -> str | None:
     cause or its hidden suite, by the match a scan makes; a hidden suite
     kept in the scenario's agent project, or at its base, in the repository the
     agent's workspace checks out; a hidden check that shares a name with
-    a visible one; or a hidden check whose runner runs the head's code
-    itself, which that code can write a passing result for
-    (`CheckDeclaration.head`)."""
+    a visible one; or a hidden check that declares no head part, whose
+    runner runs the head's code itself, which that code can write a
+    passing result for (`CheckDeclaration.head`). What a declared head
+    part and runner run is the suite's own, and no scan reads it."""
     told = named((*scenario.root_cause, *scenario.hidden.markers), scenario.objective)
     if told:
         return f"the objective names what it hides: {sorted(told)}"
