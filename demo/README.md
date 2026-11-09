@@ -1,6 +1,6 @@
 # A tree of sub-agents
 
-![The portal running a tree of sub-agents: a person asks the software engineer to read every date day first; its answer starts four sub-agents, each a row on a card in its chat and nested under its row in the left bar; one asks the person, who answers in its chat; one starts a sub-agent of its own; each row closes as its sub-agent reports; the lead writes the roll-up, the person folds the tree and approves the commit and the validation, and the lead submits its result](tree.gif)
+![The portal running a tree of sub-agents: a person asks the software engineer to read every date day first; its answer starts four sub-agents, each a row on a card in its chat and nested under its row in the left bar; one asks the person, who answers in its chat; one starts a sub-agent of its own; each row closes as its sub-agent reports; the lead writes the roll-up, the person approves the commit, folds the tree, and approves the validation, and the lead submits its result](tree.gif)
 
 The portal of a copy of the scaffold, running a tree of sessions on
 its local stack. The session runner answers from a script on the
@@ -26,10 +26,10 @@ One task, run by a lead and the sub-agents it starts.
    so. The person opens it and answers in its chat; it reports, and its
    row closes.
 4. **The roll-up.** Woken by the last report, the lead writes what its
-   sub-agents found and fixes the parser. The person folds the tree
-   under its row in the left bar. The lead holds its commit and its
-   validation for the person's approval, opens a pull request, validates
-   its head, and submits its result.
+   sub-agents found and fixes the parser. It holds its commit for the
+   person's approval, and the person folds the tree under its row in the
+   left bar. It opens a pull request, holds its validation for approval
+   too, validates its head, and submits its result.
 
 ## How to read it
 
@@ -87,8 +87,9 @@ It prints the time of each beat in the GIF. CI does not run it.
   scene runs on.
 - [`record.py`](record.py): the drive, as the person plays it, and its
   guards.
-- [`film.py`](film.py): the frames as the browser paints them, and the
-  GIF made of them: faster where the screen changes, short where it
-  stands still, and a pause on each beat.
+- [`film.py`](film.py): the frames as the run goes, and the GIF made of
+  them: faster where the screen changes, short where it stands still,
+  and a pause on each beat. The person setting out their view, the left
+  bar's width and the session's pane, is cut.
 
 It sits outside the scaffold, so no copy of the scaffold carries it.

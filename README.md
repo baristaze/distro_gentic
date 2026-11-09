@@ -1,6 +1,6 @@
 # distro_gentic
 
-![The portal running a tree of sub-agents: a person asks the software engineer to read every date day first; its answer starts four sub-agents, each a row on a card in its chat and nested under its row in the left bar; one asks the person, who answers in its chat; one starts a sub-agent of its own; each row closes as its sub-agent reports; the lead writes the roll-up, the person folds the tree and approves the commit and the validation, and the lead submits its result](demo/tree.gif)
+![The portal running a tree of sub-agents: a person asks the software engineer to read every date day first; its answer starts four sub-agents, each a row on a card in its chat and nested under its row in the left bar; one asks the person, who answers in its chat; one starts a sub-agent of its own; each row closes as its sub-agent reports; the lead writes the roll-up, the person approves the commit, folds the tree, and approves the validation, and the lead submits its result](demo/tree.gif)
 
 A closed-loop, cloud-first, distributed agentic platform. It defines,
 runs, and hosts agents: a fleet of them, for many tenants, unattended,
