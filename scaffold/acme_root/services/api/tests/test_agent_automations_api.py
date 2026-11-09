@@ -1,7 +1,8 @@
 """A tenant's agent automations over the API: a person makes one in an agent project of
 the tenant, reads and lists them, and its creator edits it. A viewer makes
 none, and nobody but its creator edits one that runs as its creator, since
-it runs on the creator's authority. Another tenant's agent automation and agent project
+it runs on the creator's authority; for that reason an API key makes and
+edits none, at any role. Another tenant's agent automation and agent project
 are not found; a malformed agent automation, and one whose action kind no
 product declares, is refused whole. A product's own action, whose params
 nest lists and mappings, is made, read, and listed whole, and a writer its
@@ -124,6 +125,40 @@ async def test_a_viewer_reads_agent_automations_and_makes_none(
     principal = {**body, "runs_as": "agent_automation_principal"}
     ungranted = await client.post("/v1/agent-automations", headers=ajax.owner, json=principal)
     refused(ungranted, 403, "not_authorized")
+
+
+# An agent automation fires on its creator's authority, so a key never
+# makes or edits one: an admin's member-role key would leave behind work
+# that fires at the admin's role, and keeps firing once the key is revoked.
+
+
+async def test_an_api_key_makes_and_edits_no_agent_automation_at_any_role(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    admin = await person(client, container, ajax.org_id, Role.ADMIN)
+    body = agent_automation(await agent_project_of(client, ajax.owner))
+    made = await client.post("/v1/agent-automations", headers=admin, json=body)
+    assert made.status_code == 201, made.text
+    url = f"/v1/agent-automations/{made.json()['id']}"
+    for role in ("member", "admin"):
+        minted = await client.post(
+            "/v1/api-keys",
+            headers={**admin, "Idempotency-Key": f"mint-{role}-key"},
+            json={"name": role, "role": role},
+        )
+        assert minted.status_code == 201, minted.text
+        key = {"Authorization": f"Bearer {minted.json()['key']}"}
+        on_key = await client.post("/v1/agent-automations", headers=key, json=body)
+        refused(on_key, 403, "not_authorized")
+        edited = await client.put(url, headers=key, json={**body, "name": f"the {role} key's"})
+        refused(edited, 403, "not_authorized")
+        grant = await client.put(
+            "/v1/agent-automations/principal", headers=key, json={"role": "viewer"}
+        )
+        refused(grant, 403, "not_authorized")
+    listed = await client.get("/v1/agent-automations", headers=ajax.owner)
+    assert listed.json() == [made.json()]
 
 
 async def test_another_tenants_agent_automation_and_agent_project_are_not_found(

@@ -1,9 +1,11 @@
 """Hosts over the live app, in memory: a pool and its enrollment token, a
 host that enrolls with it and calls with a credential of its own kind and
 nothing else, a claim that names nothing but the version it reads and is
-handed only what is pinned to its pool, and a session pinned to the pool
-that waits, visibly, while no host of it is online."""
+handed only what is pinned to its pool, a session pinned to the pool
+that waits, visibly, while no host of it is online, and a token issued on
+an API key that lets nothing in once the key is revoked or expired."""
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -11,6 +13,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import AGENT_PROJECT_ID, add_member, build_container, seed_request, sign_in_as
+from tenant_support import refused
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
@@ -20,6 +23,7 @@ from acme.om.hosts import rules
 from acme.om.hosts.rules import WireType
 from acme.om.placement.kinds import PlacementWorkKind
 from acme.om.placement.types.work import WorkspaceOperation
+from acme.om.tenancy.impl import manager as tenancy_manager
 from acme.om.work.types.work_item import WorkItem
 from acme.services.api.container import AppContainer
 
@@ -229,3 +233,52 @@ async def test_a_pinned_session_reads_waiting_until_a_host_of_its_pool_is_online
     await a_host(client, await a_token(client, owner, pool_id))
     online = await client.get(path, headers=owner)
     assert (online.json()["hosts_online"], online.json()["waiting"]) == (1, False)
+
+
+# A token issued on an API key enrolls on the key's authority: once the
+# key is revoked, or expires, it lets nothing in, while a token its issuer
+# issued in person still does.
+
+
+async def a_key(
+    client: httpx.AsyncClient, owner: dict[str, str], name: str
+) -> tuple[str, dict[str, str]]:
+    minted = await client.post(
+        "/v1/api-keys", headers=created(owner), json={"name": name, "role": "admin", "ttl_days": 1}
+    )
+    assert minted.status_code == 201, minted.text
+    return minted.json()["api_key"]["id"], {"Authorization": f"Bearer {minted.json()['key']}"}
+
+
+async def enroll_with(client: httpx.AsyncClient, token: str, name: str) -> httpx.Response:
+    return await client.post(
+        "/v1/hosts/enrollments",
+        headers=bearer(token),
+        json={"name": name, "advertisement": PROBED, "exec_version": 2},
+    )
+
+
+async def test_a_token_issued_on_a_key_enrolls_nothing_once_the_key_is_revoked_or_expired(
+    client: httpx.AsyncClient, owner: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pool_id = await a_pool(client, owner)
+    revoked_id, revoked_key = await a_key(client, owner, "revoked")
+    _, expiring_key = await a_key(client, owner, "expiring")
+    on_revoked = await a_token(client, revoked_key, pool_id)
+    on_expiring = await a_token(client, expiring_key, pool_id)
+    in_person = await a_token(client, owner, pool_id)
+    # While its key holds, the token enrolls.
+    await a_host(client, on_revoked, "before-the-revoke")
+    revoked = await client.delete(f"/v1/api-keys/{revoked_id}", headers=owner)
+    assert revoked.status_code == 200, revoked.text
+    refused(await enroll_with(client, on_revoked, "after-the-revoke"), 401, "not_authenticated")
+    # Past the key's day, the token issued on it lets nothing in, though
+    # the token's own day has not ended; one issued in person still does.
+    later = utcnow() + timedelta(days=1, minutes=1)
+    with monkeypatch.context() as past_the_key:
+        past_the_key.setattr(tenancy_manager, "utcnow", lambda: later)
+        expired = await enroll_with(client, on_expiring, "after-the-key-expired")
+        refused(expired, 401, "not_authenticated")
+        await a_host(client, in_person, "in-person")
+    listed = await client.get(f"/v1/host-pools/{pool_id}/hosts", headers=owner)
+    assert sorted(h["name"] for h in listed.json()) == ["before-the-revoke", "in-person"]

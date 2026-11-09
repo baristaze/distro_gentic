@@ -642,6 +642,67 @@ async def test_a_stop_no_host_took_yet_means_it_never_runs(wall: Wall) -> None:
     assert progress.state is ExecState.INTERRUPTED
 
 
+async def test_a_call_cancelled_once_its_row_landed_and_before_it_waits_never_runs(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = Host(wall, wall.holder)
+    work = wall.managers.work
+    inner = work.enqueue
+    rows: list[WorkItem] = []
+    queued = asyncio.Event()
+
+    async def enqueue(ctx: TenantContext, row: WorkItem) -> WorkItem:
+        rows.append(await inner(ctx, row))
+        queued.set()
+        await asyncio.Event().wait()  # the send is under way when the cancel lands
+        return rows[-1]
+
+    monkeypatch.setattr(work, "enqueue", enqueue)
+    writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(wall.workspace, "a.md", b"a\n", wall.epoch)
+    )
+    await asyncio.wait_for(queued.wait(), 5)
+    assert len(await under(wall)) == 1, "its file is in the store, its row on the queue"
+    writing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await writing
+    item_id = host.item_id(rows[0])
+    progress = await wall.managers.exec_relay.watch(request(), wall.owner.org_id, item_id, -1)
+    assert progress.state is ExecState.INTERRUPTED
+    assert progress.outcome is not None and progress.outcome.stopped is StopKind.CANCEL
+    assert await under(wall) == [], "the stop settles it, and its file goes"
+    assert await host.claim() is None and host.handed == [], "no host runs it"
+
+
+async def test_a_call_cancelled_before_its_row_lands_leaves_no_row_and_no_file(
+    wall: Wall, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    items = wall.storage.get_exec_relay_storage()
+    inner = items.create_item
+    made: list[ExecItem] = []
+    reached = asyncio.Event()
+
+    async def create_item(org_id: UUID, item: ExecItem) -> bool:
+        made.append(item)
+        reached.set()
+        await asyncio.Event().wait()  # the cancel lands before the row does
+        return await inner(org_id, item)
+
+    monkeypatch.setattr(items, "create_item", create_item)
+    writing = asyncio.ensure_future(
+        transport(wall.managers).write_file(wall.workspace, "a.md", b"a\n", wall.epoch)
+    )
+    await asyncio.wait_for(reached.wait(), 5)
+    writing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await writing
+    assert await items.read_item(wall.owner.org_id, made[0].id) is None
+    assert await under(wall) == []
+    assert await Host(wall, wall.holder).claim() is None
+    # No row landed, so there was nothing to stop: no stop reads as failed.
+    assert [r.getMessage() for r in caplog.records if r.levelname == "WARNING"] == []
+
+
 async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
     host = Host(wall, wall.holder)
     relay = wall.managers.exec_relay

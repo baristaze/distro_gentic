@@ -26,6 +26,10 @@ class EnrollmentToken(Identifiable, Trackable):
     expires_at: datetime
     revoked_at: datetime | None = None
     revoked_by: UUID | None = None
+    # The API key its issuer spoke through, if one: the token enrolls on the
+    # issuer's authority no higher than the key's role, and only while the
+    # key holds.
+    key_id: UUID | None = None
 
 
 class HostCredential(Identifiable, Created):
