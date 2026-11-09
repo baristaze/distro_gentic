@@ -82,6 +82,12 @@ the changed text changes with it.
   the argument parser, and the fence rule (`fenced_lines`).
 - `tests/` holds one pytest module per script, with a pass and a fail
   path per rule; `make test` runs them.
+- `demo/` drives the portal of a copy of the scaffold, its stack up,
+  through one scene on the scripted provider, as a person would, and
+  records `demo/tree.gif`, which the README opens on. It sits outside
+  the scaffold, so no copy carries it. The root's ruff and mypy cover
+  its Python, `tests/test_demo.py` holds what runs without a browser,
+  and `make demo-gif` records it.
 
 A gate over a folder that does not exist passes on the empty set, so
 each part is held from the change that adds it.

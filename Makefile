@@ -16,8 +16,12 @@ MARKDOWNLINT := $(NPX) markdownlint-cli2@$(call npm_pin,markdownlint-cli2)
 # ruff and mypy run at pinned versions through uvx; pyproject.toml holds their configuration
 RUFF := uvx ruff@$(call pin,ruff)
 MYPY := uvx --with pytest==$(call pin,pytest) mypy@$(call pin,mypy)
+# The demo drives the portal of a copy whose stack is up (demo/README.md),
+# with the dev server on DEMO_PORTAL_PORT.
+DEMO_COPY ?=
+DEMO_PORTAL_PORT ?= 5173
 
-.PHONY: help check lint ruff mypy lenses links toc version skills agents test plugin gen-skills gen-skills-check gen-toc clean
+.PHONY: help check lint ruff mypy lenses links toc version skills agents test plugin gen-skills gen-skills-check gen-toc demo-gif clean
 
 help:              ## show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -27,11 +31,11 @@ check: lint ruff mypy lenses links toc version gen-skills-check skills agents te
 lint:              ## markdownlint over every Markdown file
 	$(MARKDOWNLINT) "**/*.md" "#node_modules"
 
-ruff:              ## lint and format check of scripts/ and tests/
+ruff:              ## lint and format check of scripts/, tests/, and demo/
 	$(RUFF) check
 	$(RUFF) format --check
 
-mypy:              ## type check of scripts/ and tests/
+mypy:              ## type check of scripts/, tests/, and demo/
 	$(MYPY)
 
 lenses:            ## every lens follows the format and cites a real section of the spec
@@ -70,6 +74,11 @@ gen-skills-check:  ## fail when a generated skill is out of date
 
 gen-toc:           ## regenerate the Contents of distro_gentic_spec.md
 	$(PYTHON) scripts/gen_toc.py
+
+demo-gif:          ## a copy's portal driven through the demo's scene and recorded into demo/tree.gif (DEMO_COPY; needs ffmpeg; CI does not run it)
+	@if [ -z "$(DEMO_COPY)" ]; then echo "demo-gif: name a copy whose stack is up, DEMO_COPY=<path> (demo/README.md)"; exit 2; fi
+	cd demo && uv run --no-project --with playwright==$(call pin,playwright) python record.py \
+	  --copy "$(abspath $(DEMO_COPY))" --portal-port $(DEMO_PORTAL_PORT)
 
 clean:             ## remove tool caches
 	rm -rf .markdownlint-cli2-cache node_modules .pytest_cache .mypy_cache .ruff_cache

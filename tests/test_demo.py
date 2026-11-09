@@ -1,0 +1,58 @@
+"""The demo's recorder: the parts that run without a browser.
+
+The owner it plays as is at example.com or refused, so no frame of the
+GIF shows a real address, and the copy is refused unless its seed read
+the forge's twin. The film plays a run faster, cuts a still screen
+short, and pauses on each beat.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+DEMO = Path(__file__).resolve().parent.parent / "demo"
+if str(DEMO) not in sys.path:
+    sys.path.insert(0, str(DEMO))
+
+import film  # noqa: E402
+import stack  # noqa: E402
+
+
+def a_copy(root: Path, env: str) -> stack.Copy:
+    (root / ".env.example").write_text("# a copy\nACME_ENVIRONMENT=local\n")
+    (root / ".env").write_text(env)
+    return stack.Copy(root)
+
+
+def test_the_owner_is_the_seeds_at_example_com(tmp_path: Path) -> None:
+    copy = a_copy(tmp_path, "SEED_EMAIL=demo@example.com\nSEED_SLUG=ajax\n")
+    assert stack.owner_address(copy) == "demo+acme+local+ajax@example.com"
+
+
+@pytest.mark.parametrize("env", ["", "SEED_EMAIL=someone@mail.example.org\n", "SEED_EMAIL='a@example.com.evil'\n"])
+def test_an_owner_elsewhere_is_refused(tmp_path: Path, env: str) -> None:
+    with pytest.raises(SystemExit, match=r"example\.com"):
+        stack.owner_address(a_copy(tmp_path, env))
+
+
+def test_a_copy_seeded_without_the_twin_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="ACME_FORGE_INTEGRATION=twin"):
+        a_copy(tmp_path, "ACME_AGENT_WORKSPACE_BACKEND=host\n").seeded_for_scene()
+    a_copy(tmp_path, "ACME_FORGE_INTEGRATION=twin  # the seed's\nACME_AGENT_WORKSPACE_BACKEND=host\n").seeded_for_scene()
+
+
+def test_a_still_screen_is_cut_short_and_a_beat_pauses(tmp_path: Path) -> None:
+    shown = film.Film(tmp_path)
+    first, second, third = (tmp_path / f"{n}.png" for n in range(3))
+    # A change, then ten seconds of a still screen, on which a beat settles.
+    shown.frames = [(0.0, first), (0.1, second), (10.1, third)]
+    shown.beats = [(0.0, "a beat")]
+    timeline, marks = shown.timeline()
+    seconds = dict(timeline)
+    step = 1 / film.FPS
+    assert seconds[second] == pytest.approx(film.IDLE + film.HOLD, abs=step)
+    assert [name for _, name in marks] == ["a beat"]
+    assert [path for path, _ in timeline] == [first, second, third]

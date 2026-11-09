@@ -1,5 +1,7 @@
 # distro_gentic
 
+![The portal running a tree of sub-agents: a person asks the software engineer to read every date day first; its answer starts four sub-agents, each a row on a card in its chat and nested under its row in the left bar; one asks the person, who answers in its chat; one starts a sub-agent of its own; each row closes as its sub-agent reports; the lead writes the roll-up, the person folds the tree and approves the commit and the validation, and the lead submits its result](demo/tree.gif)
+
 A closed-loop, cloud-first, distributed agentic platform. It defines,
 runs, and hosts agents: a fleet of them, for many tenants, unattended,
 on machines it does not always own.
@@ -41,6 +43,9 @@ spec that tells the story, and tools that hold the detail.
   Skills](https://agentskills.io/specification) standard.
 - **[`scaffold/`](scaffold/)**: the platform's domain-free core, built on the
   engine's scaffold. A product renders it under its own name.
+- **[`demo/`](demo/)**: the portal of a copy of the scaffold, running a
+  tree of sub-agents on its local stack from a script, the run above. It
+  sits outside the scaffold, so no copy carries it.
 
 [The Repository](distro_gentic_spec.md#the-repository) in the spec says
 what each part holds. A part's folder appears with the change that
@@ -84,6 +89,7 @@ report names their layers as not run.
 make check       # the root gates
 make gen-toc     # regenerate the spec's Contents from its headings
 make gen-skills  # regenerate the review skills from the template and the lenses
+make demo-gif DEMO_COPY=../distro  # the run above, recorded from a copy's portal
 ```
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) says what `make check` needs and
