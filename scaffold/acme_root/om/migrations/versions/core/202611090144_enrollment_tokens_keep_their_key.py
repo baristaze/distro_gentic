@@ -2,14 +2,14 @@
 enrolls no higher than the key, and only while the key holds.
 
 Revision ID: 202611090144
-Revises: 202610250340
+Revises: 202610121915
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202611090144"
-down_revision = "202610250340"
+down_revision = "202610121915"
 branch_labels = None
 depends_on = None
 
