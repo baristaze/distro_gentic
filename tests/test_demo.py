@@ -4,11 +4,13 @@ The owner it plays as is at example.com or refused, so no frame of the
 GIF shows a real address, and the copy is refused unless its seed read
 the forge's twin. A request of the page off the portal's origin is
 refused. The film plays a run faster, cuts a still screen short, and
-pauses on each beat.
+pauses on each beat. The scene's search finds, with grep as the tool runs
+it, every caller its report names.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +21,7 @@ if str(DEMO) not in sys.path:
     sys.path.insert(0, str(DEMO))
 
 import film  # noqa: E402
+import scene  # noqa: E402
 import stack  # noqa: E402
 
 
@@ -75,3 +78,28 @@ def test_a_still_screen_is_cut_short_and_a_beat_pauses(tmp_path: Path) -> None:
     assert seconds[second] == pytest.approx(film.IDLE + film.HOLD, abs=step)
     assert [name for _, name in marks] == ["a beat"]
     assert [path for path, _ in timeline] == [first, second, third]
+
+
+def test_the_scenes_search_finds_the_callers_its_report_names(tmp_path: Path) -> None:
+    for name, body in scene.REPOSITORY.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(body)
+    turns = scene.turns()
+    searched = [
+        (at, block["input"]["pattern"])
+        for at, said in enumerate(turns)
+        for block in said["blocks"]
+        if block.get("name") == "search_code"
+    ]
+    assert searched
+    for at, pattern in searched:
+        # As the tool runs it: an extended regular expression, files named.
+        found = subprocess.run(
+            ["grep", "-r", "-l", "-I", "-E", "-e", pattern, "--", "."], cwd=tmp_path, capture_output=True, text=True
+        )
+        assert found.returncode == 0, found.stderr
+        files = sorted(path.removeprefix("./") for path in found.stdout.split())
+        # The definition, and every caller.
+        assert files == ["src/dates.py", "src/invoice.py", "src/report.py", "tests/test_dates.py"]
+        report = " ".join(block["text"] for block in turns[at + 1]["blocks"] if block["kind"] == "text")
+        assert [path for path in files[1:] if path not in report] == []

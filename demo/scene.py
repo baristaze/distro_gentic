@@ -162,9 +162,13 @@ def turns() -> list[dict[str, Any]]:
     # 2. Each sub-agent in the order it was started.
     turn(use("read_file", path="src/dates.py"))
     turn(text("`parse` takes the month first: it reads 05/10/2026 as 10 May, though its docstring says the day comes first."))
-    turn(use("search_code", pattern="parse("))
+    # The tool reads its pattern as an extended regular expression.
+    turn(use("search_code", pattern="parse\\("))
     turn(
-        text("Three callers pass `parse` a date. Before I say how they write it, one question."),
+        text(
+            "`parse` is called in src/invoice.py, src/report.py, and tests/test_dates.py. "
+            "Before I say how they write a date, one question."
+        ),
         use("ask_person", question=ASKED),
     )
     turn(
