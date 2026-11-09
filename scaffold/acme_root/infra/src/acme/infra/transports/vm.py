@@ -21,6 +21,7 @@ from acme.infra.transports import (
     file_offset,
     relative_path,
     require_mode,
+    require_no_user,
 )
 from acme.infra.transports.container import END_TREE, READ_FROM
 from acme.infra.transports.injection import BASE_LANG, injected
@@ -103,6 +104,7 @@ class TransportVmImpl(TransportInterface):
         seal: RecordSeal,
     ) -> CommandResult:
         name = self._vm(workspace)
+        require_no_user(command, "VM")
         await asyncio.to_thread(self._book.admit, workspace.id, command.epoch)
         folder = _inside(command.cwd)
         if utcnow() >= command.deadline:

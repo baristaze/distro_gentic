@@ -48,7 +48,9 @@ class HiddenSuite(OmBase):
     agent project apart from the scenario's, and its files are the paths its
     `paths` patterns match. The executor fetches it only to run it: in the
     tree at the head, every path a pattern matches comes from `source`,
-    whatever the head holds there."""
+    whatever the head holds there. Each of its checks runs the head's code
+    apart from its runner (`CheckDeclaration.head`), since a runner that
+    loads that code is one it can write a passing result for."""
 
     agent_project: str = Field(pattern=AGENT_PROJECT)
     source: str = Field(pattern=VERSION)

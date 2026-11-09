@@ -33,6 +33,7 @@ from acme.infra.transports import (
     file_offset,
     relative_path,
     require_mode,
+    require_no_user,
 )
 from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_group, end_tree, spawn
@@ -98,6 +99,7 @@ class TransportLocalImpl(TransportInterface):
         seal: RecordSeal,
     ) -> CommandResult:
         root = self._root(workspace)
+        require_no_user(command, "local")
         await asyncio.to_thread(self._book.admit, workspace.id, command.epoch)
         cwd = _inside(root, command.cwd)
         if not cwd.is_dir():

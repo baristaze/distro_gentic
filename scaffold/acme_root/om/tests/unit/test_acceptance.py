@@ -228,6 +228,20 @@ async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refu
         await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
 
 
+async def test_a_hidden_check_that_declares_no_head_part_is_refused() -> None:
+    """A hidden check with no head part runs the head's code in its runner,
+    which that code can write a passing result for."""
+    run = await scripted()
+    result = await whole(run)
+    together = COMPLETE.model_copy(update={"head": (), "command": ("complete-suite", "{out}")})
+    hidden = EXPORT.hidden.model_copy(update={"checks": (together,)})
+    scenario = EXPORT.model_copy(update={"hidden": hidden})
+    with pytest.raises(
+        ValidationFailed, match="head's code in its runner: \\['export-complete'\\]"
+    ):
+        await run.harness.judge(run.ctx, scenario, run.session, result, surfaces())
+
+
 async def test_a_scenario_is_refused_by_the_match_the_scan_makes() -> None:
     # A marker inside a longer word: the scan finds it on any surface, so
     # an objective that holds it is refused the same way.

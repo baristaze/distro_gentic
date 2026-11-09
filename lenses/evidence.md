@@ -279,11 +279,14 @@ started; a second collector for a place a check runs.
 **Principle.** Acceptance judges an agent's work the same way. The
 objective hides its root cause. A hidden suite must pass beside the
 visible one, and the result is judged by behavior, so any valid fix
-passes. Editing the checks or the system under test is forbidden and
-checked. No surface the agent reads mentions the hidden suite, and a
-scanner checks every one. The harness judges the chain of evidence (a
-failing baseline, the runs, the hypotheses resolved, a clean validation,
-a cited report), never the presence of files.
+passes. The head's code runs apart, as its own user, and leaves answers,
+never verdicts: the hidden suite's runner decides each case from them,
+outside the head's tree, and never loads that code. Editing the checks or
+the system under test is forbidden and checked. No surface the agent
+reads mentions the hidden suite, and a scanner checks every one. The
+harness judges the chain of evidence (a failing baseline, the runs, the
+hypotheses resolved, a clean validation, a cited report), never the
+presence of files.
 
 **Source.** Evidence, Acceptance and Benchmarks; What Closes a Loop.
 
@@ -293,8 +296,10 @@ surfaces it covers; what the harness scores.
 **Violation.** An acceptance verdict without the hidden suite; a prompt,
 agent knowledge, a tool source, evidence, or a pull request that names
 the hidden suite, or a surface the scanner skips; a harness that scores
-the presence of files; an edit to the checks or the system under test
-that goes uncaught.
+the presence of files; a hidden suite whose runner loads the head's
+code or runs in the head's tree, whose head part leaves verdicts rather
+than answers, or whose head runs as a user who owns what scores it; an
+edit to the checks or the system under test that goes uncaught.
 
 **Severity.** high
 

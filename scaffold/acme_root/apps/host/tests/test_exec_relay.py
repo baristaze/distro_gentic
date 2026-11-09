@@ -33,6 +33,7 @@ from host_support import (
     probes,
 )
 
+from acme.apps.host import agent as host_agent
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
@@ -49,7 +50,7 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.agent_workspaces.container import DEFAULT_IMAGE, AgentWorkspaceContainerImpl
 from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal
+from acme.infra.transports import CapabilityMissing, CommandResult, CommandSpec, RecordSeal
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.om.agent_steps.types.header import ToolFailure
@@ -65,6 +66,7 @@ from acme.om.context import (
 from acme.om.exceptions import ToolFailed
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
 from acme.om.exec_relay.types.exec import ExecState, StopKind
+from acme.om.hosts.rules import USER_VERSION
 from acme.om.placement.types.work import ExecPayload
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.root import build_watch
@@ -76,6 +78,8 @@ from contracts.agent_session_storage import make_agent_session
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
+APART = "65534:65534"
+"""A user apart from a workspace's own, by its id and its group's."""
 
 
 async def _nothing(data: bytes) -> bytes | None:
@@ -196,26 +200,32 @@ async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UU
 
 
 async def run_on(
-    host: HostAgent, api: Stack, agent_session_id: UUID, spec: IsolationSpec, *argv: str
+    host: HostAgent,
+    api: Stack,
+    agent_session_id: UUID,
+    spec: IsolationSpec,
+    *argv: str,
+    user: str | None = None,
 ) -> CommandResult:
     """A command of the session's next run, relayed to the host that holds
-    its workspace, while that host claims."""
+    its workspace, while that host claims: as `user` when it names one."""
     epoch = await api.container.managers.agent_steps.begin_run(api.owner, agent_session_id)
     workspace = AgentWorkspace(id=agent_session_id, org_id=api.owner.org_id, spec=spec, location="")
     waiting = asyncio.ensure_future(
-        runner_of(api).run(workspace, command(epoch, *argv), seal=NO_SEAL)
+        runner_of(api).run(workspace, command(epoch, *argv, user=user), seal=NO_SEAL)
     )
     await claims(host, waiting)
     return await waiting
 
 
-def command(epoch: int, *argv: str, seconds: float = 30) -> CommandSpec:
+def command(epoch: int, *argv: str, seconds: float = 30, user: str | None = None) -> CommandSpec:
     return CommandSpec(
         argv=argv,
         key=new_id(),
         epoch=epoch,
         deadline=datetime.now(UTC) + timedelta(seconds=seconds),
         effect="unsafe",
+        user=user,
     )
 
 
@@ -469,6 +479,54 @@ async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call
     finally:
         provider = AgentWorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
         await provider.purge(api.owner.org_id, agent_session_id)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_a_relayed_command_runs_on_its_host_as_the_user_it_names(
+    api: Stack, tmp_path: Path
+) -> None:
+    sealed = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    host = await container_host(api, (await api.pool("pool-a")).id, tmp_path)
+    agent_session_id, _ = await bound_on(host, api, sealed)
+    try:
+        ids = ("sh", "-c", "id -u; id -g")
+        apart = await run_on(host, api, agent_session_id, sealed, *ids, user=APART)
+        own = await run_on(host, api, agent_session_id, sealed, *ids)
+        assert (apart.exit_code, apart.stdout) == (0, "65534\n65534\n"), apart.stderr
+        assert (own.exit_code, own.stdout) == (0, "0\n0\n"), own.stderr
+    finally:
+        provider = AgentWorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
+        await provider.purge(api.owner.org_id, agent_session_id)
+
+
+async def test_a_command_that_names_a_user_never_reaches_a_host_that_reads_no_user(
+    api: Stack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host that reads `exec` work from before a command named its user
+    would run one as its workspace's own: it is handed none."""
+    monkeypatch.setattr(host_agent, "EXEC_VERSION", USER_VERSION - 1)
+    relayed = await relay_to(api, tmp_path)
+    marker = tmp_path / "workspace" / "ran"
+    spec = command(relayed.epoch, "touch", str(marker), user=APART)
+    with pytest.raises(CapabilityMissing, match="reads exec work from before a command named"):
+        await relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL)
+    assert await relayed.host.claim_once() is None
+    assert not marker.exists()
+
+
+async def test_a_directory_host_refuses_a_command_that_names_a_user_and_runs_nothing(
+    relayed: Relayed, tmp_path: Path
+) -> None:
+    """Every command of a directory runs as the host's one user: one that
+    names another is refused there, never run as that one."""
+    marker = tmp_path / "workspace" / "ran"
+    spec = command(relayed.epoch, "touch", str(marker), user=APART)
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    assert len(await claims(relayed.host, waiting)) == 1
+    with pytest.raises(Exception, match="as one user, never as 65534:65534"):
+        await waiting
+    assert not marker.exists()
 
 
 @pytest.mark.parametrize("served", [True, False])
