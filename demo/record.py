@@ -19,6 +19,7 @@ in the GIF is printed, so a frame can be cut at each.
 
 import argparse
 import asyncio
+import contextlib
 import json
 import re
 import shutil
@@ -36,6 +37,7 @@ from playwright.async_api import (
     async_playwright,
     expect,
 )
+from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 import scene
 from film import VIEW, Film, join
@@ -89,9 +91,17 @@ async def chat_wide(page: Page, film: Film) -> None:
     film.pause()
     try:
         hide = page.get_by_role("button", name="Hide the panel")
-        if not await hide.is_visible():
-            await page.get_by_role("button", name="Show the panel").click()
-        await hide.click()
+        show = page.get_by_role("button", name="Show the panel")
+        # The pane may open itself at any moment: whichever button shows
+        # is the one to press, until the person has hidden it once.
+        for _ in range(20):
+            if await hide.is_visible():
+                await hide.click()
+                break
+            with contextlib.suppress(PlaywrightTimeout):
+                await show.click(timeout=1_000)
+        else:
+            raise RuntimeError("the session's pane would not hide")
         await expect(hide).to_have_count(0)
         await page.mouse.move(VIEW["width"] - 4, VIEW["height"] // 2)
         await page.wait_for_timeout(400)
@@ -117,7 +127,7 @@ async def drive(page: Page, film: Film) -> None:
 
     async def beat(name: str) -> None:
         # The person reads before they act, so the beat's pause shows it.
-        film.beat(name)
+        await film.beat(page, name)
         await page.wait_for_timeout(READ)
 
     def session(title: str) -> Locator:
@@ -163,8 +173,11 @@ async def drive(page: Page, film: Film) -> None:
         return card.get_by_role("listitem").filter(has_text=title)
 
     await expect(card.get_by_role("listitem")).to_have_count(4, timeout=WAIT)
+    # The last two start once the first two have run: each says so on its
+    # row and in the left bar before the card is read.
     for title in (scene.AGREE, scene.INVOICE):
         await expect(row(title)).to_have_attribute("data-phase", "working", timeout=WAIT)
+        await expect(row_in_bar(title)).to_contain_text("Starting", timeout=WAIT)
     await into_view(card)
     await beat("the card with four rows")
 
@@ -179,7 +192,7 @@ async def drive(page: Page, film: Film) -> None:
     await row_in_bar(scene.AGREE).click()
     await expect(session(scene.AGREE)).to_be_visible(timeout=WAIT)
     await chat_wide(page, film)
-    await expect(chat.get_by_role("region", name=re.compile("^Started 1 sub-agent"))).to_be_visible(timeout=WAIT)
+    await expect(chat.get_by_role("region", name="Started a sub-agent")).to_be_visible(timeout=WAIT)
     await beat("a sub-agent starts its own")
     await expect(chat.get_by_role("region", name=f"Report from {scene.TEST}")).to_be_visible(timeout=WAIT)
     await expect(chat).to_contain_text("They agree", timeout=WAIT)
@@ -218,15 +231,8 @@ async def drive(page: Page, film: Film) -> None:
     await expect(rollup).to_be_visible(timeout=WAIT)
     await into_view(rollup)
     await beat("the roll-up")
-    # The left bar reads a tree's sub-agents while it works or waits, so the
-    # person folds them now, before the lead's own work ends the tree.
-    await bar.get_by_role("button", name=f"Fold the sub-agents of {scene.PROMPT}").click()
-    await expect(bar.get_by_role("list", name=f"Sub-agents of {scene.PROMPT}")).to_have_count(0)
-    await expect(row_in_bar(scene.PROMPT)).to_contain_text("4 sub-agents")
-    await page.mouse.move(VIEW["width"] - 4, VIEW["height"] // 2)
-    await beat("the left bar folded")
-    await to_end(chat)
-    for _ in range(2):
+
+    async def approve() -> None:
         held = chat.get_by_role("region", name="Action required")
         await expect(held).to_be_visible(timeout=WAIT)
         await to_end(chat)
@@ -234,6 +240,17 @@ async def drive(page: Page, film: Film) -> None:
         await held.get_by_role("button", name="Approve", exact=True).click()
         await expect(held).to_have_count(0, timeout=WAIT)
         await page.mouse.move(VIEW["width"] - 4, VIEW["height"] // 2)
+
+    await approve()
+    # The left bar reads a tree's sub-agents while it works or waits, so the
+    # person folds them now, before the lead's own work ends the tree.
+    await bar.get_by_role("button", name=f"Fold the sub-agents of {scene.PROMPT}").click()
+    await expect(bar.get_by_role("list", name=f"Sub-agents of {scene.PROMPT}")).to_have_count(0)
+    await expect(row_in_bar(scene.PROMPT)).to_contain_text("4 sub-agents")
+    await page.mouse.move(VIEW["width"] - 4, VIEW["height"] // 2)
+    await to_end(chat)
+    await beat("the left bar folded")
+    await approve()
     result = chat.get_by_role("region", name="Result")
     await expect(result).to_contain_text("claims succeeded", timeout=WAIT)
     await expect(chat.get_by_role("status")).to_have_text("Done", timeout=WAIT)
@@ -275,7 +292,7 @@ async def record(stack: Stack, frames: Path) -> tuple[Film, list[str]]:
             "websocket", lambda socket: None if inside(socket.url) else faults.append(f"a socket off the origin: {socket.url}")
         )
         await page.goto("/")
-        await film.roll(context, page)
+        await film.roll(page)
         try:
             await drive(page, film)
         except Exception as error:
@@ -304,6 +321,7 @@ def main(argv: list[str]) -> int:
             film, faults = asyncio.run(record(stack, frames))
         finally:
             stack.stop()
+        film.log(folder / "film.tsv")
         for fault in faults:
             print(f"failed: {fault}")
         if faults:
@@ -314,7 +332,7 @@ def main(argv: list[str]) -> int:
         join(timeline, made)
         size = made.stat().st_size
         length = sum(seconds for _, seconds in timeline)
-        print(f"{len(film.frames)} frames painted, {len(timeline)} shown: {length:.1f} s, {size / 1e6:.2f} MB")
+        print(f"{len(film.frames)} frames taken, {len(timeline)} shown: {length:.1f} s, {size / 1e6:.2f} MB")
         for at, name in marks:
             print(f"beat at {at:5.1f} s: {name}")
         if size >= LIMIT:

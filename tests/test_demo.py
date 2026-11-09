@@ -49,7 +49,7 @@ def test_a_still_screen_is_cut_short_and_a_beat_pauses(tmp_path: Path) -> None:
     first, second, third = (tmp_path / f"{n}.png" for n in range(3))
     # A change, then ten seconds of a still screen, on which a beat settles.
     shown.frames = [(0.0, first), (0.1, second), (10.1, third)]
-    shown.beats = [(0.0, "a beat")]
+    shown.beats = [(0.1, "a beat")]
     timeline, marks = shown.timeline()
     seconds = dict(timeline)
     step = 1 / film.FPS
