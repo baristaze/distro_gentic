@@ -1,6 +1,7 @@
 """The shipped agents as a root wires them: the kinds, the tools they call
 beside the adopter's, the forge's comment among them, a product's own
-readers joined to the platform assistant, and the refusal, at boot, of a
+readers joined to the platform assistant and its section of the object
+model named in the assistant's prompt, and the refusal, at boot, of a
 catalog that would let the assistant, the ops analyst, or the reviewer
 reach past what it may. A process hands its root a `PlatformAgents`,
 which carries the assistant's corpus, read once at boot from the
@@ -210,6 +211,35 @@ def with_assistant_tools(
         return tuple(agent_kinds)
     widened = current.model_copy(update={"tools": (*current.tools, *added)})
     return tuple(widened if kind == current else kind for kind in agent_kinds)
+
+
+def with_object_model(
+    agent_kinds: Iterable[AgentKind], path: str | None, corpus: Corpus
+) -> tuple[AgentKind, ...]:
+    """The kinds with the platform assistant's current version told where a
+    product's own section of the object model is: one more prompt after the
+    platform's (`kinds.PRODUCT_OBJECT_MODEL`), so it explains the product's
+    things from that document as it explains the platform's from
+    `docs/object-model.md`. The versions before it keep their prompts, and a
+    product that names none changes no kind. A document the corpus does not
+    hold is `UnsafeConfiguration`: the corpus is what the knowledge map lists
+    for the tenant's users and nothing else, so a product lists its document
+    there."""
+    if path is None:
+        return tuple(agent_kinds)
+    if path not in {document.path for document in corpus.documents}:
+        raise UnsafeConfiguration(
+            f"the slot names {path} as the product's object model, which the assistant's "
+            "corpus does not hold: the knowledge map lists no such document for the tenant's users"
+        )
+    current = kinds.PLATFORM_ASSISTANT_KIND
+    prompt = kinds.PRODUCT_OBJECT_MODEL.format(path=path)
+    return tuple(
+        kind.model_copy(update={"prompts": (*kind.prompts, prompt)})
+        if (kind.name, kind.version) == (current.name, current.version)
+        else kind
+        for kind in agent_kinds
+    )
 
 
 def refuse_reach(agent_kinds: Iterable[AgentKind], catalog: Iterable[ToolInterface]) -> None:
