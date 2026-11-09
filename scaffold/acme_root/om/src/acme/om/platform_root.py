@@ -116,6 +116,7 @@ from acme.om.platform_agents.catalog import (
     PlatformAgents,
     refuse_reach,
     with_assistant_tools,
+    with_object_model,
     with_shipped,
 )
 from acme.om.platform_agents.impl.gate import ResultGateReviewImpl
@@ -257,7 +258,12 @@ class ProductKinds:
     of its own whose workspace starts from the workspace base its session's
     agent project names (`workspace_bases`), as the platform names its software engineer
     (`platform_agents.kinds.WORKSPACE_BASE_KINDS`); a pair that is no agent
-    kind of its own is refused.
+    kind of its own is refused. It names the document that holds its own
+    section of the object model (`object_model`), by its path in the
+    knowledge map, which lists it for the tenant's users: the platform
+    assistant's current version reads it beside the platform's
+    (`docs/object-model.md`), which a product never edits, and a document
+    the assistant's corpus does not hold is refused at boot.
     Its agent kinds join the platform's catalog, which refuses a version
     declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
@@ -280,6 +286,7 @@ class ProductKinds:
     executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
     actions: ProductActions = no_actions
     assistant_tools: tuple[str, ...] = ()
+    object_model: str | None = None
     resources: ProductResources = no_resources
     toolsets: tuple[Toolset, ...] = ()
     graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
@@ -526,11 +533,13 @@ class PlatformRootOptions:
 
     `platform_agents` ships the platform's agents, with the corpus its
     assistant answers from: their kinds join `agent_kinds` and their tools
-    join `tool_catalog`, ahead of the adopter's, and the product's
-    `assistant_tools` join the assistant's. A catalog that holds two tools
-    of one name, or lets the assistant reach past reading and handing work
-    on, or a slot that names a tool the catalog does not hold, is refused
-    at boot (`UnsafeConfiguration`). None ships none. `intake` answers the
+    join `tool_catalog`, ahead of the adopter's, the product's
+    `assistant_tools` join the assistant's, and its `object_model` is named
+    in the assistant's prompt. A catalog that holds two tools of one name,
+    or lets the assistant reach past reading and handing work on, a slot
+    that names a tool the catalog does not hold, or one that names an
+    object model the corpus does not hold, is refused at boot
+    (`UnsafeConfiguration`). None ships none. `intake` answers the
     intake the process builds over these managers, where the software
     engineer's pull request is bound to its session; None binds nothing,
     so that tool opens none. `agent_knowledge` answers the agent knowledge
@@ -706,7 +715,11 @@ class RootHooksPlatformImpl(RootHooksInterface):
         if options.platform_agents is not None:
             # Their tools read the managers built below, so each edge is bound
             # at call time.
-            agent_kinds = (*with_assistant_tools(SHIPPED, product.assistant_tools), *agent_kinds)
+            shipped = with_assistant_tools(SHIPPED, product.assistant_tools)
+            shipped = with_object_model(
+                shipped, product.object_model, options.platform_agents.corpus
+            )
+            agent_kinds = (*shipped, *agent_kinds)
             tool_catalog = with_shipped(
                 options.platform_agents,
                 tool_catalog,

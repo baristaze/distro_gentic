@@ -213,6 +213,10 @@ error its work failed with on its last attempt.
 
 ## The product's own
 
-A product built on Acme adds its own section below this one: each of its
-entities, what owns it, its states and what moves it, every state that
-waits and what clears it, and the reader that shows it.
+A product built on Acme writes its own section in a document of its
+own, never in this one, in the same shape: each of its entities, what
+owns it, its states and what moves it, every state that waits and what
+clears it, and the reader that shows it. It lists that document for the
+tenant's users in the knowledge map, and names it in its slot
+(`ProductKinds.object_model`). The platform assistant then reads it
+beside this one.

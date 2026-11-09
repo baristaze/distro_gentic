@@ -1,6 +1,9 @@
 """The platform assistant's readers, over memory: its registry holds them
 and the tools a product's slot names, and a slot that names a tool it may
-not call is refused at start; a reader refuses an input it does not
+not call is refused at start; a product's own section of the object model,
+named in its slot, is in the assistant's corpus and its prompt, one the
+corpus lacks is refused, and a slot that names none changes neither; a
+reader refuses an input it does not
 declare before it reads anything; a list of sessions filters by park
 reason and agent project and says where to read on; read_wait names the offline
 host that holds a session's workspace; and the object model names every
@@ -30,7 +33,12 @@ from acme.om.exceptions import UnsafeConfiguration
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.types.pool import HostPool
 from acme.om.platform_agents import kinds
-from acme.om.platform_agents.catalog import PlatformAgents, read_corpus, with_assistant_tools
+from acme.om.platform_agents.catalog import (
+    PlatformAgents,
+    read_corpus,
+    with_assistant_tools,
+    with_object_model,
+)
 from acme.om.platform_agents.kinds import (
     ASSISTANT_READERS,
     PLATFORM_ASSISTANT_KIND,
@@ -38,6 +46,7 @@ from acme.om.platform_agents.kinds import (
     SHIPPED,
 )
 from acme.om.platform_agents.tools.base import NativeToolImpl
+from acme.om.platform_agents.types.corpus import Corpus
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,
@@ -48,6 +57,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import ToolPolicyLayer
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
+from acme.om.windows.rules import DATA_NOTICE
 
 from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_agent_session
@@ -172,6 +182,109 @@ def test_a_slot_that_names_a_tool_the_assistant_may_not_call_is_refused_at_start
                 product_kinds=product,
             ),
         )
+
+
+# Check: a product that names its section of the object model in its slot
+# has that document in the assistant's corpus and named in its prompt.
+
+PRODUCT_MODEL = "docs/product/object-model.md"
+
+
+def a_products_corpus(root: Path) -> Corpus:
+    """A copy's corpus: the platform's object model and the product's own
+    section in a document beside it, both listed for the tenant's users."""
+    (root / "docs" / "product").mkdir(parents=True)
+    (root / "docs" / "object-model.md").write_text(OBJECT_MODEL.read_text())
+    (root / PRODUCT_MODEL).write_text(
+        "# The product's object model\n\n## Tallies\n\nA **tally** counts what the product "
+        "holds. It waits while its count is open, and closes when its count is read.\n"
+    )
+    (root / "llms.txt").write_text(
+        "## Tenant users and admins\n\n"
+        "- [The object model](docs/object-model.md): each thing\n"
+        f"- [The product's object model]({PRODUCT_MODEL}): each of the product's things\n"
+    )
+    return read_corpus(root)
+
+
+async def ask(platform: Platform, query: str) -> tuple[list[str], str]:
+    """An assistant's session asked why a tally waits, which searches the
+    corpus for `query`: the system layer of its first request, and what the
+    search answered."""
+    agent_session_id = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(agent_session_id, "Why does my tally wait?")
+    platform.anthropic.add(
+        reply(said("Let me look."), calls(kinds.SEARCH_CORPUS, "use_search", query=query)),
+        reply(said("It waits while its count is open.")),
+    )
+    await platform.managers.loop.run(platform.owner, agent_session_id)
+    failure, found = await platform.answer(agent_session_id, "use_search")
+    assert failure is None
+    return [block.text for block in platform.anthropic.calls[0].system], found
+
+
+async def test_a_product_that_names_its_object_model_has_the_assistant_search_and_name_it(
+    tmp_path: Path,
+) -> None:
+    corpus = a_products_corpus(tmp_path / "repo")
+    product = ProductKinds(object_model=PRODUCT_MODEL)
+    platform = platform_over(tmp_path, corpus=corpus, product_kinds=product)
+
+    system, found = await ask(platform, "tally waits count open")
+
+    # The search answers from the product's document, cited by its path.
+    assert f'"path":"{PRODUCT_MODEL}"' in found.replace(" ", "")
+    # The prompt names it after the platform's own, which stay as they were.
+    own = list(PLATFORM_ASSISTANT_KIND.prompts)
+    assert system[: len(own)] == own
+    assert system[len(own)] == kinds.PRODUCT_OBJECT_MODEL.format(path=PRODUCT_MODEL)
+    assert system[len(own)].startswith(PRODUCT_MODEL)
+    # The version before keeps its prompts, as a session still on it does.
+    assert PLATFORM_ASSISTANT_V1 in with_object_model(SHIPPED, PRODUCT_MODEL, corpus)
+
+
+def test_a_slot_that_names_an_object_model_the_corpus_lacks_is_refused_at_start(
+    tmp_path: Path,
+) -> None:
+    # The corpus is the map's list for the tenant's users and nothing else,
+    # so a document the map does not list there is never read.
+    with pytest.raises(UnsafeConfiguration, match=PRODUCT_MODEL):
+        build_platform_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            platform_root_options=PlatformRootOptions(
+                platform_agents=PlatformAgents(corpus=CORPUS),
+                product_kinds=ProductKinds(object_model=PRODUCT_MODEL),
+            ),
+        )
+
+
+# Check: a product that names none gets the assistant's prompt and corpus
+# unchanged.
+
+
+async def test_a_product_that_names_no_object_model_leaves_the_prompt_and_the_corpus_as_shipped(
+    tmp_path: Path,
+) -> None:
+    corpus = a_products_corpus(tmp_path / "repo")
+    product = ProductKinds(
+        tools=tools_of(a_reader("read_spend_tally")), assistant_tools=("read_spend_tally",)
+    )
+    platform = platform_over(tmp_path, corpus=corpus, product_kinds=product)
+
+    system, found = await ask(platform, "tally waits count open")
+
+    # The system layer is the platform's prompts and the data notice, byte
+    # for byte, so every product that names none keeps its cached prefix.
+    assert system == [*PLATFORM_ASSISTANT_KIND.prompts, DATA_NOTICE]
+    assert with_object_model(SHIPPED, None, corpus) == SHIPPED
+    # The corpus is the map's list, which the slot neither adds to nor
+    # takes from.
+    assert [document.path for document in corpus.documents] == [
+        "docs/object-model.md",
+        PRODUCT_MODEL,
+    ]
+    assert f'"path":"{PRODUCT_MODEL}"' in found.replace(" ", "")
 
 
 # Check: a reader's input from the model is refused when it is malformed,
