@@ -6,6 +6,7 @@ from uuid import UUID, uuid5
 
 from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.attribution.rules import principal_of
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import AppContext, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
@@ -250,6 +251,7 @@ class HostsManagerImpl(HostsManagerInterface):
             kind=kind,
             digest=digest,
             expires_at=now + self._options.enrollment_ttl,
+            key_id=principal_of(ctx).key_id,
         )
         rows = (
             outbox_row(ctx, TOKEN_ISSUED_KIND, token.id, {"pool_id": str(pool_id), "kind": kind}),
@@ -620,7 +622,9 @@ class HostsManagerImpl(HostsManagerInterface):
         """The live enrollment token behind `token`, and its tenant. A token
         enrolls only while the person who issued it may still issue one: one
         who left the tenant, or no longer manages its members, lets nothing
-        in with a token issued before."""
+        in with a token issued before. A token issued on an API key enrolls
+        at a role no higher than the key's, and nothing once the key is
+        revoked or expired."""
         if not token.startswith(ENROLLMENT_PREFIX):
             raise InvalidCredential("a claimant enrolls with an enrollment token")
         found = await self._storage.read_enrollment_token_by_digest(hash_token(token))
@@ -631,10 +635,13 @@ class HostsManagerImpl(HostsManagerInterface):
             raise CredentialExpired("enrollment token expired or revoked")
         try:
             issuer = await self._tenancy.delegated_context(
-                rctx, org_id, enrollment_token.created_by
+                rctx, org_id, enrollment_token.created_by, enrollment_token.key_id
             )
         except NotAuthorized:
-            raise CredentialExpired("enrollment token's issuer left the tenant") from None
+            gone = "issuer left the tenant"
+            if enrollment_token.key_id is not None:
+                gone += ", or the API key it was issued on no longer holds"
+            raise CredentialExpired(f"enrollment token's {gone}") from None
         if not issuer.has(Permission.MANAGE_MEMBERS):
             raise CredentialExpired("enrollment token's issuer no longer manages the members")
         return org_id, enrollment_token
