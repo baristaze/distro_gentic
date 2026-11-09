@@ -2,8 +2,9 @@
 
 The owner it plays as is at example.com or refused, so no frame of the
 GIF shows a real address, and the copy is refused unless its seed read
-the forge's twin. The film plays a run faster, cuts a still screen
-short, and pauses on each beat.
+the forge's twin. A request of the page off the portal's origin is
+refused. The film plays a run faster, cuts a still screen short, and
+pauses on each beat.
 """
 
 from __future__ import annotations
@@ -42,6 +43,24 @@ def test_a_copy_seeded_without_the_twin_is_refused(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="ACME_FORGE_INTEGRATION=twin"):
         a_copy(tmp_path, "ACME_AGENT_WORKSPACE_BACKEND=host\n").seeded_for_scene()
     a_copy(tmp_path, "ACME_FORGE_INTEGRATION=twin  # the seed's\nACME_AGENT_WORKSPACE_BACKEND=host\n").seeded_for_scene()
+
+
+@pytest.mark.parametrize(
+    ("url", "kept"),
+    [
+        ("http://127.0.0.1:5183/sessions/1", True),
+        ("ws://127.0.0.1:5183/v1/realtime", True),
+        ("http://127.0.0.1:8110/v1/agent-sessions", False),
+        ("https://fonts.googleapis.com/css2", False),
+        ("http://localhost:5183/", False),
+    ],
+)
+def test_a_request_off_the_portals_origin_is_refused(tmp_path: Path, url: str, kept: bool) -> None:
+    on = stack.Stack(a_copy(tmp_path, "ACME_PORT=8110\n"), tmp_path, 5183)
+    try:
+        assert on.on_origin(url) is kept
+    finally:
+        on.repositories.rmdir()
 
 
 def test_a_still_screen_is_cut_short_and_a_beat_pauses(tmp_path: Path) -> None:

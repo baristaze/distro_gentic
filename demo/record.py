@@ -26,7 +26,6 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
 
 from playwright.async_api import (
     BrowserContext,
@@ -262,11 +261,7 @@ async def drive(page: Page, film: Film) -> None:
 async def record(stack: Stack, frames: Path) -> tuple[Film, list[str]]:
     copy = stack.copy
     faults: list[str] = []
-    origin = urlparse(stack.portal).netloc
-
-    def inside(url: str) -> bool:
-        parts = urlparse(url)
-        return parts.scheme in ("http", "https", "ws", "wss") and parts.netloc == origin
+    inside = stack.on_origin
 
     async def guard(route: Route) -> None:
         if inside(route.request.url):

@@ -18,6 +18,7 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 import scene
 
@@ -101,6 +102,13 @@ class Stack:
         # The bare repositories the runner clones from. The pull request's
         # card shows their path, so it is a short one that names nobody.
         self.repositories = Path(tempfile.mkdtemp(prefix="ledger-", dir="/tmp"))
+
+    def on_origin(self, url: str) -> bool:
+        """Whether a request of the page stays on the portal's origin, the
+        dev server, which forwards the API and its socket; the API's own
+        port is off it, and so is any other host."""
+        parts = urlparse(url)
+        return parts.scheme in ("http", "ws") and parts.netloc == urlparse(self.portal).netloc
 
     def environment(self) -> dict[str, str]:
         """What each process runs with: the shell's basics and the scene's
