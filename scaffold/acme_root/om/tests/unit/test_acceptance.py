@@ -236,7 +236,9 @@ async def test_a_hidden_check_whose_runner_runs_the_heads_code_is_refused() -> N
     together = COMPLETE.model_copy(update={"head": (), "command": ("complete-suite", "{out}")})
     hidden = EXPORT.hidden.model_copy(update={"checks": (together,)})
     scenario = EXPORT.model_copy(update={"hidden": hidden})
-    with pytest.raises(ValidationFailed, match="head's code in its runner: \\['export-complete'\\]"):
+    with pytest.raises(
+        ValidationFailed, match="head's code in its runner: \\['export-complete'\\]"
+    ):
         await run.harness.judge(run.ctx, scenario, run.session, result, surfaces())
 
 

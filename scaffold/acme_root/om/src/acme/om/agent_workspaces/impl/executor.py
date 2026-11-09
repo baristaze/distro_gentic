@@ -343,7 +343,9 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
             raise Unavailable(f"the tree did not unpack in its instance: {unpacked.stderr[-300:]}")
         root = unpacked.stdout.strip().splitlines()[-1]
         if any(check.head for check in request.checks):
-            own = await self._command(transport, workspace, ("id", "-u"), ".", self._options.setup_time)
+            own = await self._command(
+                transport, workspace, ("id", "-u"), ".", self._options.setup_time
+            )
             uid = self._options.head_user.split(":", 1)[0]
             if own.exit_code != 0 or own.stdout.strip() in ("", uid):
                 raise Unavailable(
@@ -426,7 +428,9 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                 transport, workspace, ("sh", "-c", OPEN, "sh", work), ".", self._options.setup_time
             )
             if opened.exit_code != 0:
-                raise Unavailable(f"no folder for a head part in its instance: {opened.stderr[-300:]}")
+                raise Unavailable(
+                    f"no folder for a head part in its instance: {opened.stderr[-300:]}"
+                )
             apart = tuple(part.format(**fields) for part in check.head)
             ran = await self._command(
                 transport,

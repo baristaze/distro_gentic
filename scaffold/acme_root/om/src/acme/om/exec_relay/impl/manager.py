@@ -644,7 +644,9 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 "host of its pool; its workspace is made again before its calls run"
             )
         if isinstance(call.request, RunRequest) and call.request.user is not None:
-            await self._reads_user(ctx, binding.instance_of or call.agent_session_id, binding.host_id)
+            await self._reads_user(
+                ctx, binding.instance_of or call.agent_session_id, binding.host_id
+            )
         contents = await self._contents(
             ctx, call.agent_session_id, item_id, 1, call.request, content
         )
@@ -1310,8 +1312,10 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
         is from before a command named one: it would run as the workspace's
         own user there."""
         placed = await self._hosts.work_placement(ctx, agent_session_id)
-        status = None if placed.pool is None else await self._hosts.get_host(
-            ctx, placed.pool.id, host_id
+        status = (
+            None
+            if placed.pool is None
+            else await self._hosts.get_host(ctx, placed.pool.id, host_id)
         )
         if status is None or status.host.exec_version < USER_VERSION:
             raise UserNotRead(

@@ -218,9 +218,7 @@ async def run_on(
     return await waiting
 
 
-def command(
-    epoch: int, *argv: str, seconds: float = 30, user: str | None = None
-) -> CommandSpec:
+def command(epoch: int, *argv: str, seconds: float = 30, user: str | None = None) -> CommandSpec:
     return CommandSpec(
         argv=argv,
         key=new_id(),
