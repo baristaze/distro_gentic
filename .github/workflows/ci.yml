@@ -127,6 +127,71 @@ jobs:
         working-directory: ${{ env.COPY }}
         run: make infra-down || true
 
+  terraform:
+    # A copy of the scaffold passes the Terraform tests its own CI runs, so
+    # a release never hands a product a red one. Each root and module that
+    # holds a test is found by its test files, never listed, so a new one
+    # is never left out. The tests plan under mock providers: init skips
+    # the backend, and the job holds no cloud credential.
+    name: a copy of the scaffold as ${{ matrix.name }} passes its Terraform tests
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # As the scaffold job's: the longer name grows every name built from it.
+        name: [distro, distro_operations]
+    env:
+      COPY: ${{ github.workspace }}/../${{ matrix.name }}
+      # Each folder's init links the providers one download holds.
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/../terraform-plugins
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # new.py formats the copy by the ruff its uv.lock names, through uv.
+      - name: read the tool pins
+        id: pins
+        run: echo "uv=$(sed -n 's|^uv==||p' .github/pins/requirements.txt)" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ steps.pins.outputs.uv }}
+          enable-cache: true
+          cache-dependency-glob: scaffold/acme_root/uv.lock
+      - name: copy the scaffold under a name of its own
+        run: python3 scaffold/new.py "$COPY"
+      # The tests run on the Terraform the copy's own CI runs them on.
+      - name: read the copy's Terraform version
+        id: terraform
+        run: |
+          version="$(sed -n 's|^ *terraform_version: *"\([^"]*\)".*|\1|p' "$COPY/.github/workflows/ci.yml" | head -n 1)"
+          test -n "$version" || { echo "::error::no terraform_version in the copy's CI"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.terraform.outputs.version }}
+          terraform_wrapper: false
+      - name: terraform test in each root and module that holds a test
+        working-directory: ${{ env.COPY }}
+        run: |
+          # terraform test reads the folder's own *.tftest.hcl and its tests/.
+          dirs="$(find deployment/terraform -name '*.tftest.hcl' -exec dirname {} \; | sed 's|/tests$||' | sort -u)"
+          test -n "$dirs" || { echo "::error::no Terraform test in the copy"; exit 1; }
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          passed="" failed=""
+          for dir in $dirs; do
+            echo "::group::terraform test in $dir"
+            if terraform -chdir="$dir" init -backend=false -input=false && terraform -chdir="$dir" test; then
+              passed="$passed $dir"
+            else
+              failed="$failed $dir"
+            fi
+            echo "::endgroup::"
+          done
+          for dir in $passed; do echo "passed: $dir"; done
+          for dir in $failed; do echo "::error::terraform test failed in $dir"; done
+          test -z "$failed"
+
   release-before:
     # A copy's release-before job, on a branch that adds a migration. It runs
     # the release before's integration suite a second time, so it is a job of
