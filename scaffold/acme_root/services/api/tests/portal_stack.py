@@ -7,7 +7,8 @@ the browser check and by no gate:
 
 Both register the scene's software engineer and analysis beside the product's
 kinds: the platform's own, each in a directory on this host in place of
-its container, the software engineer also writing a plan and asking its person.
+its container, each also asking its person, and the software engineer
+writing a plan.
 The software engineer's scene starts two analysis sub-agents, within the tree the
 platform's kinds root. The runner runs one loop at a time, since the
 scripted model answers every session from one script: so each turn goes
@@ -53,7 +54,11 @@ def scene_kinds() -> ProductKinds:
         }
     )
     analysis = ANALYSIS_KIND.model_copy(
-        update={"version": ANALYSIS_KIND.version + 1, "isolation": host}
+        update={
+            "version": ANALYSIS_KIND.version + 1,
+            "isolation": host,
+            "tools": (*ANALYSIS_KIND.tools, ASK_PERSON),
+        }
     )
     return ProductKinds(agents=(*PRODUCT_KINDS.agents, software_engineer, analysis))
 
