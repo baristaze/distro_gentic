@@ -589,8 +589,19 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
     isolation=NO_AGENT_WORKSPACE,
 )
 """The platform assistant. A product adds its own readers to it through its
-slot (`ProductKinds.assistant_tools`), which the root joins to this version
-alone."""
+slot (`ProductKinds.assistant_tools`), and names the document of its own
+section of the object model there (`ProductKinds.object_model`); the root
+joins both to this version alone."""
+
+PRODUCT_OBJECT_MODEL = (
+    "{path} holds the product's own part of the object model, in the shape of "
+    "docs/object-model.md: what each of its things is, what owns it, what moves it between "
+    "its states, what each wait waits on, and what clears it and who may. Explain the "
+    "product's own things from it."
+)
+"""The prompt the platform assistant's current version takes after its own
+when a product names its section of the object model, `{path}` that
+document's path in the knowledge map."""
 
 REVIEWER_PROMPT = (
     "You review one pull request, named in what you were asked as owner/repo#12. Read it with "

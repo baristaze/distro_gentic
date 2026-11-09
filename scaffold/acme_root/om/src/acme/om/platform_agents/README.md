@@ -119,7 +119,8 @@ calls, and holds its workspace warm for a while after a loop.
   listed only for the platform's own people is not in it. Among it is
   [the object model](../../../../../docs/object-model.md): each entity,
   its states and what moves it, and every park reason with what clears
-  it, who may, and the reader that shows it.
+  it, who may, and the reader that shows it. A product's own section is
+  a document of its own, which the map lists too and its slot names.
 - **A validation session**: one check of an agent project's policy, run
   on a fresh executor with no agent. It holds the agent project, the
   check, the delivered commit it runs at, and the base its checks,
@@ -274,7 +275,10 @@ calls, and holds its workspace warm for a while after a loop.
 A process ships these agents by handing its root the corpus
 (`PlatformAgents`); their kinds and tools join the adopter's, and the
 tools a product's slot names (`ProductKinds.assistant_tools`) join the
-assistant's current version. The toolsets a product's slot declares
+assistant's current version. The document of the product's own section
+of the object model that the slot names (`ProductKinds.object_model`)
+is named in that version's prompt, after the platform's, and one the
+corpus does not hold is refused at boot. The toolsets a product's slot declares
 (`ProductKinds.toolsets`) join the platform's, and the session runner's
 held-workspace sweep reads each session's kind's warm grace from the slot
 (`ProductKinds.warm_grace`). The tools that read a manager take it late,
