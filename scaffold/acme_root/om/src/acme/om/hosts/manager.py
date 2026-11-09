@@ -76,8 +76,9 @@ class HostsManagerInterface(ABC):
         """A token that enrolls claimants of `kind`, a registered claimant
         kind and a host unless named, into the pool until it expires or is revoked, in the clear
         once; only its digest is kept. Requires the members permission.
-        NotFound when the tenant holds no such pool; ValidationFailed for a
-        kind this process does not know."""
+        Issued on an API key, it keeps the key, and enrolls only while the
+        key holds. NotFound when the tenant holds no such pool;
+        ValidationFailed for a kind this process does not know."""
         ...
 
     @abstractmethod

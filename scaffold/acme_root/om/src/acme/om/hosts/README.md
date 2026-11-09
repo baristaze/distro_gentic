@@ -13,7 +13,9 @@ enrolls and calls the same way, as a kind of its own
 - **An enrollment token**: issued by an owner or an admin for one pool
   and one claimant kind, a host unless it names a product's. Every
   claimant of that kind that presents it before it expires (a day) or is
-  revoked enrolls into that pool. Only its digest is kept.
+  revoked enrolls into that pool. Only its digest is kept. One issued on
+  an API key keeps the key, and enrolls nothing once the key is revoked
+  or expired.
 - **A host**: one enrolled machine. It names its pool, the token it
   enrolled with, what it advertised at its last call, the version of
   `exec` work it reads, and when it last called.
