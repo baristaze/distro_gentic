@@ -183,7 +183,8 @@ async def test_a_claim_names_only_its_version_and_is_handed_only_its_pools_work(
     )
     assert claimed.status_code == 200, claimed.text
     item = claimed.json()["item"]
-    assert (item["id"], item["kind"], item["wire_version"]) == (str(mine.id), "WORKSPACE", 2)
+    written = rules.WIRE_VERSION[WireType.EXEC]
+    assert (item["id"], item["kind"], item["wire_version"]) == (str(mine.id), "WORKSPACE", written)
     assert item["payload"]["pool_id"] == ours
     nothing = await client.post(
         "/v1/hosts/me/claims", headers=bearer(host["token"]), json={"exec_version": 2}
