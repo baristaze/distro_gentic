@@ -1020,18 +1020,15 @@ async def test_an_item_that_settles_leaves_no_file_behind_and_its_output_goes_wi
     with pytest.raises(HostRefused):
         await refused
     assert await under(wall) == []
-    stopped = asyncio.ensure_future(runner.write_file(wall.workspace, "d.md", b"d", wall.epoch))
-    for _ in range(500):
-        if await under(wall):
-            break
-        await asyncio.sleep(0.002)
+    # Its runner waits on the item before the cancel, so the cancel sends the
+    # stop, and the stop settles the item before the cancel ends.
+    waiter, progress = flaky(wall)
+    stopped = asyncio.ensure_future(waiter.write_file(wall.workspace, "d.md", b"d", wall.epoch))
+    await asyncio.wait_for(progress.read.wait(), 5)
+    assert len(await under(wall)) == 1
     stopped.cancel()
     with pytest.raises(asyncio.CancelledError):
         await stopped
-    for _ in range(500):
-        if not await under(wall):
-            break
-        await asyncio.sleep(0.002)
     assert await under(wall) == [], "a stop settles it, and its file goes"
     # A command's output is its record: it stays until its session's purge.
     ran = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
