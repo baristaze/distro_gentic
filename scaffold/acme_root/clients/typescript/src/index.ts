@@ -11,6 +11,7 @@ export type * as attribution from "./types/attribution";
 export type * as change_events from "./types/change_events";
 export type * as common from "./types/common";
 export type * as evidence from "./types/evidence";
+export type * as hosts from "./types/hosts";
 export type * as levers from "./types/levers";
 export type * as matrix from "./types/matrix";
 export type * as media from "./types/media";
