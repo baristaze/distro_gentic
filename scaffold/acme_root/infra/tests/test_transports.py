@@ -191,6 +191,10 @@ def kept_at(records: Path) -> bytes:
     return b"".join(path.read_bytes() for path in sorted(records.rglob("*.json")))
 
 
+APART = "65534:65534"
+"""A user apart from a container's own, by its id and its group's."""
+
+
 def command(*argv: str, epoch: int = 1, seconds: float = 30, **fields: object) -> CommandSpec:
     return CommandSpec.model_validate(
         {
@@ -325,14 +329,19 @@ class TransportContract:
         assert alive == [], f"left running: {alive}"
 
     async def _alive(
-        self, transport: TransportInterface, workspace: AgentWorkspace, pids: list[str]
+        self,
+        transport: TransportInterface,
+        workspace: AgentWorkspace,
+        pids: list[str],
+        user: str | None = None,
     ) -> list[str]:
-        """The pids still running; a killed process may linger a moment
-        before its new parent reaps it."""
+        """The pids still running, asked as `user`, who may signal them; a
+        killed process may linger a moment before its new parent reaps it."""
         check = 'for p in "$0" "$@"; do if kill -0 "$p" 2>/dev/null; then echo "$p"; fi; done'
         alive = pids
         for _ in range(30):
-            found = await transport.run(workspace, command("sh", "-c", check, *pids), seal=SEAL)
+            asked = command("sh", "-c", check, *pids, user=user)
+            found = await transport.run(workspace, asked, seal=SEAL)
             alive = found.stdout.split()
             if not alive:
                 return []
@@ -468,6 +477,16 @@ def engine_credential(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class LocalContract(TransportContract):
     """What the local transport holds, as this process and as an account."""
+
+    async def test_a_command_that_names_a_user_is_refused_and_runs_nothing(
+        self, transport: TransportInterface, workspace: AgentWorkspace
+    ) -> None:
+        """Every command runs as one user here: one that names another is
+        refused, never run as that one."""
+        with pytest.raises(CapabilityMissing, match="as one user, never as 65534:65534"):
+            await transport.run(workspace, command("touch", "ran", user=APART), seal=SEAL)
+        with pytest.raises(InfraNotFound):
+            await transport.read_file(workspace, "ran", 10)
 
     async def test_a_command_is_over_when_its_own_process_exits(
         self, transport: TransportInterface, workspace: AgentWorkspace
@@ -782,6 +801,30 @@ class TestTransportContainer(TransportContract):
         result = await transport.run(workspace, command(self.python, "-c", reach), seal=SEAL)
         assert result.exit_code != 0
 
+    async def test_a_command_runs_as_the_user_it_names_and_else_as_the_containers_own(
+        self, transport: TransportInterface, workspace: AgentWorkspace
+    ) -> None:
+        ids = "id -u; id -g"
+        own = await transport.run(workspace, command("sh", "-c", ids), seal=SEAL)
+        apart = await transport.run(workspace, command("sh", "-c", ids, user=APART), seal=SEAL)
+        assert (own.exit_code, own.stdout) == (0, "0\n0\n"), own.stderr
+        assert (apart.exit_code, apart.stdout) == (0, "65534\n65534\n"), apart.stderr
+
+    async def test_a_tree_run_as_a_user_of_its_own_ends_at_the_deadline(
+        self, transport: TransportInterface, workspace: AgentWorkspace
+    ) -> None:
+        """The container's own user holds no capability to signal another
+        user's processes, so the tree ends as the user it ran as."""
+        opened = await transport.run(workspace, command("mkdir", "-m", "1777", "apart"), seal=SEAL)
+        assert opened.exit_code == 0, opened.stderr
+        spawns = command(self.python, "-c", SPAWNS_A_TREE, cwd="apart", seconds=3, user=APART)
+        result = await transport.run(workspace, spawns, seal=SEAL)
+        assert result.timed_out and result.exit_code is None
+        pids = (await transport.read_file(workspace, "apart/tree.pids", 1000)).decode().split()
+        assert len(pids) == 6, pids
+        alive = await self._alive(transport, workspace, pids, APART)
+        assert alive == [], f"left running: {alive}"
+
     async def test_a_commands_own_variables_stay_inside_the_container(
         self, transport: TransportInterface, workspace: AgentWorkspace
     ) -> None:
@@ -963,6 +1006,14 @@ class TestTransportVmTwin(TransportContract):
         vms, workspace = provided
         timeout = timedelta(seconds=60)
         return TransportVmImpl(records, secrets_for(workspace.org_id), broker, vms, timeout)
+
+    async def test_a_command_that_names_a_user_is_refused_and_runs_nothing(
+        self, transport: TransportInterface, workspace: AgentWorkspace
+    ) -> None:
+        with pytest.raises(CapabilityMissing, match="as one user, never as 65534:65534"):
+            await transport.run(workspace, command("touch", "ran", user=APART), seal=SEAL)
+        with pytest.raises(InfraNotFound):
+            await transport.read_file(workspace, "ran", 10)
 
 
 def lima_runs() -> bool:

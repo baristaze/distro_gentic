@@ -851,6 +851,7 @@ async def _operate(
                     "deadline": detail.deadline,
                     "max_output": request.get("max_output", 1_000_000),
                     "effect": detail.effect,
+                    "user": request.get("user"),
                 }
             )
             ran = await transport.run(workspace, command, on_output, seal=NO_SEAL)

@@ -63,9 +63,14 @@ __all__ = [
     "file_offset",
     "relative_path",
     "require_mode",
+    "require_no_user",
 ]
 
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+USER = r"^[0-9]{1,10}:[0-9]{1,10}$"
+"""A user a command runs as: its id and its group's id, so no image's
+names decide who it is, and no group is left to a default."""
 
 SCAN_SLICE = 1 << 20
 """The most bytes of a part one search of a snapshot's scan reads: a part of
@@ -155,6 +160,11 @@ class CommandSpec(InfraModel):
     # it on another machine, and may lose it midway, repeats only what a
     # repeat cannot harm; a command that names no effect is never repeated.
     effect: Literal["read_only", "idempotent", "unsafe"] = "unsafe"
+    # The user it runs as inside its workspace, by its id and its group's
+    # id; None runs it as the workspace's own user. A transport that runs
+    # every command as one user refuses a command that names another
+    # (`CapabilityMissing`), never runs it as its own.
+    user: str | None = Field(default=None, pattern=USER)
 
     @model_validator(mode="after")
     def _one_name_one_variable(self) -> Self:
@@ -231,6 +241,16 @@ def require_mode(workspace: AgentWorkspace, mode: IsolationMode, transport: str)
     if workspace.spec.mode is not mode:
         raise CapabilityMissing(
             f"the {transport} transport does not run in a {workspace.spec.mode.value} workspace"
+        )
+
+
+def require_no_user(command: CommandSpec, transport: str) -> None:
+    """Refuses, loudly, a command that names a user, on a transport that
+    runs every command as one: run as that one instead, it would cross no
+    boundary its caller counts on."""
+    if command.user is not None:
+        raise CapabilityMissing(
+            f"the {transport} transport runs every command as one user, never as {command.user}"
         )
 
 

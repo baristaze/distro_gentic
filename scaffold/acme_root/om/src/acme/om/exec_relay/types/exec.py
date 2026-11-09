@@ -14,7 +14,7 @@ from uuid import UUID
 from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 
 from acme.infra.agent_workspaces import IsolationSpec
-from acme.infra.transports import FileEntry, SecretUse
+from acme.infra.transports import USER, FileEntry, SecretUse
 from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import FrozenMapping, Identifiable, OmBase, Trackable
 from acme.om.placement.types.work import ExecEffect, ExecOperation
@@ -42,6 +42,11 @@ stays small."""
 def _from_the_start(offset: int) -> bool:
     """An offset of 0, which the wire leaves out."""
     return offset == 0
+
+
+def _its_own(user: str | None) -> bool:
+    """No user, which the wire leaves out: the workspace's own runs it."""
+    return user is None
 
 
 class ExecState(StrEnum):
@@ -72,6 +77,10 @@ class RunRequest(OmBase):
     # By name; a host resolves them inside its wall.
     secrets: tuple[SecretUse, ...] = Field(default=(), max_length=SECRETS)
     max_output: int = Field(default=OUTPUT_CHARS, gt=0, le=OUTPUT_CHARS)
+    # Written only when it names one, so a command run as the workspace's
+    # own user is the item a release before it wrote. A host that reads
+    # `exec` work below `USER_VERSION` is never handed one that names a user.
+    user: str | None = Field(default=None, pattern=USER, exclude_if=_its_own)
 
 
 class ObjectRef(OmBase):

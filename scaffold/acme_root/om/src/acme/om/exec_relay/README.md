@@ -93,7 +93,10 @@ platform's cloud. Each call crosses the wall as `exec`
 - **Send.** The runner's transport sends each operation of a call. A new
   one goes on the lane of the host that holds the workspace. One the
   call sent before is met as it stands, so a run that resumes after a
-  crash attaches to the first execution or reads its result.
+  crash attaches to the first execution or reads its result. A command
+  that names the user it runs as goes only to a host that reads `exec`
+  work at `USER_VERSION` or later; an older host would run it as its
+  workspace's own user, so it is refused before it is sent.
 - **Claim and run.** The host claims the item under a lease, reads what
   it runs, runs it through its own transport, streams the output back,
   and pushes the result. It renews the lease from the claim until the

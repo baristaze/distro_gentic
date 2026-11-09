@@ -30,7 +30,12 @@ from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import OmException, ToolFailed, Unavailable
-from acme.om.exec_relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.exceptions import (
+    ContentNotKept,
+    NoWorkspaceHost,
+    StaleExec,
+    UserNotRead,
+)
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.types.exec import (
     OUTPUT_CHARS,
@@ -128,6 +133,7 @@ class TransportRelayImpl(TransportInterface):
             # What a relayed command keeps of each stream is bounded, as
             # its output object is.
             max_output=min(command.max_output, OUTPUT_CHARS),
+            user=command.user,
         )
         call = self._call(
             workspace, request, command.key, command.effect, command.deadline, command.epoch
@@ -318,7 +324,7 @@ class TransportRelayImpl(TransportInterface):
             item = await self._exec_relay().send(rctx, org_id, call, occurrence, content)
         except StaleExec as error:
             raise StaleCommand(error.message) from error
-        except (NoWorkspaceHost, ContentNotKept) as error:
+        except (NoWorkspaceHost, ContentNotKept, UserNotRead) as error:
             raise CapabilityMissing(error.message) from error
         try:
             progress = await self._wait(rctx, org_id, item, on_output, epoch, attach=False)

@@ -51,9 +51,10 @@ scenario's."""
 COMPLETE = CheckDeclaration(
     name="export-complete",
     version="1",
-    command=("complete-suite", "{version}", "{out}"),
+    command=("complete-suite", "{version}", "{work}", "{out}"),
     kind="suite",
     schema_version=1,
+    head=("export-orders", "{version}", "{work}"),
 )
 
 EXPORT = Scenario(

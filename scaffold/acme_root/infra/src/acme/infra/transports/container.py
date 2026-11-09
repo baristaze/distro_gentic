@@ -69,8 +69,10 @@ def exec_argv(
     secrets: Sequence[str],
     pidfile: str,
     argv: Sequence[str],
+    user: str | None = None,
 ) -> list[str]:
-    """The `docker exec` that runs a command. A plain variable goes by name
+    """The `docker exec` that runs a command, as `user` when it names one,
+    else as the container's own. A plain variable goes by name
     and value; a secret by name alone, its value in the command line's own
     environment, so no other process lists it. None of the command's
     variables becomes the command line's own: a tool's `HOME` or `PATH`
@@ -82,6 +84,7 @@ def exec_argv(
         "exec",
         "--workdir",
         workdir,
+        *(() if user is None else ("--user", user)),
         *variables,
         container,
         "sh",
@@ -100,7 +103,8 @@ class TransportContainerImpl(TransportInterface):
     under open egress, the host's proxy and CA file, which the container
     holds at `CA_PATH` (`HostNetwork`), laid over its own. A proxy on the
     host's loopback is left out, and the transport says so when it starts:
-    inside the container that address is the container's own. At the
+    inside the container that address is the container's own. A command
+    that names a user runs as that user. At the
     deadline the command's tree inside the container ends, and the command
     line with it. Records and the epoch fence are kept on this host, beside
     the workspaces."""
@@ -148,14 +152,34 @@ class TransportContainerImpl(TransportInterface):
                     **self._network.variables(workspace.spec.egress.mode, CA_PATH),
                 }
                 process = await spawn(
-                    exec_argv(name, workdir, plain, tuple(injection.env), pidfile, command.argv),
+                    exec_argv(
+                        name,
+                        workdir,
+                        plain,
+                        tuple(injection.env),
+                        pidfile,
+                        command.argv,
+                        command.user,
+                    ),
                     Path("/"),
                     docker_environment(injection.env),
                 )
 
+                # As the command's own user: the container's holds no
+                # capability to signal another's processes.
+                ending = () if command.user is None else ("--user", command.user)
+
                 async def end_inside() -> None:
                     await docker(
-                        "exec", name, "sh", "-c", END_TREE, "sh", pidfile, bound=self._timeout
+                        "exec",
+                        *ending,
+                        name,
+                        "sh",
+                        "-c",
+                        END_TREE,
+                        "sh",
+                        pidfile,
+                        bound=self._timeout,
                     )
 
                 async def end() -> None:

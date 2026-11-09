@@ -34,7 +34,13 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
-from acme.om.exec_relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspaceHost, StaleExec
+from acme.om.exec_relay.exceptions import (
+    ContentNotKept,
+    ItemNotHeld,
+    NoWorkspaceHost,
+    StaleExec,
+    UserNotRead,
+)
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.rules import (
     CONTROL_KIND,
@@ -82,6 +88,7 @@ from acme.om.exec_relay.types.exec import (
     Printed,
     ReadRequest,
     ResultContent,
+    RunRequest,
     SentPart,
     SnapshotAnswer,
     StopKind,
@@ -89,6 +96,7 @@ from acme.om.exec_relay.types.exec import (
     WriteRequest,
 )
 from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.rules import USER_VERSION
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
@@ -635,6 +643,8 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
                 f"the host that held session {call.agent_session_id}'s workspace is no longer a live "
                 "host of its pool; its workspace is made again before its calls run"
             )
+        if isinstance(call.request, RunRequest) and call.request.user is not None:
+            await self._reads_user(ctx, binding.instance_of or call.agent_session_id, binding.host_id)
         contents = await self._contents(
             ctx, call.agent_session_id, item_id, 1, call.request, content
         )
@@ -1294,6 +1304,20 @@ class ExecRelayManagerImpl(ExecRelayManagerInterface):
             return False
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
         return status is not None and status.host.revoked_at is None
+
+    async def _reads_user(self, ctx: TenantContext, agent_session_id: UUID, host_id: UUID) -> None:
+        """Refuses a command that names a user for a host whose `exec` work
+        is from before a command named one: it would run as the workspace's
+        own user there."""
+        placed = await self._hosts.work_placement(ctx, agent_session_id)
+        status = None if placed.pool is None else await self._hosts.get_host(
+            ctx, placed.pool.id, host_id
+        )
+        if status is None or status.host.exec_version < USER_VERSION:
+            raise UserNotRead(
+                f"host {host_id} reads exec work from before a command named its user, so "
+                "a command that names one never runs there"
+            )
 
     async def _attach(
         self, ctx: TenantContext, item: ExecItem, call: ExecCall, content: bytes | None

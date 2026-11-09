@@ -888,6 +888,34 @@ async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_
     assert sent[1]["offset"] == 5
 
 
+async def test_a_run_names_no_user_on_the_wire_and_an_older_host_gets_none_that_names_one(
+    wall: Wall,
+) -> None:
+    host = Host(wall, wall.holder)
+    sent: list[dict[str, object]] = []
+
+    async def answers() -> None:
+        # A host of an earlier release, as every host of the case is.
+        row = await host.claim_soon()
+        detail = await wall.managers.exec_relay.detail(request(), wall.holder, host.item_id(row))
+        sent.append(json.loads(REQUESTS.dump_json(detail.request)))
+        await host.finish(row, 0, "")
+
+    runs = transport(wall.managers)
+    await asyncio.gather(runs.run(wall.workspace, command(wall.epoch), seal=NO_SEAL), answers())
+    # A command that names no user carries none, as the earlier release
+    # wrote it and as its API and its hosts read it.
+    assert [(item["argv"], "user" in item) for item in sent] == [(["make", "deploy"], False)]
+    # One that names a user is never handed to such a host: it would run
+    # it as the workspace's own.
+    apart = command(wall.epoch).model_copy(update={"user": "65534:65534"})
+    with pytest.raises(CapabilityMissing, match="reads exec work from before a command named"):
+        await runs.run(wall.workspace, apart, seal=NO_SEAL)
+    assert await host.claim() is None
+    named = RunRequest(argv=("make",), user="65534:65534")
+    assert json.loads(REQUESTS.dump_json(named))["user"] == "65534:65534"
+
+
 # The objects an item moves: each read only by the host that holds the
 # item, by a URL signed for it alone, unreadable once its session's key
 # goes, and gone from the store once its item settles.

@@ -15,14 +15,22 @@ is not as the executor left it ran to no verdict: its inode, its mode, its
 size, and the time its inode last changed, which no process of the
 instance sets back, are read before the first trial and after each. A
 folder stays writable: a check, or the head's code, may add a new file in
-a protected folder, and no file the tree held there changes unseen. The
-digest holds against code that leaves the instance's `stat` and
-`sha256sum` as they are; code that puts its own first on the path fakes
-it, and only a check run as a user apart from the tree's owner stops
-that. Each check's
-command template runs with `{version}` and `{out}` filled, in the tree,
-under the environment of the instance's image and its transport, never one
-an agent set. Each trial's results stream is read back within the bound,
+a protected folder, and no file the tree held there changes unseen. Each
+check's command template runs with `{version}` and `{out}` filled, in the
+tree, under the environment of the instance's image and its transport,
+never one an agent set.
+
+A check that runs the head apart (`CheckDeclaration.head`) runs that part
+first, as the head's own user (`ExecutorOptions.head_user`), in a folder
+of the trial's own (`{work}`), then its runner, as the instance's own user.
+The head's user owns nothing the instance's own commands write, run, or
+read: no file of the tree, no results stream, no folder on the path. So the
+head's code writes no result, changes no file the run protects, and puts
+no `stat` or `sha256sum` of its own where the digest finds it. A runner
+that loads the head's code itself runs it as the instance's own user, so
+there that code may write a result, and fake the digest with its own
+`stat` or `sha256sum` first on the path; a hidden suite never has that
+shape (`scenario_refusal`). Each trial's results stream is read back within the bound,
 and within what one read of its transport carries, and the executor hashes
 what it read. Every trial counts: one that ran past its time, or wrote no
 stream the collector reads as one run of its check at the version asked,
@@ -70,7 +78,13 @@ from acme.infra.agent_workspaces import (
     ResourceLimits,
 )
 from acme.infra.exceptions import InfraException
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
+from acme.infra.transports import (
+    USER,
+    CommandResult,
+    CommandSpec,
+    RecordSeal,
+    TransportInterface,
+)
 from acme.om.agent_workspaces.placed import PlacedInstancesInterface
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import TenantContext
@@ -91,8 +105,14 @@ TREE = "tree"
 """Where the tree is unpacked, under the instance's root: the checks run here."""
 OUT = "out"
 """Where each trial's results stream goes, beside the tree, never in it."""
+WORK = "work"
+"""Where each trial's head part writes, beside the tree, in a folder of the
+trial's own."""
 UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
+OPEN = 'mkdir -p -- "$1" && chmod -- 1777 "$1"'
+"""Makes a trial's folder for its head part, which any user writes in and
+none removes another's file from."""
 LOCK = 'chmod -- a-w "$@"'
 """Makes each file of the tree a run protects read-only, and never a
 folder: no process of the check writes the file without changing its mode,
@@ -169,6 +189,9 @@ class ExecutorOptions(OmBase):
     # when the session's pin names no base.
     host: str = Field(default="cloud", min_length=1, max_length=200)
     image: str = Field(default="python:3.14", pattern=VERSION)
+    # The user a check's head part runs as, by its id and its group's: one
+    # apart from the instance's own, who owns the tree and the results.
+    head_user: str = Field(default="65534:65534", pattern=USER)
 
 
 async def _kept_nowhere(data: bytes) -> bytes | None:
@@ -319,6 +342,14 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         if unpacked.exit_code != 0 or not unpacked.stdout.strip():
             raise Unavailable(f"the tree did not unpack in its instance: {unpacked.stderr[-300:]}")
         root = unpacked.stdout.strip().splitlines()[-1]
+        if any(check.head for check in request.checks):
+            own = await self._command(transport, workspace, ("id", "-u"), ".", self._options.setup_time)
+            uid = self._options.head_user.split(":", 1)[0]
+            if own.exit_code != 0 or own.stdout.strip() in ("", uid):
+                raise Unavailable(
+                    f"the instance's own user is the head's, {uid}, or unknown, so no head "
+                    "runs apart from what scores it there"
+                )
         if locked:
             made = await self._command(
                 transport,
@@ -345,15 +376,13 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
             for trial in range(trials):
                 if rate is not None and stops_at(rate, failed, rate.confidence) is not None:
                     break
-                out = f"{OUT}/{index}-{trial}.jsonl"
                 stream, record = await self._trial(
                     transport,
                     workspace,
                     request,
                     check,
                     prepared,
-                    f"{root}/{out}",
-                    out,
+                    (root, f"{index}-{trial}"),
                     read,
                     (guarded, sealed),
                 )
@@ -369,25 +398,48 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         request: ExecutionRequest,
         check: CheckDeclaration,
         prepared: Prepared,
-        out: str,
-        path: str,
+        place: tuple[str, str],
         read: int,
         seal: tuple[tuple[str, ...], str | None],
     ) -> tuple[bytes, ExecutionRecord]:
-        """One trial of `check`: its template filled, with `out` where the
-        command writes its results stream, and run in the tree; the stream
-        read back from `path`, the same file from the instance's root,
-        within what is left of the bound; and the run it holds. A trial
-        that ran past its time, changed a path the run protects (`seal`
-        holds those paths, and their digest before the first trial),
-        wrote no stream, one past the bound or longer than one read of the
-        transport carries (such as the relay's into a tenant's wall), or
-        one the collector does not read as one run of `check` at the
-        version asked, ran to no verdict: its stream is an `errored` run
-        the executor writes in its place."""
-        argv = tuple(part.format(version=request.version, out=out) for part in check.command)
+        """One trial of `check`, named `trial` under the instance's `root`
+        (`place`): its head part, when it declares one, run in the tree as
+        the head's user, with `{work}` the trial's own folder; then its
+        runner, with `{out}` where it writes its results stream, run in the
+        tree as the instance's own user, the two within one trial's time;
+        the stream read back from the instance's root, within what is left
+        of the bound; and the run it holds. The head part's exit decides
+        nothing: the runner scores what it left. A trial that ran past its
+        time, changed a path the run protects (`seal` holds those paths,
+        and their digest before the first trial), wrote no stream, one past
+        the bound or longer than one read of the transport carries (such as
+        the relay's into a tenant's wall), or one the collector does not
+        read as one run of `check` at the version asked, ran to no verdict:
+        its stream is an `errored` run the executor writes in its place."""
+        root, trial = place
+        path, work = f"{OUT}/{trial}.jsonl", f"{WORK}/{trial}"
+        fields = {"version": request.version, "out": f"{root}/{path}", "work": f"{root}/{work}"}
         started = self._clock()
-        ran = await self._command(transport, workspace, argv, TREE, self._options.trial_time)
+        ran = None
+        if check.head:
+            opened = await self._command(
+                transport, workspace, ("sh", "-c", OPEN, "sh", work), ".", self._options.setup_time
+            )
+            if opened.exit_code != 0:
+                raise Unavailable(f"no folder for a head part in its instance: {opened.stderr[-300:]}")
+            apart = tuple(part.format(**fields) for part in check.head)
+            ran = await self._command(
+                transport,
+                workspace,
+                apart,
+                TREE,
+                self._options.trial_time,
+                user=self._options.head_user,
+            )
+        if ran is None or not ran.timed_out:
+            argv = tuple(part.format(**fields) for part in check.command)
+            left_time = self._options.trial_time - (self._clock() - started)
+            ran = await self._command(transport, workspace, argv, TREE, left_time)
         left = self._options.max_results_bytes - read
         stream, why = b"", None
         guarded, sealed = seal
@@ -449,6 +501,8 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         argv: tuple[str, ...],
         cwd: str,
         time: timedelta,
+        *,
+        user: str | None = None,
     ) -> CommandResult:
         command = CommandSpec(
             argv=argv,
@@ -458,6 +512,7 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
             deadline=self._clock() + time,
             max_output=SPOKEN,
             effect="unsafe",
+            user=user,
         )
         return await transport.run(workspace, command, seal=SEAL)
 

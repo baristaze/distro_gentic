@@ -5,9 +5,9 @@ stream, one JSON object a line, and its cases stream as they finish."""
 from datetime import datetime
 from enum import StrEnum
 from string import Formatter
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, model_validator
 
 from acme.om.base import FrozenMapping, OmBase
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency
@@ -20,9 +20,10 @@ SCHEMAS = frozenset({SCHEMA})
 PLATFORM_EXECUTOR = "platform"
 """The platform's fresh executor, by name: where a check that names no
 other runs."""
-FIELDS = frozenset({"version", "out"})
-"""The fields a check's command template names: the version under test,
-and where the results stream goes."""
+FIELDS = frozenset({"version", "out", "work"})
+"""The fields a check's command templates name: the version under test,
+where the results stream goes, and the folder the head's own part writes
+in."""
 
 
 class CheckDeclaration(OmBase):
@@ -32,9 +33,22 @@ class CheckDeclaration(OmBase):
     the executor that runs it, by name: the platform's fresh executor,
     or one a product registered at its root.
     `{version}` and `{out}` in the template are the version under test and
-    where the results stream goes. The template is checked when it is
-    declared: it parses, it names those two fields alone and each bare, and
-    it names `{out}`, so a runner it starts always writes its results."""
+    where the results stream goes.
+
+    A check whose runner must never load the head's code declares `head`:
+    the command that runs it, apart. The fresh executor runs it first, in
+    the tree, as a user of its own, who writes no file the run protects,
+    never the results stream, and nowhere in the tree; `{work}` is a folder
+    of its trial's own that it writes in. The runner then runs as the
+    instance's own user and scores what the head's part left in `{work}`,
+    so the head's code reaches nothing that writes a result. A runner that
+    loads the head's code itself is one the head's code can write a passing
+    result for, whatever runs it.
+
+    The templates are checked when they are declared: each parses and names
+    those fields alone, each bare; `command` names `{out}`, so a runner it
+    starts always writes its results; `head` never names it; and only a
+    check that declares `head` names `{work}`."""
 
     name: str = Field(pattern=NAME)
     version: str = Field(pattern=VERSION)
@@ -45,14 +59,21 @@ class CheckDeclaration(OmBase):
     capabilities: tuple[Annotated[str, Field(pattern=NAME)], ...] = ()
     schema_version: int = Field(ge=1)
     executor: str = Field(default=PLATFORM_EXECUTOR, pattern=NAME)
+    head: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
+        default=(), max_length=50
+    )
 
-    @field_validator("command")
-    @classmethod
-    def _a_template_a_runner_fills(cls, command: tuple[str, ...]) -> tuple[str, ...]:
-        named = {field for argument in command for field in _fields(argument)}
+    @model_validator(mode="after")
+    def _templates_a_runner_fills(self) -> Self:
+        named = {field for argument in self.command for field in _fields(argument)}
+        apart = {field for argument in self.head for field in _fields(argument)}
         if "out" not in named:
             raise ValueError("the command names {out}, where the results stream goes")
-        return command
+        if "out" in apart:
+            raise ValueError("the head's command never names {out}: only the runner writes it")
+        if "work" in named | apart and not self.head:
+            raise ValueError("only a check that runs the head apart names {work}")
+        return self
 
 
 class Offer(OmBase):
@@ -124,7 +145,7 @@ def _fields(argument: str) -> set[str]:
         if field not in FIELDS or spec or conversion:
             raise ValueError(
                 f"the command argument {argument!r} names a field other than a bare "
-                "{version} or {out}"
+                "{version}, {out}, or {work}"
             )
         named.add(field)
     return named

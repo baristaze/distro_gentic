@@ -3,8 +3,10 @@ harness asks for it by the agent project whose repository holds it, the platform
 reads the tree at the head with every path of the suite taken from that
 repository, and the suite's own files run there, whatever the head holds
 at those paths. Both repositories are on this disk, read by their URLs;
-the instance is the twins', and each check's command runs for real in
-the tree the executor wrote into it. Every file the run protects is
+the instance is the twins', and each check's commands run for real in
+the tree the executor wrote into it: the suite's head part, which runs
+the head's code apart, then its runner, which scores what that part left.
+Every file the run protects is
 read-only to the head's code while it runs, and one it changes anyway
 leaves the trial without a verdict; a folder stays writable, and a check
 may write a new file there."""
@@ -35,6 +37,7 @@ from acme.om.agent_workspaces.agent_projects import WorkspaceAgentProjectsInterf
 from acme.om.agent_workspaces.impl.executor import (
     ARCHIVE,
     LOCK,
+    OPEN,
     SEEN,
     ExecutorAgentWorkspacesImpl,
     ExecutorOptions,
@@ -66,14 +69,28 @@ AUTHOR = {
     "GIT_CONFIG_GLOBAL": os.devnull,
     "GIT_CONFIG_NOSYSTEM": "1",
 }
+SUITE_HEAD = """\
+import json, sys
+
+totals = {}
+exec(open("src/totals.py").read(), totals)
+with open(f"{sys.argv[2]}/answer.json", "w") as answer:
+    json.dump({"total": totals["total"]([2, 3])}, answer)
+"""
+"""The hidden suite's head part, in its own repository: it runs the head's
+code, apart from the runner, and leaves what that code answers in its
+trial's folder."""
 SUITE_RUNNER = """\
 import datetime, json, sys
 
-version, out = sys.argv[1], sys.argv[2]
+version, work, out = sys.argv[1], sys.argv[2], sys.argv[3]
 now = datetime.datetime.now(datetime.UTC).isoformat()
-totals = {}
-exec(open("src/totals.py").read(), totals)
-outcome = "passed" if totals["total"]([2, 3]) == 5 else "failed"
+try:
+    with open(f"{work}/answer.json") as answer:
+        total = json.load(answer)["total"]
+except (OSError, ValueError, KeyError, TypeError):
+    total = None
+outcome = "passed" if total == 5 else "failed"
 lines = [
     {
         "kind": "start",
@@ -93,19 +110,20 @@ lines = [
 with open(out, "w") as stream:
     stream.write("\\n".join(json.dumps(line) for line in lines) + "\\n")
 """
-"""The hidden suite's runner, in its own repository: every item of a list
-counts toward its total."""
+"""The hidden suite's runner, in its own repository, which never loads the
+head's code: every item of a list counts toward its total, as the head
+part's answer shows."""
 SCORED_RUNNER = SUITE_RUNNER.replace(
-    'outcome = "passed" if totals["total"]([2, 3]) == 5 else "failed"',
+    'outcome = "passed" if total == 5 else "failed"',
     'score = {}\nexec(open("checks/score.py").read(), score)\n'
-    'outcome = "passed" if score["passes"](totals["total"]) else "failed"',
+    'outcome = "passed" if score["passes"](total) else "failed"',
 )
 """A hidden suite's runner whose cases the agent project's own code scores, at a
 path the scenario forbids."""
-SCORE = "def passes(total):\n    return total([2, 3]) == 5\n"
+SCORE = "def passes(total):\n    return total == 5\n"
 GAMED = "def passes(total):\n    return True\n"
 """What a head writes over the code that scores the suite: every case passes."""
-PLANTED = SUITE_RUNNER.replace('totals["total"]([2, 3]) == 5', "True")
+PLANTED = SUITE_RUNNER.replace("total == 5", "True")
 """A runner a head plants where the hidden suite's sits: it passes whatever
 the code does."""
 DEFECT = "def total(items):\n    return sum(items[1:])\n"
@@ -167,9 +185,10 @@ new file in the folder the scenario forbids before it scores."""
 COMPLETE = CheckDeclaration(
     name="totals-complete",
     version="1",
-    command=("python3", "hidden/totals_suite.py", "{version}", "{out}"),
+    command=("python3", "hidden/totals_suite.py", "{version}", "{work}", "{out}"),
     kind="suite",
     schema_version=1,
+    head=("python3", "hidden/totals_head.py", "{version}", "{work}"),
 )
 
 
@@ -255,19 +274,25 @@ class Ran:
     made read-only there and their digest taken as `SEEN` takes it, and
     each check runs there, its results stream handed back to the transport
     where the executor reads it. `trees` keeps each tree's files, as the
-    executor wrote them."""
+    executor wrote them, and `users` each command's argv with the user it
+    names, which the twin runs as this process."""
 
     def __init__(self, root: Path, provider: Instances, transport: TransportTwinImpl) -> None:
         self._root = root
         self._provider = provider
         self._transport = transport
         self.trees: list[dict[str, bytes]] = []
+        self.users: list[tuple[tuple[str, ...], str | None]] = []
         transport.handler = self._answer
 
     async def _answer(self, command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
         workspace = self._provider.made
         assert workspace is not None
         instance = self._root / str(workspace.id)
+        self.users.append((command.argv, command.user))
+        if command.argv[:3] == ("sh", "-c", OPEN):
+            (instance / command.argv[4]).mkdir(parents=True)
+            return TwinReply()
         if command.argv[:3] == ("sh", "-c", LOCK):
             for name in command.argv[4:]:
                 path = instance / "tree" / name
@@ -339,7 +364,14 @@ class Repositories:
         suite = tmp_path / "suites"
         suite.mkdir()
         git(suite, "init", "-q", "-b", "main")
-        self.source = commit(suite, {"hidden/totals_suite.py": runner, "README.md": "the suites"})
+        self.source = commit(
+            suite,
+            {
+                "hidden/totals_head.py": SUITE_HEAD,
+                "hidden/totals_suite.py": runner,
+                "README.md": "the suites",
+            },
+        )
         self.suite_url = served(suite)
         self.scenario = Scenario(
             name="totals-drop",
@@ -433,9 +465,14 @@ async def test_a_hidden_suite_from_a_source_of_its_own_runs_its_files_protected(
         (COMPLETE.name, fixed.head, True)
     ]
     assert Link.HIDDEN not in fixed.broken()
+    ran = [(argv[1], user) for argv, user in repositories.ran.users if argv[0] == "python3"]
+    assert ran == [("hidden/totals_head.py", "65534:65534"), ("hidden/totals_suite.py", None)], (
+        "the head's code apart, as the head's user, and the runner as the instance's own"
+    )
     (tree,) = repositories.ran.trees
     assert tree == {
         "src/totals.py": FIX.encode(),
+        "hidden/totals_head.py": SUITE_HEAD.encode(),
         "hidden/totals_suite.py": SUITE_RUNNER.encode(),
     }, "the head's files, and of the suite's repository only the paths its patterns match"
 
@@ -474,6 +511,7 @@ async def test_a_head_that_rewrites_what_scores_the_suite_is_judged_by_the_bases
     assert tree == {
         "src/totals.py": DEFECT.encode(),
         "checks/score.py": SCORE.encode(),
+        "hidden/totals_head.py": SUITE_HEAD.encode(),
         "hidden/totals_suite.py": SCORED_RUNNER.encode(),
     }, "the head's code, the base's forbidden paths, and the suite's own files"
 
@@ -508,8 +546,7 @@ async def test_a_head_whose_code_rewrites_what_scores_the_suite_while_it_runs_fa
     assert Link.HIDDEN in refused.broken() and Link.UNTOUCHED not in refused.broken()
 
     # Its code makes the scorer writable, writes over it, and puts it back
-    # as it was when the run ends: the suite read the head's copy and
-    # passed, and the trial is errored, never a pass.
+    # as it was when it ends: the trial is errored, never a pass.
     put_back = await repositories.judge({"src/totals.py": PUTS_BACK})
     assert [(run.check, run.outcome) for run in put_back.hidden] == [
         (COMPLETE.name, RunOutcome.ERRORED)

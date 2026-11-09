@@ -871,8 +871,10 @@ collector serves every place a check can run.
 
 **Acceptance** judges an agent's work the same way. The objective hides
 its root cause. A hidden suite must pass beside the visible one, and the
-result is judged by behavior, so any valid fix passes. Editing the
-checks or the system under test is forbidden and checked. No surface the
+result is judged by behavior, so any valid fix passes. The head's code
+runs apart from what scores the hidden suite, as a user who owns nothing
+the score is read from. Editing the checks or the system under test is
+forbidden and checked. No surface the
 agent reads (prompts, agent knowledge, tool sources, evidence, pull
 requests) mentions the hidden suite, and a scanner checks every one. The
 harness judges the chain of evidence (a failing baseline, the runs, the

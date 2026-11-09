@@ -23,8 +23,10 @@ def scenario_refusal(scenario: Scenario) -> str | None:
     """Why a scenario measures nothing: an objective that names its root
     cause or its hidden suite, by the match a scan makes; a hidden suite
     kept in the scenario's agent project, or at its base, in the repository the
-    agent's workspace checks out; or a hidden check that shares a name with
-    a visible one."""
+    agent's workspace checks out; a hidden check that shares a name with
+    a visible one; or a hidden check whose runner runs the head's code
+    itself, which that code can write a passing result for
+    (`CheckDeclaration.head`)."""
     told = named((*scenario.root_cause, *scenario.hidden.markers), scenario.objective)
     if told:
         return f"the objective names what it hides: {sorted(told)}"
@@ -35,6 +37,9 @@ def scenario_refusal(scenario: Scenario) -> str | None:
     shared = sorted({check.name for check in scenario.hidden.checks} & set(scenario.visible))
     if shared:
         return f"the hidden suite shares a check with the visible one: {shared}"
+    together = sorted(check.name for check in scenario.hidden.checks if not check.head)
+    if together:
+        return f"the hidden suite runs the head's code in its runner: {together}"
     return None
 
 

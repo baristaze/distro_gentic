@@ -40,3 +40,11 @@ class ContentNotKept(ExecRelayException, Unavailable):
     in the control plane until its host read it, so it is not relayed."""
 
     code = "content_not_kept"
+
+
+class UserNotRead(ExecRelayException, Unavailable):
+    """A command that names a user, for a host that reads `exec` work from
+    before a command named one: run there, it would run as the workspace's
+    own user, so it is never sent."""
+
+    code = "user_not_read"
