@@ -27,7 +27,7 @@ from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.base import utcnow
 from acme.om.connectors.impl.addresses import Resolve, resolve
 from acme.om.connectors.impl.manager import ConnectorsManagerImpl, ConnectorsOptions
-from acme.om.connectors.impl.toolsets import ConnectorToolsetsImpl, HostCall
+from acme.om.connectors.impl.toolsets import ConnectorToolsetsImpl, HostCall, OnTheHostImpl
 from acme.om.connectors.manager import ConnectorsManagerInterface
 from acme.om.context import TenantContext
 from acme.om.levers.rules import reach_of
@@ -137,6 +137,7 @@ class ConnectorsLayer:
                 self._infra.get_secrets(),
                 self._options,
                 tool_of=McpToolImpl,
+                on_host=OnTheHostImpl,
                 host=self._host,
                 resolver=self._resolve,
                 clock=self._clock,

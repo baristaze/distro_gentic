@@ -56,6 +56,10 @@ ToolOf = Callable[..., ToolInterface]
 the secret its spec declares: the engine's `McpToolImpl`, as a root wires
 it."""
 
+OnHost = Callable[[ToolInterface], ToolInterface]
+"""The tool of a server inside the wall, over the tool `ToolOf` built:
+`OnTheHostImpl`, as a root wires it."""
+
 
 class HostCall(Protocol):
     """Reaches a tool of a server the host that holds `workspace` runs, as
@@ -133,7 +137,8 @@ class OnTheHostImpl(ToolInterface):
 
 class ConnectorToolsetsImpl(LoopHooksInterface):
     """`host` reaches a server inside a customer's wall; None is a process
-    that reaches no host, whose calls of such a server are refused."""
+    that reaches no host, whose calls of such a server are refused. `on_host`
+    makes each such server's tool one whose calls reach the workspace."""
 
     def __init__(
         self,
@@ -146,12 +151,14 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
         options: ConnectorsOptions,
         *,
         tool_of: ToolOf,
+        on_host: OnHost,
         host: HostCall | None = None,
         resolver: Resolve = resolve,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
         self._tool_of = tool_of
+        self._on_host_tool = on_host
         self._kinds = kinds
         self._agent_projects = agent_projects
         self._placement = placement
@@ -239,7 +246,7 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
                 )
                 return self._tool_of(tool.definition, binding, call, secret=secret_use(server))
             case ConnectorPlace.HOST:
-                return OnTheHostImpl(
+                return self._on_host_tool(
                     self._tool_of(tool.definition, binding, self._on_host(connector, tool))
                 )
 
