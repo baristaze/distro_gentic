@@ -30,7 +30,11 @@ there. The head's user owns no file of the tree or of that copy, no
 results stream, and no folder on the path. So the head's code writes no
 result, changes no file the run protects, and puts no `stat` or
 `sha256sum` of its own where the digest finds it, and what it leaves in
-`{work}` is all of it the runner reads. The check's author keeps the rest:
+`{work}` is all of it the runner reads. A check without a head part runs
+the head's code as the instance's own user, who owns that copy and every
+results stream, so in a request that holds both kinds, every check with a
+head part runs, and its streams are read, before any without one starts.
+The check's author keeps the rest:
 its head part leaves answers, never verdicts, since the head's code decides
 whatever is decided there; and its runner never imports or runs the head's
 code, nor what `{work}` holds, since that code would run as the instance's
@@ -345,9 +349,11 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         prepared: Prepared,
     ) -> bytes:
         """Every trial the request asks for, each check's stopping where its
-        rate's rule stops it, and their results streams, one after another,
-        in `workspace` through `transport`. A trial failed unless its run
-        passed, as `ExecutionRecord.passing` says."""
+        rate's rule stops it, and their results streams in the request's
+        order, in `workspace` through `transport`. The trials run one after
+        another: every check with a head part first, then every check
+        without one, each kind in the request's order. A trial failed unless
+        its run passed, as `ExecutionRecord.passing` says."""
         locked, guarded = _protected(tree, request.protected + request.untouched)
         await transport.write_file(workspace, ARCHIVE, tree, EPOCH)
         unpacked = await self._command(
@@ -397,13 +403,16 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
         sealed = await self._seen(transport, workspace, guarded)
         if guarded and sealed is None:
             raise Unavailable("the instance did not show what it holds at the paths it protects")
-        streams: list[bytes] = []
+        streams: dict[int, list[bytes]] = {}
         read = 0
         rates = request.rates or (None,) * len(request.checks)
-        for index, (check, trials, rate) in enumerate(
-            zip(request.checks, request.trials, rates, strict=True)
-        ):
+        planned = enumerate(zip(request.checks, request.trials, rates, strict=True))
+        # A check without a head part runs the head's code as the instance's
+        # own user, who owns the runners' copy and every results stream: it
+        # runs once no verdict of a check with one is left to change.
+        for index, (check, trials, rate) in sorted(planned, key=lambda each: not each[1][0].head):
             failed: list[bool] = []
+            kept = streams.setdefault(index, [])
             for trial in range(trials):
                 if rate is not None and stops_at(rate, failed, rate.confidence) is not None:
                     break
@@ -419,8 +428,8 @@ class ExecutorAgentWorkspacesImpl(ExecutorInterface):
                 )
                 read += len(stream)
                 failed.append(not record.passing)
-                streams.append(stream.rstrip(b"\n"))
-        return b"\n".join(streams)
+                kept.append(stream.rstrip(b"\n"))
+        return b"\n".join(stream for index in sorted(streams) for stream in streams[index])
 
     async def _trial(
         self,

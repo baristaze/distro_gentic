@@ -50,6 +50,14 @@ user is the head's refuses the checks before any runs.
 write its result. A check of the visible suite may keep one command; the
 hidden link is what catches a head that games it.
 
+**A check that runs the head apart runs first.** A check with one
+command runs the head's code as the instance's own user, who owns the
+runners' copy and every results stream. So in a request that holds both
+kinds, every check with a head part runs, and its streams are read,
+before any check without one starts. The head's code that runs after
+finds no verdict of theirs left to change. The results keep the
+request's order.
+
 **The suite's author keeps what the platform cannot read.** What each
 part runs is the suite's own: the platform holds that both are declared,
 and where and as whom each runs, never what they do. So the head's part
