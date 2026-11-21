@@ -22,6 +22,10 @@ host pulls, and the platform never calls in.
   it, with the session's **pool of one** and the person its session's
   work is for. A row is written before its VM starts and deleted
   once the VM is gone.
+- **A size**: what a session's spec asks its VM by name, `xs`, `s`, or
+  `m`, and `s` when it asks none. The deployment's **size map** names
+  each size it allows as a machine type, with its CPUs and its memory;
+  a warm VM is the default size.
 - **A VM key**: a one-use secret the pool hands each VM as it
   starts, in its **seed**, beside where the platform answers. Only its
   digest is kept, until the VM's host trades it for a host's
@@ -43,23 +47,31 @@ let go, whether it runs, starts, or stands stopped for its session.
 
 ## What can happen
 
-- **Prepare.** A session's loop asks for its workspace. The VM that
-  serves it is found, or a warm one is claimed, or one is started from
-  the pool's image; with the session's latest snapshot, one is started
-  from that, held to its digest first. A claim counts the VMs held under
+- **Prepare.** A session's loop asks for its workspace. A size the map
+  does not name, or an ask of CPUs or memory, is refused for good before
+  anything starts. The VM that serves it is found, or a warm one is
+  claimed at the default size, or one of its size is started from the
+  pool's image; with the session's latest snapshot, one is started from
+  that, held to its digest first. A claim counts the VMs held under
   one lock, and past the pool's maximum or its tenant's starts none: the
   loop waits on the resource and asks again, its park naming no count.
   The loop also waits while the VM starts and its host enrolls, then
   the VM is sealed and its host prepares the workspace through the exec
   relay.
 - **Enroll.** The VM's host trades its key once. While the VM
-  is warm it is told to ask again.
+  is warm it is told to ask again. A cold start records its boot, from
+  its start to here, as `acme_cloud_pool_boot_seconds`; a warm claim
+  records none.
 - **Snapshot.** At a loop's end, for a session kept by snapshots, what
   the workspace holds is pushed, the host's credential is ended, the
   VM stops, and its disk is kept. The run's release lets the stopped
   VM go, and the next loop starts another from the disk.
 - **Release.** Past the grace, the runner's sweep lets a session's
   running VM go, its disk with it: a cache.
+- **Recycle.** At a run's end, once its work is pushed, a VM whose disk
+  is a cache and that is past the pool's maximum age goes, and the next
+  loop starts another. Nothing lets a VM go for its age under a running
+  loop.
 - **Sweep.** Where the process reaches the VMs, every row is read, a
   page at a time. A first start that died, a VM that ran and is gone, a
   VM whose session or tenant is gone, and one under the pool's names
@@ -67,8 +79,9 @@ let go, whether it runs, starts, or stands stopped for its session.
   claim's lock, so a session that claimed it meanwhile keeps it. A VM
   that runs with no host to work for, its host never enrolled, ended, or
   silent, is stopped, its disk kept: the session's next prepare starts
-  it again under a new key. The erasures asked are done. Then warm VMs start
-  until the warm count stands, never past the pool's maximum.
+  it again under a new key. A warm VM past the maximum age goes, its row
+  first. The erasures asked are done. Then warm VMs start until the warm
+  count stands, never past the pool's maximum.
 - **Set the limits.** An operator writes the pool's limits, or a
   tenant's own maximum, and the next claim reads them. Each write leaves
   an audit event naming the operator and the values: the pool's own in

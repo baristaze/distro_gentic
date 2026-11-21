@@ -578,3 +578,35 @@ holds the workspace.
 **Severity.** high
 
 **Check.** review
+
+## PLC-24 A cloud VM is its kind's size, recycled between runs, its boot timed
+
+**Principle.** A kind asks its VM's size by name, `s` when it asks none,
+and the deployment maps each name it allows onto a machine type; the
+pool's cloud role launches no other type and moves no VM to one. A size
+the deployment does not map, or an ask of CPUs or memory, is refused
+for good, with its cause, before any VM starts. Warm VMs are the
+default size. A VM past its maximum age goes at its run's end once its
+work is kept, never under a running loop; a warm one goes at the sweep.
+Each cold start records its time from its start to its host's
+enrollment; a warm claim records none.
+
+**Source.** Placement and Workspace Hosts, The Cloud Pool.
+
+**Look for.** How a spec's size becomes the machine type a start names,
+and what a warm claim reads of it; what the pool's cloud role allows a
+start, and a change of an attribute, to be; where a VM's age is read and
+what has run, and what is kept, when it goes; where a boot is observed,
+and what tells a cold start from a warm claim and a start again.
+
+**Violation.** A VM of a type the deployment never mapped, or of
+another size than its spec asked, a raw CPU or memory ask met, or a
+refusal after a VM started; a role that launches, or moves a VM to, any
+type; a VM let go for its age under a running loop, or before its run's
+work was kept; a VM that lives across runs with no maximum age; a boot
+recorded for a warm claim or a start again, or a cold start recorded
+twice or not at all.
+
+**Severity.** high
+
+**Check.** review

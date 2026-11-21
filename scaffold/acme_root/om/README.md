@@ -222,7 +222,9 @@ whole disk is kept as the session's snapshot, and the next loop starts a
 VM from it. A few VMs may stand **warm**, started ahead of the
 session that claims one. The pool holds at most as many VMs as its
 operators allow, and a tenant at most its own maximum; a session past
-either waits for one.
+either waits for one. A VM is the **size** its kind asks by name, which
+the deployment maps onto a machine type, and one past its maximum age
+goes at its run's end, once its work is kept.
 
 ## The agents the platform ships
 
