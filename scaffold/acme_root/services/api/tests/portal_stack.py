@@ -39,7 +39,8 @@ def scene_kinds() -> ProductKinds:
     its latest version: the shipped kind whole, its tree and its share
     included, on this host."""
     from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
-    from acme.om.platform_agents.kinds import ANALYSIS_KIND, SOFTWARE_ENGINEER_KIND
+    from acme.om.platform_agents.kinds.analysis.kind import ANALYSIS_KIND
+    from acme.om.platform_agents.kinds.software_engineer.kind import SOFTWARE_ENGINEER_KIND
     from acme.om.platform_root import ProductKinds
     from acme.om.product_kinds import PRODUCT_KINDS
     from acme.om.tools.native.ask_person import ASK_PERSON

@@ -47,7 +47,7 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.exceptions import Unavailable
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
+from acme.om.platform_agents.kinds.software_engineer.kind import SOFTWARE_ENGINEER_KIND
 from acme.om.platform_root import PlatformManagers, PlatformRootOptions, build_platform_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings

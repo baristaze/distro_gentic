@@ -10,6 +10,7 @@ platform's kinds is `ProductKinds`, declared once in
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
@@ -121,16 +122,18 @@ from acme.om.platform_agents.catalog import (
     with_object_model,
     with_shipped,
 )
+from acme.om.platform_agents.folders import KindFolder
 from acme.om.platform_agents.impl.gate import ResultGateReviewImpl
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
+from acme.om.platform_agents.impl.manuals import AgentsManagerOwnManualsImpl
 from acme.om.platform_agents.kinds import (
     GRACES,
     PROMPT_CACHE_LIFE,
-    SHIPPED,
     TOOLSETS,
     WARM_GRACE,
     WORKSPACE_BASE_KINDS,
 )
+from acme.om.platform_agents.shipped import FOLDERS, SHIPPED
 from acme.om.platform_loop_hooks import PlatformLoopHooksImpl
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.keys import AgentSessionKeysImpl
@@ -193,6 +196,9 @@ class PlatformManagers(Managers):
     kinds: AgentKindCatalog
     """The kinds every session starts on, each version they run: what a
     text a person writes for them, such as an agent playbook, reaches."""
+    folders: Mapping[str, KindFolder]
+    """Every kind that is a folder, the platform's and the product's, by its
+    name: the manuals and the wiki its sessions reach as the kind's own."""
 
 
 ProductTools = Callable[[Callable[[], PlatformManagers]], tuple[ToolInterface, ...]]
@@ -244,7 +250,9 @@ def no_resources(managers: Callable[[], PlatformManagers]) -> tuple[ProductResou
 @dataclass(frozen=True)
 class ProductKinds:
     """What a product adds to the platform's kinds: its agent kinds, every
-    version it still runs; its tools, and the authorization classes they
+    version it still runs, each kind of its own a folder (`folders`, from
+    `platform_agents.folders.folder_of`) whose manuals and wiki reach its
+    sessions as the kind's own; its tools, and the authorization classes they
     declare beside the platform's, with the ceiling any of those classes
     holds whatever a tenant's layer says; its work kinds, each with its payload,
     its permission, its lane, and the claimant kind that takes it through
@@ -271,8 +279,10 @@ class ProductKinds:
     assistant's current version reads it beside the platform's
     (`docs/object-model.md`), which a product never edits, and a document
     the assistant's corpus does not hold is refused at boot.
-    Its agent kinds join the platform's catalog, which refuses a version
-    declared twice, and its tools the
+    Its agent kinds, those it names alone (`agents`) and its folders'
+    versions, join the platform's catalog, which refuses a version
+    declared twice; a kind it declares as two folders, or as a folder and
+    alone, is refused, so a kind's texts are one folder's. Its tools join the
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,
     and a name the platform holds is refused, so a product adds kinds and
@@ -283,6 +293,7 @@ class ProductKinds:
     it."""
 
     agents: tuple[AgentKind, ...] = ()
+    folders: tuple[KindFolder, ...] = ()
     tools: ProductTools = no_tools
     classes: tuple[str, ...] = ()
     ceilings: Mapping[str, Decision] = field(default_factory=lambda: {})
@@ -299,6 +310,12 @@ class ProductKinds:
     graces: Mapping[str, timedelta] = field(default_factory=lambda: {})
     workspace_bases: frozenset[tuple[str, int]] = frozenset()
 
+    @property
+    def agent_kinds(self) -> tuple[AgentKind, ...]:
+        """Every version of every kind of the product's: those it names
+        alone, then its folders'."""
+        return (*self.agents, *(version for folder in self.folders for version in folder.versions))
+
     def __post_init__(self) -> None:
         platform = {toolset.name for toolset in TOOLSETS}
         declared = {(toolset.name, toolset.version): toolset for toolset in self.toolsets}
@@ -310,8 +327,15 @@ class ProductKinds:
                     f"toolset {toolset.name} is the platform's, which no product changes"
                 )
         declared.update({(toolset.name, toolset.version): toolset for toolset in TOOLSETS})
-        own = {kind.name for kind in self.agents}
+        named = [folder.name for folder in self.folders]
+        twice = sorted({name for name in named if named.count(name) > 1})
+        if twice:
+            raise ValueError(f"the product declares {twice[0]} as two folders")
         for kind in self.agents:
+            if kind.name in named:
+                raise ValueError(f"the product declares {kind.name} as a folder and alone")
+        own = {kind.name for kind in self.agent_kinds}
+        for kind in self.agent_kinds:
             for toolset in (*kind.toolsets, *kind.deferred):
                 if declared.get((toolset.name, toolset.version)) != toolset:
                     raise ValueError(
@@ -328,7 +352,7 @@ class ProductKinds:
                     f"{name}'s warm grace of {grace} runs outside the prompt cache's life "
                     f"of {PROMPT_CACHE_LIFE}"
                 )
-        versions = {(kind.name, kind.version) for kind in self.agents}
+        versions = {(kind.name, kind.version) for kind in self.agent_kinds}
         for name, version in sorted(self.workspace_bases):
             if (name, version) not in versions:
                 raise ValueError(
@@ -717,7 +741,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
         product = options.product_kinds or ProductKinds()
         self._product = product
         self._product_resources: tuple[ProductResourceKind, ...] | None = None
-        agent_kinds = (*agent.agent_kinds, *product.agents)
+        agent_kinds = (*agent.agent_kinds, *product.agent_kinds)
+        folders = product.folders
         tool_catalog = (*agent.tool_catalog, *product.tools(lambda: self.managers))
         domain_classes = (*agent.domain_classes, *product.classes)
         if options.platform_agents is not None:
@@ -728,6 +753,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 shipped, product.object_model, options.platform_agents.corpus
             )
             agent_kinds = (*shipped, *agent_kinds)
+            folders = (*FOLDERS, *folders)
             tool_catalog = with_shipped(
                 options.platform_agents,
                 tool_catalog,
@@ -754,6 +780,9 @@ class RootHooksPlatformImpl(RootHooksInterface):
         self._tool_catalog = tool_catalog
         self._domain_classes = domain_classes
         self._kinds = AgentKindCatalog(kinds=agent_kinds)
+        self._folders: Mapping[str, KindFolder] = MappingProxyType(
+            {folder.name: folder for folder in folders}
+        )
         self._work_kinds = engine.get("work_kinds", KINDS).extended(product.work)
         self._claimant_kinds = ClaimantKinds(
             (*platform_claimant_kinds(), *product.claimants), reserved=PLATFORM_PREFIXES
@@ -1190,8 +1219,13 @@ class RootHooksPlatformImpl(RootHooksInterface):
         return ResultGateReviewImpl(results, self._sessions, self._steps)
 
     def agents(self, agents: AgentsManagerInterface) -> AgentsManagerInterface:
+        # Each kind's own manuals sit first in a new session's standing text,
+        # beneath any layer a root adds, so no root makes a session without
+        # them.
+        manuals = {name: folder.manual for name, folder in self._folders.items() if folder.manual}
+        own = AgentsManagerOwnManualsImpl(agents, manuals) if manuals else agents
         layer = self._options.agents_layer
-        return agents if layer is None else layer(agents)
+        return own if layer is None else layer(own)
 
     def build(self, managers: Managers) -> PlatformManagers:
         """The platform's managers over the engine's, which `build_managers`
@@ -1312,6 +1346,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             agent_projects=agent_projects,
             benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
             kinds=self._kinds,
+            folders=self._folders,
         )
         return self._built
 

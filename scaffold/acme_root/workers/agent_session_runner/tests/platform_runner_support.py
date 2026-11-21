@@ -10,7 +10,7 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.content import ToolUseBlock
 from acme.integrations.model_providers.types import StopReason, Usage
 from acme.om.platform_agents import kinds
-from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
+from acme.om.platform_agents.kinds.software_engineer.kind import SOFTWARE_ENGINEER_KIND
 
 SOFTWARE_ENGINEER = SOFTWARE_ENGINEER_KIND.model_copy(
     update={"version": SOFTWARE_ENGINEER_KIND.version + 1, "isolation": HOST}

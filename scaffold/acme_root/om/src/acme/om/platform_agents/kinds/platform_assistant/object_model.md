@@ -1,0 +1,1 @@
+{path} holds the product's own part of the object model, in the shape of docs/object-model.md: what each of its things is, what owns it, what moves it between its states, what each wait waits on, and what clears it and who may. Explain the product's own things from it.

@@ -59,7 +59,7 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.route import Effect
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER_KIND
+from acme.om.platform_agents.kinds.software_engineer.kind import SOFTWARE_ENGINEER_KIND
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.tenancy.rules import permissions_of
 

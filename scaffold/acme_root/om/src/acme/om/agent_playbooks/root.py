@@ -75,6 +75,7 @@ class AgentPlaybooksLayer:
                 managers.kinds,
                 SessionAgentProjectsBoundImpl(self._storage.get_agent_project_storage()),
                 self._clock,
+                {name: folder.manual for name, folder in managers.folders.items() if folder.manual},
             )
             self._built = (agent_playbooks, managers.agent_steps)
         return self._built[0]

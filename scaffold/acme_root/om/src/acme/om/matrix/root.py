@@ -39,7 +39,7 @@ from acme.om.matrix.impl.models import ModelsManagerMatrixImpl
 from acme.om.matrix.impl.resolver import MatrixOptions, MatrixResolverImpl, Workload
 from acme.om.matrix.manager import MatrixManagerInterface, MatrixOperatorManagerInterface
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow
-from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface

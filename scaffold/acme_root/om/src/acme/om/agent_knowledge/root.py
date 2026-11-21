@@ -14,7 +14,8 @@ built:
     managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     agent_knowledge = layer.build(managers)
 
-A session's agent project is read from the agent projects' rows."""
+A session's agent project is read from the agent projects' rows, and the
+entries its kind ships from the kinds' folders the managers carry."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -46,6 +47,7 @@ def build_agent_knowledge(
         options or AgentKnowledgeOptions(),
         reach_of(managers.kinds),
         clock,
+        {name: folder.wiki for name, folder in managers.folders.items() if folder.wiki},
     )
 
 

@@ -26,7 +26,11 @@ from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.hosts import HostsManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import COMMENT, CommentImpl
-from acme.om.platform_agents import kinds, rules
+from acme.om.platform_agents import rules
+from acme.om.platform_agents.kinds.platform_assistant.kind import (
+    PLATFORM_ASSISTANT_KIND,
+    PRODUCT_OBJECT_MODEL,
+)
 from acme.om.platform_agents.tools.agent_knowledge import (
     ReadAgentKnowledgeImpl,
     SearchAgentKnowledgeImpl,
@@ -201,7 +205,7 @@ def with_assistant_tools(
     added = tuple(extra)
     if len(set(added)) != len(added):
         raise UnsafeConfiguration("the slot names one of the assistant's tools twice")
-    current = kinds.PLATFORM_ASSISTANT_KIND
+    current = PLATFORM_ASSISTANT_KIND
     taken = set(added) & set(current.tools)
     if taken:
         raise UnsafeConfiguration(
@@ -218,7 +222,7 @@ def with_object_model(
 ) -> tuple[AgentKind, ...]:
     """The kinds with the platform assistant's current version told where a
     product's own section of the object model is: one more prompt after the
-    platform's (`kinds.PRODUCT_OBJECT_MODEL`), so it explains the product's
+    platform's (`PRODUCT_OBJECT_MODEL`), so it explains the product's
     things from that document as it explains the platform's from
     `docs/object-model.md`. The versions before it keep their prompts, and a
     product that names none changes no kind. A document the corpus does not
@@ -232,8 +236,8 @@ def with_object_model(
             f"the slot names {path} as the product's object model, which the assistant's "
             "corpus does not hold: the knowledge map lists no such document for the tenant's users"
         )
-    current = kinds.PLATFORM_ASSISTANT_KIND
-    prompt = kinds.PRODUCT_OBJECT_MODEL.format(path=path)
+    current = PLATFORM_ASSISTANT_KIND
+    prompt = PRODUCT_OBJECT_MODEL.format(path=path)
     return tuple(
         kind.model_copy(update={"prompts": (*kind.prompts, prompt)})
         if (kind.name, kind.version) == (current.name, current.version)

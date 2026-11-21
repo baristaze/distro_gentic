@@ -26,7 +26,7 @@ from acme.om.language_models.types.fill import MAIN, SUMMARIZER
 from acme.om.matrix.root import MatrixLayer, engine_rows
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.matrix.types.record import BenchmarkRun
-from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_root import PlatformManagers
 from acme.om.retention.types.policy import RetentionPolicy
 from acme.om.storage.root import StorageInterface
