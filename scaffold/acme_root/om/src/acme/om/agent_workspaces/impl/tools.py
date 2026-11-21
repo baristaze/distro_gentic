@@ -14,7 +14,9 @@ at the spawn and kept there as the child's (`fork_point`). The pin holds the
 session's durability and base with its isolation. A provider's refusal
 clears, since another host may give the isolation later, unless it refuses
 what the prepare asks beyond it (a snapshot's durability, a base, or a
-restore): that refusal is for good, and ends the loop with its reason. A
+restore): that refusal is for good, and ends the loop with its reason.
+What a prepare would refuse for good, here or on the cloud pool, is asked
+of the pin before the loop's first model call (`check_pinned`). A
 workspace a snapshot started keeps the tree the snapshot holds: its branch
 is not brought up over it. Every other operation is the engine's,
 unchanged.
@@ -50,6 +52,7 @@ from acme.infra.agent_workspaces import (
     AgentWorkspace,
     AgentWorkspaceLost,
     Durability,
+    EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -61,13 +64,15 @@ from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import host_refusal
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agent_workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.cloud_pool import CloudPoolManagerInterface
-from acme.om.context import TenantContext
+from acme.om.context import Permission, TenantContext
+from acme.om.exceptions import NotFound
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
@@ -148,7 +153,7 @@ class HeldWorkspaces:
             self._held.pop(agent_session_id, None)
 
 
-class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
+class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInterface):
     def __init__(
         self,
         inner: ToolsManagerInterface,
@@ -191,6 +196,52 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
+
+    async def check_agent_workspace(self, ctx: TenantContext, spec: IsolationSpec) -> None:
+        if spec.mode is IsolationMode.NONE:
+            await self._inner.check_agent_workspace(ctx, spec)
+            return
+        ctx.require(Permission.WRITE)
+        # The kind's spec, which names no session: one the cloud pool runs
+        # is held to what its VMs can ever hold, read of the spec alone as
+        # the transport reads it, and one they never can is refused before
+        # the loop's first model call, and no VM starts. The session's pin,
+        # held where it is placed, is the platform's loop hooks' to check
+        # (`check_pinned`).
+        if self._cloud is not None and await self._cloud.runs(spec):
+            await self._cloud.check(spec)
+
+    async def check_pinned(
+        self, ctx: TenantContext, agent_session_id: UUID, asked: IsolationSpec
+    ) -> None:
+        ctx.require(Permission.WRITE)
+        try:
+            pinned = (await self._agent_workspaces.get_workspace(ctx, agent_session_id)).spec()
+        except NotFound:
+            # Pinned at its first prepare, to what its loop asks.
+            pinned = asked
+        if pinned.mode is IsolationMode.NONE:
+            return
+        # Placed as its prepare places it.
+        try:
+            pool = (
+                None if self._placed is None else await self._placed.pool_of(ctx, agent_session_id)
+            )
+        except NotFound:
+            return  # its pool is gone: it waits for it, as its prepare does
+        if pool is not None:
+            return
+        if self._cloud is not None and await self._cloud.runs(pinned):
+            await self._cloud.check(pinned)
+            return
+        if not _beyond_isolation(pinned, None):
+            # A refusal of the isolation alone clears: another host may give it.
+            return
+        try:
+            await self._inner.check_agent_workspace(ctx, pinned)
+        except InfraException as refused:
+            if not (isinstance(refused, IsolationRefused) and refused.clears):
+                raise
 
     async def prepare_agent_workspace(
         self,
@@ -803,6 +854,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         call_input: Mapping[str, Any],
         workspace: AgentWorkspace,
         *,
+        egress: EgressMode,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
         above: Sequence[ToolPolicyLayer] = (),
@@ -814,10 +866,27 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             request,
             call_input,
             workspace,
+            egress=await self._pinned_egress(ctx, request, workspace, egress),
             holds_private=holds_private,
             tree_deadline=tree_deadline,
             above=above,
         )
+
+    async def _pinned_egress(
+        self, ctx: TenantContext, request: AgentStep, workspace: AgentWorkspace, asked: EgressMode
+    ) -> EgressMode:
+        """The session's egress as its pin holds it, which the rule of two
+        reads whatever workspace the call was given: an agent project's
+        allowlist may open egress its kind holds to its hosts, or close what
+        its kind opens. A prepared workspace holds the pin; a session never
+        pinned holds what its kind asks."""
+        if workspace.spec.mode is not IsolationMode.NONE:
+            return workspace.spec.egress.mode
+        try:
+            pin = await self._agent_workspaces.get_workspace(ctx, request.agent_session_id)
+        except NotFound:
+            return asked
+        return pin.egress
 
     async def execute(
         self,

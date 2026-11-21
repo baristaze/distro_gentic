@@ -14,6 +14,12 @@ of](../../../../README.md).
   what one of its sessions may spend as a sub-agent.
   A product declares its kinds; each is versioned, and a session keeps
   the version it started on.
+- **Request kind**: a kind whose loop runs in the request that asks it,
+  not in a worker. It has no workspace, starts no sub-agent and no job,
+  and makes no call a person must approve, in at most 10 model calls and
+  30 seconds; a kind that breaks any of these is refused when the
+  product declares it. Asked a question, it answers in the same request,
+  as a stream, and where another loop would wait, its loop ends.
 - **Done rule**: an assistant is done when it answers without calling a
   tool; an agent that delivers work is done only when it submits a
   result.
@@ -39,9 +45,11 @@ of](../../../../README.md).
   kept.
 - **Loop hooks**: where a layer above the engine extends a run without
   editing the loop: the toolsets it attaches to a session beyond its
-  kind's, held or deferred, and the steps it appends before a run's
-  first model call. With no hooks supplied, a session holds its kind's
-  tools and nothing is appended.
+  kind's, held or deferred, the steps it appends before a run's first
+  model call, which no workspace precedes, and those it appends once
+  the run's first call that reaches the workspace has prepared it,
+  before that call runs. With no hooks supplied, a session holds its
+  kind's tools and nothing is appended.
 
 ## What can happen
 
@@ -79,11 +87,13 @@ of](../../../../README.md).
   from, and starts only when its person speaks to it.
 - **Submit** a result through the gate.
 - **Run** a loop. A run takes up the loop an input woke, or one a park
-  let go. It prepares the session's workspace first, renders a request,
-  passes the budget gate, writes the request, calls the model, and
-  writes the response. Then it runs each tool call the model asked for,
-  through policy and the transport, writing each request before it is
-  decided and each answer before the next call.
+  let go. It checks the session's isolation spec first, renders a
+  request, passes the budget gate, writes the request, calls the model,
+  and writes the response. Then it runs each tool call the model asked
+  for, through policy and the transport, writing each request before it
+  is decided and each answer before the next call. The workspace is
+  prepared at the first call that reaches it, and only that call waits
+  for it; a run whose calls reach none prepares none (ADR 1043).
 - **End, park, or yield.** A loop ends on the kind's done rule, a bound,
   a principal's cancel, or an error no park can clear. It parks when it
   cannot go on yet, holding no workspace while it waits: on its person,
@@ -211,11 +221,14 @@ of](../../../../README.md).
   a few times in a row earns a notice too, before the streak ends the
   loop.
 - **An interrupt stops the call it names,** and no other.
-- **Isolation is refused, never weakened.** A refusal of the kind's spec
-  that cannot clear ends the loop before its first model call. One that
-  waits for a workspace that may come parks the loop on `leasable_resource`, and
-  it asks again after a wait. A workspace whose durable state is gone
-  parks the loop, loudly, for a person. The step that ends or parks the
+- **Isolation is refused, never weakened.** A spec the provider can
+  never meet ends the loop before its first model call, with nothing
+  made. A prepare that cannot clear, a base whose setup failed say,
+  ends the loop at the call that asked, each call left open answered
+  with the cause. A prepare that waits for a workspace that may come parks the
+  loop on `leasable_resource` with its call open, and it asks again
+  after a wait; the call then runs once. A workspace whose durable state
+  is gone parks the loop, loudly, for a person. The step that ends or parks the
   loop names its cause for a person: what the spec asks that the
   provider cannot meet, a setup command and how it ended, or what was
   lost, never what a command wrote (ADR 1035).
@@ -234,14 +247,18 @@ that offer them. A child's loop hands its report to the agents manager,
 which bounds it through the windows and writes it into the parent's
 inbox. The session runner calls the loop's one operation with
 the session and the context its claim built: once each time the session
-turns pending, and again when a run's time is up. Nothing else drives a
-loop. A job's report comes in through the loop too, from whatever the
+turns pending, and again when a run's time is up. A kind whose loop runs
+in the request that asks it is driven by that request instead: the API
+calls the operation once per question, and where the loop would park or
+yield, it ends (ADR 1044). Nothing else drives a loop. A job's report comes in through the loop too, from whatever the
 product connects to the system the job runs on. A session waits in a
 line of the [leases](../leases/README.md) as a waiter the root
 registers, and a grant reaches it through the work queue. A layer above
 the engine extends a run through the loop's hooks, which the root wires:
 once a run, the loop asks them for the toolsets a session holds beyond
-its kind, and, once its workspace is prepared, for the steps they append
-before its first model call.
+its kind, and, before any workspace is prepared, for the steps they
+append before its first model call; once a call has prepared the
+workspace, it gives them the workspace and asks for the steps they
+append about it before that call runs.
 Each session is an [agent session](../agent_sessions/README.md); what it
 may do and who pays is [attribution](../attribution/README.md)'s.

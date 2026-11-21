@@ -236,7 +236,7 @@ class WatchManagerImpl(WatchManagerInterface):
             return
         if pin.durability is not Durability.SNAPSHOT:
             return
-        latest = kept_snapshot(await self._history(ctx, agent_session_id))
+        latest = kept_snapshot(await self._history(ctx, agent_session_id), settled=False)
         named = None if latest is None else named_snapshot(latest)
         if named is None:
             return

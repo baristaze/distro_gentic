@@ -244,6 +244,8 @@ async def test_a_container_provider_refuses_what_it_cannot_hold_before_it_reache
     monkeypatch.setattr("acme.infra.agent_workspaces.container.docker", docker)
     provider = AgentWorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     with pytest.raises(IsolationRefused):
+        await provider.check(asked)
+    with pytest.raises(IsolationRefused):
         await provider.prepare(new_id(), new_id(), asked)
     assert calls == []
 

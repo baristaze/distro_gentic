@@ -317,7 +317,7 @@ def wired(
     agent_knowledge = AgentKnowledgeLayer(storage, clock=clock)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        return agent_knowledge.tools(agent_playbooks.tools(trust.tools(inner)))
+        return agent_playbooks.tools(trust.tools(inner))
 
     managers = build_platform_managers(
         storage,
@@ -368,7 +368,7 @@ def wired(
         clock,
         sleep,
         leases=managers.leases,
-        hooks=LoopHooksNullImpl(),
+        hooks=agent_knowledge.loop_hooks(LoopHooksNullImpl()),
     )
     intake = build_intake(storage, managers, principal_context=members, clock=clock)
     return Wired(

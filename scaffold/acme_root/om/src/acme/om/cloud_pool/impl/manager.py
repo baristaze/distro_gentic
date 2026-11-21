@@ -208,6 +208,14 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     async def runs(self, spec: IsolationSpec) -> bool:
         return bool(self._options.image) and spec.mode is IsolationMode.VM
 
+    async def check(self, spec: IsolationSpec) -> None:
+        why = refusal(
+            spec, closes_egress=self._vms.closes_egress(), sizes=self._options.sizes.allowed()
+        )
+        if why is not None:
+            # Composed from what the spec declares: the session reads it.
+            raise IsolationRefused(why, cause=why)
+
     # A session's VM.
 
     async def prepare(
@@ -217,12 +225,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         spec: IsolationSpec,
         restore: KeptSnapshot | None = None,
     ) -> AgentWorkspace:
-        why = refusal(
-            spec, closes_egress=self._vms.closes_egress(), sizes=self._options.sizes.allowed()
-        )
-        if why is not None:
-            # Composed from what the spec declares: the session reads it.
-            raise IsolationRefused(why, cause=why)
+        await self.check(spec)
         if restore is not None and not restore.on_vms:
             raise AgentWorkspaceLost(
                 f"snapshot {restore.id} of session {agent_session_id} was not taken of a VM "

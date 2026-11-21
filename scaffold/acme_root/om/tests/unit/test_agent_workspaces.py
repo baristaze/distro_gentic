@@ -1,9 +1,10 @@
 """A session's workspace as the platform runs it, over the memory roots and
 the scripted provider: its isolation pinned when the session is created and
-refused by a host that cannot give it, with the loop parked on the
-resource; its work pushed before its instance goes, the next loop told, and
-a vanished branch failing loudly; its egress its agent project's allowlist; and
-its own branch and pull request its work product."""
+refused, at the first call that reaches it, by a host that cannot give it,
+with the loop parked on the resource and the call open; its work pushed
+before its instance goes, the next loop that reaches it told, and a
+vanished branch failing loudly; its egress its agent project's allowlist;
+and its own branch and pull request its work product."""
 
 import asyncio
 from dataclasses import dataclass, field, replace
@@ -55,6 +56,8 @@ from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unav
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
+from acme.om.tools.types.tool import ToolClass
 
 from contracts.agent_project_storage import make_agent_project
 from contracts.agent_workspaces import (
@@ -65,7 +68,7 @@ from contracts.agent_workspaces import (
     PullRequestsTwin,
     ReaderTwin,
 )
-from contracts.loops import ASSISTANT, reply, said
+from contracts.loops import ALLOWED, ASSISTANT, Lookup, reply, said, use
 from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 
@@ -113,13 +116,15 @@ def of_type(steps: list[AgentStep], step_type: AgentStepType) -> list[AgentStep]
 
 
 async def one_loop(loop: PlatformLoop, agent_session_id: Any, text: str = "Answer it.") -> Any:
+    """A loop whose first call reaches the workspace, which prepares it."""
     await loop.say(agent_session_id, text)
-    loop.anthropic.add(reply(said("Done.")))
+    loop.anthropic.add(reply(use("lookup")), reply(said("Done.")))
     return await loop.loops.run(loop.owner, agent_session_id)
 
 
 # Check 1: a host that cannot give a session's pinned isolation refuses its
-# workspace before the first model call, and the loop parks on `resource`.
+# workspace at the first call that reaches it, and the loop parks on
+# `resource` with that call open.
 
 
 async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_the_resource(
@@ -139,10 +144,10 @@ async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_th
     assert run.end is RunEnd.PARKED and run.park is not None
     assert run.park.reason is ParkReason.LEASABLE_RESOURCE and run.park.unlock == "agent_workspace"
     assert run.park.retry_at is not None and run.park.retry_at > loop.clock()
-    assert loop.anthropic.calls == [], "refused before the first model call"
+    assert len(loop.anthropic.calls) == 1, "refused at the call that reached the workspace"
     assert provider(loop).live == set(), "no weaker place, and no place at all, was made"
     steps = await loop.history(agent_session_id)
-    assert [step.type for step in steps] == [AgentStepType.MESSAGE, AgentStepType.PARKED]
+    assert [step.type for step in steps][-2:] == [AgentStepType.TOOL_REQUEST, AgentStepType.PARKED]
 
     # At its retry time it asks again, and a host that still cannot give it
     # parks it again: it waits, and never runs on less.
@@ -150,7 +155,7 @@ async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_th
     await loop.managers.agent_sessions.wake_agent_session(loop.owner, agent_session_id, run.park)
     again = await loop.loops.run(loop.owner, agent_session_id)
     assert again.park is not None and again.park.reason is ParkReason.LEASABLE_RESOURCE
-    assert loop.anthropic.calls == []
+    assert len(loop.anthropic.calls) == 1, "the open call waits, and no model call is made"
 
 
 async def test_a_prepare_is_held_to_the_pin_whatever_a_loop_asks(tmp_path: Path) -> None:
@@ -222,15 +227,30 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
     assert provider(loop).live == set(), "kept, then let go"
 
     git.dirty = False
+    # A run that reaches no workspace prepares none, and tells nothing.
+    await loop.say(agent_session_id, "What did you do?")
+    loop.anthropic.add(reply(said("I pushed the work.")))
+    answered = await loop.loops.run(loop.owner, agent_session_id)
+
+    assert answered.outcome is LoopOutcome.SUCCEEDED
+    steps = await loop.history(agent_session_id)
+    assert of_type(steps, AgentStepType.ENVIRONMENT_CHANGED) == [], "never told without one"
+    held = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
+    assert len(held.notices) == 1, "kept for the next run that reaches it"
+
     third = await one_loop(loop, agent_session_id, "And now?")
 
     assert third.outcome is LoopOutcome.SUCCEEDED
     steps = await loop.history(agent_session_id)
     (told,) = of_type(steps, AgentStepType.ENVIRONMENT_CHANGED)
     assert ref in told.as_text() and commit in told.as_text()
+    # Told once the run's first call that reached the workspace prepared it,
+    # before that call ran, and delivered with its answer.
+    reached = of_type(steps, AgentStepType.TOOL_REQUEST)[-1]
+    (answer,) = [s for s in steps if s.responds_to == reached.id]
     requests = of_type(steps, AgentStepType.MODEL_REQUEST)
-    assert requests[1].seq < told.seq < requests[2].seq, "told before the next loop's call"
-    assert told.id in requests[2].refs, "the call delivered it"
+    assert reached.seq < told.seq < answer.seq < requests[-1].seq, "told before the call ran"
+    assert told.id in requests[-1].refs, "the next model call delivered it"
     held = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
     assert held.notices == (), "told once"
 
@@ -279,7 +299,7 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
     git.dirty, git.refuses_push = True, True
     git.calls.clear()
     await loop.say(agent_session_id, "Next change.")
-    loop.anthropic.add(reply(said("Never asked.")))
+    loop.anthropic.add(reply(use("lookup")))
 
     with pytest.raises(Unavailable):
         await loop.loops.run(loop.owner, agent_session_id)
@@ -287,6 +307,7 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
     assert git.cuts == [] and git.calls == ["snapshot"], "nothing was cut over the work"
     git.refuses_push = False
     git.calls.clear()
+    loop.anthropic.add(reply(said("Done.")))
 
     rebuilt = await loop.loops.run(loop.owner, agent_session_id)
 
@@ -315,7 +336,8 @@ async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for
 
     run = await one_loop(loop, agent_session_id)
 
-    assert run.end is RunEnd.PARKED and run.park is not None and loop.anthropic.calls == []
+    assert run.end is RunEnd.PARKED and run.park is not None
+    assert len(loop.anthropic.calls) == 1, "parked at the call that reached the workspace"
     assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "agent_workspace")
     assert git.cuts == [], "nothing merged or cut"
 
@@ -345,7 +367,7 @@ async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_perso
 
     assert lost.end is RunEnd.PARKED and lost.park is not None
     assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "agent_workspace")
-    assert len(loop.anthropic.calls) == calls, "it failed before the first model call"
+    assert len(loop.anthropic.calls) == calls + 1, "it failed at the call that reached it"
     assert git.cuts == [], "nothing restarted from the default branch"
     assert provider(loop).live == set()
 
@@ -478,6 +500,68 @@ async def test_only_one_who_manages_the_tenant_writes_an_allowlist(tmp_path: Pat
     )
     with pytest.raises(NotAuthorized):
         await loop.platform.agent_workspaces.write_allowlist(member, listed)
+
+
+@pytest.mark.parametrize("reaches", [True, False], ids=["reaches", "reaches-none"])
+async def test_a_command_waits_for_a_person_where_its_agent_project_opened_the_egress(
+    tmp_path: Path, reaches: bool
+) -> None:
+    """The rule of two reads the egress the session's pin holds, whatever
+    workspace a call was given: a kind that names its hosts runs with open
+    egress where its agent project chose it, so once a tool result marks
+    the session, a command acts outward and waits for a person."""
+    worker = ASSISTANT.model_copy(
+        update={
+            "name": "worker",
+            "tools": ("lookup", "shell"),
+            "isolation": IsolationSpec(
+                mode=IsolationMode.TWIN,
+                egress=EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("git.example.com",)),
+            ),
+            "policy": ToolPolicyLayer(
+                rules=(
+                    *ALLOWED.rules,
+                    ToolPolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
+                )
+            ),
+        }
+    )
+    shell = Lookup("shell", authorization_class=ToolClass.EXECUTE, workspace=reaches)
+    agent_projects = AgentProjectsTwin()
+    loop = loop_of(
+        tmp_path,
+        worker,
+        platform=PlatformRootOptions(
+            workspace_agent_projects=agent_projects, workspace_git=GitTwin()
+        ),
+        extra=(shell,),
+    )
+    opened = EgressAllowlist(
+        id=new_id(),
+        created_at=loop.clock(),
+        updated_at=loop.clock(),
+        created_by=loop.owner.user_id,
+        updated_by=loop.owner.user_id,
+        agent_project_id=agent_projects.agent_project_id,
+        open=True,
+        reason="the build fetches from anywhere",
+    )
+    await loop.platform.agent_workspaces.write_allowlist(loop.owner, opened)
+    agent_session_id = await loop.start("worker")
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
+    assert pinned.egress is EgressMode.OPEN, "its agent project opened what its kind names"
+    await loop.say(agent_session_id, "Read the totals, then run the build.")
+    loop.anthropic.add(
+        reply(use("lookup", use_id="use_lookup")),
+        reply(use("shell", use_id="use_shell")),
+        reply(said("Built.")),
+    )
+
+    run = await loop.loops.run(loop.owner, agent_session_id)
+
+    assert run.end is RunEnd.PARKED and run.park is not None
+    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "approval")
+    assert shell.ran_as == [], "it read data, so it waits before it runs under open egress"
 
 
 # Check 4: a session's own branch and pull request on its agent project's bound

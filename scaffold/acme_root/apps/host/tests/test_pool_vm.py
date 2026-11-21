@@ -308,6 +308,12 @@ async def test_a_vms_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
     container = KEPT.model_copy(update={"mode": IsolationMode.CONTAINER})
     with pytest.raises(IsolationRefused):
         await provider.prepare(ORG, SESSION, container)
+    # Its check refuses what its prepare refuses of the spec, and makes nothing.
+    await provider.check(opened)
+    for never in (based, listed, container):
+        with pytest.raises(IsolationRefused) as refused:
+            await provider.check(never)
+        assert refused.value.cause, "the session reads why"
 
     await provider.release(workspace)
     assert await provider.held_instances() == []

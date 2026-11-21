@@ -42,8 +42,9 @@ says.)
 ## WSP-02 Work is pushed before release, and nothing restarts silently
 
 **Principle.** Before an instance is released, uncommitted work is
-committed to a snapshot ref and pushed, and the next loop is told about
-it. When a session's branch has vanished, the platform rebuilds it only
+committed to a snapshot ref and pushed, and the next loop that reaches
+the workspace is told about it, before the call that reached it runs.
+When a session's branch has vanished, the platform rebuilds it only
 when it knows why (a merged or closed pull request). Anything else fails
 loudly; nothing restarts silently from the default branch.
 
@@ -89,21 +90,27 @@ it is a twin.
 ## WSP-04 Isolation is pinned, and a host that cannot provide it refuses
 
 **Principle.** A session's isolation is pinned when it is created and
-enforced by the host. A host that cannot provide it refuses the
-`workspace` work before the loop's first model call, and the loop parks
-on `resource` until a host in its placement can. Isolation is never
-weakened.
+enforced by the host. A spec its placement can never meet is refused
+before the loop's first model call, with its cause, and nothing is made.
+The workspace is prepared at the first call that reaches it: a host that
+cannot provide it now refuses the `workspace` work there, and the loop
+parks on `resource`, the call open, until a host in its placement can.
+Isolation is never weakened.
 
 **Source.** Workspaces and Isolation, Pinned, Probed, Refused.
 
 **Look for.** Where a session's isolation is set, and whether anything
 changes it later; what a host does with `workspace` work whose isolation
-it cannot provide; when in the loop that refusal comes.
+it cannot provide; when in the loop each refusal comes: a provider's
+`check` before the first model call, a prepare at the first call that
+reaches the workspace.
 
 **Violation.** Isolation chosen per loop or per host rather than pinned
 at creation; a host that prepares a weaker level than the pinned one; a
-refusal after the loop's first model call; a refused session that fails
-instead of parking on `resource`.
+spec the placement can never meet refused after the loop's first model
+call, or once an instance is made; a workspace prepared before a call
+reaches it; a refused session that fails instead of parking on
+`resource`.
 
 **Severity.** high
 

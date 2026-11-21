@@ -71,6 +71,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Question
+         * @description A session on a kind whose loop runs in the request that asks it,
+         *     started and asked at once: its loop runs in this request, and streams.
+         */
+        post: operations["start_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{agent_session_id}": {
         parameters: {
             query?: never;
@@ -365,7 +386,12 @@ export interface paths {
          */
         get: operations["get_questions"];
         put?: never;
-        post?: never;
+        /**
+         * Ask
+         * @description A question to a session the caller steers: its loop runs in this
+         *     request, and streams.
+         */
+        post: operations["ask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -997,6 +1023,15 @@ export interface components {
             steerer?: string | null;
         };
         /**
+         * QuestionRequest
+         * @description A question to a session the caller steers, of a kind whose loop runs
+         *     in the request that asks it.
+         */
+        QuestionRequest: {
+            /** Text */
+            text: string;
+        };
+        /**
          * QuestionView
          * @description What a session asks of a person now: a park on a person that is no
          *     call's decision, such as a step guard to lift, a deadline to move, or a
@@ -1058,6 +1093,19 @@ export interface components {
             /** Title */
             title: string;
             workspace?: components["schemas"]["WorkspacePlace"] | null;
+        };
+        /**
+         * StartQuestionRequest
+         * @description A question that starts a session on the latest version of a kind
+         *     whose loop runs in the request that asks it.
+         */
+        StartQuestionRequest: {
+            /** Kind */
+            kind: string;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
         };
         /**
          * StopReason
@@ -1505,6 +1553,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_question: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description The question's stream, as server-sent events: `session` (QuestionSessionView), then `text` (QuestionTextView) and `ping` (QuestionPingView), and one `end` (QuestionEndView) or `error` (QuestionErrorView). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2105,6 +2190,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description The question's stream, as server-sent events: `session` (QuestionSessionView), then `text` (QuestionTextView) and `ping` (QuestionPingView), and one `end` (QuestionEndView) or `error` (QuestionErrorView). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */

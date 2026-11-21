@@ -3,11 +3,11 @@ a host of the pool run it: the runner's container, wired as it boots, and
 the host's own agent against the API in process, each over a storage root
 of its own, as two processes hold them, and one key service, as a cloud's.
 
-While no host of the pool is online, the loop parks on the resource before
-any model call, and a prepare waits on the pool's lane. A host that comes
-online claims it, makes the workspace, and the session is bound to it; the
-next loop's tool call runs there, in the directory that host made, and
-nowhere on the runner.
+While no host of the pool is online, the loop parks on the resource at the
+first call that reaches the workspace, with that call open, and a prepare
+waits on the pool's lane. A host that comes online claims it, makes the
+workspace, and the session is bound to it; the call then runs there, in the
+directory that host made, and nowhere on the runner.
 
 Needs a migrated database (`make migrate`)."""
 
@@ -73,7 +73,7 @@ def resolved(location: str) -> str:
     return str(Path(location).resolve())
 
 
-async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_pools_host(
+async def test_a_pinned_session_waits_at_its_call_then_runs_it_on_its_pools_host(
     runner: RunnerContainer, api: Stack, tmp_path: Path
 ) -> None:
     owner = api.owner
@@ -89,12 +89,13 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     said = message_step(new_id(), utcnow(), session.id, owner, "Where do you run?")
     await managers.agent_sessions.receive(owner, session.id, [said])
 
-    # No host of the pool is online: the loop waits on the resource, and no
-    # model call is made.
+    # No host of the pool is online: the loop waits on the resource at the
+    # call that reaches the workspace, the call open.
+    model.add(runs("pwd"))
     parked = await managers.loop.run(owner, session.id)
     assert parked.end is RunEnd.PARKED and parked.park is not None
     assert parked.park.reason is ParkReason.LEASABLE_RESOURCE
-    assert model.calls == []
+    assert len(model.calls) == 1
     assert await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
     assert await managers.exec_relay.binding_of(owner, session.id) is None
 
@@ -108,9 +109,8 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     assert Path(binding.location).is_relative_to(root.resolve())
     assert not await managers.work.has_open(owner, PlacementWorkKind.WORKSPACE, session.id)
 
-    # The next loop's tool call runs on that host, in the directory it made.
+    # The call that waited runs on that host, in the directory it made.
     await managers.agent_sessions.wake_agent_session(owner, session.id, parked.park)
-    model.add(runs("pwd"))
     model.add(answers("On a host of my pool."))
     running = asyncio.ensure_future(managers.loop.run(owner, session.id))
     pace = Pace()

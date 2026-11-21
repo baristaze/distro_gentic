@@ -6,9 +6,10 @@ machine.
 
 A local session is pinned to a pool of one of its own. Its person's client
 trades a one-use key for a host's credential of that pool, prepares the
-workspace, and runs the session's tool calls; their results reach the
-model. With the client gone, the next workspace call waits on the resource
-and never reaches the cloud; once a client serves again, the call runs. A
+workspace at the first call that reaches it, and runs the session's tool
+calls; their results reach the model. With the client gone, the next
+workspace call waits on the resource, open, and never reaches the cloud;
+once a client serves again, the call runs. A
 session in an agent project, served under a ceilings file written as the
 host's README shows, syncs its repository and runs its command. A session
 started on the cloud has its workspace prepared by the cloud pool.
@@ -306,13 +307,20 @@ async def stopped(serving_task: asyncio.Future[Any]) -> None:
         await serving_task
 
 
-async def bound_on_the_client(runner: RunnerContainer, api: Stack, agent_session_id: UUID) -> UUID:
-    """The first loop waits on the resource with no model call, the client
-    claims the prepare, and the workspace is bound to its host: its id."""
+async def bound_on_the_client(
+    runner: RunnerContainer, api: Stack, agent_session_id: UUID, *argv: str
+) -> UUID:
+    """The first loop's call that reaches the workspace, `argv` or `pwd`,
+    waits on the resource, open, the client claims the prepare, and the
+    workspace is bound to its host: its id."""
     managers = runner.managers
+    model = model_of(runner)
+    before = len(model.calls)
+    model.add(runs(*(argv or ("pwd",))))
     parked = await managers.loop.run(api.owner, agent_session_id)
     assert parked.end is RunEnd.PARKED and parked.park is not None
     assert parked.park.reason is ParkReason.LEASABLE_RESOURCE
+    assert len(model.calls) == before + 1, "the call that reached it waits"
     binding = await until(
         lambda: managers.exec_relay.binding_of(api.owner, agent_session_id),
         lambda bound: bound is not None,
@@ -327,20 +335,19 @@ async def a_call_ran(
     api: Stack,
     agent_session_id: UUID,
     host_id: UUID,
-    *argv: str,
+    *,
     prints: str | None = None,
 ) -> None:
-    """The next loop's tool call runs on the client's host, and what it
-    printed, `prints` or the workspace's directory, reaches the model."""
+    """The call that waited runs on the client's host, and what it printed,
+    `prints` or the workspace's directory, reaches the model."""
     model = model_of(runner)
     before = len(model.calls)
-    model.add(runs(*(argv or ("pwd",))))
     model.add(answers("On my person's own machine."))
     ended = await runner.managers.loop.run(api.owner, agent_session_id)
     assert ended.outcome is LoopOutcome.SUCCEEDED, ended
     binding = await runner.managers.exec_relay.binding_of(api.owner, agent_session_id)
     assert binding is not None and binding.host_id == host_id
-    assert len(model.calls) == before + 2
+    assert len(model.calls) == before + 1
     assert (prints or resolved(binding.location)) in repr(model.calls[-1])
 
 
@@ -382,11 +389,15 @@ async def test_with_its_client_gone_a_local_session_waits_and_never_reaches_the_
     async def runs_any(spec: IsolationSpec) -> bool:
         return True
 
+    async def holds_any(spec: IsolationSpec) -> None:
+        return None
+
     async def prepare(ctx: object, agent_session_id: UUID, *rest: object) -> None:
         asked.append(agent_session_id)
         raise IsolationRefused("no VM here", clears=True)
 
     monkeypatch.setattr(runner.managers.cloud_pool, "runs", runs_any)
+    monkeypatch.setattr(runner.managers.cloud_pool, "check", holds_any)
     monkeypatch.setattr(runner.managers.cloud_pool, "prepare", prepare)
     agent_session_id, serving_task = await started_local(api, person)
     await said(runner, api, agent_session_id, "Where do you run?")
@@ -402,10 +413,11 @@ async def test_with_its_client_gone_a_local_session_waits_and_never_reaches_the_
     model = model_of(runner)
     calls = len(model.calls)
     await said(runner, api, agent_session_id, "And now?")
+    model.add(runs("pwd", "-L"))
     parked = await runner.managers.loop.run(api.owner, agent_session_id)
     assert parked.end is RunEnd.PARKED and parked.park is not None
     assert parked.park.reason is ParkReason.LEASABLE_RESOURCE
-    assert len(model.calls) == calls, "no model call while it waits"
+    assert len(model.calls) == calls + 1, "the call that reached it waits, and no other is made"
     assert asked == [], "the cloud pool is never asked"
     assert await runner.managers.work.has_open(
         api.owner, PlacementWorkKind.WORKSPACE, agent_session_id
@@ -422,7 +434,7 @@ async def test_with_its_client_gone_a_local_session_waits_and_never_reaches_the_
     await runner.managers.agent_sessions.wake_agent_session(
         api.owner, agent_session_id, parked.park
     )
-    await a_call_ran(runner, api, agent_session_id, second, "pwd", "-L")
+    await a_call_ran(runner, api, agent_session_id, second)
     assert len(machine()) == 2 and asked == []
     await stopped(again)
 
@@ -463,6 +475,7 @@ async def test_a_session_started_on_the_cloud_has_its_workspace_prepared_by_the_
         as_json=False,
     )
     await said(runner, api, started.id, "Build it.")
+    model_of(runner).add(runs("pwd"))
     parked = await runner.managers.loop.run(api.owner, started.id)
 
     assert parked.end is RunEnd.PARKED and parked.park is not None
@@ -545,19 +558,13 @@ async def test_a_local_session_in_an_agent_project_syncs_and_runs_under_the_read
     )
     agent_session_id, serving_task = await started_local(api, person, agent_project.id)
     await said(runner, api, agent_session_id, "What does this project hold?")
-    host_id = await bound_on_the_client(runner, api, agent_session_id)
+    host_id = await bound_on_the_client(runner, api, agent_session_id, "cat", "README.md")
     assert len(machine()) == 1 and read == [written], "the client holds the README's file"
 
     # The loop syncs the checkout through the client before its call, and
     # the call reads what the repository holds.
     await a_call_ran(
-        runner,
-        api,
-        agent_session_id,
-        host_id,
-        "cat",
-        "README.md",
-        prints="a checkout of the agent project",
+        runner, api, agent_session_id, host_id, prints="a checkout of the agent project"
     )
     await stopped(serving_task)
     await runner.storage.close()

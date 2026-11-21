@@ -197,6 +197,18 @@ class PrincipalRequest(BaseModel):
     steerer: Annotated[UUID | None, Field(title='Steerer')] = None
 
 
+class QuestionRequest(BaseModel):
+    """
+    A question to a session the caller steers, of a kind whose loop runs
+    in the request that asks it.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    text: Annotated[str, Field(max_length=100000, min_length=1, title='Text')]
+
+
 class QuestionView(BaseModel):
     """
     What a session asks of a person now: a park on a person that is no
@@ -222,6 +234,20 @@ class SnapshotView(BaseModel):
     hash: Annotated[str, Field(title='Hash')]
     id: Annotated[UUID, Field(title='Id')]
     size: Annotated[int, Field(title='Size')]
+
+
+class StartQuestionRequest(BaseModel):
+    """
+    A question that starts a session on the latest version of a kind
+    whose loop runs in the request that asks it.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+    text: Annotated[str, Field(max_length=100000, min_length=1, title='Text')]
+    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
 
 class StopReason(StrEnum):

@@ -100,7 +100,7 @@ from contracts import exec_objects
 from contracts.agent_project_storage import in_agent_project
 from contracts.agent_session_storage import make_agent_session
 from contracts.hosts_storage import make_credential, make_host
-from contracts.loops import DELIVERY, reply, said
+from contracts.loops import DELIVERY, reply, said, use
 from contracts.platform_loops import platform_loop_over
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -1285,7 +1285,7 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
     agent_session_id = await loop.start("contained")
     await hosts.place_session(owner, agent_session_id, pool.id)
     await loop.say(agent_session_id, "Build it.")
-    loop.anthropic.add(reply(said("Never asked.")))
+    loop.anthropic.add(reply(use("lookup")), reply(said("Never asked.")))
 
     waiting = await loop.loops.run(owner, agent_session_id)
     first = loop.clock()
@@ -1309,7 +1309,8 @@ async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again
             "agent_workspace",
         )
         assert run.park.retry_at is not None and run.park.retry_at > parked_at, "it asks again"
-    assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
+    assert len(loop.anthropic.calls) == 1, "the call that reached it waits, and no other is made"
+    assert loop.anthropic.remaining == 1
 
 
 # A release: asked of the host that holds the workspace, answered by it.

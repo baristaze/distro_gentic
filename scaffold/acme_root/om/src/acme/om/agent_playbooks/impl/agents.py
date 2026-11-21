@@ -1,7 +1,8 @@
 """The engine's agents, each new session made with its kind manual.
 
 A decorator over the engine's agents manager, behind the same interface.
-A start, a spawn, and a hand-off of a session not yet made read the
+A start, a question that starts its session, a spawn, and a hand-off of
+a session not yet made read the
 agent playbook the tenant pinned to its kind, in its agent project or else for the
 tenant, record that version as the session's pinned invocation, and send
 its brief as the session's standing text: so its gates hold from the
@@ -30,6 +31,7 @@ from acme.om.agents.types.report import Report
 from acme.om.agents.types.request import (
     MAX_STANDING,
     Handoff,
+    Question,
     Spawn,
     Start,
     SwitchStanding,
@@ -63,6 +65,15 @@ class AgentsManagerKindManualImpl(AgentsManagerInterface):
         # A start in an agent project wrote the session's agent project row before it.
         kind_manual = await self._kind_manual(ctx, start.id, start.kind, start.id)
         return await self._inner.start_agent_session(ctx, _with(start, kind_manual))
+
+    async def ask(self, ctx: TenantContext, question: Question) -> AgentStep:
+        if question.start is None:
+            return await self._inner.ask(ctx, question)
+        # A question that starts its session makes it as a start does.
+        start = question.start
+        kind_manual = await self._kind_manual(ctx, start.id, start.kind, start.id)
+        made = question.model_copy(update={"start": _with(start, kind_manual)})
+        return await self._inner.ask(ctx, made)
 
     async def switch_standing(
         self, ctx: TenantContext, agent_session_id: UUID, switch: SwitchStanding

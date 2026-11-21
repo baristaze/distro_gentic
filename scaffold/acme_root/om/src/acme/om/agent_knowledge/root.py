@@ -2,12 +2,15 @@
 
     agent_knowledge = build_agent_knowledge(storage, managers)
 
-A root that runs loops wraps its tools in the layer, so a session recalls
-what its subject triggers as its first loop starts, and hands the agents'
-agent knowledge tools its manager, which answers once it is built:
+A root that runs loops wraps its loop's hooks in the layer, so a session
+recalls what its subject triggers before its first model call, and hands
+the agents' agent knowledge tools its manager, which answers once it is
+built:
 
     layer = AgentKnowledgeLayer(storage)
-    options = PlatformRootOptions(tools_layer=layer.tools, agent_knowledge=layer.manager)
+    options = PlatformRootOptions(
+        loop_hooks=layer.loop_hooks(hooks), agent_knowledge=layer.manager
+    )
     managers = build_platform_managers(storage, infra, ..., platform_root_options=options)
     agent_knowledge = layer.build(managers)
 
@@ -16,15 +19,15 @@ A session's agent project is read from the agent projects' rows."""
 from collections.abc import Callable
 from datetime import datetime
 
+from acme.om.agent_knowledge.impl.hooks import LoopHooksRecallImpl
 from acme.om.agent_knowledge.impl.manager import AgentKnowledgeManagerImpl, AgentKnowledgeOptions
-from acme.om.agent_knowledge.impl.tools import ToolsManagerRecallImpl
 from acme.om.agent_knowledge.manager import AgentKnowledgeManagerInterface
 from acme.om.agent_projects.impl.policies import SessionAgentProjectsBoundImpl
+from acme.om.agents.hooks import LoopHooksInterface
 from acme.om.base import utcnow
 from acme.om.levers.rules import reach_of
 from acme.om.platform_root import PlatformManagers
 from acme.om.storage.root import StorageInterface
-from acme.om.tools.manager import ToolsManagerInterface
 
 
 def build_agent_knowledge(
@@ -59,10 +62,10 @@ class AgentKnowledgeLayer:
         self._clock = clock
         self._built: tuple[AgentKnowledgeManagerInterface, PlatformManagers] | None = None
 
-    def tools(self, inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        """The tools manager beneath, recalling a session's agent knowledge as its
-        first loop prepares the workspace."""
-        return ToolsManagerRecallImpl(
+    def loop_hooks(self, inner: LoopHooksInterface) -> LoopHooksInterface:
+        """The loop's hooks beneath, recalling a session's agent knowledge
+        before its first model call."""
+        return LoopHooksRecallImpl(
             inner,
             lambda: self._managers()[0],
             lambda: self._managers()[1].agent_sessions,

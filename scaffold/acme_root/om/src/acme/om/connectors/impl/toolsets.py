@@ -25,7 +25,7 @@ from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import ToolFailure
 from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.agents.types.kind import AgentKindCatalog
-from acme.om.base import utcnow
+from acme.om.base import OmBase, utcnow
 from acme.om.connectors.impl.addresses import Resolve, refused_now, resolve
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.rules import cloud_server, pinned, still_reviewed, toolset_of
@@ -43,7 +43,8 @@ from acme.om.exec_relay.types.exec import McpRequest
 from acme.om.tools.mcp import McpCall, McpServers, secret_use
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.mcp import McpBinding
-from acme.om.tools.types.tool import Effect, ToolInput
+from acme.om.tools.types.policy import Target
+from acme.om.tools.types.tool import Effect, ToolInput, ToolSpec
 from acme.om.tools.types.toolset import Toolset
 from acme.om.trust.placement import PlacementInterface
 
@@ -54,6 +55,10 @@ ToolOf = Callable[..., ToolInterface]
 """Builds the tool of a binding over a server's definition, its call, and
 the secret its spec declares: the engine's `McpToolImpl`, as a root wires
 it."""
+
+OnHost = Callable[[ToolInterface], ToolInterface]
+"""The tool of a server inside the wall, over the tool `ToolOf` built:
+`OnTheHostImpl`, as a root wires it."""
 
 
 class HostCall(Protocol):
@@ -103,9 +108,37 @@ def input_model_of(schema: Mapping[str, Any]) -> type[ToolInput]:
     return Input
 
 
+class OnTheHostImpl(ToolInterface):
+    """A tool of a server inside the wall, which the host that holds the
+    session's workspace runs: each of its calls reaches the workspace, so
+    the first prepares it, on a host of the session's pool, and every call
+    goes to that host. `inner` is the tool as a server's tool is built,
+    which reaches none."""
+
+    def __init__(self, inner: ToolInterface) -> None:
+        self._inner = inner
+        self._spec = inner.spec.model_copy(update={"workspace": True})
+
+    @property
+    def spec(self) -> ToolSpec:
+        return self._spec
+
+    async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
+        return await self._inner.target(ctx, call_input)
+
+    async def preflight(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> None:
+        await self._inner.preflight(ctx, call_input, runtime)
+
+    async def run(self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> OmBase:
+        return await self._inner.run(ctx, call_input, runtime)
+
+
 class ConnectorToolsetsImpl(LoopHooksInterface):
     """`host` reaches a server inside a customer's wall; None is a process
-    that reaches no host, whose calls of such a server are refused."""
+    that reaches no host, whose calls of such a server are refused. `on_host`
+    makes each such server's tool one whose calls reach the workspace."""
 
     def __init__(
         self,
@@ -118,12 +151,14 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
         options: ConnectorsOptions,
         *,
         tool_of: ToolOf,
+        on_host: OnHost,
         host: HostCall | None = None,
         resolver: Resolve = resolve,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
         self._tool_of = tool_of
+        self._on_host_tool = on_host
         self._kinds = kinds
         self._agent_projects = agent_projects
         self._placement = placement
@@ -211,7 +246,9 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
                 )
                 return self._tool_of(tool.definition, binding, call, secret=secret_use(server))
             case ConnectorPlace.HOST:
-                return self._tool_of(tool.definition, binding, self._on_host(connector, tool))
+                return self._on_host_tool(
+                    self._tool_of(tool.definition, binding, self._on_host(connector, tool))
+                )
 
     def _cloud(
         self, connector: PinnedConnector, tool: ConnectorTool, servers: McpServers
@@ -279,4 +316,10 @@ class ConnectorToolsetsImpl(LoopHooksInterface):
 
     async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
         """The connectors append nothing before a run's first call."""
+        return ()
+
+    async def workspace_prepared(
+        self, ctx: TenantContext, start: LoopStart, workspace: AgentWorkspace
+    ) -> Sequence[AgentStep]:
+        """Nor once its workspace is prepared."""
         return ()

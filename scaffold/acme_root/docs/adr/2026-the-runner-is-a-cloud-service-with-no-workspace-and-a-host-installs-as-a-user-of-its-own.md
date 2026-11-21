@@ -27,7 +27,7 @@ migration, one task at a time, with a count and a ceiling set in the
 environment's root. It runs with `ACME_AGENT_WORKSPACE_BACKEND=none`: a
 session's tools run on a host of its tenant's pool, through the exec
 relay, and a session that asks the runner itself for a workspace is
-refused before its first model call.
+refused at the first call that reaches it.
 
 **Its role reads what a loop reads, and writes no secret.** Its task role
 holds the buckets, the key, and a read of a tenant's own secrets under

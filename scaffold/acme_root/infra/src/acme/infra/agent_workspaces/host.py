@@ -14,6 +14,7 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    KeepsWholeMixin,
     SnapshotRefused,
     refusal,
 )
@@ -31,7 +32,7 @@ outside the directory, and a snapshot of the directory alone would lose it
 without a word."""
 
 
-class AgentWorkspaceHostImpl(AgentWorkspaceProviderInterface):
+class AgentWorkspaceHostImpl(KeepsWholeMixin, AgentWorkspaceProviderInterface):
     """A directory on this host, one per workspace, under `root`. A directory
     confines where files go and nothing else: not a process's network, and
     not what it takes of the machine. So it meets the host mode with open
@@ -46,6 +47,11 @@ class AgentWorkspaceHostImpl(AgentWorkspaceProviderInterface):
     def __init__(self, root: Path) -> None:
         self._root = root
 
+    async def check(self, spec: IsolationSpec) -> None:
+        why = _refusal(spec)
+        if why is not None:
+            raise IsolationRefused(why, cause=why)
+
     async def prepare(
         self,
         org_id: UUID,
@@ -56,9 +62,7 @@ class AgentWorkspaceHostImpl(AgentWorkspaceProviderInterface):
         *,
         building: bool = False,
     ) -> AgentWorkspace:
-        why = refusal(
-            spec, mode=IsolationMode.HOST, egress={EgressMode.OPEN}, limits=(), unkept=UNKEPT
-        )
+        why = _refusal(spec)
         if why is None and (snapshot is not None or base is not None):
             why = f"a host workspace cannot start from a snapshot: {UNKEPT}"
         if why is not None:
@@ -174,3 +178,10 @@ def _given_back(function: Callable[..., object], path: str, error: BaseException
         shutil.rmtree(path, onexc=_given_back)
     else:
         function(path)
+
+
+def _refusal(spec: IsolationSpec) -> str | None:
+    """Why a directory on this host can never meet `spec`."""
+    return refusal(
+        spec, mode=IsolationMode.HOST, egress={EgressMode.OPEN}, limits=(), unkept=UNKEPT
+    )

@@ -54,6 +54,7 @@ from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.impl.sessions import AgentSessionsPinnedImpl
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces, ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
+from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
 from acme.om.agents.hooks import LoopHooksInterface
@@ -178,6 +179,10 @@ class PlatformManagers(Managers):
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
     agent_workspaces: AgentWorkspacesManagerInterface
+    pinned_workspaces: PinnedWorkspacesInterface
+    """Whether a session's pin can ever be held where the session runs: the
+    tools manager that makes each workspace, which the loop's hooks ask
+    before a loop's first model call."""
     hosts: HostsManagerInterface
     exec_relay: ExecRelayManagerInterface
     cloud_pool: CloudPoolManagerInterface
@@ -558,9 +563,10 @@ class PlatformRootOptions:
     None takes each manager as it is. `loop_hooks` answers the toolsets a
     session holds beyond its kind, a tenant's own, which the loop folds
     into the session's kind at each run, and the steps a layer above the
-    platform appends before a run's first call; the platform's own hooks
-    renew a new loop's fill set and tell what changed under the model
-    around them (`platform_loop_hooks`). None attaches and appends nothing.
+    platform appends before a run's first call and once its workspace is
+    prepared; the platform's own hooks renew a new loop's fill set and tell
+    what changed under the model around them (`platform_loop_hooks`). None
+    attaches and appends nothing.
 
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
@@ -811,6 +817,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             loop_hooks=PlatformLoopHooksImpl(
                 self._options.loop_hooks or LoopHooksNullImpl(),
                 lambda: self.managers.language_models,
+                lambda: self.managers.pinned_workspaces,
             ),
         )
         return engine
@@ -1240,6 +1247,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 ),
             ),
             agent_workspaces=self._agent_workspaces,
+            pinned_workspaces=self._held_to_pins,
             hosts=hosts,
             # A tool call into a customer's wall as keyed exec work: its items,
             # their output sealed under the session's key as its commands'

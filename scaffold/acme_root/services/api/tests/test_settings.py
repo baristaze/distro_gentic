@@ -67,6 +67,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "vm_store_encrypted": "the vm workspace backend only",
     "vm_timeout_seconds": "the vm workspace backend only",
     "vm_boot_timeout_seconds": "the vm workspace backend only",
+    "vm_pack_timeout_seconds": "the vm workspace backend only",
     "vm_launch_template": "the API runs no machine; it trades a machine's key alone",
     "vm_subnets": "the API runs no machine; it trades a machine's key alone",
     "vm_closed_group": "the API runs no machine; it trades a machine's key alone",

@@ -63,7 +63,7 @@ from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
 from contracts.agent_project_storage import make_agent_project
 from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
 from contracts.doubles import APP
-from contracts.loops import ASSISTANT, Asked, Found, Lookup, call, reply, said
+from contracts.loops import ASSISTANT, Asked, Found, Lookup, call, reply, said, use
 from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 KEPT = IsolationSpec(
@@ -269,7 +269,7 @@ async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over
     git.diverged = True
 
     await loop.say(agent_session_id, "Go on.")
-    loop.anthropic.add(reply(said("Going on.")))
+    loop.anthropic.add(reply(use("lookup")), reply(said("Going on.")))
     ran = await loop.loops.run(loop.owner, agent_session_id)
 
     assert ran.outcome is LoopOutcome.SUCCEEDED, "never parked over a branch it did not sync"
@@ -296,28 +296,36 @@ async def test_a_refusal_for_good_of_a_kept_workspace_ends_the_loop_with_its_rea
     ends: LoopOutcome | None,
 ) -> None:
     """A provider that cannot snapshot refuses a workspace kept by snapshots
-    on every host like it: the loop ends with the reason, never a wait that
-    no host ends. A refusal of the isolation alone waits on the resource,
-    since another host may give it."""
+    on every host like it, in its check as in its prepare: the session's pin
+    is held to it before the first model call, and the loop ends with the
+    reason, no call spent, never a wait that no host ends. A refusal of the
+    isolation alone waits on the resource at the first call that reaches
+    the workspace, since another host may give it."""
     loop, twin = kept_loop(tmp_path)
     reason = "a twin workspace cannot be snapshotted: its store is not encrypted at rest"
 
     async def refuses(*args: Any, **kwargs: Any) -> AgentWorkspace:
         raise IsolationRefused(reason)
 
+    async def checks(*args: Any, **kwargs: Any) -> None:
+        raise IsolationRefused(reason)
+
     monkeypatch.setattr(twin, "prepare", refuses)
+    monkeypatch.setattr(twin, "check", checks)
     agent_session_id = await loop.start(asked.name)
     await loop.say(agent_session_id, "Install the tool.")
+    loop.anthropic.add(reply(use("lookup")))
 
     with caplog.at_level(logging.WARNING):
         ran = await loop.loops.run(loop.owner, agent_session_id)
 
-    history = await loop.history(agent_session_id)
-    assert not of_type(history, AgentStepType.MODEL_REQUEST), "no call spent"
+    requests = of_type(await loop.history(agent_session_id), AgentStepType.MODEL_REQUEST)
     if ends is not None:
+        assert not requests, "no call spent"
         assert ran.outcome is ends
         assert any(reason in record.getMessage() for record in caplog.records)
     else:
+        assert len(requests) == 1, "waits at the first call that reaches it"
         session = await loop.managers.agent_sessions.get_agent_session(loop.owner, agent_session_id)
         assert session.park is not None and session.park.reason is ParkReason.LEASABLE_RESOURCE
 

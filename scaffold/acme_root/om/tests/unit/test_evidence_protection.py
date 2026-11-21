@@ -116,7 +116,13 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
             "write",
         )
         gate = await tools.manager.gate(
-            ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
+            ctx,
+            registry,
+            ALLOW_WRITES,
+            call.request,
+            call.call_input,
+            workspace,
+            egress=workspace.spec.egress.mode,
         )
         assert gate.outcome is GateOutcome.REFUSE and gate.decision is Decision.DENY, path
         assert gate.response is not None
@@ -126,7 +132,13 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
         tools.manager, tools.steps, ctx, "write_file", {"path": "src/cart.py", "text": "x"}, "write"
     )
     gate = await tools.manager.gate(
-        ctx, registry, ALLOW_WRITES, free.request, free.call_input, workspace
+        ctx,
+        registry,
+        ALLOW_WRITES,
+        free.request,
+        free.call_input,
+        workspace,
+        egress=workspace.spec.egress.mode,
     )
     assert gate.outcome is GateOutcome.RUN and gate.decision is Decision.ALLOW
     assert write.written == [], "the gate runs nothing"
@@ -154,7 +166,13 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
     registry = registry_of(WriteFile(evidence.manager, new_id()))
     workspace = AgentWorkspace.absent(ctx.org_id, new_id())
     gate = await tools.manager.gate(
-        ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
+        ctx,
+        registry,
+        ALLOW_WRITES,
+        call.request,
+        call.call_input,
+        workspace,
+        egress=workspace.spec.egress.mode,
     )
     assert gate.outcome is GateOutcome.REFUSE and gate.decision is Decision.DENY
 
@@ -193,7 +211,13 @@ async def test_the_software_engineers_change_to_a_protected_path_is_refused_at_t
             agent_session_id,
         )
         gate = await tools.manager.gate(
-            ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
+            ctx,
+            registry,
+            ALLOW_WRITES,
+            call.request,
+            call.call_input,
+            workspace,
+            egress=workspace.spec.egress.mode,
         )
         if not refused:
             assert gate.outcome is GateOutcome.RUN

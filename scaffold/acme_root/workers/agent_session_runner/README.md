@@ -105,7 +105,7 @@ production it is a service of its own, from
 `deployment/docker/agent-session-runner.Dockerfile`, rolled after the API's
 migration with a count and a ceiling. There it prepares no workspace: a
 session's tools run on a host of its tenant's pool, and a session that
-asks the runner for one is refused before its first model call. Its role
+asks the runner for one is refused at the first call that reaches it. Its role
 reads a tenant's own secrets and writes none, and it reaches no inbound
 queue
 ([ADR 2026](../../docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md)).

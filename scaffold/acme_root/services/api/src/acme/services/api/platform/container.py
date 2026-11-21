@@ -16,10 +16,11 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om import product_namespaces
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
-from acme.om.agent_knowledge.root import build_agent_knowledge
+from acme.om.agent_knowledge.root import AgentKnowledgeLayer
 from acme.om.agent_playbooks.root import AgentPlaybooksLayer
 from acme.om.agent_root import LOCAL, AgentRootOptions
 from acme.om.agent_workspaces.impl.executor import ExecutorOptions
+from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.base import new_id
 from acme.om.connectors.impl.manager import ConnectorsOptions
 from acme.om.connectors.root import build_connectors
@@ -39,6 +40,7 @@ from acme.om.platform_root import (
 )
 from acme.om.root import TenancyOperatorOptions, TenancyOptions
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.trust import KeyProbeInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl, KeyProbeTwinImpl
 from acme.om.trust.impl.placement import PlacementCloudImpl
@@ -48,8 +50,10 @@ from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api import product_api
+from acme.services.api.assistant import offered
 from acme.services.api.products import ProductLive
 from acme.services.api.services.impl.platform_root import build_platform_services
+from acme.services.api.services.impl.questions import QuestionStreamsImpl
 from acme.services.api.services.impl.root import build_services
 from acme.services.api.services.platform import PlatformServicesInterface
 from acme.services.api.settings import ApiSettings
@@ -107,8 +111,32 @@ def build_platform_api(
     is messaged."""
     ports = ports or PlatformPorts()
     held: list[IntakeManagerInterface] = []
+    streams = QuestionStreamsImpl()
+    # The example assistant, where the environment offers it and the product
+    # declares no kind; its tool reads the media manager the root below builds.
+    example_kinds, example_tools = offered(
+        settings.environment, ports.kinds.agents, lambda: managers.media
+    )
     # A start makes each session with its kind manual.
     agent_playbooks = AgentPlaybooksLayer(storage)
+    agent_knowledge = AgentKnowledgeLayer(storage)
+    # A tenant's own provider keys, saved and listed here and never read
+    # back. A request kind's loop runs its calls here, in the cloud, so
+    # its placement names this process.
+    api = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.service_name)
+    trust = TrustLayer(
+        storage,
+        infra,
+        placement=PlacementCloudImpl(api),
+        probe=key_probe(settings),
+        product_kinds=ports.kinds,
+    )
+
+    def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
+        # The wall and the audit first, then the session's agent playbook
+        # gates, as the session runner holds every call.
+        return agent_playbooks.tools(trust.tools(inner))
+
     managers = build_platform_managers(
         storage,
         infra,
@@ -123,23 +151,28 @@ def build_platform_api(
             agent_session_projects=ports.agent_session_projects,
             workspace_agent_projects=ports.workspace_agent_projects,
             product_kinds=ports.kinds,
+            tools_layer=layers,
             agents_layer=agent_playbooks.agents,
+            # The agent knowledge a session recalls before its first model
+            # call, as the session runner recalls it.
+            loop_hooks=agent_knowledge.loop_hooks(LoopHooksNullImpl()),
         ),
         agent_root_options=AgentRootOptions(
             environment=settings.environment,
-            tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
+            agent_kinds=example_kinds,
+            tool_catalog=(
+                CommentImpl(lambda: held[0], integrations.get_integration),
+                *example_tools,
+            ),
             spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
+            # A kind whose loop runs in the request that asks it runs here,
+            # and streams to that request.
+            stream_sink=streams,
         ),
     )
     refuse_open_money(settings.environment, managers)
-    # A tenant's own provider keys, saved and listed here and never read
-    # back. This process runs no session's calls, so its placement names
-    # it and is asked nothing.
-    api = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.service_name)
-    trust = TrustLayer(
-        storage, infra, placement=PlacementCloudImpl(api), probe=key_probe(settings)
-    ).build(managers)
+    trusted = trust.build(managers)
     # The model matrix: its versions serve every model role the
     # product's kinds call, beside the platform's own.
     matrix = MatrixLayer(
@@ -169,6 +202,7 @@ def build_platform_api(
         infra,
         integrations,
         timedelta(seconds=settings.realtime_head_max_age_seconds),
+        streams,
         intake=intake,
         agent_projects=managers.agent_projects,
         agent_project_required=agent_project_required,
@@ -180,7 +214,7 @@ def build_platform_api(
         managers,
         infra,
         watch,
-        trust.trust_operator,
+        trusted.trust_operator,
         intake=intake,
         # A person writes an agent automation here, so a product's action kind
         # is held to its shape when it is saved.
@@ -193,7 +227,7 @@ def build_platform_api(
         ),
         park_alerts=build_park_alerts(storage, managers, integrations, intake),
         matrix=matrix,
-        trust=trust.trust,
+        trust=trusted.trust,
         # The ledger the operators read and grant units on, and the
         # payments a tenant posts, each checked by the provider's
         # signature: with no provider wired, every one is refused.
@@ -201,9 +235,10 @@ def build_platform_api(
             storage, managers, payments or PaymentProviderAbsentImpl()
         ),
         # A person writes and reviews what sessions recall; the runner
-        # recalls them. A person publishes the agent playbooks sessions follow,
-        # invokes one into a session, and pins one to a kind.
-        agent_knowledge=build_agent_knowledge(storage, managers),
+        # recalls them, and so does a request kind's loop here. A person
+        # publishes the agent playbooks sessions follow, invokes one into a
+        # session, and pins one to a kind.
+        agent_knowledge=agent_knowledge.build(managers),
         agent_playbooks=agent_playbooks.build(managers),
         # An operator reads which of them the sessions that stalled reached.
         levers=build_levers(storage),

@@ -65,9 +65,9 @@ class AgentSessionWorkspace(Identifiable, Trackable):
     # it vanished.
     branch_seen: bool = False
     snapshot_ref: str | None = Field(default=None, max_length=255)
-    # What the next loop is told before its first call, one entry an
-    # instance let go since a loop was last told: never written over, and
-    # each cleared once told.
+    # What the next run that reaches the workspace is told once it is
+    # prepared, one entry an instance let go since a loop was last told:
+    # never written over, and each cleared once told.
     notices: tuple[Annotated[str, Field(max_length=2000)], ...] = ()
     # The digest of the one push token the loop holds, and when it expires;
     # a prepare or a release clears both, so no token outlives its loop.
