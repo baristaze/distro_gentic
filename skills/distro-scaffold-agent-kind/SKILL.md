@@ -1,6 +1,6 @@
 ---
 name: distro-scaffold-agent-kind
-description: "Add an agent kind the platform ships, or a new version of one: a profile over the engine's one loop with its tools, done rule, authority, workspace, policy layer, and model roles, in the shipped catalog every process builds from, with any tool of its own and its tests, in the shape of the platform's shipped agents. Python."
+description: "Add an agent kind the platform ships, or a new version of one: a folder of its own with a profile over the engine's one loop (its tools, done rule, authority, workspace, policy layer, and model roles), each version's prompt in Markdown pinned by digest, and any manuals and wiki entries it ships for its sessions, in the shipped catalog every process builds from, with any tool of its own and its tests, in the shape of the platform's shipped agents. Python."
 allowed-tools: Read, Grep, Glob, Write, Edit, Bash(make check), Bash(uv run:*), Bash(git status:*), Bash(git show:*)
 ---
 
@@ -19,15 +19,19 @@ for where a kind lives.
 
 `<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--started-by person|agent|both] [--share <micros>] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
 and what the kind's agent does and may never do, in the arguments or
-in the conversation.
+in the conversation. That text is the kind's prompt (step 2). Any
+operation manual the kind ships for its sessions, and anything its
+sessions should not have to rediscover, with the words that should
+bring it in, may come in the conversation too: its manuals and its
+wiki (step 6).
 
 Example: `triage --done answer --tools list_agent_sessions,read_agent_session --authority steady --workspace none --classes read`,
 for "reads a failed session and the sessions beside it, changes
 nothing, and answers which session should take it".
 
-- `<kind>` is the kind's name, snake case, as `AgentKind.name` holds it.
-  `<KIND>` is its name constant in upper snake case, and `<KIND>_KIND`
-  the profile.
+- `<kind>` is the kind's name, snake case, as `AgentKind.name` holds it,
+  and its folder's name. `<KIND>` is its name constant in upper snake
+  case, and `<KIND>_KIND` the profile of its latest version.
 - `--done`: `answer` for an agent whose turn with no tool call is its
   answer; `result_tool` for one that delivers work, which only its
   result tool ends, as the software engineer's `submit_result` does.
@@ -38,12 +42,13 @@ nothing, and answers which session should take it".
   `steady`, even when a person starts it too, as analysis and the
   reviewer are.
 - `--started-by`: who may start a session of the kind, as
-  `AgentKind.started_by` holds it. `person`, the default, leaves it
-  unset: a person starts the kind, or a hand-off reaches it, and a spawn
-  of it is refused. `agent` sets `frozenset({Starter.AGENT})`, for a
-  kind only a spawn starts: a person's start of it is refused. `both`
-  sets `SPAWNED` in `kinds.py`, for a kind a person starts and a lead or
-  another kind spawns. A kind a spawn starts, `agent` or `both`, names
+  `AgentKind.started_by` holds it; every shipped version states it.
+  `person`, the default, sets `BY_A_PERSON`: a person starts the kind,
+  or a hand-off reaches it, and a spawn of it is refused. `agent` sets
+  `frozenset({Starter.AGENT})`, for a kind only a spawn starts: a
+  person's start of it is refused. `both` sets `SPAWNED`, for a kind a
+  person starts and a lead or another kind spawns. `BY_A_PERSON` and
+  `SPAWNED` are in `om/src/<name>/om/platform_agents/kinds/__init__.py`. A kind a spawn starts, `agent` or `both`, names
   its share beside it, as the reviewer names `REVIEWER_SHARE`, and its
   parent holds what the spawn asks of it (step 4). When it is not
   given, a kind given `--share`, or one the arguments or the
@@ -56,7 +61,9 @@ nothing, and answers which session should take it".
   `<KIND>_LOOPS = 2` (its first loop, and one more a follow-up asks
   for), times its step guard (`Limits().step_guard`, the engine's,
   unless the kind sets its own), times `CACHED_CALL_MICROS`, and times
-  `XL_CALL_FACTOR` when it asks XL of `MAIN`, as `REVIEWER_SHARE` does.
+  `XL_CALL_FACTOR` when it asks XL of `MAIN`, as `REVIEWER_SHARE` does
+  in `kinds/reviewer/kind.py`. `<KIND>_LOOPS` and `<KIND>_SHARE` go in
+  the kind's `kind.py`; the two factors are in `kinds/__init__.py`.
 - `--workspace`: `container` for a kind that reads or changes files or
   runs commands (the profile's `isolation` is `WORKSPACE`), `none` for
   one that has no workspace (`NO_WORKSPACE`). A delegated kind a person
@@ -65,28 +72,42 @@ nothing, and answers which session should take it".
 - `--roles`: model roles beyond `MAIN` the kind's calls take.
 - `--asks`: the model size the kind asks of a role, as `main=xl`. By
   default a kind asks what every shipped kind but the reviewer asks,
-  `ASKS` in `kinds.py`: L of `MAIN` and S of `SUMMARIZER`. A size named
+  `ASKS` in `kinds/__init__.py`: L of `MAIN` and S of `SUMMARIZER`. A size named
   here replaces that role's ask, as the reviewer's `REVIEWER_ASKS` asks
   XL of `MAIN`, and a role of `--roles` asks nothing unless it is named.
 
 ## Created
 
-None, unless the kind calls a tool the tree does not have: then the
-tool's test module, as step 3 says.
+A kind is a folder of its own, `om/src/<name>/om/platform_agents/kinds/<kind>/`,
+beside the others and never inside one. The shape is
+`kinds/reviewer/` for a kind with one version and
+`kinds/software_engineer/` for one with several, over `AgentKind` in
+`om/src/<name>/om/agents/types/kind.py` and the folder's rules in
+`om/src/<name>/om/agents/prompts.py` and
+`om/src/<name>/om/platform_agents/folders.py`.
+
+| File | Holds |
+|------|-------|
+| `kinds/<kind>/__init__.py` | its docstring alone: the kind's name, its versions in `kind.py`, their prompts in `prompts/` |
+| `kinds/<kind>/kind.py` | a docstring of what the kind does, `<KIND>_KIND` (a constant per version, the latest named `<KIND>_KIND`, each with `prompts=(prompt_of(__file__, <N>),)` and its `started_by`), any `<KIND>_LOOPS` and `<KIND>_SHARE`, and `VERSIONS`, every version the platform still runs |
+| `kinds/<kind>/prompts/v1.md` | the prompt of version 1, Markdown, ending in one line break (step 2) |
+| `kinds/<kind>/prompts/lock.json` | `{"v1.md": "<digest>"}`, the digest step 7 prints |
+| `kinds/<kind>/manuals/<name>.md`, `kinds/<kind>/wiki/<slug>.md` (step 6) | each manual and each entry the kind ships for its sessions |
+
+and, when the kind calls a tool the tree does not have, the tool's test
+module, as step 3 says.
 
 ## Changed
 
-The shape of a kind is the four profiles in
-`om/src/<name>/om/platform_agents/kinds.py`, over `AgentKind` in
-`om/src/<name>/om/agents/types/kind.py`.
-
 | File | Change |
 |------|--------|
-| `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
-| `om/src/<name>/om/platform_agents/kinds.py` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any prompt layer step 4 asks for, beside its last in `SHIPPED`; the tests below take that version as they take the kind's |
+| `om/src/<name>/om/platform_agents/kinds/__init__.py` | `<KIND>`, any tool name constant it adds, and its line in the module docstring |
+| `om/src/<name>/om/platform_agents/shipped.py` | the kind's module imported, `from <name>.om.platform_agents.kinds.<kind> import kind as <kind>`, and named in `FOLDERS`, after the platform's others, so `SHIPPED` holds its versions |
+| `om/src/<name>/om/platform_agents/kinds/<parent>/kind.py` and its `prompts/` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any prompt layer step 4 asks for, beside its last in `VERSIONS`, with its prompt file and its lock entry (step 2); the tests below take that version as they take the kind's |
 | `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
-| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once with `-vv`, since a shorter report cuts the digest short, and pin the digest its failure prints |
+| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its latest version in `RENDERED`, the digest of its request's tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompt`: run that test once with `-vv`, since a shorter report cuts the digest short, and pin the digest its failure prints |
+| `om/tests/unit/test_kind_folders.py` | each new version in `SETTINGS`, the digest of its settings: run `test_each_shipped_version_keeps_the_settings_it_was_released_with` once with `-vv`, and pin the digest its failure prints for the version |
 | `om/tests/unit/test_platform_agents.py` (a kind a spawn starts) | its name in `SPAWNED_KINDS`, and its profile and its share in the list of kinds that name one in `test_every_shipped_kind_a_spawn_can_start_names_a_share`, which holds every other latest version to name none |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
@@ -110,22 +131,28 @@ The shape of a kind is the four profiles in
    and each version's prompt in `prompts/` with its entry in
    `prompts/lock.json`), its tools, and its bounds (its steps 2 to 4),
    `om/tests/unit/test_agent_kinds.py` with the catalog cases of its
-   step 5, read over `PRODUCT_KINDS.agents`, and the check of its step 5
-   that `prompt_breaches` finds nothing in each kind folder, which holds
-   the folder's prompt lock, and the kind in
-   `om/src/<name>/om/agents/README.md`. It writes none of that skill's
-   wiring: no `AGENT_KINDS` (`om/src/<name>/om/agents/kinds/__init__.py`
-   holds a docstring alone, since `PRODUCT_KINDS.agents` joins each
-   folder's `VERSIONS`),
-   no `agent_kinds=` in a container's call to `build_platform_managers`,
-   which stands here for that skill's `build_managers`, and neither the
-   API's nor the maintenance worker's container test that reads that
-   call. Its kinds, every version it still runs, its tools,
-   and the classes they declare go in `PRODUCT_KINDS`, in
-   `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
-   `ceilings` of `ProductKinds` in
-   `om/src/<name>/om/platform_root.py`), which every process's entry
-   point hands its root as `PlatformPorts.kinds`.
+   step 5, read over `PRODUCT_KINDS.agent_kinds`, and the kind in
+   `om/src/<name>/om/agents/README.md`; its manuals and its wiki go in
+   its folder as step 6 says. It writes none of that skill's wiring: no
+   `AGENT_KINDS` (`om/src/<name>/om/agents/kinds/__init__.py` holds a
+   docstring alone); no check of its own that `prompt_breaches` finds
+   nothing, since the base's `om/tests/unit/test_kind_folders.py` runs
+   `folder_breaches`, the engine's check and the platform's, over every
+   folder in `om/src/<name>/om/agents/kinds/`, and holds each one
+   declared; no `agent_kinds=` in a container's call to
+   `build_platform_managers`, which stands here for that skill's
+   `build_managers`; and neither the API's nor the maintenance worker's
+   container test that reads that call. Each of its kinds goes in
+   `PRODUCT_KINDS`, in `om/src/<name>/om/product_kinds.py`, as its
+   folder: `folders=(folder_of(<kind>),)`, with
+   `from <name>.om.agents.kinds.<kind> import kind as <kind>` and
+   `from <name>.om.platform_agents.folders import folder_of`. Never put
+   a folder's versions in `agents`, which holds a kind with no folder
+   and would lose the folder's manuals and wiki. Its tools and the
+   classes they declare go in `tools`, `classes`, and `ceilings` of
+   `ProductKinds`, in `om/src/<name>/om/platform_root.py`, and every
+   process's entry point hands `PRODUCT_KINDS` to its root as
+   `PlatformPorts.kinds`.
    A version of its kind whose workspace starts from its agent project's
    workspace base, as the platform's software engineer does from version
    8, is named by its name and version in `workspace_bases`.
@@ -133,7 +160,7 @@ The shape of a kind is the four profiles in
    ceiling in `ceilings`, never a row in `DEFAULT_CEILINGS` in the
    platform's `tools/rules.py`, whatever the engine's
    `agentic-scaffold-tool` says for a class. Its container
-   test holds instead that the kind declared in `PRODUCT_KINDS.agents`
+   test holds instead that the kind declared in `PRODUCT_KINDS.folders`
    reaches each container's `build`, shape
    `workers/agent_session_runner/tests/test_product_parts.py`: the API's
    container starts a session of it, the session runner runs it, and
@@ -149,12 +176,22 @@ The shape of a kind is the four profiles in
    root: the closure that is `tools` holds the client and passes it to
    the tool, as `ledger_product`'s `tools` passes `read`.
 2. A kind is versioned, and a session keeps the version it started on.
-   A change to a kind that the last commit holds
-   (`git show HEAD:om/src/<name>/om/platform_agents/kinds.py`) is the
-   next version, a profile of its own beside the last, and both stay in
-   `SHIPPED` while a session may run the last. A kind only this work
-   wrote changes in place, and so does who may start a kind, which only
-   a start of its latest version reads.
+   A version's prompt is what the arguments or the conversation say the
+   kind does and answers, written as Markdown in `prompts/v<N>.md`: one
+   text, ending in one line break. It never says how policy treats the
+   kind (step 4). Its constant reads it, `prompt_of(__file__, <N>)`, and
+   no prompt is a string in code. A change to a kind that the last
+   commit holds
+   (`git show HEAD:om/src/<name>/om/platform_agents/kinds/<kind>/kind.py`,
+   and its `prompts/`) is the next version: a constant of its own beside
+   the last in `VERSIONS`, its whole prompt in its own
+   `prompts/v<N+1>.md`, even when it repeats the last one's and adds a
+   paragraph, and its own lock entry (step 7). The last version's prompt
+   file and lock entry never change, and both versions stay in
+   `VERSIONS` while a session may run the last. A kind only this work
+   wrote changes in place, its prompt file and its lock entry with it,
+   and so does who may start a kind, which only a start of its latest
+   version reads.
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
    A tool the platform ships for it is a `NativeToolImpl` in the module
@@ -182,8 +219,9 @@ The shape of a kind is the four profiles in
    conversation say spawns it, and the parent holds what the spawn asks
    of it: the kind's tools among its own, since a child's tools are cut
    to its parent's (a lead, in `platform_agents/README.md`); the
-   `sub_agents` toolset, the `SUB_AGENTS` layer, and `SPAWN` in its
-   policy, as `ANALYSIS_V3` took them, when it lacks them; and, when its
+   `sub_agents` toolset, a paragraph of its prompt on sub-agents, and
+   `SPAWN` in its policy, as `ANALYSIS_V3` took them (the paragraph is
+   the second of `kinds/analysis/prompts/v3.md`), when it lacks them; and, when its
    prompt must say when to start the kind, a prompt layer that says it.
    A parent that lacks any of them gets its next version holding them,
    as step 2 says. Ask for that version; unattended, write it and name
@@ -210,6 +248,36 @@ The shape of a kind is the four profiles in
      kind calls is refused, shape
      `test_a_version_that_serves_not_every_role_its_kinds_call_is_refused`
      in `om/tests/unit/test_matrix.py`.
+
+6. A kind may ship texts for its sessions beside its prompts, when the
+   arguments or the conversation give them; with none given, it ships
+   none, and its folder is whole without `manuals/` and `wiki/`.
+   - An operation manual goes in `manuals/<name>.md`, `<name>`
+     lowercase words joined by hyphens, its text whole. Each new session
+     of the kind holds the kind's manuals first in its standing text, in
+     name order, before the kind manual its tenant pins. Together they
+     hold at most `MAX_MANUALS` characters (`folders.py`). A manual is
+     no prompt: what every version must say goes in the prompt, which a
+     version pins; a manual changes in place, and a session keeps the
+     one it was made with.
+   - What a session should not have to rediscover goes in
+     `wiki/<slug>.md`, `<slug>` lowercase words joined by hyphens: a
+     header between two `---` lines, `title: <one line>` and
+     `trigger: <word>, <word>`, every word one that must appear in what
+     a session is about for it to be recalled, then a blank line and
+     the text, at most `MAX_TEXT` characters. Its sessions read it by
+     `<kind>/<slug>`, and a session of another kind never reaches it.
+   - Neither names a tool the kind's latest version does not hold, nor
+     says to retry with no bound: the lever checks read both, and a
+     finding fails the gate.
+7. Pin each new prompt, and check every text: run
+   `uv run pytest om/tests/unit/test_kind_folders.py -k every_kind_folder -vv`.
+   Its failure names each breach by its file. For a new version it
+   reads `prompts/v<N>.md: lock.json pins no digest for it; once its
+   text is final, pin "v<N>.md": "<digest>"`: add that pair to the
+   folder's `prompts/lock.json`, an object of file names to digests. A
+   breach in a manual or an entry is fixed in its text. Run it again
+   until it passes.
 
 Then the gate, `make check`, as After writing in the conventions
 runs it.

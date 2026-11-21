@@ -202,8 +202,9 @@ playbook. A principal or an agent automation invokes one, and its gates
 compile into the session's policy, where they can only narrow it. A
 person who manages the tenant pins one to a kind as its kind manual:
 each session of the kind made after the pin holds its brief as its
-standing text, whole on every request, and its gates in its policy, and
-keeps that version for its life.
+standing text, after the kind's own manuals, whole on every request,
+and its gates in its policy, and keeps that version for its life. A
+brief that does not fit after them is refused.
 
 **Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
@@ -215,7 +216,8 @@ a kind manual renders, and when a session takes it.
 or pins; one run unversioned; a gate that widens a session's policy,
 adds a tool, or lifts an approval; a kind manual rendered as a message
 or cut to an excerpt, or one that changes under a session already made;
-a kind manual whose gates hold only after the session's first call.
+a kind manual whose gates hold only after the session's first call; a
+pin that fits alone and not after the kind's own manuals, taken.
 
 **Severity.** high
 
@@ -227,15 +229,18 @@ a kind manual whose gates hold only after the session's first call.
 trigger matches, so a new session does not rediscover its environment.
 It renders as data. An agent may suggest agent knowledge, and a person
 reviews it before any session recalls it, so one session cannot plant
-instructions for the next.
+instructions for the next. A kind's own entries ship in its folder,
+reviewed as its code is, and reach only the sessions of that kind.
 
 **Source.** Work In, Results Out, Agent Playbooks and Agent Knowledge.
 
 **Look for.** How agent knowledge is suggested, reviewed, and recalled;
-how recalled agent knowledge renders.
+how recalled agent knowledge renders; which sessions reach a kind's own
+entries.
 
 **Violation.** An agent's suggestion recalled before a person reviews
-it; recalled agent knowledge rendered as an instruction.
+it; recalled agent knowledge rendered as an instruction; a kind's own
+entry a session of another kind recalls, finds, or reads.
 
 **Severity.** high
 

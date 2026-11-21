@@ -305,7 +305,8 @@ finding the session never noted, or one off its file.
 
 **Severity.** high
 
-**Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/kinds.py`
+**Shape.**
+`scaffold/acme_root/om/src/acme/om/platform_agents/kinds/reviewer/kind.py`
 and `scaffold/acme_root/om/src/acme/om/platform_agents/impl/gate.py`
 
 **Check.** review
@@ -330,5 +331,40 @@ them; an operator with a workspace or with steady authority.
 **Severity.** high
 
 **Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/rules.py`
+
+**Check.** review
+
+## FLT-16 A kind's own texts ship in its folder and stay the kind's
+
+**Principle.** Each kind is a folder of its own: its typed versions,
+and each version's prompt in Markdown, pinned by its digest. Beside
+them, the folder ships the kind's own texts. Its manuals open the
+standing text of each new session of the kind, before the kind manual
+its tenant pins. Its wiki is agent knowledge its sessions recall,
+search, and read beside the tenant's. Both are the kind's, never a
+tenant's: no tenant edits or erases them, and a session of another
+kind never reaches them. The gate reads each one with the checks a
+lever gets, and fails on what they find. A product keeps its own kinds
+as folders the same way.
+
+**Source.** The Agents a Platform Ships.
+
+**Look for.** Where each kind's versions, prompts, manuals, and wiki
+live; which gate reads them; how its manuals reach a new session, and
+in what order beside a tenant's kind manual; how its wiki is recalled,
+found, and read, by which sessions, and under which handle; whether a
+product declares each folder it keeps.
+
+**Violation.** A prompt that is a string in code; a released prompt or
+setting changed in place; a kind's manual or entry stored as a
+tenant's row, or one a session of another kind reaches; a kind's
+manuals after a tenant's kind manual, or missing from a session made
+by a spawn or a hand-off; a kind's text that ships with a finding of
+the lever checks; a product folder its product never declares.
+
+**Severity.** high
+
+**Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/folders.py`
+and `scaffold/acme_root/om/src/acme/om/platform_agents/impl/manuals.py`
 
 **Check.** review

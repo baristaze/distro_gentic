@@ -35,9 +35,11 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **Make a session with its kind manual.** A start, a spawn, or a
   hand-off of a session not yet made records its kind's pinned version
   as the session's pinned invocation, then sends the version's brief as
-  the session's standing text: its gates hold from the first call, and
-  its text renders whole in the system layer of every request. A session
-  that stands already keeps the kind manual it was made with.
+  the session's standing text, after the manuals its kind ships
+  ([the platform's agents](../platform_agents/README.md)): its gates
+  hold from the first call, and its text renders whole in the system
+  layer of every request. A session that stands already keeps the kind
+  manual it was made with.
 
 ## The rules
 
@@ -45,8 +47,8 @@ kinds of thing [Acme is made of](../../../../README.md).
   automation invokes. Only a person who manages the tenant pins. An
   agent's call does none of them.
 - **A kind manual is whole and fixed.** A brief past what a session's
-  standing text holds is refused when it is pinned, and a session never
-  takes a kind manual after it is made.
+  standing text holds after its kind's own manuals is refused when it
+  is pinned, and a session never takes a kind manual after it is made.
 - **A gate only narrows.** A gate denies a call or holds it for a
   person's approval; none allows. A call the policy beneath refuses or
   holds stays so.
