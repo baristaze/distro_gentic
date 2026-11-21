@@ -1231,6 +1231,23 @@ keeps its own kinds as folders the same way.
   what they spent. Every tool it holds reads, so it changes nothing. A
   fix it finds leaves as a self-contained objective, which a person
   hands to a software engineer.
+- The **support assistant** answers in the portal's support dock. It
+  reads and drafts what the platform assistant does, on its person's own
+  permissions, and hands no work on.
+
+Where a kind's loop runs is its own ([`agentic_core` Where a Loop
+Runs][e-where]). The support assistant's runs in the request that asks
+it, so the dock shows its answer as it is written, with no queue and no
+claim before its first word. Every other kind the platform ships runs in
+a worker: each holds a workspace, a sub-agent, a hand-off, or bounds past
+a request's. Every process knows which kinds run in the request. The
+runner never runs one's loop, and no sweep wakes one's session. No agent
+automation starts one, since a firing asks no question, and no connector
+attaches to one, since its calls outlast a request and most wait for a
+person. A question's session runs as its person and stands in no agent
+project, so the tenant's own policies hold it. Its loop in the API takes
+the model matrix's fills, on the tenant's own keys where it pays with
+them, as a worker's does.
 
 A role of roles is a kind like any other: a lead, whose toolsets include
 starting the others as sub-agents. A lead that takes a change through
@@ -1241,8 +1258,9 @@ kind's policy and the lead's, and each spends from its own share, so the
 lead adds no power and no noun. A spawn starts only a kind that names an
 agent among those who may start it ([`agentic_core` Agent
 Kinds][e-kinds]). The software engineer, analysis, and the reviewer
-name an agent and a person. The planner, the platform assistant, and
-the ops analyst are a person's alone, so no spawn starts one.
+name an agent and a person. The planner, the platform assistant, the
+ops analyst, and the support assistant are a person's alone, so no
+spawn starts one.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never
@@ -1298,7 +1316,9 @@ to the sweep:
   else at its full amount, and is released only when the provider
   provably did not bill;
 - an approval past its expiry is asked again;
-- a session with a pending input and no queued loop is woken;
+- a session with a pending input and no queued loop is woken, unless its
+  kind's loop runs in the request that asks it: its next question takes
+  it up;
 - expired content's keys are revoked, and expired shape is purged
   ([Data, Retention, and the Wall](#data-retention-and-the-wall)).
 
@@ -1452,6 +1472,7 @@ price table; and the threat model each deployment writes.
 [e-provider-errors]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#provider-errors
 [e-roles]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#roles-and-fills
 [e-kinds]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#agent-kinds
+[e-where]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#where-a-loop-runs
 [e-rendering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#rendering
 [e-history]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#history
 [e-snapshots]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#workspace-snapshots

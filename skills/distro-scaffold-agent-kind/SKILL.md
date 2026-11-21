@@ -215,6 +215,15 @@ module, as step 3 says.
    the whole catalog. A new kind a person talks to that acts on nothing
    takes a reach of its own, shape `kinds.OPS_ANALYST`. Its prompt says
    what it does and what it answers, never how policy treats it.
+   A kind a person asks and waits on, whose loop runs in the request
+   that asks it, sets `runs_in=RunsIn.REQUEST` at every version and the
+   engine's request bounds, `Limits(step_guard=REQUEST_STEPS,
+   run_time=REQUEST_TIME)`: it holds no workspace, no hand-off, no
+   sub-agent, no job, and no tool its policy holds for a person, and
+   only a person starts it. The root refuses one that breaks any of
+   these, naming each breach. Shape `kinds/support_assistant/kind.py`;
+   its tests ask it with `Platform.ask` where another kind's start it
+   with `Platform.start`.
    A kind a spawn starts has a parent, the kind the arguments or the
    conversation say spawns it, and the parent holds what the spawn asks
    of it: the kind's tools among its own, since a child's tools are cut

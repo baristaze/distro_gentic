@@ -5,7 +5,8 @@ Agent Fleet Scale, and Operations of `distro_gentic_spec.md`.
 
 This group judges the agents a platform ships, what the agent fleet does
 when things fail, and how the platform is operated: the shipped kinds,
-the platform assistant, the reviewer, and the ops analyst, a provider
+the platform assistant, the reviewer, the ops analyst, and the support
+assistant, which answers in the request that asks it, a provider
 outage at scale, the sweep and its duties, operational skills, the
 dashboard, and the telemetry round trip.
 It leaves the outage signal itself to `money`, each sweep duty's own rule
@@ -169,8 +170,9 @@ not; a recovery that a missed beat starts, rather than the sweep.
 loop is requeued; an expired `exec` item follows the exec relay
 transport; a workspace instance nobody claims is purged; a hold nobody
 settled settles; an approval past its expiry is asked again; a session
-with a pending input and no queued loop is woken; and expired content's
-keys are revoked and expired shape purged.
+with a pending input and no queued loop is woken, unless its kind's loop
+runs in the request that asks it; and expired content's keys are revoked
+and expired shape purged.
 
 **Source.** Failure at Agent Fleet Scale.
 
@@ -366,5 +368,40 @@ the lever checks; a product folder its product never declares.
 
 **Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/folders.py`
 and `scaffold/acme_root/om/src/acme/om/platform_agents/impl/manuals.py`
+
+**Check.** review
+
+## FLT-17 The support assistant answers in the request alone
+
+**Principle.** The support assistant answers in the portal's support
+dock. It reads and drafts what the platform assistant does, on its
+person's own permissions, and hands no work on. Its loop runs in the
+request that asks it; every other shipped kind's runs in a worker. The
+runner never runs a request kind's loop, and no sweep wakes its session.
+No agent automation starts a request kind, and no connector attaches to
+one. A question's session runs as its person, stands in no agent
+project, and takes the model matrix's fills in the API as a worker's
+loop does.
+
+**Source.** The Agents a Platform Ships.
+
+**Look for.** Which shipped kinds run in the request, and what each
+holds against the engine's check for one; what the runner's loop
+handler and the stalled sweep do with a request kind's session; what an
+agent automation's start and a connector's attachment do with a request
+kind; how the API builds the loop a question runs: its fills, its
+readers, and its loop hooks.
+
+**Violation.** A request kind that holds a hand-off, a workspace, a tool
+past reading, or bounds past a request's; a worker that runs a request
+kind's loop, or a sweep that asks for its run; an agent automation that
+starts one, or a connector attached to one; a question's loop in the API
+on fills or keys other than a worker's loop takes.
+
+**Severity.** high
+
+**Shape.**
+`scaffold/acme_root/om/src/acme/om/platform_agents/rules.py`,
+`scaffold/acme_root/services/api/src/acme/services/api/platform/container.py`
 
 **Check.** review
