@@ -54,6 +54,7 @@ from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.impl.sessions import AgentSessionsPinnedImpl
 from acme.om.agent_workspaces.impl.tools import HeldWorkspaces, ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.impl.work_product import WorkProductAgentWorkspacesImpl
+from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agent_workspaces.types.host import HostOffer
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
 from acme.om.agents.hooks import LoopHooksInterface
@@ -178,6 +179,10 @@ class PlatformManagers(Managers):
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
     agent_workspaces: AgentWorkspacesManagerInterface
+    pinned_workspaces: PinnedWorkspacesInterface
+    """Whether a session's pin can ever be held where the session runs: the
+    tools manager that makes each workspace, which the loop's hooks ask
+    before a loop's first model call."""
     hosts: HostsManagerInterface
     exec_relay: ExecRelayManagerInterface
     cloud_pool: CloudPoolManagerInterface
@@ -812,6 +817,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             loop_hooks=PlatformLoopHooksImpl(
                 self._options.loop_hooks or LoopHooksNullImpl(),
                 lambda: self.managers.language_models,
+                lambda: self.managers.pinned_workspaces,
             ),
         )
         return engine
@@ -1262,6 +1268,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 ),
             ),
             agent_workspaces=self._agent_workspaces,
+            pinned_workspaces=self._held_to_pins,
             hosts=hosts,
             # A tool call into a customer's wall as keyed exec work: its items,
             # their output sealed under the session's key as its commands'
