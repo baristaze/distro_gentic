@@ -1,9 +1,9 @@
 """The cloud's VMs over a fake EC2 and EBS: a VM is an instance of
 the cloud pool's launch template, in the security group of its egress, with
 no instance role of its own to hand out; its seed is its first-boot data,
-and its metadata endpoint is closed once sealed. A snapshot is an image of
-the stopped instance, held to a digest of the ids that name its bytes, and
-read back block by block. Nothing calls into a VM: `run` and `channel`
+and its metadata endpoint is closed once sealed. No image or snapshot of a
+VM's disk is made: `snapshot` and `read` refuse, and a start names the
+pool's image alone. Nothing calls into a VM: `run` and `channel`
 refuse."""
 
 from collections.abc import AsyncIterator
@@ -24,14 +24,13 @@ AMI = "ami-0base"
 
 
 class Ec2:
-    """An account's instances and images, as the calls the impl makes see
-    them, each call recorded by name."""
+    """An account's instances and its images, the pool's among them, as the
+    calls the impl makes see them, each call recorded by name."""
 
     def __init__(self) -> None:
         self.instances: dict[str, dict[str, Any]] = {}
         self.images: dict[str, dict[str, Any]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.blocks: dict[str, list[bytes]] = {}
 
     def _record(self, name: str, request: dict[str, Any]) -> None:
         self.calls.append((name, request))
@@ -65,14 +64,11 @@ class Ec2:
         return {"Reservations": [{"Instances": found}] if found else []}
 
     async def describe_images(self, **request: Any) -> dict[str, Any]:
-        if "ImageIds" in request:
-            found = [i for i in self.images.values() if i["ImageId"] in request["ImageIds"]]
-            if not found:
-                error = {"Error": {"Code": "InvalidAMIID.NotFound", "Message": "no such image"}}
-                raise ClientError(error, "DescribeImages")  # type: ignore[arg-type]
-            return {"Images": found}
-        named, _ = _filters(request)
-        return {"Images": [i for i in self.images.values() if _matches(i, named)]}
+        found = [i for i in self.images.values() if i["ImageId"] in request["ImageIds"]]
+        if not found:
+            error = {"Error": {"Code": "InvalidAMIID.NotFound", "Message": "no such image"}}
+            raise ClientError(error, "DescribeImages")  # type: ignore[arg-type]
+        return {"Images": found}
 
     async def stop_instances(self, **request: Any) -> dict[str, Any]:
         self._record("stop_instances", request)
@@ -107,45 +103,6 @@ class Ec2:
             "HttpEndpoint"
         ]
         return {}
-
-    async def create_image(self, **request: Any) -> dict[str, Any]:
-        self._record("create_image", request)
-        image_id = f"ami-{len(self.images):04d}"
-        snapshot_id = f"snap-{len(self.images):04d}"
-        self.images[image_id] = {
-            "ImageId": image_id,
-            "State": "available",
-            "Tags": request["TagSpecifications"][0]["Tags"],
-            "BlockDeviceMappings": [{"Ebs": {"SnapshotId": snapshot_id}}],
-        }
-        self.blocks[snapshot_id] = [b"disk-block-0", b"disk-block-1"]
-        return {"ImageId": image_id}
-
-    async def deregister_image(self, **request: Any) -> dict[str, Any]:
-        self._record("deregister_image", request)
-        self.images.pop(request["ImageId"])
-        return {}
-
-    async def delete_snapshot(self, **request: Any) -> dict[str, Any]:
-        self._record("delete_snapshot", request)
-        self.blocks.pop(request["SnapshotId"], None)
-        return {}
-
-    async def list_snapshot_blocks(self, **request: Any) -> dict[str, Any]:
-        blocks = self.blocks[request["SnapshotId"]]
-        return {"Blocks": [{"BlockIndex": i, "BlockToken": f"t{i}"} for i in range(len(blocks))]}
-
-    async def get_snapshot_block(self, **request: Any) -> dict[str, Any]:
-        data = self.blocks[request["SnapshotId"]][request["BlockIndex"]]
-        return {"BlockData": Body(data)}
-
-
-class Body:
-    def __init__(self, data: bytes) -> None:
-        self._data = data
-
-    async def read(self) -> bytes:
-        return self._data
 
 
 def _filters(request: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
@@ -272,33 +229,22 @@ async def test_a_running_vm_handed_a_new_seed_is_stopped_reseeded_and_started(
     assert names.index("stop_instances") < names.index("start_instances")
 
 
-async def test_a_snapshot_is_an_image_of_the_stopped_disk_held_to_its_digest_and_read_back(
+async def test_no_image_of_a_vms_disk_is_made_and_a_start_names_the_pools_image_alone(
     cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:
     vms, ec2 = cloud
     await vms.launch("acme-vm-pa", spec())
-    with pytest.raises(SnapshotNotFound):
-        await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001")  # still running
     await vms.stop("acme-vm-pa")
-    digest = await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001")
-    assert digest.startswith("sha256:") and len(digest) == len("sha256:") + 64
-    assert await vms.digest("acme-vm-pxx-0001") == digest
-    assert await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001") == digest, "kept as it is"
-    assert [part async for part in vms.read("acme-vm-pxx-0001")] == [
-        b"disk-block-0",
-        b"disk-block-1",
-    ]
-    await vms.destroy("acme-vm-pa")
-    await vms.launch("acme-vm-pb", spec(), "acme-vm-pxx-0001")
-    _, restored = [r for n, r in ec2.calls if n == "run_instances"]
-    assert restored["ImageId"] != AMI, "started from the snapshot's image"
-    assert sorted(await vms.names("acme-vm-p")) == ["acme-vm-pb", "acme-vm-pxx-0001"]
-
-    await vms.destroy("acme-vm-pxx-0001")
-    assert await vms.digest("acme-vm-pxx-0001") is None
-    assert ("delete_snapshot", {"SnapshotId": "snap-0000"}) in ec2.calls
+    with pytest.raises(InfraValidationFailed, match="keeps no image"):
+        await vms.snapshot("acme-vm-pa", "acme-vm-pxx-0001")
+    with pytest.raises(InfraValidationFailed, match="keeps no image"):
+        _ = [part async for part in vms.read("acme-vm-pa")]
+    assert await vms.digest("acme-vm-pa") is None
     with pytest.raises(SnapshotNotFound):
-        await vms.launch("acme-vm-pc", spec(), "acme-vm-pxx-0001")
+        await vms.launch("acme-vm-pb", spec(), "acme-vm-pa")
+    assert await vms.names("acme-vm-p") == ["acme-vm-pa"]
+    made = {name for name, _ in ec2.calls}
+    assert not made & {"create_image", "copy_image"}, "no call that makes an image"
 
 
 async def test_nothing_calls_into_a_vm(cloud: tuple[VmsEc2Impl, Ec2]) -> None:
