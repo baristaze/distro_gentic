@@ -544,20 +544,17 @@ is the guideline's NET-37.)
 
 **Check.** review
 
-## PLC-23 The cloud pool holds its maxima at each claim, and no claim races its sweep
+## PLC-23 The cloud pool holds its maxima, and no claim races its sweep
 
 **Principle.** The cloud pool holds at most a maximum of VMs at once,
-and one tenant at most a maximum of its own, the pool's default where no
-operator set one. Its warm VMs stand below the maximum, and its refill
-never starts past it. A VM counts from its start or its claim until it
-is let go. These limits are records an operator writes, read at every
-claim and every refill, and every write leaves an audit event that
-names the operator and the values. A claim past either maximum starts
-no VM: its session waits on the resource, and its park names no count
-and no other tenant's use. A VM's host is handed its session's work
-only once it holds the workspace. The sweep takes a warm VM's record
-under the lock a claim takes before it destroys the VM, and lets go of
-a VM that ran and is gone.
+and one tenant at most its own. A VM counts from its start or claim
+until it is let go; warm VMs stand below the maximum. The limits are
+records an operator writes, read at every claim and refill, and each
+write is audited with its writer and values. A claim past a maximum
+starts no VM: its session waits on the resource, told no count and no
+other tenant's use. A VM's host gets its session's work only once it
+holds the workspace. The sweep takes a warm VM's record under the
+claim's lock before destroying it, and lets go of a VM that is gone.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
