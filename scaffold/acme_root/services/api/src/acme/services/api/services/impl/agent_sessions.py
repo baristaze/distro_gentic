@@ -1,4 +1,6 @@
-from collections.abc import Awaitable, Callable
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -35,9 +37,10 @@ from acme.om.agent_steps.types.header import (
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.types.kind import AgentKindCatalog
-from acme.om.agents.types.request import Start
+from acme.om.agents.types.request import Question, Start
+from acme.om.agents.types.run import LoopRun
 from acme.om.attribution import AttributionManagerInterface
-from acme.om.base import utcnow
+from acme.om.base import new_id, utcnow
 from acme.om.context import OperatorContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
 from acme.om.spend_budgets import SpendBudgetsOperatorManagerInterface
@@ -47,6 +50,11 @@ from acme.om.tools.rules import named_snapshot
 from acme.om.tools.types.call import JobCompletion
 from acme.om.windows import WindowsManagerInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
+from acme.services.api.services.impl.questions import (
+    QUIET,
+    Sleep,
+    stream_question,
+)
 from acme.services.api.services.impl.session_reads import (
     approvals_of,
     bounds_of,
@@ -56,6 +64,7 @@ from acme.services.api.services.impl.session_reads import (
     waits_on_approval,
 )
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
+from acme.services.api.services.questions import QuestionStreamsInterface
 from acme.services.api.types.agent_sessions import (
     MAX_SHOWN,
     AgentRefView,
@@ -77,9 +86,13 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     ParkView,
     PrincipalRequest,
+    QuestionEndView,
+    QuestionRequest,
+    QuestionSessionView,
     QuestionView,
     SnapshotView,
     StartAgentSessionRequest,
+    StartQuestionRequest,
     StopReason,
     ToolCallPageView,
     ToolOutputPageView,
@@ -284,16 +297,22 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         loop: LoopManagerInterface,
         windows: WindowsManagerInterface,
         spend_budgets_operator: SpendBudgetsOperatorManagerInterface,
+        streams: QuestionStreamsInterface,
         agent_projects: AgentProjectsManagerInterface,
         *,
         agent_project_required: bool,
         kinds: AgentKindCatalog,
         place_locally: PlaceLocally,
+        quiet: timedelta = QUIET,
+        sleep: Sleep = asyncio.sleep,
     ) -> None:
         """`agent_project_required` refuses a session started in no agent project: what
         every stack but a local one sets, so no per-agent-project policy is
         skipped by a session that names none. `place_locally` pins a session
         started with its workspace local to its own pool of one."""
+        self._streams = streams
+        self._quiet = quiet
+        self._sleep = sleep
         self._windows = windows
         self._sessions = sessions
         self._agents = agents
@@ -427,6 +446,73 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         message = message_step(agent_step_id, utcnow(), agent_session_id, ctx, body.text)
         (stored,), _ = await self._sessions.receive(ctx, agent_session_id, [message])
         return step_view(stored)
+
+    async def start_question(
+        self, ctx: TenantContext, body: StartQuestionRequest
+    ) -> AsyncIterator[str]:
+        agent_session_id = new_id()
+        start = Start(id=agent_session_id, kind=body.kind, title=body.title)
+        question = Question(
+            id=new_id(), agent_session_id=agent_session_id, text=body.text, start=start
+        )
+        return await self._asked(ctx, question)
+
+    async def ask(
+        self, ctx: TenantContext, agent_session_id: UUID, body: QuestionRequest
+    ) -> AsyncIterator[str]:
+        question = Question(id=new_id(), agent_session_id=agent_session_id, text=body.text)
+        return await self._asked(ctx, question)
+
+    async def _asked(self, ctx: TenantContext, question: Question) -> AsyncIterator[str]:
+        """The question, durable, then the stream that runs its loop here and
+        ends with what the run wrote since it."""
+        stored = await self._agents.ask(ctx, question)
+        asked = QuestionSessionView(
+            agent_session_id=question.agent_session_id, agent_step_id=stored.id, seq=stored.seq
+        )
+
+        async def ended(run: LoopRun) -> QuestionEndView:
+            return await self._question_end(ctx, run, stored.seq)
+
+        return stream_question(
+            self._streams,
+            asked,
+            lambda: self._loop.run(ctx, question.agent_session_id),
+            ended,
+            quiet=self._quiet,
+            sleep=self._sleep,
+        )
+
+    async def _question_end(self, ctx: TenantContext, run: LoopRun, seq: int) -> QuestionEndView:
+        """The end of a question's stream, read off the steps from the
+        question on: the loop's cause, the last seq, and the usage of every
+        model call among them."""
+        cause: str | None = None
+        last = seq
+        usage = Usage()
+        after = seq - 1
+        while True:
+            page = await self._steps.get_agent_steps(ctx, run.agent_session_id, after, 200)
+            for step in page.items:
+                header = step.header
+                if isinstance(header, ModelResponseHeader) and header.usage is not None:
+                    usage = usage + header.usage
+                if isinstance(header, LoopEndedHeader) and step.loop_id == run.loop_id:
+                    cause = header.cause
+                last = step.seq
+            if not page.has_more or not page.items:
+                break
+            after = page.items[-1].seq
+        return QuestionEndView(
+            agent_session_id=run.agent_session_id,
+            loop_id=run.loop_id,
+            end=run.end,
+            outcome=run.outcome,
+            cause=cause,
+            first_seq=seq,
+            last_seq=last,
+            usage=AgentStepUsageView.model_validate(usage.model_dump()),
+        )
 
     async def send_control(
         self, ctx: TenantContext, agent_session_id: UUID, body: ControlRequest, agent_step_id: UUID

@@ -195,17 +195,28 @@ session's."""
 SNAPSHOT_HASH = re.compile(rf"^{HASH_SCHEME}[0-9a-f]{{64}}$")
 
 
+class SnapshotHolds(StrEnum):
+    """What a workspace's snapshot holds."""
+
+    WORKSPACE = "workspace"  # everything its commands could write, as one archive
+    DIRECTORY = "directory"  # its directory's files alone, in parts; the rest is its base's
+
+
 class AgentWorkspaceSnapshot(OmBase):
     """A workspace's snapshot as the history names it: its id, the hash of
     its bytes keyed by its session, so once the key is revoked nothing can
-    confirm what it held, its size, and the workspace it was taken from:
-    the session's own, or its parent's when a child started from it. The
-    bytes live in the store, sealed under the session's key."""
+    confirm what it held, its size, the workspace it was taken from (the
+    session's own, or its parent's when a child started from it), and what
+    it holds. The bytes live in the store, sealed under the session's key.
+    One that holds a directory alone is kept in parts, each sealed on its
+    own; its hash is that of the manifest that names them, and its size
+    the directory's archive's."""
 
     id: UUID
     hash: str = Field(pattern=SNAPSHOT_HASH.pattern)
     size: int = Field(ge=0)
     agent_workspace_id: UUID
+    holds: SnapshotHolds = SnapshotHolds.WORKSPACE
 
 
 class InputHeader(OmBase):
@@ -334,7 +345,10 @@ class ToolRequestHeader(OmBase):
     `refs`) and carrying its input's hash, never its input, and the class
     of power its tool exercises, which decides who may approve it. The
     agent acts (`agent`); the call runs under `principal`, whom `authority`
-    chose and the adopter's transition answered for on this call."""
+    chose and the adopter's transition answered for on this call.
+    `workspace` says whether the call reaches the session's workspace: its
+    run prepares the workspace before it, and a snapshot taken before it
+    no longer holds the workspace once it may have run."""
 
     kind: Literal["tool_request"] = "tool_request"
     tool: Stored = Field(min_length=1, max_length=MAX_NAME)
@@ -344,6 +358,7 @@ class ToolRequestHeader(OmBase):
     authority: AuthorityMode
     agent: AgentRef
     authorization_class: Stored = Field(min_length=1, max_length=MAX_NAME)
+    workspace: bool = True
 
 
 class AcceptedResult(OmBase):
@@ -361,12 +376,15 @@ class ToolResponseHeader(OmBase):
     above the size bound, whose head and tail are the first two parts of the
     step's result. `accepted` is the verdict on a result submitted through
     the kind's result tool, kept in the history so the loop ends on it even
-    after a park or a lost run."""
+    after a park or a lost run. `unstarted` marks a call answered before
+    any run started it, as a refused workspace answers one: it touched
+    nothing, so the latest snapshot still holds the workspace."""
 
     kind: Literal["tool_response"] = "tool_response"
     failure: ToolFailure | None = None
     tool_output: ToolOutputRef | None = None
     accepted: AcceptedResult | None = None
+    unstarted: bool = False
 
     @model_validator(mode="after")
     def _a_failure_accepts_nothing(self) -> Self:

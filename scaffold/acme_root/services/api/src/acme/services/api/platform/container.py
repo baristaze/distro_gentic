@@ -48,8 +48,10 @@ from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api import product_api
+from acme.services.api.assistant import offered
 from acme.services.api.products import ProductLive
 from acme.services.api.services.impl.platform_root import build_platform_services
+from acme.services.api.services.impl.questions import QuestionStreamsImpl
 from acme.services.api.services.impl.root import build_services
 from acme.services.api.services.platform import PlatformServicesInterface
 from acme.services.api.settings import ApiSettings
@@ -107,6 +109,12 @@ def build_platform_api(
     is messaged."""
     ports = ports or PlatformPorts()
     held: list[IntakeManagerInterface] = []
+    streams = QuestionStreamsImpl()
+    # The example assistant, where the environment offers it and the product
+    # declares no kind; its tool reads the media manager the root below builds.
+    example_kinds, example_tools = offered(
+        settings.environment, ports.kinds.agents, lambda: managers.media
+    )
     # A start makes each session with its kind manual.
     agent_playbooks = AgentPlaybooksLayer(storage)
     managers = build_platform_managers(
@@ -127,9 +135,16 @@ def build_platform_api(
         ),
         agent_root_options=AgentRootOptions(
             environment=settings.environment,
-            tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
+            agent_kinds=example_kinds,
+            tool_catalog=(
+                CommentImpl(lambda: held[0], integrations.get_integration),
+                *example_tools,
+            ),
             spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
+            # A kind whose loop runs in the request that asks it runs here,
+            # and streams to that request.
+            stream_sink=streams,
         ),
     )
     refuse_open_money(settings.environment, managers)
@@ -169,6 +184,7 @@ def build_platform_api(
         infra,
         integrations,
         timedelta(seconds=settings.realtime_head_max_age_seconds),
+        streams,
         intake=intake,
         agent_projects=managers.agent_projects,
         agent_project_required=agent_project_required,

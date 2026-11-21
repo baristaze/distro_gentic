@@ -77,6 +77,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "vm_store_encrypted": "the cloud pool's VMs, which no deployment runs yet",
     "vm_timeout_seconds": "the cloud pool's VMs, which no deployment runs yet",
     "vm_boot_timeout_seconds": "the cloud pool's VMs, which no deployment runs yet",
+    "vm_pack_timeout_seconds": "the cloud pool's VMs, which no deployment runs yet",
     "vm_launch_template": "the cloud pool's VMs, which no deployment runs yet",
     "vm_subnets": "the cloud pool's VMs, which no deployment runs yet",
     "vm_closed_group": "the cloud pool's VMs, which no deployment runs yet",

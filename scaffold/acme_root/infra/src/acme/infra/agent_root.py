@@ -25,7 +25,7 @@ from acme.infra.agent_workspaces.container import (
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 from acme.infra.agent_workspaces.network import NO_HOST_NETWORK, HostNetwork
 from acme.infra.agent_workspaces.twin import AgentWorkspaceNullImpl, AgentWorkspaceTwinImpl
-from acme.infra.agent_workspaces.vm import AgentWorkspaceVmImpl
+from acme.infra.agent_workspaces.vm import PACK_WITHIN, AgentWorkspaceVmImpl
 from acme.infra.keys import KeyServiceInterface
 from acme.infra.keys.kms import KeyServiceKmsImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl, root_key
@@ -79,9 +79,10 @@ class AgentInfraSettings(BaseSettings):
     # `vm_prefix`. It holds a project's name and `-vm-`, and no more:
     # Lima keeps a socket under each name, the host bounds its path, and a
     # probe refuses a Lima home too deep for the longest name. A VM's
-    # snapshot is its disk, kept in the backend's store;
-    # `vm_store_encrypted` declares that store encrypted at rest, and
-    # without it a VM workspace keeps no snapshot.
+    # snapshot keeps its directory, sealed in the buckets; a base is a disk
+    # kept in the backend's store. `vm_store_encrypted` declares that store
+    # encrypted at rest, and without it a VM workspace starts from no base
+    # with setup.
     vms_backend: Literal["none", "lima", "ec2"] = "none"
     vm_image: str = "template:_images/ubuntu-lts"
     vm_prefix: str = Field(default="acme-vm-", pattern=r"^[a-z][a-z0-9-]*-$", max_length=21)
@@ -94,6 +95,9 @@ class AgentInfraSettings(BaseSettings):
     # which may download its image and install Docker in it.
     vm_timeout_seconds: float = Field(default=120.0, gt=0)
     vm_boot_timeout_seconds: float = Field(default=900.0, gt=0)
+    # A pack of a VM workspace's directory, at a snapshot: its own bound,
+    # since it writes up to the snapshot's bound in the guest.
+    vm_pack_timeout_seconds: float = Field(default=PACK_WITHIN.total_seconds(), gt=0)
 
     @field_validator("keys_root_key")
     @classmethod
@@ -255,7 +259,13 @@ def _runtime(
     if settings.agent_workspace_backend == "vm":
         timeout = timedelta(seconds=settings.vm_timeout_seconds)
         return (
-            AgentWorkspaceVmImpl(vms, settings.vm_image, settings.vm_prefix, timeout),
+            AgentWorkspaceVmImpl(
+                vms,
+                settings.vm_image,
+                settings.vm_prefix,
+                timeout,
+                pack_within=timedelta(seconds=settings.vm_pack_timeout_seconds),
+            ),
             TransportVmImpl(records, secrets, broker, vms, timeout),
         )
     return AgentWorkspaceNullImpl(), TransportNullImpl()
