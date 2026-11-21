@@ -29,7 +29,12 @@ from acme.infra.transports.redaction import forms
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
-from acme.om.agent_steps.types.header import InputHeader, LoopOutcome, ToolFailure
+from acme.om.agent_steps.types.header import (
+    InputHeader,
+    LoopOutcome,
+    ToolFailure,
+    ToolRequestHeader,
+)
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
@@ -156,6 +161,7 @@ class HostCalls:
 
     answer: McpAnswer
     sent: list[McpRequest] = field(default_factory=lambda: [])
+    given: list[AgentWorkspace] = field(default_factory=lambda: [])
 
     async def __call__(
         self,
@@ -168,6 +174,7 @@ class HostCalls:
         epoch: int,
     ) -> McpAnswer:
         self.sent.append(request)
+        self.given.append(workspace)
         return self.answer
 
 
@@ -619,6 +626,14 @@ async def test_a_server_inside_the_wall_is_called_through_its_host_and_never_fro
     assert "- words:" not in at.loop.anthropic.calls[0].tools[0].description
     (sent,) = host.sent
     assert (sent.server, sent.tool, dict(sent.arguments)) == ("tracker", "find", {"q": "login"})
+    (found,) = [
+        s.header
+        for s in steps
+        if isinstance(s.header, ToolRequestHeader) and s.header.tool == "tracker__find"
+    ]
+    assert found.workspace, "its host holds the workspace, so the call reaches it"
+    (given,) = host.given
+    assert given.id == agent_session_id
     assert dict(sent.definition) == definition.model_dump(mode="json"), "the reviewed one"
     assert json.loads(result_text(responses(steps)[-1])) == {"text": "cat: a feline."}
     assert nothing.exchanges == 0, "the platform opened no connection to any server"
