@@ -7,7 +7,7 @@ from pydantic import Field, SecretStr
 from acme.infra.secrets import SecretsInterface
 from acme.integrations.mcp import McpClientInterface, McpHttp
 from acme.om.agent_projects.policies import SessionAgentProjectsInterface
-from acme.om.agents.types.kind import AgentKindCatalog
+from acme.om.agents.types.kind import AgentKindCatalog, RunsIn
 from acme.om.base import OmBase, new_id, utcnow
 from acme.om.connectors.impl.addresses import Resolve, refused_now, resolve
 from acme.om.connectors.manager import ConnectorsManagerInterface
@@ -205,9 +205,16 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         connector = await self._connector(ctx, connector_id)
         try:
-            self._kinds.latest(attachment.kind)
+            latest = self._kinds.latest(attachment.kind)
         except UnknownAgentKind:
             raise ValidationFailed(f"no kind {attachment.kind} to attach to") from None
+        if latest.runs_in is RunsIn.REQUEST:
+            # A connector's tools run past a request's time, and most wait for a
+            # person: a kind whose loop runs in the request holds none.
+            raise ValidationFailed(
+                f"{attachment.kind} runs its loop in the request that asks it, "
+                "which takes no connector"
+            )
         for kind in self._kinds.kinds:
             names = {toolset.name for toolset in (*kind.toolsets, *kind.deferred)}
             if kind.name == attachment.kind and connector.name in names:

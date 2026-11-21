@@ -32,6 +32,7 @@ from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import InputHeader
 from acme.om.agents import AgentsManagerInterface
+from acme.om.agents.types.kind import AgentKindCatalog, RunsIn
 from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -39,7 +40,13 @@ from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.change_events import ChangeEventsManagerInterface
 from acme.om.change_events.manager import audit_change_event
 from acme.om.context import Permission, Role, TenantContext
-from acme.om.exceptions import NotAuthorized, NotFound, OmException, ValidationFailed
+from acme.om.exceptions import (
+    NotAuthorized,
+    NotFound,
+    OmException,
+    UnknownAgentKind,
+    ValidationFailed,
+)
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
@@ -93,13 +100,16 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         agent_project_required: bool,
         actions: AgentAutomationActions | None = None,
         agent_playbooks: Callable[[], AgentPlaybooksManagerInterface] | None = None,
+        kinds: AgentKindCatalog | None = None,
     ) -> None:
         """`agent_project_required` refuses a start that names no agent project: what
         every stack but a local one sets, so no per-agent-project policy is
         skipped by a session an agent automation starts. `actions` are the
         product's own kinds of action; None declares none. `agent_playbooks`
         answers the agent playbooks a start invokes; None keeps none, so a start
-        that names one is refused when it is saved and when it fires."""
+        that names one is refused when it is saved and when it fires.
+        `kinds` is the process's catalog, whose request kinds no start
+        names; None knows none."""
         self._storage = storage
         self._agents = agents
         self._agent_projects = agent_projects
@@ -114,6 +124,7 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         self._clock = clock
         self._actions = actions or AgentAutomationActions(())
         self._agent_playbooks = agent_playbooks
+        self._kinds = kinds
 
     async def create_agent_automation(
         self, ctx: TenantContext, agent_automation: AgentAutomation
@@ -610,10 +621,17 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
         not asked: nothing deletes an agent automation, so turning it off always
         goes through, and turning it on again is an edit the kind checks.
         An enabled message to a standing session is `ValidationFailed`
-        (`UNHELD`): nothing would hold its run to its cap."""
+        (`UNHELD`): nothing would hold its run to its cap. So is a start of a
+        kind whose loop runs in the request that asks it: a firing asks no
+        question, and no worker would run its loop."""
         action = agent_automation.action
         if action.kind == ActionKind.MESSAGE_SESSION and agent_automation.enabled:
             raise ValidationFailed(UNHELD)
+        if action.kind == ActionKind.START_SESSION and self._in_request(action.agent_kind):
+            raise ValidationFailed(
+                f"agent kind {action.agent_kind} runs its loop in the request that asks it: "
+                "a person asks it, and no agent automation starts it"
+            )
         if action.kind in PLATFORM_ACTIONS:
             return
         kind = self._actions.get(action.kind)
@@ -625,6 +643,14 @@ class AgentAutomationsManagerImpl(AgentAutomationsManagerInterface):
             raise ValidationFailed(f"the params of {action.kind} are malformed: {exc}") from exc
         if agent_automation.enabled:
             await kind.check_writer(ctx, params, agent_automation.runs_as)
+
+    def _in_request(self, agent_kind: str | None) -> bool:
+        if agent_kind is None or self._kinds is None:
+            return False
+        try:
+            return self._kinds.latest(agent_kind).runs_in is RunsIn.REQUEST
+        except UnknownAgentKind:
+            return False
 
     def _unknown_kind(self, agent_automation: AgentAutomation) -> bool:
         kind = agent_automation.action.kind
