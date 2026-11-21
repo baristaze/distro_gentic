@@ -402,7 +402,7 @@ class HeldWorkspacesSweep:
         moves it."""
         if durability is not Durability.SNAPSHOT:
             return False
-        if kept_snapshot(await self._history(ctx, agent_session_id)) is not None:
+        if kept_snapshot(await self._history(ctx, agent_session_id), settled=False) is not None:
             return False
         self._unkept[agent_session_id] = head
         log.warning(
