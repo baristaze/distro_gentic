@@ -33,7 +33,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 
 from contracts.agent_workspaces import AgentProjectsTwin, GitTwin, ReaderTwin
-from contracts.loops import ASSISTANT, reply, said
+from contracts.loops import ASSISTANT, reply, said, use
 from contracts.platform_loops import platform_loop_over
 
 pytestmark = pytest.mark.integration
@@ -147,12 +147,13 @@ async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
     )
     agent_session_id = await loop.start("twinned")
     await loop.say(agent_session_id, "Answer it.")
-    loop.anthropic.add(reply(said("Never asked.")))
+    loop.anthropic.add(reply(use("lookup")), reply(said("Never asked.")))
 
     run = await loop.loops.run(owner, agent_session_id)
 
     assert run.end is RunEnd.PARKED and run.park is not None
-    assert run.park.reason is ParkReason.LEASABLE_RESOURCE and loop.anthropic.calls == []
+    assert run.park.reason is ParkReason.LEASABLE_RESOURCE
+    assert len(loop.anthropic.calls) == 1, "parked at the call that reached the workspace"
     session = await loop.managers.agent_sessions.get_agent_session(owner, agent_session_id)
     assert session.park is not None and session.park.reason is ParkReason.LEASABLE_RESOURCE
 
@@ -177,7 +178,8 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
     for text, leaves_work in (("First.", False), ("Second.", True), ("Third.", False)):
         git.dirty = leaves_work
         await loop.say(agent_session_id, text)
-        loop.anthropic.add(reply(said("Done.")))
+        # Each loop's first call reaches the workspace, which prepares it.
+        loop.anthropic.add(reply(use("lookup")), reply(said("Done.")))
         assert (await loop.loops.run(owner, agent_session_id)).outcome is LoopOutcome.SUCCEEDED
 
     (kept,) = list(git.pushed)

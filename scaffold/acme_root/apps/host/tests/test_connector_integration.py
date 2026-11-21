@@ -193,6 +193,10 @@ async def test_a_server_inside_the_wall_is_called_by_its_host_and_never_by_the_p
     await api.container.managers.hosts.place_session(owner, session.id, pool.id)
     said = message_step(new_id(), utcnow(), session.id, owner, "What is a cat?")
     await managers.agent_sessions.receive(owner, session.id, [said])
+    # The server's call reaches the workspace its host holds: with no host of
+    # the pool online yet, it waits there, open.
+    model.add(calls("load_toolset", toolset="words"))
+    model.add(calls("words__lookup", word="cat"))
     parked = await managers.loop.run(owner, session.id)
     assert parked.park is not None and parked.park.reason is ParkReason.LEASABLE_RESOURCE
     host, _ = await directory_host(
@@ -202,8 +206,6 @@ async def test_a_server_inside_the_wall_is_called_by_its_host_and_never_by_the_p
     await host.idle()
     await managers.agent_sessions.wake_agent_session(owner, session.id, parked.park)
 
-    model.add(calls("load_toolset", toolset="words"))
-    model.add(calls("words__lookup", word="cat"))
     model.add(answers("A cat is a unit of language."))
     running = asyncio.ensure_future(managers.loop.run(owner, session.id))
     pace = Pace()

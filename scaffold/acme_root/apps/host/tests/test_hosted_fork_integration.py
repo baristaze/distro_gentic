@@ -243,17 +243,18 @@ async def test_a_hosted_parent_forks_and_its_child_reads_the_copy_its_host_keeps
     await managers.agent_sessions.receive(owner, parent, [said])
     child: UUID | None = None
     try:
-        # The first loop asks a host of the pool for the workspace and
-        # parks; the host makes the container, and the session is bound.
+        # The first loop's write asks a host of the pool for the workspace
+        # and parks, the call open; the host makes the container, and the
+        # session is bound.
+        model.add(runs("sh", "-c", "echo from-the-parent > note"))
         parked = await managers.loop.run(owner, parent)
         assert parked.end is RunEnd.PARKED and parked.park is not None
         assert await host.claim_once() is not None
         await host.idle()
         assert await managers.exec_relay.binding_of(owner, parent) is not None
 
-        # The parent writes a file and forks in the same run.
+        # The parent writes the file and forks in the same run.
         await managers.agent_sessions.wake_agent_session(owner, parent, parked.park)
-        model.add(runs("sh", "-c", "echo from-the-parent > note"))
         model.add(forks())
         model.add(answers("Forked."))
         ended = await driven(host, managers.loop.run(owner, parent))
@@ -348,6 +349,7 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
     said = message_step(new_id(), utcnow(), parent, owner, "Write the note, then fork.")
     await managers.agent_sessions.receive(owner, parent, [said])
     try:
+        model.add(runs("sh", "-c", "echo from-the-parent > note"))
         parked = await managers.loop.run(owner, parent)
         assert parked.end is RunEnd.PARKED and parked.park is not None
         assert await host.claim_once() is not None
@@ -355,7 +357,6 @@ async def test_a_fork_refused_by_its_host_or_its_session_spends_nothing(
         before = (await managers.agents.tree_of(owner, parent)).size
 
         await managers.agent_sessions.wake_agent_session(owner, parent, parked.park)
-        model.add(runs("sh", "-c", "echo from-the-parent > note"))
         model.add(forks())
         model.add(answers("Refused."))
         ended = await driven(host, managers.loop.run(owner, parent))
