@@ -115,3 +115,26 @@ run "the_platforms_hold_starts_vms_from_the_template_and_passes_no_role" {
     error_message = "only what carries a VM's name is stopped, snapshotted, or ended"
   }
 }
+
+run "the_platforms_hold_makes_no_disk_image_or_volume_snapshot" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for action in [
+        "ebs:StartSnapshot", "ec2:CopyImage", "ec2:CopySnapshot", "ec2:CreateImage",
+        "ec2:CreateRestoreImageTask", "ec2:CreateSnapshot", "ec2:CreateSnapshots",
+        "ec2:CreateStoreImageTask", "ec2:ImportImage", "ec2:ImportSnapshot", "ec2:RegisterImage",
+      ] : contains(one([for statement in data.aws_iam_policy_document.operate.statement : statement.actions if statement.sid == "NoDiskImage" && statement.effect == "Deny" && statement.resources == toset(["*"])]), action)
+    ])
+    error_message = "the role is denied every call that makes a disk image or a volume snapshot, on everything"
+  }
+
+  assert {
+    condition = length([
+      for statement in data.aws_iam_policy_document.operate.statement : statement
+      if statement.effect != "Deny" && anytrue([for action in statement.actions : can(regex("^\\*$|^(ec2|ebs):.*\\*|^ec2:.*(Image|Snapshots?)$|^ebs:", action)) && action != "ec2:DescribeImages"])
+    ]) == 0
+    error_message = "no statement allows a disk image, a volume snapshot, or a wildcard over the machines or their disks"
+  }
+}

@@ -377,11 +377,23 @@ that only reads, plans, or answers starts none.
 - **Closed at its network.** A VM's egress is closed outside its
   guest, to the gateway and what its session's egress allows, never by a
   rule its own commands could undo.
-- **Its whole disk is its snapshot.** For a session kept by snapshots,
-  the run's end pushes what the workspace holds, ends the host's
-  credential, stops the VM, and keeps its disk. The next loop starts
-  a VM from that disk: its files, its packages, and its images
-  stand, and its processes start again.
+- **Its files are its snapshot, never its disk.** For a session kept
+  by snapshots, the run's end pushes what the workspace holds, then
+  keeps the workspace's directory as the engine keeps a VM's
+  ([`agentic_core` Workspace Snapshots][e-snapshots]): measured and
+  packed in the VM, refused past its bound before any byte leaves,
+  and read out through the relay in parts, each sealed under the
+  session's key in the object store. An archive that fails part way
+  keeps no part. The VM then goes, and the pool keeps no image of any
+  disk: a disk costs about ten times its files, is bound to one zone,
+  and is sealed under no session's key. The next loop's VM boots the
+  pool's image and takes the files back, so what its commands
+  installed outside the directory comes from the image again. A
+  restore that fails lets its VM go and touches nothing kept.
+- **Kept while its session is active.** A session's archives stay 30
+  days after its last activity, by default, then the sweep removes
+  them. Its purge removes them, and its key's revocation leaves them
+  noise.
 - **No host, no compute; its disk stays.** A VM whose host never
   enrolled, was ended, or went silent is stopped, its disk kept, and the
   session's next loop starts it again under a new key, its host with it.
@@ -412,9 +424,8 @@ that only reads, plans, or answers starts none.
   idle one, which goes.
   Every path that starts a VM has the one that lets it go: the run's
   release, the sweep past the grace, a run's end past the VM's age, a
-  session or a tenant that is gone, a VM that died, a purge, and a
-  key's revocation, since a VM left running is money. A revocation the
-  API takes reaches no VM, so the sweep destroys its disks.
+  session or a tenant that is gone, a VM that died, and a purge, since
+  a VM left running is money.
 - **Idle, it goes after the grace.** After a run, a VM stays for its
   kind's grace, so a follow-up finds it, and is then let go. No session
   has a time budget of its own: the grace bounds an idle VM, and the
@@ -429,9 +440,9 @@ that only reads, plans, or answers starts none.
   and never for its age before one does. A warm VM past its age goes
   at the sweep.
 - **Its boot is timed.** Each cold start records how long it took
-  from its start to its host's enrollment, by what it booted: the
-  pool's image, or a session's snapshot. A warm claim records none, so
-  the image's time is what the warm count is set by.
+  from its start to its host's enrollment. Every VM boots the pool's
+  image, and a warm claim records none, so that time is what the warm
+  count is set by.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the
@@ -514,9 +525,10 @@ workspace itself stays a cache.
   workspaces as caches makes each of them a cache. A session that keeps
   no content at rest keeps no snapshot, so a kind kept by snapshots is
   refused for it when it is created.
-- **What it holds.** Everything the workspace's commands could write at
-  its level: the whole disk of a VM, the whole filesystem of a
-  container, and on a bare host the directory alone, where its host's
+- **What it holds.** What the workspace's commands wrote that its next
+  start does not bring back: the whole filesystem of a container; the
+  directory alone of a VM, whose every start boots its image or its
+  base; and on a bare host the directory alone, where its host's
   provider takes one. No process is held; each starts again. No
   credential is held: what the broker attached is taken back first, and
   a snapshot that holds a secret's value is refused.
@@ -527,10 +539,10 @@ workspace itself stays a cache.
   snapshot, and the restored tree stands: the session's branch is not
   brought over it. A person who takes control gets that tree too.
 - **Where it lives follows the wall.** A workspace in the platform's
-  cloud keeps its snapshots in the platform's own stores: the object
-  store, sealed under the session's key, or, for a VM of the cloud
-  pool, the cloud's disk snapshots, encrypted at rest. A workspace on a
-  customer's host keeps them in that host's own store, inside the wall.
+  cloud, a VM of the cloud pool's included, keeps its snapshots in the
+  platform's object store, sealed under the session's key. A workspace
+  on a customer's host keeps them in that host's own store, inside the
+  wall.
   Their bytes never cross: the platform records the reference and the
   hash alone, and a host of the same pool whose store holds one restores
   it. A snapshot kept on one side of the wall never restores on the
@@ -545,7 +557,9 @@ workspace itself stays a cache.
 - **For how long.** A snapshot is content. When a session's content
   expires, its key is revoked, or the session is purged, its snapshots go
   from the object store and from each host's store that keeps one, and
-  their records go with them.
+  their records go with them. Those of a session of the cloud pool go
+  too once the session has been idle past their bound
+  ([The Cloud Pool](#the-cloud-pool)).
 
 ### An Agent Project's Workspace Base
 

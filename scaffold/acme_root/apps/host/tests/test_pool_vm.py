@@ -26,7 +26,7 @@ from acme.apps.host.agent import HostAgent, RoutesHostImpl
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import settings_from_env
 from acme.apps.host.exec_relay import ExecutorRelayImpl
-from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
+from acme.apps.host.main import KEPT_APART, host_transports, host_workspaces
 from acme.apps.host.seed import forget_key, read_seed
 from acme.client.claimant.credential import BadSetting
 from acme.client.transport import ApiError
@@ -279,7 +279,7 @@ async def test_a_vms_host_gives_up_on_any_other_refusal() -> None:
         await routes.enroll(Refusing(0), "hmk_spent", "vm")  # type: ignore[arg-type]
 
 
-async def test_a_vms_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
+async def test_a_vms_workspace_is_a_folder_at_the_vms_level_kept_by_the_platform(
     tmp_path: Path,
 ) -> None:
     provider = AgentWorkspacePoolVmImpl(tmp_path / "workspace")
@@ -289,16 +289,16 @@ async def test_a_vms_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
     assert (await provider.prepare(ORG, SESSION, opened)).location == workspace.location
     assert [held.id for held in await provider.held_instances()] == [SESSION]
 
-    with pytest.raises(SnapshotRefused, match="pool keeps"):
+    with pytest.raises(SnapshotRefused, match="platform keeps this VM's directory"):
         await provider.snapshot(workspace)
-    with pytest.raises(IsolationRefused, match="as its pool started it"):
+    with pytest.raises(IsolationRefused, match="starts from the pool's image"):
         await provider.prepare(ORG, SESSION, KEPT, snapshot=b"a snapshot")
     based = KEPT.model_copy(
         update={
             "base": AgentWorkspaceBase(image="ubuntu", egress=EgressPolicy(mode=EgressMode.NONE))
         }
     )
-    with pytest.raises(IsolationRefused, match="as its pool started it"):
+    with pytest.raises(IsolationRefused, match="starts from the pool's image"):
         await provider.prepare(ORG, SESSION, based)
     listed = KEPT.model_copy(
         update={"egress": EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("pypi.org",))}
@@ -376,7 +376,7 @@ async def test_a_vms_host_enrolls_with_its_key_and_holds_its_sessions_workspace(
         lambda: agents[0].client(),
         host_transports(settings),
         host_workspaces(settings),
-        kept_whole=KEPT_WHOLE,
+        kept_apart=KEPT_APART,
         flush_seconds=0.0,
         renew_seconds=0.2,
     )

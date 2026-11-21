@@ -1,19 +1,20 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import CursorResult, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
 from acme.om.base import EMPTY_UUID
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
-from acme.om.cloud_pool.storage.tables.pool_erasures import PoolErasures
+from acme.om.cloud_pool.storage.tables.pool_archives import PoolArchives
 from acme.om.cloud_pool.storage.tables.pool_limits import PoolLimits as PoolLimitsRows
 from acme.om.cloud_pool.storage.tables.pool_tenant_limits import PoolTenantLimits
 from acme.om.cloud_pool.storage.tables.pool_vms import PoolVms
-from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
@@ -67,6 +68,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 row.agent_session_id = vm.agent_session_id
                 row.pool_id = vm.pool_id
                 row.bound_by = vm.bound_by
+                row.restored_from = vm.restored_from
                 row.bound_at = vm.bound_at
                 claimed = to_model(row, PoolVm)
                 await session.commit()
@@ -194,15 +196,12 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             await session.execute(stmt)
             await session.commit()
 
-    async def rekey(
-        self, vm_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
-    ) -> PoolVm | None:
+    async def rekey(self, vm_id: UUID, key_digest: str, at: datetime) -> PoolVm | None:
         stmt = (
             update(PoolVms)
             .where(PoolVms.id == vm_id)
             .values(
                 key_digest=key_digest,
-                restored_from=restored_from,
                 host_id=None,
                 bound_at=at,
                 sealed_at=None,
@@ -221,39 +220,49 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             await session.execute(stmt)
             await session.commit()
 
-    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
-        asked = (
-            insert(PoolErasures)
+    async def keep_archive(self, archive: PoolArchive) -> None:
+        stmt = (
+            insert(PoolArchives)
             .values(
-                id=erasure.id,
-                created_at=erasure.created_at,
-                tenant_id=erasure.tenant_id,
-                agent_session_id=erasure.agent_session_id,
+                id=archive.id,
+                created_at=archive.created_at,
+                tenant_id=archive.tenant_id,
+                agent_session_id=archive.agent_session_id,
+                kept_at=archive.kept_at,
             )
-            .on_conflict_do_nothing(
-                index_elements=[PoolErasures.tenant_id, PoolErasures.agent_session_id]
+            .on_conflict_do_update(
+                index_elements=[PoolArchives.tenant_id, PoolArchives.agent_session_id],
+                set_={"kept_at": archive.kept_at},
             )
         )
-        standing = select(PoolErasures).where(
-            PoolErasures.tenant_id == erasure.tenant_id,
-            PoolErasures.agent_session_id == erasure.agent_session_id,
-        )
-        async with self._session_for(PoolErasures, org_id=EMPTY_UUID) as session:
-            await session.execute(asked)
-            stood = to_model((await session.execute(standing)).scalar_one(), PoolErasure)
+        async with self._session_for(PoolArchives, org_id=EMPTY_UUID) as session:
+            await session.execute(stmt)
             await session.commit()
-            return stood
 
-    async def read_erasures(self, limit: int) -> list[PoolErasure]:
-        stmt = select(PoolErasures).order_by(PoolErasures.created_at, PoolErasures.id).limit(limit)
+    async def read_archives(self, before: datetime, limit: int) -> list[PoolArchive]:
+        stmt = (
+            select(PoolArchives)
+            .where(PoolArchives.kept_at < before)
+            .order_by(PoolArchives.kept_at, PoolArchives.agent_session_id)
+            .limit(limit)
+        )
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
-            return [to_model(row, PoolErasure) for row in (await session.execute(stmt)).scalars()]
+            return [to_model(row, PoolArchive) for row in (await session.execute(stmt)).scalars()]
 
-    async def delete_erasure(self, erasure_id: UUID) -> None:
-        stmt = delete(PoolErasures).where(PoolErasures.id == erasure_id)
+    async def delete_archive(self, tenant_id: UUID, agent_session_id: UUID) -> None:
+        stmt = delete(PoolArchives).where(
+            PoolArchives.tenant_id == tenant_id, PoolArchives.agent_session_id == agent_session_id
+        )
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(stmt)
             await session.commit()
+
+    async def delete_tenant_archives(self, tenant_id: UUID) -> int:
+        stmt = delete(PoolArchives).where(PoolArchives.tenant_id == tenant_id)
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            gone = cast(CursorResult[Any], await session.execute(stmt)).rowcount
+            await session.commit()
+            return gone
 
     async def read_limits(self) -> PoolLimits | None:
         stmt = select(PoolLimitsRows).order_by(PoolLimitsRows.version.desc()).limit(1)

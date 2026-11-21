@@ -134,9 +134,10 @@ session waits for it, even with other hosts of the pool online.
 A session of the cloud whose agent works in a VM runs on a **VM of
 the cloud pool**: a VM of its own, which runs the host
 program and serves that session alone. Its first loop waits while the
-VM starts; when it is kept by snapshots, each loop's end keeps the
-VM's whole disk, and the next loop waits while a VM starts
-from it.
+VM starts; when it is kept by snapshots, each loop's end keeps its
+workspace's files, sealed under the session's key, and lets the VM go,
+and the next loop waits while a VM starts from the pool's image and
+takes them back.
 
 Readers: `read_wait` (the loop's item: queued or running, its lane, since
 when, its attempts, and the org's loops running ahead of it; where the

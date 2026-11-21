@@ -52,35 +52,24 @@ in. A new VM boots the pool's image, named by its AMI id, the
 module's `image_id`; the template maps that image's own root device, so
 the root disk itself is encrypted under the pool's key. Its seed is its
 first-boot data, which the image reads at each boot, and its metadata
-endpoint is closed once its host has traded the key. A snapshot is an
-image of the stopped instance under the pool's disk key, held to a
-digest of the ids that name its bytes, and read back through the block
-API for the scan. `run` and `channel` refuse. Lima stays the local
+endpoint is closed once its host has traded the key. It makes no image
+of a disk ([ADR 2070](2070-the-cloud-pool-keeps-a-sessions-files-sealed-never-a-disk.md)).
+`run` and `channel` refuse. Lima stays the local
 backend, its image a stopped VM's name, and its seed written
 through the hypervisor's channel.
 
-**A VM starts from the session's snapshot, a warm VM, or the
-image.** A prepare finds the VM that serves the session, or a
-restore replaces it with one started from the session's latest snapshot,
-held to its recorded digest first; else it claims a warm one, else it
-starts one from the pool's image. It waits a while for the host to enroll
+**A VM starts from a warm VM, or the image.** A prepare finds the VM
+that serves the session, unless a restore replaces it; else it claims a
+warm one, else it starts one from the pool's image. It waits a while for the host to enroll
 and to prepare the workspace, then the loop waits on the resource. A
 spec the VMs cannot hold is refused for good: an allowlist, which
 needs an egress proxy no VM runs; no egress, where the backend
 cannot close it; a limit it does not enforce; and a base.
 
-**A snapshot is the VM's whole disk.** At the end of a run of a
-session kept by snapshots, what the workspace holds is pushed while the
-host still runs; then the host's credential is ended, the VM
-stopped, and its disk kept under the tenant's and the session's names.
-The record names the snapshot and its digest, never the disk, and the
-step names the digest's hash keyed by the session. The run's release
-lets the stopped VM go. The session's purge, its key's revocation,
-and its tenant's purge take the disks by those names, in a process whose
-VMs settings are the runner's. A revocation is a person's call to
-the API, whose process reaches no VM: the pool records the erasure
-it owes first, and the sweep destroys the disks; a process that reaches
-the VMs destroys them at once.
+**A snapshot keeps the session's files.** A session kept by snapshots
+keeps its workspace's directory, sealed under its key in the snapshots
+bucket, and the pool keeps no disk of any VM
+([ADR 2070](2070-the-cloud-pool-keeps-a-sessions-files-sealed-never-a-disk.md)).
 
 **Every path that starts a VM has the one that lets it go.** A
 cache session's VM stays warm through the grace, then the runner's
@@ -105,11 +94,10 @@ with its VM.
 
 ## Consequences
 
-- One migration: the pool's VMs, the erasures it owes, a pool's and
-  a host's session, and a snapshot kept by the VMs.
+- One migration: the pool's VMs, and a pool's and a host's session.
 - A session kept by snapshots holds no VM between loops: its next
-  loop waits for one to start from its disk, seconds on Lima, about a
-  minute in the cloud.
+  loop waits for one to start, seconds on Lima, about a minute in the
+  cloud, unless it claims a warm one.
 - A VM's host credential sits in its memory, where the session's
   commands, which hold the VM whole, can read it. It claims that
   session's work alone, and ends when the VM stops.
@@ -124,16 +112,15 @@ with its VM.
   its outputs, and their task roles its policy.
 - A session of the pool whose agent project names a workspace base is
   refused for good. The trigger is a cloud agent project with a
-  workspace base: the pool then builds the base on a VM and keeps
-  its disk under the tenant.
+  workspace base: the pool then builds the base on a VM and keeps it
+  under the tenant.
 - A VM's host holds no tenant's secret, so a cloud session's
   environment secret is missing there. The trigger is a cloud agent
   project that declares one.
 - A VM of a session kept by snapshots whose run died before its end
   keeps running until a run's end snapshots it, or the session is purged.
 - A VM the sweep stopped keeps its disk until its session's next
-  loop or its end, as a snapshot would be kept.
-- An erasure asked in the API waits for the sweep's next pass.
+  loop or its end.
 - A session's pool of one stays with its tenant until the tenant's purge.
 - A VM's size is the pool's: a spec that asks for more is refused,
   never met with less.

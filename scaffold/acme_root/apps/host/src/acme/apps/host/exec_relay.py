@@ -199,9 +199,9 @@ class Running:
 class ExecutorRelayImpl(ExecutorInterface):
     """`transports` names the transport that runs each isolation mode this
     host gives; an item at any other mode is refused, with nothing run.
-    `kept_whole` names the modes a workspace kept by snapshots is held at
-    with no snapshot of the host's: a VM of the cloud pool, whose pool
-    keeps the VM's whole disk. Output gathers for `flush_seconds`, or up to
+    `kept_apart` names the modes a workspace kept by snapshots is held at
+    with no snapshot of the host's: a VM of the cloud pool, whose
+    directory the platform keeps through the relay. Output gathers for `flush_seconds`, or up to
     `window_chars`, before the window is sent as one push, and the lease is
     renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
@@ -218,7 +218,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         *,
         snapshots: HostSnapshots | None = None,
         snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
-        kept_whole: frozenset[IsolationMode] = frozenset(),
+        kept_apart: frozenset[IsolationMode] = frozenset(),
         broker: CredentialBrokerInterface | None = None,
         servers: HostServers | None = None,
         base_options: Mapping[str, Any] | None = None,
@@ -240,7 +240,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             )
         )
         self._probed_snapshots = snapshot_modes
-        self._kept_whole = kept_whole
+        self._kept_apart = kept_apart
         self._broker = broker
         self._servers = servers
         self._flush_seconds = flush_seconds
@@ -519,7 +519,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             return
         if (
             spec.durability is Durability.SNAPSHOT
-            and spec.mode not in self._snapshot_modes() | self._kept_whole
+            and spec.mode not in self._snapshot_modes() | self._kept_apart
         ):
             # Never made as a cache in its stead: another host may keep it.
             why = f"this host has not probed snapshots of a {spec.mode.value} workspace"

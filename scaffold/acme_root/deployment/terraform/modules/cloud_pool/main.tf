@@ -7,8 +7,9 @@
 # its host has read the seed the pool handed it. Its egress is closed at the
 # network: the closed group reaches the gateway alone, and the open group
 # adds the open egress a session's policy chose. Neither admits anything in.
-# Its disk, and every snapshot the pool keeps of it, are encrypted under the
-# pool's own key. Its size is one of the size map's machine types, the only
+# Its disk is encrypted under the pool's own key, and the pool keeps no image
+# or snapshot of it: a session's files are kept sealed in the snapshots
+# bucket, under the session's key (ADR 2070). Its size is one of the size map's machine types, the only
 # ones the platform's role may launch (ADR 2069).
 
 locals {
@@ -16,6 +17,20 @@ locals {
   tags = { "acme:component" = "cloud-pool", "acme:environment" = var.environment }
   # The machine types the size map names, each once: what a VM may run on.
   types = sort(distinct([for size in values(var.sizes) : size.type]))
+  # Every call that makes a disk image or a volume snapshot, or copies one in.
+  disk_copies = [
+    "ebs:StartSnapshot",
+    "ec2:CopyImage",
+    "ec2:CopySnapshot",
+    "ec2:CreateImage",
+    "ec2:CreateRestoreImageTask",
+    "ec2:CreateSnapshot",
+    "ec2:CreateSnapshots",
+    "ec2:CreateStoreImageTask",
+    "ec2:ImportImage",
+    "ec2:ImportSnapshot",
+    "ec2:RegisterImage",
+  ]
 }
 
 data "aws_caller_identity" "current" {}
@@ -33,7 +48,7 @@ data "aws_ami" "image" {
 }
 
 resource "aws_kms_key" "disks" {
-  description         = "The cloud pool's VM disks and the snapshots kept of them"
+  description         = "The cloud pool's VM disks"
   enable_key_rotation = true
   tags                = local.tags
 }
@@ -120,9 +135,10 @@ resource "aws_launch_template" "vm" {
 
 # What the platform's runner and its sweep may do to the pool's VMs,
 # and nothing more: start one from the pool's template, of a type the size
-# map names, and only with its name's tag, then stop, start, seal,
-# snapshot, and end only what carries one, never moving one to another
-# type. It passes no role, so no VM ever holds one.
+# map names, and only with its name's tag, then stop, start, seal, and end
+# only what carries one, never moving one to another type. It makes no disk
+# image and no volume snapshot, of a VM or of anything else. It passes no
+# role, so no VM ever holds one.
 data "aws_iam_policy_document" "operate" {
   statement {
     sid       = "Read"
@@ -179,7 +195,7 @@ data "aws_iam_policy_document" "operate" {
     condition {
       test     = "StringEquals"
       variable = "ec2:CreateAction"
-      values   = ["RunInstances", "CreateImage", "CopyImage"]
+      values   = ["RunInstances"]
     }
   }
 
@@ -191,12 +207,6 @@ data "aws_iam_policy_document" "operate" {
       "ec2:TerminateInstances",
       "ec2:ModifyInstanceAttribute",
       "ec2:ModifyInstanceMetadataOptions",
-      "ec2:CreateImage",
-      "ec2:CopyImage",
-      "ec2:DeregisterImage",
-      "ec2:DeleteSnapshot",
-      "ebs:ListSnapshotBlocks",
-      "ebs:GetSnapshotBlock",
     ]
     resources = ["*"]
     condition {
@@ -204,6 +214,15 @@ data "aws_iam_policy_document" "operate" {
       variable = "aws:ResourceTag/acme:vm"
       values   = ["false"]
     }
+  }
+
+  # A copy of a VM's disk would be kept outside the session's seal, so
+  # nothing this role does makes one, whatever another statement allows.
+  statement {
+    sid       = "NoDiskImage"
+    effect    = "Deny"
+    actions   = local.disk_copies
+    resources = ["*"]
   }
 
   statement {

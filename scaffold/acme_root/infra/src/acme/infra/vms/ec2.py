@@ -1,9 +1,10 @@
 """Vms in the platform's cloud account: each VM an EC2 instance
-started from the cloud pool's launch template, each snapshot an image of a
-stopped instance, its disk kept by the cloud's own snapshots under the
-template's key. A VM and a snapshot are found by the tag that carries
-the name their caller chose; the image the pool's new VMs boot is
-named by its AMI id, as the module's `image_id` is.
+started from the cloud pool's launch template, found by the tag that
+carries the name its caller chose. Every VM boots the pool's image, named
+by its AMI id, as the module's `image_id` is. No image or snapshot of a
+VM's disk is ever made: a disk is sealed under no session's key, so
+`snapshot` and `read` refuse, and the module's role is denied them
+(ADR 2070).
 
 Nothing here reaches into a VM. The cloud closes its egress at its
 network, by the security group a start names: the closed group reaches the
@@ -15,7 +16,6 @@ has read it (`seal`). The platform never calls into a VM: what runs
 there, its host pulls, so `run` and `channel` refuse."""
 
 import asyncio
-import hashlib
 import random
 import re
 from collections.abc import AsyncIterator, Callable, Sequence
@@ -38,16 +38,17 @@ from acme.infra.vms import (
 )
 
 TAG = "acme:vm"
-"""The tag that carries a VM's name, or a snapshot's."""
+"""The tag that carries a VM's name."""
 
 LIVE = ("pending", "running", "stopping", "stopped")
 """An instance in any other state is gone, or going."""
 
 REFUSED = "a VM of the cloud takes no command from outside: what runs there, its host pulls"
 
+NO_IMAGE = "a VM of the cloud keeps no image of its disk: its session's files are kept sealed"
+
 AMI_ID = re.compile(r"ami-[0-9a-f]{8,17}")
-"""An image named by its id, as the pool's own image is, rather than by its
-name's tag, as a snapshot is."""
+"""An image named by its id, as the pool's own image is."""
 
 
 class VmsEc2Impl(VmsInterface, SeedsInterface):
@@ -80,10 +81,6 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         self._ec2 = AwsClientHolder(
             "ec2", lambda: session.client("ec2", region_name=region, config=config)
         )
-        self._ebs = AwsClientHolder(
-            "ebs", lambda: session.client("ebs", region_name=region, config=config)
-        )
-        self._region = region
         self._boot = boot
         self._template = template
         self._subnets = subnets
@@ -121,13 +118,11 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
 
     async def state(self, name: str) -> VmState:
         instance = await self._instance(name)
-        if instance is not None:
-            if instance["State"]["Name"] in ("pending", "running"):
-                return VmState.RUNNING
-            return VmState.STOPPED
-        if await self._image(name) is not None:
-            return VmState.STOPPED
-        return VmState.ABSENT
+        if instance is None:
+            return VmState.ABSENT
+        if instance["State"]["Name"] in ("pending", "running"):
+            return VmState.RUNNING
+        return VmState.STOPPED
 
     async def launch(self, name: str, spec: VmSpec, snapshot: str | None = None) -> None:
         await self._launch(name, spec, snapshot, None)
@@ -154,96 +149,31 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         await self._until(name, "stopped")
 
     async def snapshot(self, name: str, to: str) -> str:
-        if await self._image(to) is None:
-            instance = await self._instance(name)
-            source = None if instance is not None else await self._image(name)
-            if instance is not None and instance["State"]["Name"] == "stopped":
-                with translated("ec2", "snapshot"):
-                    await self._ec2.client().create_image(
-                        InstanceId=instance["InstanceId"],
-                        Name=to,
-                        NoReboot=True,
-                        TagSpecifications=_tagged(to, "image", "snapshot"),
-                    )
-            elif source is not None:
-                with translated("ec2", "snapshot"):
-                    await self._ec2.client().copy_image(
-                        SourceImageId=source["ImageId"],
-                        SourceRegion=self._region,
-                        Name=to,
-                        Encrypted=self._encrypted,
-                        TagSpecifications=_tagged(to, "image"),
-                    )
-            else:
-                raise SnapshotNotFound(f"nothing stopped stands under {name}")
-            await self._available(to)
-        digest = await self.digest(to)
-        if digest is None:
-            raise SnapshotNotFound(f"no snapshot stands under {to}")
-        return digest
+        raise InfraValidationFailed(NO_IMAGE)
 
     async def digest(self, snapshot: str) -> str | None:
-        image = await self._image(snapshot)
-        if image is None:
-            return None
-        # A snapshot of the cloud's never changes once taken, so the ids of
-        # the image and of each disk it holds name its bytes: one replaced
-        # under the same name answers another digest.
-        disks = sorted(_snapshot_ids(image))
-        named = f"{image['ImageId']}:{','.join(disks)}"
-        return "sha256:" + hashlib.sha256(named.encode()).hexdigest()
+        return None  # none is ever made
 
     async def read(self, snapshot: str) -> AsyncIterator[bytes]:
-        image = await self._image(snapshot)
-        if image is None or image.get("State") != "available":
-            raise SnapshotNotFound(f"no snapshot stands under {snapshot}")
-        for disk in sorted(_snapshot_ids(image)):
-            token: str | None = None
-            while True:
-                asked: dict[str, Any] = {"SnapshotId": disk}
-                if token:
-                    asked["NextToken"] = token
-                with translated("ebs", "read"):
-                    listed = await self._ebs.client().list_snapshot_blocks(**asked)
-                for block in listed.get("Blocks", []):
-                    with translated("ebs", "read"):
-                        got = await self._ebs.client().get_snapshot_block(
-                            SnapshotId=disk,
-                            BlockIndex=block["BlockIndex"],
-                            BlockToken=block["BlockToken"],
-                        )
-                        yield await got["BlockData"].read()
-                token = listed.get("NextToken")
-                if not token:
-                    break
+        raise InfraValidationFailed(NO_IMAGE)
+        yield b""  # an async generator, as the interface reads
 
     async def names(self, prefix: str) -> list[str]:
-        named: set[str] = set()
-        for instance in await self._instances(prefix + "*"):
-            named.add(_name_of(instance))
-        for image in await self._images(prefix + "*"):
-            named.add(_name_of(image))
+        named = {_name_of(instance) for instance in await self._instances(prefix + "*")}
         return sorted(name for name in named if name.startswith(prefix))
 
     async def destroy(self, name: str) -> None:
         for instance in await self._instances(name):
             with translated("ec2", "destroy"):
                 await self._ec2.client().terminate_instances(InstanceIds=[instance["InstanceId"]])
-        for image in await self._images(name):
-            with translated("ec2", "destroy"):
-                await self._ec2.client().deregister_image(ImageId=image["ImageId"])
-                for disk in _snapshot_ids(image):
-                    await self._ec2.client().delete_snapshot(SnapshotId=disk)
 
     def describe(self) -> str:
         return f"vms=ec2({self._template})"
 
     async def start(self) -> None:
         await self._ec2.open()
-        await self._ebs.open()
 
     async def close(self) -> None:
-        await self._ebs.close()
         await self._ec2.close()
 
     # Seeds: the VM's first-boot data, and the endpoint closed once read.
@@ -306,9 +236,9 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         group: str,
     ) -> None:
         if snapshot is not None:
-            image = await self._source(snapshot)
+            image = await self._image_of(snapshot)
             if image is None or image.get("State") != "available":
-                raise SnapshotNotFound(f"no snapshot stands under {snapshot}")
+                raise SnapshotNotFound(f"no image stands under {snapshot}")
             image_id = image["ImageId"]
         else:
             image_id = spec.image
@@ -354,29 +284,15 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
             await self._sleep(self._poll.total_seconds())
             waited += self._poll.total_seconds()
 
-    async def _available(self, name: str) -> None:
-        """Waits for the image under `name` to be whole, within the boot
-        bound."""
-        waited = 0.0
-        while True:
-            image = await self._image(name)
-            if image is not None and image.get("State") == "available":
-                return
-            if image is not None and image.get("State") == "failed":
-                raise BackendFailed("ec2", "snapshot", f"{name} failed")
-            if waited >= self._boot.total_seconds():
-                raise BackendFailed("ec2", "snapshot", f"{name} not available in time")
-            await self._sleep(self._poll.total_seconds())
-            waited += self._poll.total_seconds()
-
-    async def _source(self, snapshot: str) -> dict[str, Any] | None:
-        """The image a new VM boots: the pool's own image by its AMI id,
-        or a session's snapshot by its name's tag. None when none stands."""
-        if not AMI_ID.fullmatch(snapshot):
-            return await self._image(snapshot)
+    async def _image_of(self, source: str) -> dict[str, Any] | None:
+        """The image a new VM boots, the pool's own, by its AMI id. None
+        when none stands, or `source` names no AMI: no other image is
+        ever made."""
+        if not AMI_ID.fullmatch(source):
+            return None
         with translated("ec2", "describe"):
             try:
-                page = await self._ec2.client().describe_images(ImageIds=[snapshot])
+                page = await self._ec2.client().describe_images(ImageIds=[source])
             except ClientError as error:
                 if error_code(error).startswith("InvalidAMIID"):
                     return None
@@ -386,10 +302,6 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
 
     async def _instance(self, name: str) -> dict[str, Any] | None:
         found = await self._instances(name)
-        return found[0] if found else None
-
-    async def _image(self, name: str) -> dict[str, Any] | None:
-        found = await self._images(name)
         return found[0] if found else None
 
     async def _instances(self, named: str) -> list[dict[str, Any]]:
@@ -411,13 +323,6 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
             if not token:
                 return found
 
-    async def _images(self, named: str) -> list[dict[str, Any]]:
-        with translated("ec2", "describe"):
-            page = await self._ec2.client().describe_images(
-                Owners=["self"], Filters=[{"Name": f"tag:{TAG}", "Values": [named]}]
-            )
-        return [image for image in page.get("Images", []) if image.get("State") != "deregistered"]
-
 
 def _tagged(name: str, *kinds: str) -> list[dict[str, Any]]:
     return [{"ResourceType": kind, "Tags": [{"Key": TAG, "Value": name}]} for kind in kinds]
@@ -428,11 +333,3 @@ def _name_of(resource: dict[str, Any]) -> str:
         if tag.get("Key") == TAG:
             return str(tag.get("Value", ""))
     return ""
-
-
-def _snapshot_ids(image: dict[str, Any]) -> list[str]:
-    return [
-        mapping["Ebs"]["SnapshotId"]
-        for mapping in image.get("BlockDeviceMappings", [])
-        if "Ebs" in mapping and mapping["Ebs"].get("SnapshotId")
-    ]

@@ -125,8 +125,8 @@ def host_agent(settings: Settings, client_for: ClientFactory | None = None) -> H
     ceilings and every wall stay one."""
     agents: list[HostAgent] = []
     workspaces = host_workspaces(settings)
-    # A VM of the cloud pool keeps no snapshot store: its pool keeps
-    # the VM's whole disk.
+    # A VM of the cloud pool keeps no snapshot store: the platform keeps
+    # its workspace's directory, through the relay.
     store = None if settings.vm else HostSnapshots(settings.snapshots_path, settings.secrets_path)
     # One broker: what the transport attaches, a snapshot takes back.
     broker = BrokerNullImpl()
@@ -140,7 +140,7 @@ def host_agent(settings: Settings, client_for: ClientFactory | None = None) -> H
         snapshot_modes=lambda: frozenset(
             ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
         ),
-        kept_whole=KEPT_WHOLE if settings.vm else frozenset(),
+        kept_apart=KEPT_APART if settings.vm else frozenset(),
         spool=settings.transfers_path,
         # The servers the owner names, each started for one call with a
         # credential from the host's own store.
@@ -239,9 +239,10 @@ def host_snapshots(
     return {HOST_MODES[mode]: store.usable for mode in workspaces if mode in SNAPSHOTTING}
 
 
-KEPT_WHOLE = frozenset({IsolationMode.VM})
+KEPT_APART = frozenset({IsolationMode.VM})
 """The level a VM of the cloud pool holds a workspace kept by snapshots
-at: its pool keeps the VM's whole disk, and the host takes none."""
+at: the platform keeps its directory through the relay, and the host
+takes none."""
 
 SNAPSHOTTING = frozenset({IsolationMode.CONTAINER})
 """The engine's modes whose providers here snapshot a workspace whole: the
