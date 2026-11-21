@@ -60,6 +60,16 @@ class PoolVm(Identifiable, Created):
         return self.bound_at is not None and self.bound_at == self.created_at
 
 
+class PoolClaim(OmBase):
+    """What a claim got: the VM that serves its session, a warm one bound or
+    its own row written. At the pool's maximum, a claim that takes no warm
+    VM takes the place of an idle one, `displaced`: its row went under the
+    claim's lock, and its VM goes before the claim's own starts."""
+
+    vm: PoolVm
+    displaced: PoolVm | None = None
+
+
 class VmSnapshot(OmBase):
     """A snapshot of a session's VM, kept by the VMs' backend in its
     own store: the name it keeps it under, and the digest its disk is held

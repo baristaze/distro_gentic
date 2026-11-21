@@ -6,9 +6,11 @@ binds a VM being destroyed.
 
 Every claim and every refill reads the pool's limits, which its operators
 write: the warm VMs, the most VMs the pool holds at once, and the most one
-tenant holds, its own where an operator set one. A claim past either
-maximum starts no VM: the session's loop waits on the resource and asks
-again, told no count and no other tenant's use.
+tenant holds, its own where an operator set one. At the pool's maximum,
+a claim that can take no warm VM takes the place of an idle one, which
+goes first. Otherwise a claim past either maximum starts no VM: the
+session's loop waits on the resource and asks again, told no count and
+no other tenant's use.
 
 A VM is the size its session's spec asks by name, which the
 deployment's map turns into a machine type; a warm VM is the default
@@ -465,9 +467,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         """The session's VM: a warm one it claims, when it starts from the
         pool's image at the default size, else a new one of its size, from
         its snapshot or the pool's image, within the pool's limits as they
-        stand now. Its row is written first, so a start that dies leaves a
-        row the sweep finds; one that fails here leaves nothing. Past a
-        maximum, the loop waits on the resource."""
+        stand now. At the pool's maximum, a new one takes the place of an
+        idle warm VM, which goes first. Its row is written first, so a start
+        that dies leaves a row the sweep finds; one that fails here leaves
+        nothing. Past a maximum, the loop waits on the resource."""
         key = new_key()
         now = self._clock()
         vm = PoolVm(
@@ -500,10 +503,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 clears=True,
                 cause=FULL_CAUSES[got],
             )
-        if got.id != vm.id:
-            log.info("session %s claimed warm VM %s", agent_session_id, got.name)
+        if got.vm.id != vm.id:
+            log.info("session %s claimed warm VM %s", agent_session_id, got.vm.name)
             self._spawn(self._refill())
-            return got
+            return got.vm
+        if got.displaced is not None:
+            await self._displace(vm, got.displaced)
         source = self._options.image if restore is None else restore.reference
         await self._launch(vm, self._spec(spec), source, key)
         log.info("session %s: VM %s started from %s", agent_session_id, vm.name, source)
@@ -660,6 +665,19 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     def _aged(self, vm: PoolVm, now: datetime) -> bool:
         """Whether a VM is past the pool's maximum age, from its row's start."""
         return now - vm.created_at > self._options.max_age
+
+    async def _displace(self, vm: PoolVm, warm: PoolVm) -> None:
+        """The idle warm VM whose place a claim took goes before the claim's
+        own VM starts, so the VMs that run never pass the maximum. Its row
+        went under the claim's lock, so no claim binds it. A destroy that
+        fails takes the claim's row with it, and the sweep lets go of the
+        warm VM, which no row holds."""
+        try:
+            await self._vms.destroy(warm.name)
+        except BaseException:
+            await self._storage.delete_vm(vm.id)
+            raise
+        log.info("warm VM %s let go for session %s", warm.name, vm.agent_session_id)
 
     async def _hostless(self, rctx: RequestContext, vm: PoolVm, now: datetime) -> bool:
         """Whether a session's VM has no host to work for: none enrolled

@@ -40,15 +40,16 @@ class CloudPoolManagerInterface(ABC):
         warm one it claims at the default size, else one of the size the
         spec asks, started from the pool's image; with `restore`, one
         started from that snapshot of the session's VM, held to its digest
-        first. A new VM, or a warm one claimed, counts
-        against the most the pool holds and the most the session's tenant
-        holds, as the pool's limits stand at this claim. `IsolationRefused`
-        that clears while either maximum stands, the VM starts, or its
-        host has not prepared it in time, and the loop waits on the
-        resource; its cause names no count and no other tenant's use. One
-        that never clears, its cause the spec's, for a spec the pool's VMs
-        cannot hold: a size the deployment does not allow among them, before
-        any VM starts.
+        first. A new VM, or a warm one claimed, counts against the most the
+        pool holds and the most the session's tenant holds, as the pool's
+        limits stand at this claim; at the pool's maximum, a new one takes
+        the place of an idle warm VM, which goes. `IsolationRefused` that
+        clears while either maximum stands, the VM starts, or its host has
+        not prepared it in time, and the loop waits on the resource; its
+        cause names no count and no other tenant's use. One that never
+        clears, its cause the spec's, for a spec the pool's VMs cannot hold:
+        a size the deployment does not allow among them, before any VM
+        starts.
         `AgentWorkspaceLost` when the snapshot is gone, was not taken by the
         pool, or does not match its digest."""
         ...

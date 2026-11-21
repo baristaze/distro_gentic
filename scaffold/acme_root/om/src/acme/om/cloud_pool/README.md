@@ -52,9 +52,11 @@ let go, whether it runs, starts, or stands stopped for its session.
   anything starts. The VM that serves it is found, or a warm one is
   claimed at the default size, or one of its size is started from the
   pool's image; with the session's latest snapshot, one is started from
-  that, held to its digest first. A claim counts the VMs held under
-  one lock, and past the pool's maximum or its tenant's starts none: the
-  loop waits on the resource and asks again, its park naming no count.
+  that, held to its digest first. A claim counts the VMs held under one
+  lock. At the pool's maximum, a claim that cannot take a warm VM takes
+  the place of an idle one, which goes first. Otherwise, past the pool's
+  maximum or its tenant's, it starts none: the loop waits on the
+  resource and asks again, its park naming no count.
   The loop also waits while the VM starts and its host enrolls, then
   the VM is sealed and its host prepares the workspace through the exec
   relay.
