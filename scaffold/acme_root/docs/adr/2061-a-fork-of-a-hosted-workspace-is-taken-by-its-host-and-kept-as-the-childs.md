@@ -48,8 +48,8 @@ rest is refused before any host is asked. With no live host that holds
 the workspace, or a host that takes no snapshot of it, the fork is
 refused with the reason, before the tree's slot is taken or the child is
 made. A workspace on a VM of the cloud pool is still taken through
-the engine's provider, which refuses it: the pool keeps the VM's
-whole disk, and its host takes no snapshot.
+the engine's provider, which refuses it: its host takes no snapshot,
+and the platform keeps a pool VM's directory only at its run's end.
 
 ## Consequences
 

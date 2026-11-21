@@ -7,8 +7,8 @@ takes no warm VM takes an idle one's place; a VM a claim writes reads
 back cold, and one it binds warm or starts again does not; a warm VM's
 row is taken only while no session claimed it; a VM started again keeps
 when it first ran; the warm VMs a sweep writes never pass the count or
-the maximum; an erasure is asked once per session until it is done; and
-the pool's limits and a tenant's own maximum are written over the
+the maximum; a session's archives are one row, moved forward as it keeps
+more and read oldest first until they go; and the pool's limits and a tenant's own maximum are written over the
 version read. Its VMs are the platform's rows, read by their predicate,
 and another tenant's finds nothing; a tenant's own maximum is that
 tenant's, and its cases present another tenant's."""
@@ -21,7 +21,7 @@ import pytest
 
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
-from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
@@ -114,13 +114,14 @@ class CloudPoolStorageContract:
         assert written is not None and written.cold, "bound as its row was written"
 
         claim = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
-        claim = claim.model_copy(update={"bound_at": utcnow()})
+        claim = claim.model_copy(update={"bound_at": utcnow(), "restored_from": new_id()})
         bound = await storage.claim(claim, most=FAR, tenant_most=FAR, warm=True)
         assert isinstance(bound, PoolClaim) and bound.vm.id == warm.id
         read = await storage.read_vm(warm.id)
         assert read is not None and not read.cold, "a warm VM is bound at its claim"
+        assert read.restored_from == claim.restored_from, "and takes back what the claim asks"
 
-        await storage.rekey(asked.id, new_id().hex, None, utcnow())
+        await storage.rekey(asked.id, new_id().hex, utcnow())
         again = await storage.read_vm(asked.id)
         assert again is not None and not again.cold, "a start again binds it anew"
 
@@ -305,14 +306,15 @@ class CloudPoolStorageContract:
     async def test_a_vm_started_again_takes_a_new_key_and_its_host_anew(
         self, storage: CloudPoolStorageInterface
     ) -> None:
+        snapshot = new_id()
         vm = make_vm(tenant_id=new_id(), agent_session_id=new_id())
+        vm = vm.model_copy(update={"restored_from": snapshot})
         await storage.create_vm(vm)
         host, at = new_id(), utcnow()
         await storage.mark_enrolled(vm.id, host)
         await storage.mark_sealed(vm.id, at)
-        snapshot = new_id()
         later = at + timedelta(hours=2)
-        again = await storage.rekey(vm.id, "a new digest", snapshot, later)
+        again = await storage.rekey(vm.id, "a new digest", later)
         assert again is not None
         assert (again.key_digest, again.restored_from, again.host_id) == (
             "a new digest",
@@ -325,7 +327,7 @@ class CloudPoolStorageContract:
         await storage.mark_started(vm.id, later)
         started = await storage.read_vm(vm.id)
         assert started is not None and started.started_at == later
-        assert await storage.rekey(new_id(), "none", None, later) is None
+        assert await storage.rekey(new_id(), "none", later) is None
 
     async def test_another_tenant_finds_no_vm(self, storage: CloudPoolStorageInterface) -> None:
         tenant, session = new_id(), new_id()
@@ -358,22 +360,36 @@ class CloudPoolStorageContract:
         assert await storage.read_by_name(vm.name) == vm
         assert await storage.read_by_name("acme-vm-pnone") is None
 
-    async def test_an_erasure_is_asked_once_per_session_until_it_is_done(
+    async def test_a_sessions_archives_are_one_row_moved_forward_and_read_oldest_first(
         self, storage: CloudPoolStorageInterface
     ) -> None:
-        tenant, session = new_id(), new_id()
-        now = utcnow()
-        first = PoolErasure(id=new_id(), created_at=now, tenant_id=tenant, agent_session_id=session)
-        assert await storage.ask_erase(first) == first
-        assert await storage.ask_erase(first.model_copy(update={"id": new_id()})) == first
-        other = PoolErasure(
-            id=new_id(),
-            created_at=now + timedelta(seconds=1),
-            tenant_id=tenant,
-            agent_session_id=new_id(),
-        )
-        await storage.ask_erase(other)
-        assert await storage.read_erasures(10) == [first, other]
-        assert await storage.read_erasures(1) == [first]
-        await storage.delete_erasure(first.id)
-        assert await storage.read_erasures(10) == [other]
+        tenant, other, now = new_id(), new_id(), utcnow()
+
+        def archive(tenant_id: UUID, days: int) -> PoolArchive:
+            return PoolArchive(
+                id=new_id(),
+                created_at=now,
+                tenant_id=tenant_id,
+                agent_session_id=new_id(),
+                kept_at=now - timedelta(days=days),
+            )
+
+        mine, theirs, newer = archive(tenant, 40), archive(other, 35), archive(tenant, 1)
+        for kept in (mine, theirs, newer):
+            await storage.keep_archive(kept)
+        idle = now - timedelta(days=30)
+        assert await storage.read_archives(idle, 10) == [mine, theirs]
+        assert await storage.read_archives(idle, 1) == [mine]
+
+        # Kept again, or seen active: the one row moves, and keeps its id.
+        await storage.keep_archive(mine.model_copy(update={"id": new_id(), "kept_at": now}))
+        assert await storage.read_archives(idle, 10) == [theirs]
+        moved = await storage.read_archives(now + timedelta(seconds=1), 10)
+        assert [
+            (a.id, a.kept_at) for a in moved if a.agent_session_id == mine.agent_session_id
+        ] == [(mine.id, now)]
+
+        await storage.delete_archive(other, mine.agent_session_id)  # another tenant's: none
+        await storage.delete_archive(other, theirs.agent_session_id)
+        assert await storage.delete_tenant_archives(tenant) == 2
+        assert await storage.read_archives(now + timedelta(days=1), 10) == []

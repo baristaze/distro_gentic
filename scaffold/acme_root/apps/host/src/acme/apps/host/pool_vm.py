@@ -10,8 +10,9 @@ run as the host's own user, in Docker's group, so they build and run
 containers of their own: the VM's root is theirs through Docker, as a
 VM workspace's commands hold their guest whole. Its egress is the VM's,
 closed at the VM's network by the pool to what the session's spec
-asks. It keeps no snapshot and starts from none: the pool keeps the
-VM's whole disk, and starts the VM again from it."""
+asks. It keeps no snapshot and starts from none: the platform keeps the
+workspace's directory, packed and read out through the relay as the
+host's own commands, and brings it back into the next VM the same way."""
 
 from acme.apps.host.probe import Probe, Probes, container
 from acme.client.types.hosts import IsolationMode as HostIsolation

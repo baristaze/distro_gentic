@@ -6,13 +6,15 @@ network, as a VM of the cloud reaches the gateway.
 The session's first loop starts a VM from the pool's image; its host
 trades the key it was handed for a credential of the session's pool of one,
 prepares the workspace, and runs the session's command there: a Docker
-image built and a container run of it. The loop's end keeps the VM
-whole: the host's credential ends, the VM stops, and its disk is kept
-as the session's snapshot; then the VM goes. The next loop starts a
-VM from that snapshot, whose new host finds the same file and the same
-image. The host's environment holds nothing of the platform's. What a
-command printed crosses the store, here the local impl's, served on this
-host's loopback beside the API, which the guest reaches the same way.
+image built and a container run of it. The loop's end keeps the
+workspace's directory: packed in the VM and read out through the relay,
+each part sealed under the session's key in the bucket; then the VM
+goes, and no disk of it is kept. The next loop's VM boots the pool's
+image, and its new host takes the directory back: the same file, and
+no Docker image, which lived outside it. The host's environment holds
+nothing of the platform's. What a command printed, and every part,
+crosses the store, here the local impl's, served on this host's
+loopback beside the API, which the guest reaches the same way.
 
 Needs a migrated database (`make migrate`), Lima and a hypervisor, and the
 pool's image, which it builds when it is missing
@@ -43,10 +45,10 @@ from acme.infra.agent_workspaces import (
     IsolationMode,
     IsolationSpec,
 )
+from acme.infra.buckets import Buckets
 from acme.infra.buckets.local import BucketsLocalImpl
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.platform_root import PlatformInfra
-from acme.infra.vms import VmState
 from acme.infra.vms.lima import VmsLimaImpl, hypervisor
 from acme.infra.vms.seeded import SeedsChannelImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -60,6 +62,7 @@ from acme.om.agent_steps.types.header import LoopOutcome
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
 from acme.om.platform_root import PlatformPorts, ProductKinds
+from acme.om.tools.impl.snapshots import session_prefix, snapshot_key
 from acme.services.api.app import create_app
 from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
@@ -89,14 +92,16 @@ BUILD = (
 and a container run of it, which prints the file's line twice."""
 
 FOUND = (
-    "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt && "
+    "cat ctx/state.txt && "
+    "echo images-$(docker images -q acme-pool-kept | wc -l | tr -d ' ') && "
     "echo @ENVIRONMENT@ && "
     "tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value acme-host)/environ "
     "| cut -d= -f1 && echo @SEED@ && cat /run/acme-vm/seed.json && echo @END@"
 )
-"""What the next loop's command reads: the file and the image the first one
-made, the names in the host program's environment, as its process holds
-them, and the VM's seed, which its commands can read too."""
+"""What the next loop's command reads: the file the first one made, how
+many Docker images of it the new VM holds, the names in the host
+program's environment, as its process holds them, and the VM's seed,
+which its commands can read too."""
 
 NOTHING_OF_THE_PLATFORMS = re.compile(
     r"DATABASE|POSTGRES|VALKEY|S3_|AWS_|KMS|SECRET|PASSWORD|ANTHROPIC|OPENAI|GEMINI|"
@@ -217,7 +222,7 @@ def printed(model: ModelProviderScriptedImpl, call: int) -> str:
     return repr(model.calls[call])
 
 
-async def test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops(
+async def test_a_session_of_the_cloud_pool_keeps_its_files_sealed_across_loops(
     api: Stack, runner: RunnerContainer, vms: VmsLimaImpl
 ) -> None:
     owner = api.owner
@@ -243,19 +248,23 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops(
         assert digest is not None, state
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
 
-        # The loop's end kept the VM whole, and let it go.
+        # The loop's end kept the directory in sealed parts, and let the
+        # VM go with no disk kept.
         page = await managers.agent_steps.get_agent_steps(owner, session.id, 0, 200)
         snapshotted = [s for s in page.items if s.type is AgentStepType.SNAPSHOTTED]
         assert len(snapshotted) == 1
         (record,) = await managers.agent_workspaces.kept_snapshots(owner, session.id)
-        assert record.vm and record.reference.startswith(PREFIX + "p")
-        assert await vms.state(record.reference) is VmState.STOPPED
+        assert not record.on_host
+        assert record.reference == snapshot_key(session.id, record.hash)
+        parts = await api.container.infra.get_buckets().list(
+            owner.org_id, Buckets.SNAPSHOTS, f"{session_prefix(session.id)}workspace/", 100
+        )
+        assert parts, "the directory in parts"
         assert not await pool.holds(owner, session.id), "the VM went with the release"
-        running = [n for n in await vms.names(PREFIX + "p") if "-" not in n[len(PREFIX) :]]
-        assert running == [], "no VM of the pool runs between loops"
+        assert await vms.names(PREFIX + "p") == [], "no VM, and no disk of one, between loops"
 
-        # The next loop: a VM from the snapshot, a new host, the same
-        # file and the same image.
+        # The next loop: a VM from the pool's image, a new host, the same
+        # file, and no image built outside the directory.
         again = message_step(new_id(), utcnow(), session.id, owner, "Is it there?")
         await managers.agent_sessions.receive(owner, session.id, [again])
         model.add(runs("sh", "-c", FOUND))
@@ -271,7 +280,8 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops(
             second = await managers.loop.run(owner, session.id)
         assert second.outcome is LoopOutcome.SUCCEEDED, second
         found = printed(model, len(model.calls) - 1)
-        assert found.count(digest.group(1)) >= 2, found
+        assert digest.group(1) in found, found
+        assert "images-0" in found, "what lived outside the directory is the image's again"
 
         # The VM's host holds nothing of the platform's, and its key is
         # spent and gone from the seed.
@@ -283,4 +293,4 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_vm_across_loops(
         assert "api_url" in seed and "hmk_" not in seed, seed
     finally:
         await pool.purge(owner.org_id, session.id)
-    assert await vms.names(PREFIX + "p") == [], "every VM and disk of the session"
+    assert await vms.names(PREFIX + "p") == [], "every VM of the session"

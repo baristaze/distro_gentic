@@ -3,7 +3,8 @@ session's own: a VM of the platform's cloud pool, where the host
 program runs and the pool started the VM for one session. The VM
 is the session's wall, so its workspace is a folder in it, at the VM's
 level, and its commands hold the guest whole, as a VM workspace's do
-(ADR 2052)."""
+(ADR 2052). The platform keeps its directory, reaching it through the
+relay as it reaches any of the host's workspaces (ADR 2070)."""
 
 import asyncio
 from uuid import UUID
@@ -19,15 +20,18 @@ from acme.infra.agent_workspaces import (
 )
 from acme.infra.agent_workspaces.host import AgentWorkspaceHostImpl
 
-KEPT_BY_THE_POOL = "the cloud pool keeps this VM's whole disk, and the host takes none"
+KEPT_BY_THE_POOL = (
+    "the platform keeps this VM's directory through the relay, and the host takes no snapshot"
+)
 
 
 class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
     """A folder under `root`, at the VM's level. It holds open egress and
     none alike, which the VM's network enforces, and the size the pool
     started the VM to, and no allowlist and no other limit. It keeps no
-    snapshot and starts from none, nor from a base: the pool keeps the
-    VM's whole disk, and starts the VM again from it. Its release ends
+    snapshot and starts from none, nor from a base: the platform packs the
+    directory, reads it out, and brings it back into a new VM through the
+    relay, and every VM starts from the pool's image. Its release ends
     what its commands left running and keeps its files, as a host
     directory's does. Its `check` refuses what its `prepare` refuses of the
     spec alone."""
@@ -66,7 +70,7 @@ class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
         return f"workspaces=vm({self._root})"
 
 
-_FROM_THE_POOL = "a VM's workspace starts from the VM as its pool started it: " + KEPT_BY_THE_POOL
+_FROM_THE_POOL = "a VM's workspace starts from the pool's image: " + KEPT_BY_THE_POOL
 
 
 def _refusal(spec: IsolationSpec) -> str | None:

@@ -20,14 +20,20 @@ background, since nothing waits on it. A cold start's boot, from its
 start to its host's enrollment, is a metric; a warm claim records none.
 
 Every path that starts a VM has the one that lets it go: a session's
-snapshot, its release after the grace, its purge, its tenant's purge,
+run's end, its release after the grace, its purge, its tenant's purge,
 and the sweep, which lets go of a start that never ran, of a VM whose
 session or tenant is gone, and of a VM no row holds. A VM that ran
 keeps its disk until its session lets it go: the sweep stops one that
 runs with no host to work for, and its session's next prepare starts it
 again under a new key. A VM past its maximum age goes between runs, once
 its run's end kept its work, never under a running loop; a warm one past
-it goes at the sweep."""
+it goes at the sweep.
+
+The pool keeps no disk image of any VM. A session kept by snapshots keeps
+its workspace's files as sealed parts in the snapshots bucket, archived by
+the platform's tools through the relay; the pool records the session, and
+its sweep removes them once the session has been idle past
+`archive_kept`, by its last activity (ADR 2070)."""
 
 import asyncio
 import logging
@@ -40,19 +46,16 @@ from pydantic import Field, model_validator
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
-    AgentWorkspaceLost,
     EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
-    SnapshotRefused,
     VmSize,
 )
 from acme.infra.exceptions import InfraException
 from acme.infra.observability import CLOUD_POOL_BOOT_SECONDS
 from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
-from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.manager import CloudPoolManagerInterface
@@ -60,22 +63,18 @@ from acme.om.cloud_pool.rules import (
     DEFAULT_SIZE,
     KEY_PREFIX,
     MARK,
-    is_snapshot,
     longest_name,
     new_key,
     refusal,
     seed,
     size_of,
-    snapshot_name,
-    snapshots_of,
-    tenant_snapshots,
     vm_name,
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
-from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
 from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
-from acme.om.cloud_pool.types.vm import PoolVm, VmSnapshot
+from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
@@ -100,6 +99,14 @@ SessionGone = Callable[[UUID, UUID], Awaitable[bool]]
 """Whether a tenant's session is gone, deleted or purged, or its tenant is:
 given the tenant and the session."""
 
+ActiveAt = Callable[[UUID, UUID], Awaitable[datetime | None]]
+"""When a tenant's session was last active, by its own record; None once
+the session, or its tenant, is gone: given the tenant and the session."""
+
+DropArchives = Callable[[UUID, UUID], Awaitable[None]]
+"""Removes every archive of a tenant's session from the snapshots bucket,
+and their records: given the tenant and the session."""
+
 
 class CloudPoolOptions(OmBase):
     # The VMs' prefix, which the pool's names follow with its mark.
@@ -123,6 +130,9 @@ class CloudPoolOptions(OmBase):
     # How long a VM serves its session across runs: past it, its run's end
     # lets it go, its work kept, and the next loop starts another.
     max_age: timedelta = Field(default=timedelta(hours=72), gt=timedelta(0))
+    # How long a session's archived workspace files are kept after its last
+    # activity: past it, the sweep removes them.
+    archive_kept: timedelta = Field(default=timedelta(days=30), gt=timedelta(0))
     # The region a session's pool of one names.
     region: Region = "cloud"
     # Where the platform answers, as the pool's VMs reach it.
@@ -184,6 +194,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         *,
         session_gone: SessionGone,
         expired: Callable[[TenantContext], Awaitable[bool]],
+        active_at: ActiveAt,
+        drop_archives: DropArchives,
         stage: Callable[[], RequestContext] | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
@@ -200,6 +212,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         )
         self._session_gone = session_gone
         self._expired = expired
+        self._active_at = active_at
+        self._drop_archives = drop_archives
         self._stage = stage
         self._sleep = sleep
         self._clock = clock
@@ -223,14 +237,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         ctx: TenantContext,
         agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: KeptSnapshot | None = None,
+        restore: UUID | None = None,
     ) -> AgentWorkspace:
         await self.check(spec)
-        if restore is not None and not restore.on_vms:
-            raise AgentWorkspaceLost(
-                f"snapshot {restore.id} of session {agent_session_id} was not taken of a VM "
-                "of the cloud pool"
-            )
         missing = await self._vms.probe(longest_name(self._options.prefix))
         if missing is not None:
             raise IsolationRefused(f"the cloud pool runs no VM here: {missing}")
@@ -242,18 +251,18 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             await self._storage.mark_sealed(vm.id, self._clock())
         return await self._held(ctx, agent_session_id, spec, pool)
 
-    async def snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> VmSnapshot:
-        vm = await self._storage.read_of_session(ctx.org_id, agent_session_id)
-        if vm is None or vm.started_at is None:
-            raise SnapshotRefused(f"no VM of the cloud pool holds session {agent_session_id}")
-        # Ended first: the disk the snapshot keeps holds no credential that
-        # answers.
-        await self._retire(ctx, vm)
-        await self._vms.stop(vm.name)
-        to = snapshot_name(self._options.prefix, ctx.org_id, agent_session_id)
-        digest = await self._vms.snapshot(vm.name, to)
-        log.info("session %s: VM %s kept as %s", agent_session_id, vm.name, to)
-        return VmSnapshot(reference=to, digest=digest)
+    async def archived(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        ctx.require(Permission.WRITE)
+        now = self._clock()
+        await self._storage.keep_archive(
+            PoolArchive(
+                id=new_id(),
+                created_at=now,
+                tenant_id=ctx.org_id,
+                agent_session_id=agent_session_id,
+                kept_at=now,
+            )
+        )
 
     async def holds(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         return await self._storage.read_of_session(ctx.org_id, agent_session_id) is not None
@@ -278,18 +287,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self.erase(org_id, agent_session_id)
 
     async def erase(self, org_id: UUID, agent_session_id: UUID) -> None:
-        # Asked first: a process that reaches no VM, as the API's does,
-        # leaves it to the sweep, which does, and one that fails part way is
-        # finished there.
-        asked = PoolErasure(
-            id=new_id(),
-            created_at=self._clock(),
-            tenant_id=org_id,
-            agent_session_id=agent_session_id,
-        )
-        standing = await self._storage.ask_erase(asked)
-        if await self._reaches_vms():
-            await self._erased(standing)
+        # The archives' bytes leave the bucket with the session's content;
+        # the pool keeps nothing of them outside the seal.
+        await self._storage.delete_archive(org_id, agent_session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
@@ -299,11 +299,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         for vm in await self._storage.read_of_tenant(ctx.org_id, self._options.page):
             await self._let_go(ctx, vm)
             gone += 1
-        prefix = self._options.prefix
-        for name in await self._vms.names(tenant_snapshots(prefix, ctx.org_id)):
-            if is_snapshot(prefix, name):
-                await self._vms.destroy(name)
-                gone += 1
+        gone += await self._storage.delete_tenant_archives(ctx.org_id)
         if await self._storage.delete_tenant_limit(ctx.org_id) is not None:
             gone += 1
         return gone
@@ -336,9 +332,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             # Once a cold start: its key is spent here, and a start again
             # binds it anew. A warm VM's boot was over before its claim.
             booted = (self._clock() - vm.created_at).total_seconds()
-            source = "image" if vm.restored_from is None else "snapshot"
-            CLOUD_POOL_BOOT_SECONDS.labels(source=source).observe(booted)
-            log.info("VM %s booted from its %s in %.1fs", vm.name, source, booted)
+            CLOUD_POOL_BOOT_SECONDS.observe(booted)
+            log.info("VM %s booted from the pool's image in %.1fs", vm.name, booted)
         log.info(
             "VM %s: its host %s enrolled for session %s",
             vm.name,
@@ -350,11 +345,11 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     # The sweep.
 
     async def sweep(self, rctx: RequestContext) -> int:
+        now = self._clock()
+        acted = await self._idle_archives(now)
         # A process that reaches no VM reads every one as gone: it sweeps none.
         if not await self._reaches_vms():
-            return 0
-        now = self._clock()
-        acted = 0
+            return acted
         held: set[str] = set()
         ran: list[PoolVm] = []
         after: UUID | None = None
@@ -377,8 +372,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             if vm.name not in named and await self._died(rctx, vm):
                 acted += 1
         for name in sorted(named):
-            # A snapshot is kept under its session's names; a VM is not.
-            if is_snapshot(prefix, name) or name == self._options.image or name in held:
+            if name == self._options.image or name in held:
                 continue
             # Read again just before a destroy: a start writes its row before
             # its VM, so a VM whose row the pass did not read may
@@ -387,8 +381,6 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 log.warning("VM %s is held by no row of the pool, and goes", name)
                 await self._vms.destroy(name)
                 acted += 1
-        for erasure in await self._storage.read_erasures(self._options.page):
-            await self._erased(erasure)
         await self._refill()
         return acted
 
@@ -404,19 +396,18 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         agent_session_id: UUID,
         spec: IsolationSpec,
         pool: HostPool,
-        restore: KeptSnapshot | None,
+        restore: UUID | None,
     ) -> PoolVm:
         """The VM that serves the session, running: the one it holds,
         unless a restore replaces it; else a warm one; else a new one."""
         current = await self._storage.read_of_session(ctx.org_id, agent_session_id)
-        if current is not None and restore is not None and current.restored_from != restore.id:
-            # A restore replaces the VM whole.
+        if current is not None and restore is not None and current.restored_from != restore:
+            # A restore replaces the VM whole: what it holds outside its
+            # directory comes from the pool's image again.
             await self._let_go(ctx, current)
             current = None
         if current is not None:
             return await self._running(ctx, agent_session_id, spec, current)
-        if restore is not None:
-            await self._held_to(agent_session_id, restore)
         return await self._start(ctx, agent_session_id, spec, pool, restore)
 
     async def _running(
@@ -450,7 +441,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
         await self._retire(ctx, vm)
         key = new_key()
-        again = await self._storage.rekey(vm.id, hash_token(key), vm.restored_from, self._clock())
+        again = await self._storage.rekey(vm.id, hash_token(key), self._clock())
         if again is None:
             raise IsolationRefused(f"session {agent_session_id}'s VM is gone", clears=True)
         await self._seeds.launch_seeded(
@@ -465,12 +456,11 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         agent_session_id: UUID,
         spec: IsolationSpec,
         pool: HostPool,
-        restore: KeptSnapshot | None,
+        restore: UUID | None,
     ) -> PoolVm:
-        """The session's VM: a warm one it claims, when it starts from the
-        pool's image at the default size, else a new one of its size, from
-        its snapshot or the pool's image, within the pool's limits as they
-        stand now. At the pool's maximum, a new one takes the place of an
+        """The session's VM: a warm one it claims, at the default size, else
+        a new one of its size, from the pool's image, within the pool's
+        limits as they stand now. At the pool's maximum, a new one takes the place of an
         idle warm VM, which goes first. Its row is written first, so a start
         that dies leaves a row the sweep finds; one that fails here leaves
         nothing. Past a maximum, the loop waits on the resource."""
@@ -486,7 +476,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             pool_id=pool.id,
             bound_by=ctx.user_id,
             key_digest=hash_token(key),
-            restored_from=None if restore is None else restore.id,
+            restored_from=restore,
             bound_at=now,
         )
         limits = await self._limits()
@@ -495,7 +485,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             vm,
             most=limits.most,
             tenant_most=limits.tenant_most if own is None else own.most,
-            warm=restore is None and size_of(spec) is DEFAULT_SIZE,
+            warm=size_of(spec) is DEFAULT_SIZE,
         )
         if isinstance(got, Full):
             # The cause is what the tenant reads: no count, and no other
@@ -512,9 +502,8 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             return got.vm
         if got.displaced is not None:
             await self._displace(vm, got.displaced)
-        source = self._options.image if restore is None else restore.reference
-        await self._launch(vm, self._spec(spec), source, key)
-        log.info("session %s: VM %s started from %s", agent_session_id, vm.name, source)
+        await self._launch(vm, self._spec(spec), self._options.image, key)
+        log.info("session %s: VM %s started", agent_session_id, vm.name)
         return vm
 
     async def _limits(self) -> PoolLimits:
@@ -581,19 +570,6 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
                 return held
             left = (by - self._clock()).total_seconds()
             await self._sleep(max(0.0, min(polls.failed(), left)))
-
-    async def _held_to(self, agent_session_id: UUID, restore: KeptSnapshot) -> None:
-        """The snapshot's disk, held to the digest the pool recorded, before
-        anything starts from it: one gone or altered loses the workspace."""
-        digest = await self._vms.digest(restore.reference)
-        if digest is None:
-            raise AgentWorkspaceLost(
-                f"snapshot {restore.id} of session {agent_session_id} is gone from the VMs' store"
-            )
-        if digest != restore.digest:
-            raise AgentWorkspaceLost(
-                f"snapshot {restore.id} of session {agent_session_id} does not match its digest"
-            )
 
     async def _let_go(self, rctx: RequestContext, vm: PoolVm) -> None:
         """The VM goes: its host's credential ends, then the VM and
@@ -703,12 +679,32 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             return False
         return await self._vms.probe(longest_name(self._options.prefix)) is None
 
-    async def _erased(self, erasure: PoolErasure) -> None:
-        """Every disk kept under the session's names goes, then the ask."""
-        named = snapshots_of(self._options.prefix, erasure.tenant_id, erasure.agent_session_id)
-        for name in await self._vms.names(named):
-            await self._vms.destroy(name)
-        await self._storage.delete_erasure(erasure.id)
+    async def _idle_archives(self, now: datetime) -> int:
+        """The archives of each session idle past `archive_kept`, by its
+        last activity, removed with their record, oldest first, a page at a
+        time; a session active since keeps them, its record moved to then.
+        Answers how many sessions lost theirs."""
+        kept = self._options.archive_kept
+        gone = 0
+        while True:
+            page = await self._storage.read_archives(now - kept, self._options.page)
+            for archive in page:
+                active = await self._active_at(archive.tenant_id, archive.agent_session_id)
+                if active is not None and now - active <= kept:
+                    moved = archive.model_copy(update={"kept_at": max(active, archive.kept_at)})
+                    await self._storage.keep_archive(moved)
+                    continue
+                await self._drop_archives(archive.tenant_id, archive.agent_session_id)
+                await self._storage.delete_archive(archive.tenant_id, archive.agent_session_id)
+                log.info(
+                    "session %s of org %s idle past %s: its archives go",
+                    archive.agent_session_id,
+                    archive.tenant_id,
+                    kept,
+                )
+                gone += 1
+            if len(page) < self._options.page:
+                return gone
 
     async def _refill(self) -> None:
         """Starts warm VMs, in the background, until the warm count

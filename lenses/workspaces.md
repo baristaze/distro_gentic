@@ -255,11 +255,11 @@ that fetches a URL the agent wrote.
 
 ## WSP-12 A snapshot lives on its workspace's side of the wall
 
-**Principle.** A workspace in the platform's cloud keeps its snapshots in
-the platform's own stores: the object store, sealed under the session's
-key, or, for a VM of the cloud pool, the cloud's disk snapshots,
-encrypted at rest. A workspace on a customer's host keeps them in that
-host's own store, inside the wall. Their bytes never cross: the platform
+**Principle.** A workspace in the platform's cloud, a VM of the cloud
+pool's included, keeps its snapshots in the platform's object store,
+sealed under the session's key; a VM keeps its directory alone. A
+workspace on a customer's host keeps them in that host's own store,
+inside the wall. Their bytes never cross: the platform
 records the reference and the hash alone, and a host of the same pool
 whose store holds one restores it. A snapshot is content: when a
 session's content expires, its key is revoked, or the session is purged,
@@ -275,8 +275,9 @@ the wall; what the content's expiry, a key's revocation, and a
 session's purge remove.
 
 **Violation.** A host's snapshot whose bytes reach the platform, or a
-cloud snapshot whose bytes reach a host; a record or a step that holds a
-snapshot's bytes; a restore from the other side of the wall; a session
+cloud snapshot whose bytes reach a host; a cloud snapshot kept outside
+the session's seal, such as a disk image; a record or a step that holds
+a snapshot's bytes; a restore from the other side of the wall; a session
 past its content's life, or purged, whose snapshots, or their records,
 remain.
 

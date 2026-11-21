@@ -30,12 +30,13 @@ host pulls, and the platform never calls in.
   starts, in its **seed**, beside where the platform answers. Only its
   digest is kept, until the VM's host trades it for a host's
   credential of the session's pool of one.
-- **A session's snapshot**: the VM's whole disk, kept by the
-  VMs' backend under the tenant's and the session's names. The
-  platform records its name and its digest in the session's workspace
-  snapshots, never the disk.
-- **An erasure**: the pool's record that a session's disks are to go,
-  until its sweep has destroyed them.
+- **A session's snapshot**: its workspace's directory, packed in the VM
+  and read out through the relay in parts, each sealed under the
+  session's key in the snapshots bucket, by the platform's tools
+  (ADR 2070). The pool keeps no disk of any VM.
+- **An archive record**: the pool's record that a session keeps
+  archives, with the latest moment it knew the session active, until
+  they go.
 - **The pool's limits**: how many VMs stand warm, the most VMs it
   holds at once, and the most one tenant holds, a row per version an
   operator wrote; with none, the pool's options hold.
@@ -51,8 +52,9 @@ let go, whether it runs, starts, or stands stopped for its session.
   does not name, or an ask of CPUs or memory, is refused for good before
   anything starts. The VM that serves it is found, or a warm one is
   claimed at the default size, or one of its size is started from the
-  pool's image; with the session's latest snapshot, one is started from
-  that, held to its digest first. A claim counts the VMs held under one
+  pool's image. A restore lets go of a VM that serves the session for
+  another snapshot, and marks the one it gets for its own, so a prepare
+  asked again while it starts keeps it. A claim counts the VMs held under one
   lock. At the pool's maximum, a claim that cannot take a warm VM takes
   the place of an idle one, which goes first. Otherwise, past the pool's
   maximum or its tenant's, it starts none: the loop waits on the
@@ -64,33 +66,36 @@ let go, whether it runs, starts, or stands stopped for its session.
   is warm it is told to ask again. A cold start records its boot, from
   its start to here, as `acme_cloud_pool_boot_seconds`; a warm claim
   records none.
-- **Snapshot.** At a loop's end, for a session kept by snapshots, what
-  the workspace holds is pushed, the host's credential is ended, the
-  VM stops, and its disk is kept. The run's release lets the stopped
-  VM go, and the next loop starts another from the disk.
+- **Archive.** At a loop's end, for a session kept by snapshots, what
+  the workspace holds is pushed, the pool records the session's
+  archives, and the platform's tools keep its directory. The run's
+  release lets the VM go, its disk with it, and the next loop's VM
+  takes the directory back.
 - **Release.** Past the grace, the runner's sweep lets a session's
   running VM go, its disk with it: a cache.
 - **Recycle.** At a run's end, once its work is pushed, a VM whose disk
   is a cache and that is past the pool's maximum age goes, and the next
   loop starts another. Nothing lets a VM go for its age under a running
   loop.
-- **Sweep.** Where the process reaches the VMs, every row is read, a
-  page at a time. A first start that died, a VM that ran and is gone, a
+- **Sweep.** First the archive records past `archive_kept`, 30 days by
+  default: a session active since has its record moved to its last
+  activity, and any other loses its archives and their records. Then,
+  where the process reaches the VMs, every row is read, a page at a
+  time. A first start that died, a VM that ran and is gone, a
   VM whose session or tenant is gone, and one under the pool's names
   that no row holds are let go. A warm VM's row goes first, under the
   claim's lock, so a session that claimed it meanwhile keeps it. A VM
   that runs with no host to work for, its host never enrolled, ended, or
   silent, is stopped, its disk kept: the session's next prepare starts
   it again under a new key. A warm VM past the maximum age goes, its row
-  first. The erasures asked are done. Then warm VMs start until the warm
-  count stands, never past the pool's maximum.
+  first. Then warm VMs start until the warm count stands, never past
+  the pool's maximum.
 - **Set the limits.** An operator writes the pool's limits, or a
   tenant's own maximum, and the next claim reads them. Each write leaves
   an audit event naming the operator and the values: the pool's own in
   the platform's stream, which no tenant reads, a tenant's own in that
   tenant's.
-- **Purge and erase.** A session's purge takes its VM and every disk
-  kept of it; its key's revocation, every disk; its tenant's purge, every
-  VM and disk of the tenant. A revocation is recorded first, and
-  done at once only where the process reaches the VMs; in the API's
-  process, the sweep does it.
+- **Purge and erase.** A session's purge takes its VM and its archive
+  record, and its archives leave the bucket with its other snapshots;
+  its key's revocation takes the record in any process, the API's
+  included; its tenant's purge, every VM and record of the tenant.

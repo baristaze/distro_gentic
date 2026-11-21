@@ -9,7 +9,7 @@ platform's kinds is `ProductKinds`, declared once in
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
@@ -1061,6 +1061,21 @@ class RootHooksPlatformImpl(RootHooksInterface):
             session = await sessions_rows.read_agent_session(org_id, agent_session_id)
             return session is None or session.deleted_at is not None
 
+        async def active_at(org_id: UUID, agent_session_id: UUID) -> datetime | None:
+            # A session's last activity is its row's last write: each loop's
+            # progress moves it.
+            org = await orgs_rows.read_org(org_id)
+            if org is None:
+                return None
+            session = await sessions_rows.read_agent_session(org_id, agent_session_id)
+            return None if session is None else session.updated_at
+
+        async def drop_archives(org_id: UUID, agent_session_id: UUID) -> None:
+            # Every archive of an idle session of the pool leaves the bucket,
+            # then the records that name them.
+            await snapshots.purge(org_id, agent_session_id)
+            await agent_workspaces.forget_snapshots(org_id, agent_session_id)
+
         self._pooling = options.cloud_pool_options or CloudPoolOptions()
         self._cloud_pool = CloudPoolManagerImpl(
             storage.get_cloud_pool_storage(),
@@ -1072,6 +1087,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
             self._pooling,
             session_gone=session_gone,
             expired=tenancy.tenant_expired,
+            active_at=active_at,
+            drop_archives=drop_archives,
             stage=options.cloud_pool_stage,
         )
         # Each workspace is held to its session's pin, refused by this host
@@ -1097,6 +1114,10 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 self.managers.exec_relay.erase_purged(org_id, agent_session_id, host_id)
             ),
             cloud=self._cloud_pool,
+            # A VM of the pool keeps its directory through the transport
+            # that reaches its host, each command's record sealed as any is.
+            transport=self._placed,
+            record_seal=self._records,
         )
         # What makes a result: the runs, the policies, and validation on the
         # executor, apart from every agent's workspace. Outside `local`, it is

@@ -19,7 +19,7 @@ variable "gateway_security_group_id" {
 }
 
 variable "image_id" {
-  description = "The AMI every new VM boots: a Linux with Docker and the host program installed by deployment/vms/install.sh. A VM started from a session's snapshot boots that snapshot's image instead."
+  description = "The AMI every VM boots: a Linux with Docker and the host program installed by deployment/vms/install.sh."
   type        = string
 }
 
@@ -43,7 +43,7 @@ variable "sizes" {
 }
 
 variable "disk_gb" {
-  description = "Every VM's disk, which its session's snapshot keeps whole."
+  description = "Every VM's disk, which holds the session's workspace and what its commands install."
   type        = number
   default     = 64
 }

@@ -7,7 +7,6 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.agent_workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.om.base import Created, Identifiable, OmBase
 
 VM_NAME = r"^[a-z][a-z0-9-]{0,62}$"
@@ -25,8 +24,10 @@ class PoolVm(Identifiable, Created):
     for its host. `key_digest` is the digest of the one-use key the VM
     was handed at its start; its host trades the key for a credential once,
     and the digest goes. `host_id` is the host that did. `restored_from` is
-    the snapshot its disk started from, so a prepare asked again does not
-    start it again. `started_at` is None until it first runs, and stays set
+    the snapshot whose directory it was claimed or started to take back,
+    so a prepare asked again for it keeps the VM, and one asked for
+    another replaces it. `started_at` is None until it first runs, and
+    stays set
     once it has: a VM started again keeps its disk. `bound_at` is when
     it was last handed a key for its session: its start for the session,
     its claim, or its start again; its host enrolls within the boot bound
@@ -68,12 +69,3 @@ class PoolClaim(OmBase):
 
     vm: PoolVm
     displaced: PoolVm | None = None
-
-
-class VmSnapshot(OmBase):
-    """A snapshot of a session's VM, kept by the VMs' backend in its
-    own store: the name it keeps it under, and the digest its disk is held
-    to. Never the disk."""
-
-    reference: str = Field(pattern=REFERENCE)
-    digest: str = Field(pattern=DIGEST)

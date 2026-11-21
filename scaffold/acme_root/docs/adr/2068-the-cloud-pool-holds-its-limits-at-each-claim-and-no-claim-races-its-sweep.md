@@ -43,11 +43,14 @@ maximum together. A warm VM already counts, so binding one at the
 maximum is allowed. Warm VMs stand below the maximum, which a write
 holds.
 
-**A warm VM gives way at the maximum.** A restore, a session that asks
-limits, and a session of another egress cannot take a warm VM. At the
-maximum, such a claim takes the place of the oldest idle warm VM, one
-that started and that no session claimed. Under the same lock, the warm
-VM's row goes and the claim's own is written. The warm VM is destroyed
+**A warm VM gives way at the maximum.** A session of a size other than
+the default, or of another egress, cannot take a warm VM. A restore can:
+every VM boots the pool's image, and the restore fills its directory
+([ADR 2070](2070-the-cloud-pool-keeps-a-sessions-files-sealed-never-a-disk.md)).
+At the maximum, a claim that cannot take a warm VM takes the place of
+the oldest idle warm VM, one that started and that no session claimed.
+Under the same lock, the warm VM's row goes and the claim's own is
+written. The warm VM is destroyed
 before the claim's VM starts, so the VMs that run never pass the
 maximum. If that destroy fails, the claim's row goes too, and the
 sweep destroys the warm VM, which no row holds. A warm VM still
