@@ -362,7 +362,9 @@ session, which boots the pool's image, named by the id its cloud gives
 it, and runs the same host program a customer installs, with a
 container engine inside. The runner reaches it through the exec relay,
 as it reaches any host: the VM pulls, and the platform never calls
-in.
+in. A run claims or starts its session's VM at its first call that
+reaches the workspace, so no model call waits for a boot, and a run
+that only reads, plans, or answers starts none.
 
 - **Its own credential, for one session.** The pool hands each VM,
   as it starts, a one-use key, and its host trades the key once for a
@@ -399,8 +401,9 @@ in.
   it allows onto a machine type, with its CPUs and its memory, and the
   pool's role in the cloud launches no other type. A size the
   deployment does not map is refused for good, with its cause, before
-  any VM starts. So is an ask of CPUs or memory, which names no machine
-  a cloud runs: a VM is never met with another size.
+  the loop's first model call, and no VM starts. So is an ask of CPUs or
+  memory, which names no machine a cloud runs: a VM is never met with
+  another size.
 - **Warm, and always let go.** A few VMs may stand started ahead of
   demand, as many as an operator sets, below the maximum, all of the
   default size: a claim of another size starts its own. They name no
@@ -490,7 +493,8 @@ released at once when the session is archived or cancelled. A session
 that merely exists holds no machine.
 
 Before an instance is released, uncommitted work is committed to a
-snapshot ref and pushed, and the next loop is told about it. When a
+snapshot ref and pushed, and the next loop that reaches the workspace is
+told about it, before the call that reached it runs. When a
 session's branch has vanished, the platform rebuilds it only when it
 knows why (a merged or closed pull request). Anything else fails loudly;
 nothing restarts silently from the default branch.
@@ -605,9 +609,13 @@ Snapshots][e-snapshots]), as an agent project names it.
 `core`
 
 A session's isolation is pinned when it is created and enforced by the
-host. A host that cannot provide it refuses the `workspace` work before
-the loop's first model call, and the loop parks on `resource` until a
-host in its placement can. Every level runs from a process environment
+host. A spec its placement can never meet, such as a VM size the cloud
+pool's deployment does not map, is refused before the loop's first
+model call, with its cause, and nothing is made. The workspace is
+prepared at the first call that reaches it, and only that call waits: a
+host that cannot provide it now refuses the `workspace` work there, and
+the loop parks on `resource`, the call open, until a host in its
+placement can. Every level runs from a process environment
 stripped of every platform credential. The cloud never runs a session
 directly on a shared host, and a bare directory exists only inside a
 customer's wall.

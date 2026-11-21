@@ -492,9 +492,11 @@ session's own pool, and is handed that session's work alone. It holds no
 database credential, no model key, no history, and no cloud role, and
 its key and its credential never reach its disk. Its egress is closed
 outside its guest, to the gateway and what its session's egress allows.
-Its whole disk is the session's snapshot, kept while the session lives;
-a VM with no host stops. Every path that starts a VM has the
-one that lets it go.
+A run claims or starts it at its first call that reaches the workspace,
+so no model call waits for its boot, and a run that reaches none starts
+none. Its whole disk is the session's snapshot, kept while the session
+lives; a VM with no host stops. Every path that starts a VM has the one
+that lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
@@ -505,8 +507,10 @@ VM's disk is kept; each path that starts a VM and the one that
 lets it go, the sweep's among them; what a VM with no host to work
 for comes to; where a revocation's erasure runs.
 
-**Violation.** A VM's host enrolled with a tenant's token, or handed
-another session's work; a database credential, a model key, a platform
+**Violation.** A VM started or claimed before a run's call reaches
+the workspace, or by a run that reaches none; a VM's host enrolled with a
+tenant's token, or handed another session's work; a database
+credential, a model key, a platform
 secret, or a cloud role in a VM; a key or a live credential on a
 disk the pool keeps; egress closed by a rule inside the guest, or open
 to more than the gateway and the session's egress; the platform calling
@@ -630,7 +634,8 @@ other.
 and the deployment maps each name it allows onto a machine type; the
 pool's cloud role launches no other type and moves no VM to one. A size
 the deployment does not map, or an ask of CPUs or memory, is refused
-for good, with its cause, before any VM starts. Warm VMs are the
+for good, with its cause, before the loop's first model call, and no VM
+starts. Warm VMs are the
 default size. A VM past its maximum age goes at its run's end once its
 work is kept, never under a running loop; a warm one goes at the sweep.
 Each cold start records its time from its start to its host's
@@ -646,7 +651,8 @@ and what tells a cold start from a warm claim and a start again.
 
 **Violation.** A VM of a type the deployment never mapped, or of
 another size than its spec asked, a raw CPU or memory ask met, or a
-refusal after a VM started; a role that launches, or moves a VM to, any
+refusal after the loop's first model call or a VM's start; a role that
+launches, or moves a VM to, any
 type; a VM let go for its age under a running loop, or before its run's
 work was kept; a VM that lives across runs with no maximum age; a boot
 recorded for a warm claim or a start again, or a cold start recorded
