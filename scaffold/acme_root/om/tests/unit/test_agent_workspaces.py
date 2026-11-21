@@ -56,6 +56,8 @@ from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unav
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
+from acme.om.tools.types.tool import ToolClass
 
 from contracts.agent_project_storage import make_agent_project
 from contracts.agent_workspaces import (
@@ -66,7 +68,7 @@ from contracts.agent_workspaces import (
     PullRequestsTwin,
     ReaderTwin,
 )
-from contracts.loops import ASSISTANT, reply, said, use
+from contracts.loops import ALLOWED, ASSISTANT, Lookup, reply, said, use
 from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 
@@ -498,6 +500,68 @@ async def test_only_one_who_manages_the_tenant_writes_an_allowlist(tmp_path: Pat
     )
     with pytest.raises(NotAuthorized):
         await loop.platform.agent_workspaces.write_allowlist(member, listed)
+
+
+@pytest.mark.parametrize("reaches", [True, False], ids=["reaches", "reaches-none"])
+async def test_a_command_waits_for_a_person_where_its_agent_project_opened_the_egress(
+    tmp_path: Path, reaches: bool
+) -> None:
+    """The rule of two reads the egress the session's pin holds, whatever
+    workspace a call was given: a kind that names its hosts runs with open
+    egress where its agent project chose it, so once a tool result marks
+    the session, a command acts outward and waits for a person."""
+    worker = ASSISTANT.model_copy(
+        update={
+            "name": "worker",
+            "tools": ("lookup", "shell"),
+            "isolation": IsolationSpec(
+                mode=IsolationMode.TWIN,
+                egress=EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("git.example.com",)),
+            ),
+            "policy": ToolPolicyLayer(
+                rules=(
+                    *ALLOWED.rules,
+                    ToolPolicyRule(authorization_class=ToolClass.EXECUTE, decision=Decision.ALLOW),
+                )
+            ),
+        }
+    )
+    shell = Lookup("shell", authorization_class=ToolClass.EXECUTE, workspace=reaches)
+    agent_projects = AgentProjectsTwin()
+    loop = loop_of(
+        tmp_path,
+        worker,
+        platform=PlatformRootOptions(
+            workspace_agent_projects=agent_projects, workspace_git=GitTwin()
+        ),
+        extra=(shell,),
+    )
+    opened = EgressAllowlist(
+        id=new_id(),
+        created_at=loop.clock(),
+        updated_at=loop.clock(),
+        created_by=loop.owner.user_id,
+        updated_by=loop.owner.user_id,
+        agent_project_id=agent_projects.agent_project_id,
+        open=True,
+        reason="the build fetches from anywhere",
+    )
+    await loop.platform.agent_workspaces.write_allowlist(loop.owner, opened)
+    agent_session_id = await loop.start("worker")
+    pinned = await loop.platform.agent_workspaces.get_workspace(loop.owner, agent_session_id)
+    assert pinned.egress is EgressMode.OPEN, "its agent project opened what its kind names"
+    await loop.say(agent_session_id, "Read the totals, then run the build.")
+    loop.anthropic.add(
+        reply(use("lookup", use_id="use_lookup")),
+        reply(use("shell", use_id="use_shell")),
+        reply(said("Built.")),
+    )
+
+    run = await loop.loops.run(loop.owner, agent_session_id)
+
+    assert run.end is RunEnd.PARKED and run.park is not None
+    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "approval")
+    assert shell.ran_as == [], "it read data, so it waits before it runs under open egress"
 
 
 # Check 4: a session's own branch and pull request on its agent project's bound
