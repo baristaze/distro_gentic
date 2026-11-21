@@ -1,9 +1,12 @@
 """The platform's hooks into each run of the engine's loop
 (`acme.om.agents.hooks`). What a session holds beyond its kind, a tenant's
 own connector say, is answered by the hooks the process wires (`inner`).
-Before the run's first model call, a new loop renews its session's fill
-set, so a fill gone since the last loop switches between loops and never
-inside one. Once the run's first call that reaches the workspace has
+Before the run's first model call, a new loop holds its session's pinned
+workspace to where the session runs (`PinnedWorkspacesInterface`): one
+that can never be held there ends the loop errored, nothing spent, as a
+refused fill ends it. A new loop then renews its session's fill set, so a
+fill gone since the last loop switches between loops and never inside
+one. Once the run's first call that reaches the workspace has
 prepared it, and before that call runs, what changed under the model since
 its last loop is told as a step: the workspace was prepared over what that
 loop left. A run that reaches no workspace tells nothing, and the next run
@@ -12,14 +15,16 @@ that reaches it tells it then."""
 from collections.abc import Callable, Sequence
 from datetime import datetime
 
-from acme.infra.agent_workspaces import AgentWorkspace
+from acme.infra.agent_workspaces import AgentWorkspace, IsolationMode, IsolationRefused
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agent_steps.types.agent_step import Actor, AgentStep, AgentStepType, Origin
 from acme.om.agent_steps.types.content import Content, TextBlock
 from acme.om.agent_steps.types.header import MarkHeader
+from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agents.hooks import AttachedToolsets, LoopHooksInterface, LoopStart
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
+from acme.om.exceptions import UnresolvedRole
 from acme.om.language_models.manager import LanguageModelsManagerInterface
 
 
@@ -42,17 +47,20 @@ def changed_step(start: LoopStart, text: str, at: datetime) -> AgentStep:
 class PlatformLoopHooksImpl(LoopHooksInterface):
     """`inner` answers what a session holds beyond its kind and the steps a
     layer above the platform appends; `language_models` is the face over the
-    models manager every namespace reaches, read at call time, since the
-    root builds it after the loop's hooks are set."""
+    models manager every namespace reaches, and `pinned` the tools manager
+    that makes each workspace, each read at call time, since the root
+    builds them after the loop's hooks are set."""
 
     def __init__(
         self,
         inner: LoopHooksInterface,
         language_models: Callable[[], LanguageModelsManagerInterface],
+        pinned: Callable[[], PinnedWorkspacesInterface],
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
         self._language_models = language_models
+        self._pinned = pinned
         self._clock = clock
 
     async def attached_toolsets(
@@ -62,12 +70,30 @@ class PlatformLoopHooksImpl(LoopHooksInterface):
 
     async def before_first_call(self, ctx: TenantContext, start: LoopStart) -> Sequence[AgentStep]:
         if start.new_loop:
+            # A pin keeps its kind's level, so a kind of none has none.
+            if start.kind.isolation.mode is not IsolationMode.NONE:
+                await self._check_pinned(ctx, start)
             # A fill gone since the last loop switches here, between loops,
             # and never inside one. Renewing twice leaves what once left.
             await self._language_models().renew_fill_set(
                 ctx, start.agent_session.id, start.epoch, start.loop_id
             )
         return await self._inner.before_first_call(ctx, start)
+
+    async def _check_pinned(self, ctx: TenantContext, start: LoopStart) -> None:
+        """The session's pin, held to where the session runs before any model
+        call. A loop past its first call answers its open calls when its
+        workspace is refused, so only a new loop, which has none, is held
+        here."""
+        try:
+            await self._pinned().check_pinned(ctx, start.agent_session.id, start.kind.isolation)
+        except IsolationRefused as refused:
+            # The one refusal the engine ends a loop on before its first
+            # model call is a fill's: the loop ends errored, and the log
+            # reads the cause.
+            raise UnresolvedRole(
+                f"the session's pinned workspace can never be held where it runs: {refused.message}"
+            ) from refused
 
     async def workspace_prepared(
         self, ctx: TenantContext, start: LoopStart, workspace: AgentWorkspace

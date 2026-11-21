@@ -68,7 +68,9 @@ def platform_loop_over(
     # The loop the suite drives takes the platform's hooks, as the root's own
     # loop does: the platform's around the ones the process wires.
     hooks = PlatformLoopHooksImpl(
-        loop_hooks or LoopHooksNullImpl(), lambda: built[0].language_models
+        loop_hooks or LoopHooksNullImpl(),
+        lambda: built[0].language_models,
+        lambda: built[0].pinned_workspaces,
     )
     over = loop_over(tmp_path, build=build, hooks=hooks, **loop)
     return PlatformLoop(**vars(over), platform=built[0])

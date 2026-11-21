@@ -14,7 +14,9 @@ at the spawn and kept there as the child's (`fork_point`). The pin holds the
 session's durability and base with its isolation. A provider's refusal
 clears, since another host may give the isolation later, unless it refuses
 what the prepare asks beyond it (a snapshot's durability, a base, or a
-restore): that refusal is for good, and ends the loop with its reason. A
+restore): that refusal is for good, and ends the loop with its reason.
+What a prepare would refuse for good, here or on the cloud pool, is asked
+of the pin before the loop's first model call (`check_pinned`). A
 workspace a snapshot started keeps the tree the snapshot holds: its branch
 is not brought up over it. Every other operation is the engine's,
 unchanged.
@@ -62,6 +64,7 @@ from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
+from acme.om.agent_workspaces.pinned import PinnedWorkspacesInterface
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import host_refusal
 from acme.om.agent_workspaces.types.host import HostOffer
@@ -150,7 +153,7 @@ class HeldWorkspaces:
             self._held.pop(agent_session_id, None)
 
 
-class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
+class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface, PinnedWorkspacesInterface):
     def __init__(
         self,
         inner: ToolsManagerInterface,
@@ -199,14 +202,46 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             await self._inner.check_agent_workspace(ctx, spec)
             return
         ctx.require(Permission.WRITE)
-        # A spec the cloud pool runs is held to what its VMs can ever hold,
-        # read of the spec alone as the transport reads it: one they never
-        # can is refused before the loop's first model call, and no VM
-        # starts. Every other refusal clears, since a host of the session's
-        # placement, or this process's provider, may give the isolation
-        # later: it is learned at the first call that reaches the workspace.
+        # The kind's spec, which names no session: one the cloud pool runs
+        # is held to what its VMs can ever hold, read of the spec alone as
+        # the transport reads it, and one they never can is refused before
+        # the loop's first model call, and no VM starts. The session's pin,
+        # held where it is placed, is the platform's loop hooks' to check
+        # (`check_pinned`).
         if self._cloud is not None and await self._cloud.runs(spec):
             await self._cloud.check(spec)
+
+    async def check_pinned(
+        self, ctx: TenantContext, agent_session_id: UUID, asked: IsolationSpec
+    ) -> None:
+        ctx.require(Permission.WRITE)
+        try:
+            pinned = (await self._agent_workspaces.get_workspace(ctx, agent_session_id)).spec()
+        except NotFound:
+            # Pinned at its first prepare, to what its loop asks.
+            pinned = asked
+        if pinned.mode is IsolationMode.NONE:
+            return
+        # Placed as its prepare places it.
+        try:
+            pool = (
+                None if self._placed is None else await self._placed.pool_of(ctx, agent_session_id)
+            )
+        except NotFound:
+            return  # its pool is gone: it waits for it, as its prepare does
+        if pool is not None:
+            return
+        if self._cloud is not None and await self._cloud.runs(pinned):
+            await self._cloud.check(pinned)
+            return
+        if not _beyond_isolation(pinned, None):
+            # A refusal of the isolation alone clears: another host may give it.
+            return
+        try:
+            await self._inner.check_agent_workspace(ctx, pinned)
+        except IsolationRefused as refused:
+            if not refused.clears:
+                raise
 
     async def prepare_agent_workspace(
         self,
