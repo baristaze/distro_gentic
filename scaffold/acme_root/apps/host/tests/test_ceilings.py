@@ -9,7 +9,14 @@ from uuid import uuid4
 
 import pytest
 
-from acme.apps.host.ceilings import Ceilings, HostServer, ask_of, load, refusals
+from acme.apps.host.ceilings import (
+    Ceilings,
+    HostServer,
+    ask_of,
+    command_refusal,
+    load,
+    refusals,
+)
 from acme.apps.host.config import BadSetting
 from acme.client.types.hosts import ClaimedWorkView, IsolationMode
 
@@ -79,6 +86,36 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
             load(path)
 
 
+def test_the_owner_names_the_programs_a_command_starts_and_none_runs_unless_named(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "ceilings.toml"
+    path.write_text("")
+    assert load(path).commands == frozenset(), "none unless the owner names them"
+    path.write_text('commands = ["git", "/usr/bin/python3"]\n')
+    assert load(path).commands == frozenset({"git", "/usr/bin/python3"})
+    path.write_text('commands = "all"\n')
+    assert load(path).commands is None
+    for wrong in ('commands = "git"\n', 'commands = ["bin/git"]\n', 'commands = [""]\n'):
+        path.write_text(wrong)
+        with pytest.raises(BadSetting):
+            load(path)
+    request = {"argv": ["git", "status"], "env": [], "secrets": []}
+    assert command_refusal(None, request) is None
+    assert command_refusal(frozenset({"git"}), request) is None
+    assert command_refusal(frozenset(), request) == (
+        "commands: 'git' is not among this host's commands"
+    )
+    for unreadable in ({}, {"argv": []}, {"argv": "git"}):
+        assert command_refusal(frozenset({"git"}), unreadable) == (
+            "commands: a command that names no program"
+        )
+    by_secret = {**request, "secrets": [{"name": "token", "env": "PATH"}]}
+    assert command_refusal(frozenset({"git"}), by_secret) == (
+        "commands: a command that sets PATH, where 'git' is found"
+    )
+
+
 def test_the_owner_names_each_mcp_server_whole_and_nothing_else_starts(tmp_path: Path) -> None:
     path = tmp_path / "ceilings.toml"
     path.write_text(
@@ -122,13 +159,28 @@ def test_an_item_within_every_ceiling_runs() -> None:
 @pytest.mark.parametrize(
     ("change", "reason"),
     [
-        ({"agent_project_id": str(uuid4())}, "an agent project this host does not serve"),
-        ({"isolation": "directory"}, "isolation directory below this host's minimum"),
+        (
+            {"agent_project_id": str(uuid4())},
+            "agent_projects: an agent project this host does not serve",
+        ),
+        (
+            {"isolation": "directory"},
+            "min_isolation: isolation directory below this host's minimum",
+        ),
         ({"isolation": "vm"}, "isolation vm this host did not probe"),
-        ({"egress": ["github.com:443", "example.test:443"]}, "egress beyond this host's allowlist"),
-        ({"reads": ["/srv/work/../../etc/shadow"]}, "a read outside this host's readable paths"),
-        ({"reads": ["/srv/workshop/notes"]}, "a read outside this host's readable paths"),
-        ({"by_person": True}, "a person's command, which this host does not accept"),
+        (
+            {"egress": ["github.com:443", "example.test:443"]},
+            "egress: egress beyond this host's allowlist",
+        ),
+        (
+            {"reads": ["/srv/work/../../etc/shadow"]},
+            "readable: a read outside this host's readable paths",
+        ),
+        ({"reads": ["/srv/workshop/notes"]}, "readable: a read outside this host's readable paths"),
+        (
+            {"by_person": True},
+            "people_commands: a person's command, which this host does not accept",
+        ),
     ],
 )
 def test_each_ceiling_refuses_what_passes_it(change: dict[str, Any], reason: str) -> None:
@@ -137,17 +189,17 @@ def test_each_ceiling_refuses_what_passes_it(change: dict[str, Any], reason: str
 
 def test_an_item_that_says_too_little_is_read_as_the_widest_ask() -> None:
     assert refused({"host_id": str(uuid4())}) == [
-        "an agent project this host does not serve",
-        "no isolation named",
-        "egress beyond this host's allowlist",
-        "a read outside this host's readable paths",
-        "a person's command, which this host does not accept",
+        "agent_projects: an agent project this host does not serve",
+        "min_isolation: no isolation named",
+        "egress: egress beyond this host's allowlist",
+        "readable: a read outside this host's readable paths",
+        "people_commands: a person's command, which this host does not accept",
     ]
 
 
 def test_an_item_silent_on_its_reads_is_read_as_reading_everything() -> None:
     silent = {key: value for key, value in FITS.items() if key != "reads"}
-    assert refused(silent) == ["a read outside this host's readable paths"]
+    assert refused(silent) == ["readable: a read outside this host's readable paths"]
     assert refused({**FITS, "reads": []}) == []
 
 
@@ -168,7 +220,9 @@ def test_nothing_an_item_carries_widens_a_ceiling() -> None:
         "people_commands": True,
         "readable": ["/"],
     }
-    assert refused(widening) == ["a person's command, which this host does not accept"]
+    assert refused(widening) == [
+        "people_commands: a person's command, which this host does not accept"
+    ]
     with pytest.raises(dataclasses.FrozenInstanceError):
         CEILINGS.people_commands = True  # type: ignore[misc]
     assert CEILINGS.people_commands is False

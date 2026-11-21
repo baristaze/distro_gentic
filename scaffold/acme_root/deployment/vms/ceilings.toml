@@ -6,5 +6,6 @@ agent_projects = "all"
 min_isolation = "vm"
 egress = "open"
 readable = ["/"]
+commands = "all"
 people_commands = true
 items_at_once = 8
