@@ -543,3 +543,41 @@ is the guideline's NET-37.)
 **Severity.** high
 
 **Check.** review
+
+## PLC-23 The cloud pool holds its maxima at each claim, and no claim races its sweep
+
+**Principle.** The cloud pool holds at most a maximum of VMs at once,
+and one tenant at most a maximum of its own, the pool's default where no
+operator set one. Its warm VMs stand below the maximum, and its refill
+never starts past it. A VM counts from its start or its claim until it
+is let go. These limits are records an operator writes, read at every
+claim and every refill, and every write leaves an audit event that
+names the operator and the values. A claim past either maximum starts
+no VM: its session waits on the resource, and its park names no count
+and no other tenant's use. A VM's host is handed its session's work
+only once it holds the workspace. The sweep takes a warm VM's record
+under the lock a claim takes before it destroys the VM, and lets go of
+a VM that ran and is gone.
+
+**Source.** Placement and Workspace Hosts, The Cloud Pool.
+
+**Look for.** Where a claim and a refill count the VMs held, and the
+lock they count under; where the limits are read, and whether a deploy
+setting or a cache stands in for them; what a write of a limit
+records, and in whose stream; what a park past a maximum says; the
+order of a destroy and its record's delete on each path that lets a
+warm VM go; how the sweep finds a VM that died.
+
+**Violation.** A VM started, or a warm one claimed, past a maximum,
+or counted outside the lock, so two claims pass it together; a limit
+read from a deploy setting, or held in memory past a write; a write
+of a limit with no audit event, or the pool's own limits in a tenant's
+stream; a park that names a count, the pool's size, or another
+tenant's use; a warm VM destroyed before its record is taken, so a
+claim binds a VM being destroyed; a VM gone from the backend whose
+record still holds a place; a host handed its session's work before it
+holds the workspace.
+
+**Severity.** high
+
+**Check.** review

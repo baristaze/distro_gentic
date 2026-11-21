@@ -220,7 +220,9 @@ session's **pool of one** with a one-use **VM key** the pool handed
 the VM, and claims that session's work alone. At the loop's end its
 whole disk is kept as the session's snapshot, and the next loop starts a
 VM from it. A few VMs may stand **warm**, started ahead of the
-session that claims one.
+session that claims one. The pool holds at most as many VMs as its
+operators allow, and a tenant at most its own maximum; a session past
+either waits for one.
 
 ## The agents the platform ships
 
