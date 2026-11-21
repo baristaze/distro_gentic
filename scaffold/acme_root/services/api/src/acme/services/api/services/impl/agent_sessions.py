@@ -58,8 +58,8 @@ from acme.services.api.services.impl.questions import (
 from acme.services.api.services.impl.session_reads import (
     approvals_of,
     bounds_of,
-    unlocks_of,
     tool_calls_of,
+    unlocks_of,
     usage_of,
     waits_on_approval,
 )
@@ -89,7 +89,6 @@ from acme.services.api.types.agent_sessions import (
     QuestionEndView,
     QuestionRequest,
     QuestionSessionView,
-    UnlockView,
     SnapshotView,
     StartAgentSessionRequest,
     StartQuestionRequest,
@@ -97,6 +96,7 @@ from acme.services.api.types.agent_sessions import (
     ToolCallPageView,
     ToolOutputPageView,
     ToolUseView,
+    UnlockView,
     VisibilityRequest,
     WorkspacePlace,
 )

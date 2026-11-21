@@ -218,8 +218,7 @@ def with_assistant_tools(
         taken = set(added) & set(current.tools)
         if taken:
             raise UnsafeConfiguration(
-                f"the slot names {', '.join(sorted(taken))}, which the {current.name} "
-                "already holds"
+                f"the slot names {', '.join(sorted(taken))}, which the {current.name} already holds"
             )
     if not added:
         return tuple(agent_kinds)

@@ -13,8 +13,6 @@ import pytest
 from unit.test_platform_agents import shipped_catalog
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.agents.rules import request_kind_breaches
-from acme.om.agents.types.kind import RunsIn
 from acme.om.agent_automations.types.agent_automation import (
     Action,
     ActionKind,
@@ -23,6 +21,8 @@ from acme.om.agent_automations.types.agent_automation import (
     Trigger,
     TriggerKind,
 )
+from acme.om.agents.rules import request_kind_breaches
+from acme.om.agents.types.kind import RunsIn
 from acme.om.base import OmBase as Record
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext

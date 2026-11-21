@@ -29,11 +29,11 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     PrincipalRequest,
     QuestionRequest,
-    UnlockView,
     StartAgentSessionRequest,
     StartQuestionRequest,
     ToolCallPageView,
     ToolOutputPageView,
+    UnlockView,
     VisibilityRequest,
 )
 

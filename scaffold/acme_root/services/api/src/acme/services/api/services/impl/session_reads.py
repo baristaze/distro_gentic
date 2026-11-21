@@ -31,9 +31,9 @@ from acme.services.api.types.agent_sessions import (
     BoundsView,
     FillUsageView,
     LoopLimitsView,
-    UnlockView,
     ToolCallView,
     TreeBoundsView,
+    UnlockView,
 )
 
 
