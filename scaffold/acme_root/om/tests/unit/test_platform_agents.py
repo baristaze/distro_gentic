@@ -553,10 +553,16 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
 
 
 RENDERED = {
-    (kinds.SOFTWARE_ENGINEER, 8): "04fd4cbcacddf156e91f07743eb35987cffb54f08748850f2c52cacf6dfc65fd",
+    (
+        kinds.SOFTWARE_ENGINEER,
+        8,
+    ): "04fd4cbcacddf156e91f07743eb35987cffb54f08748850f2c52cacf6dfc65fd",
     (kinds.ANALYSIS, 4): "5bb9c28b157e286d0ed62826b215ea2e6c429758b85cd190bfbc5f5b74ed59eb",
     (kinds.PLANNER, 1): "0dd1fd420a048131aa4d74acf6c9ec9f4bada79429cddecc11db15ba439ea7a0",
-    (kinds.PLATFORM_ASSISTANT, 2): "a149e48cc527948be2e0cf7e634ae4bbc2bd8177cf31a9897af9935575189119",
+    (
+        kinds.PLATFORM_ASSISTANT,
+        2,
+    ): "a149e48cc527948be2e0cf7e634ae4bbc2bd8177cf31a9897af9935575189119",
     (kinds.REVIEWER, 1): "2228559c82dca8133ff510a145a9fcc97f19c89802dc7a2b163652f450f1bde7",
     (kinds.OPS_ANALYST, 1): "6a8f7bf77d69a4718ce6c482317ec111360dc29ac3bcc469d5ec9bccd2bfbb40",
 }

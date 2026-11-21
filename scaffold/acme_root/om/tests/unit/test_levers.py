@@ -12,7 +12,7 @@ from uuid import UUID
 
 import pytest
 
-from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledgeStatus
+from acme.om.agent_knowledge.types.agent_knowledge import AgentKnowledge, AgentKnowledgeStatus
 from acme.om.agent_playbooks.impl.manager import AgentPlaybooksManagerImpl, AgentPlaybooksOptions
 from acme.om.agent_playbooks.rules import skill_md
 from acme.om.agent_playbooks.types.agent_playbook import (
@@ -367,7 +367,8 @@ async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
     agent = await platform.agents_call(platform.owner)
     # What `read_agent_knowledge` does: the entry by its slug, and a read again.
     for _ in range(2):
-        assert (await platform.agent_knowledge.read(agent, sessions[0], note.slug)).id == note.id
+        read = await platform.agent_knowledge.read(agent, sessions[0], note.slug)
+        assert isinstance(read, AgentKnowledge) and read.id == note.id
     await spin(platform, sessions[0])
     for agent_session_id in sessions[1:]:
         await answer(platform, agent_session_id)

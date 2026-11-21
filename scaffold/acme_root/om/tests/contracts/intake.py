@@ -56,10 +56,12 @@ from acme.om.language_models.credentials import CallCredentialsInterface
 from acme.om.language_models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.park_alerts.manager import ParkAlertsManagerInterface
 from acme.om.park_alerts.root import build_park_alerts
+from acme.om.platform_agents.folders import KindFolder
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformRootOptions,
     ProductActions,
+    ProductKinds,
     build_platform_managers,
     no_actions,
 )
@@ -263,12 +265,14 @@ def wired(
     credentials: Callable[
         [ModelProvidersInterface], CallCredentialsInterface
     ] = CallCredentialsPlatformImpl,
+    folders: tuple[KindFolder, ...] = (),
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `agent_project_required`
     is the agent automations' as a stack outside `local` sets it, `actions` the
-    product's own kinds of agent automation action, and `credentials` the key
-    each of the loop's calls goes out on, the platform's unless said."""
+    product's own kinds of agent automation action, `credentials` the key
+    each of the loop's calls goes out on, the platform's unless said, and
+    `folders` the product's kinds as folders, beside `KINDS`."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -326,6 +330,7 @@ def wired(
         platform_root_options=PlatformRootOptions(
             tools_layer=layers,
             agents_layer=agent_playbooks.agents,
+            product_kinds=ProductKinds(folders=folders),
         ),
         agent_root_options=AgentRootOptions(
             agent_kinds=KINDS, principal_context=principals, tool_catalog=catalog
@@ -341,7 +346,7 @@ def wired(
         managers.agent_steps,
         managers.agent_sessions,
         managers.agents,
-        AgentKindCatalog(kinds=KINDS),
+        AgentKindCatalog(kinds=(*KINDS, *ProductKinds(folders=folders).agent_kinds)),
         managers.attribution,
         managers.language_models,
         managers.windows,
