@@ -34,7 +34,7 @@ from acme.om.agent_steps.types.header import (
     Park,
     ParkReason,
 )
-from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import AgentKind, DoneRule, Starter, TreeLimits
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
@@ -75,6 +75,7 @@ KIND = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=3, count=4),
     share=Amount(cost_micros=1_000),
+    started_by=frozenset(Starter),
 )
 """The kind `make_agent_session` names, which a run takes its loop up as, and
 which a session spawns under its share."""

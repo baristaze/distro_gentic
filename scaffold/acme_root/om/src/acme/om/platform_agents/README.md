@@ -64,8 +64,9 @@ calls, and holds its workspace warm for a while after a loop.
   that changes code runs as a software engineer.
   Every kind roots the engine's tree: three levels deep, ten sub-agents
   besides its root, one budget and one deadline for all of them. Each
-  kind a sub-agent may run as names its share, what one of them may
-  spend over its life; the tree's budget still bounds them all
+  kind a sub-agent may run as names an agent among those who may start
+  it, beside a person, and its share, what one of them may spend over
+  its life; the tree's budget still bounds them all
   ([ADR 2043](../../../../../docs/adr/2043-the-platforms-kinds-start-sub-agents-each-under-a-share-the-trees-budget-bounds.md)).
 - **A kind's versions**: a session keeps the version of its kind it
   started on, so the software engineer and analysis before they searched
@@ -90,8 +91,9 @@ calls, and holds its workspace warm for a while after a loop.
   grade, and submits its review through its result tool, citing its
   reads and findings. It has no workspace and holds no tool that writes
   a file, runs code, or pushes; it comments on the pull request through
-  the forge's `comment`, which a person approves. It names a share, so a
-  lead may start it as a sub-agent on a pull request another kind opened
+  the forge's `comment`, which a person approves. It names an agent
+  among those who may start it, and a share, so a lead may start it as a
+  sub-agent on a pull request another kind opened
   ([ADR
   2058](../../../../../docs/adr/2058-a-reviewer-and-an-ops-analyst-ship-as-kinds-and-each-only-reads-what-it-judges.md)).
 - **The ops analyst** reads the tenant's operations on its person's own

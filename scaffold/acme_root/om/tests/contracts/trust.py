@@ -25,7 +25,7 @@ from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agents.impl.hooks import LoopHooksNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
-from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
+from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, Starter, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -82,6 +82,7 @@ STEADY = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=4),
     share=Amount(tokens=1_000_000),
+    started_by=frozenset(Starter),
     prompts=("You keep the records, under the authority of whoever started you.",),
     policy=ALLOWED,
     isolation=TWIN_SPEC,

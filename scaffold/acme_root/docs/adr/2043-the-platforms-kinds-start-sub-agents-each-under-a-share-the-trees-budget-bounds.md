@@ -41,7 +41,10 @@ every sub-agent's report first. Each change is a new version, and
 the version before it stays shipped while a session may run it.
 
 **A sub-agent runs as the software engineer or as analysis, each under
-its share.** A spawn names one of the two, or takes its caller's. The
+its share.** A spawn names one of the two, or takes its caller's. Each
+names an agent among those who may start it, beside a person, since a
+spawn starts only a kind that names one ([ADR
+1046](1046-a-kind-is-a-folder-its-prompts-are-markdown-pinned-by-digest-and-it-names-who-starts-it.md)). The
 software engineer's prompt names analysis for a question that only reads
 or checks, and the software engineer for work that changes code, since
 the spawn tool's input names no kind. Both shares are reference cost at
@@ -57,8 +60,8 @@ Each share is more than one worst-case call of the main role at a full
 window: about 2.82 for its fill (a million prompt tokens written to the
 cache at 2.50 per million, and 32,000 output tokens at 10) and 5.73 for
 its fallback. So a share never refuses a child's first call. The planner
-and the assistant name none: a person starts them, and a spawn refuses
-them.
+and the assistant name neither: a person alone starts them, and a spawn
+refuses them.
 
 **The tree's budget bounds them all.** A share bounds one child. The
 tree's budget, when the root has one, such as an agent automation's run

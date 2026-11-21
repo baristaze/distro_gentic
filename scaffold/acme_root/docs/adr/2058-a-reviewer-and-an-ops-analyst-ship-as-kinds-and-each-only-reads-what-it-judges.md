@@ -37,7 +37,8 @@ it, and the chat and an absent integration refuse.
 `submit_review`), `agent_knowledge`, and `tool_outputs`, and names the
 forge's `comment` alone. It asks XL of its main role, since a review is
 worth the defects it finds, and S of its summarizer. Its authority is
-steady, and it names a share, so a lead may start it as a sub-agent.
+steady. It names an agent among those who may start it, beside a
+person, and a share, so a lead may start it as a sub-agent.
 
 **The reviewer has no workspace.** A workspace checks out its session's
 own branch. Checking out another session's branch would change how

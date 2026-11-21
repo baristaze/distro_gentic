@@ -15,7 +15,7 @@ from acme.om.agent_projects.exceptions import AgentProjectFixed
 from acme.om.agent_projects.types.agent_project import AgentProject, Repository
 from acme.om.agent_root import AgentRootOptions
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
-from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import AgentKind, DoneRule, Starter, TreeLimits
 from acme.om.agents.types.request import Handoff, Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
@@ -41,6 +41,7 @@ DELIVERY = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=2),
     share=Amount(cost_micros=5_000),
+    started_by=frozenset(Starter),
 )
 ASSISTANT = AgentKind(
     name="assistant",

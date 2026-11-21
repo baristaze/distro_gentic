@@ -17,13 +17,13 @@ for where a kind lives.
 
 ## Input
 
-`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
+`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--started-by person|agent|both] [--share <micros>] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
 and what the kind's agent does and may never do, in the arguments or
 in the conversation.
 
-Example: `triage --done answer --tools read_file,list_files,read_agent_session --authority steady --workspace container --classes read`,
-for "reads a failed run's logs in its workspace and answers which
-session should take it".
+Example: `triage --done answer --tools list_agent_sessions,read_agent_session --authority steady --workspace none --classes read`,
+for "reads a failed session and the sessions beside it, changes
+nothing, and answers which session should take it".
 
 - `<kind>` is the kind's name, snake case, as `AgentKind.name` holds it.
   `<KIND>` is its name constant in upper snake case, and `<KIND>_KIND`
@@ -34,7 +34,29 @@ session should take it".
 - `--authority`: `delegated` runs each call under the asking person's
   live permissions; `steady` under one principal fixed when the session
   is made. Unattended, an agent a person talks to is `delegated`, and
-  one that works on its own is `steady`.
+  one that works on its own is `steady`. A kind a spawn starts is
+  `steady`, even when a person starts it too, as analysis and the
+  reviewer are.
+- `--started-by`: who may start a session of the kind, as
+  `AgentKind.started_by` holds it. `person`, the default, leaves it
+  unset: a person starts the kind, or a hand-off reaches it, and a spawn
+  of it is refused. `agent` sets `frozenset({Starter.AGENT})`, for a
+  kind only a spawn starts: a person's start of it is refused. `both`
+  sets `SPAWNED` in `kinds.py`, for a kind a person starts and a lead or
+  another kind spawns. A kind a spawn starts, `agent` or `both`, names
+  its share beside it, as the reviewer names `REVIEWER_SHARE`, and its
+  parent holds what the spawn asks of it (step 4). When it is not
+  given, a kind given `--share`, or one the arguments or the
+  conversation say a spawn starts, is `both`, and any other is `person`.
+- `--share`: what one session of the kind may spend over its life as a
+  sub-agent, in reference cost, `<KIND>_SHARE = Amount(cost_micros=<micros>)`
+  beside the kind. A kind a person alone starts names none. When it is
+  not given for a kind a spawn starts, it is the kind's loops at its
+  step guard over a cached window, as `ANALYSIS_SHARE` is:
+  `<KIND>_LOOPS = 2` (its first loop, and one more a follow-up asks
+  for), times its step guard (`Limits().step_guard`, the engine's,
+  unless the kind sets its own), times `CACHED_CALL_MICROS`, and times
+  `XL_CALL_FACTOR` when it asks XL of `MAIN`, as `REVIEWER_SHARE` does.
 - `--workspace`: `container` for a kind that reads or changes files or
   runs commands (the profile's `isolation` is `WORKSPACE`), `none` for
   one that has no workspace (`NO_WORKSPACE`). A delegated kind a person
@@ -61,9 +83,11 @@ The shape of a kind is the four profiles in
 | File | Change |
 |------|--------|
 | `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
+| `om/src/<name>/om/platform_agents/kinds.py` (a kind a spawn starts, whose parent lacks what step 4 says) | the parent's next version, holding the kind's tools and any prompt layer step 4 asks for, beside its last in `SHIPPED`; the tests below take that version as they take the kind's |
 | `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
-| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
+| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, each of its versions in `NAMED_ONE_BY_ONE` with the tools it names one by one, since `test_each_shipped_kind_built_from_toolsets_renders_the_tool_block_it_named_one_by_one` holds that set equal to `SHIPPED`, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once with `-vv`, since a shorter report cuts the digest short, and pin the digest its failure prints |
+| `om/tests/unit/test_platform_agents.py` (a kind a spawn starts) | its name in `SPAWNED_KINDS`, and its profile and its share in the list of kinds that name one in `test_every_shipped_kind_a_spawn_can_start_names_a_share`, which holds every other latest version to name none |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
 | `om/tests/contracts/matrix.py`, `om/tests/unit/test_matrix.py`, and `services/api/tests/test_matrix_api.py` (a model size no shipped kind asked before) | `SIZED` holds a row for the size, since a version is published only with a row for each size a shipped kind asks; in `test_matrix.py`, the roles zipped strictly with `SIZED` take the role the size is asked of, and the set of the sizes the shipped kinds ask takes the pair; in `test_matrix_api.py`, the list of the sizes a published version's rows match takes the size |
@@ -81,11 +105,18 @@ The shape of a kind is the four profiles in
    changes. A product's own kind, one no other product built on the
    platform would ship, is the engine's: `agentic-scaffold-agent-kind`,
    with its wiring changed in this base. From that skill a product
-   still writes the kind's versions, its tools, and its bounds (its
-   steps 2 to 4), `om/tests/unit/test_agent_kinds.py` with the catalog
-   cases of its step 5, read over `PRODUCT_KINDS.agents`, and the kind in
+   still writes the kind's folder, `om/src/<name>/om/agents/kinds/<kind>/`
+   (its `__init__.py`, its `kind.py` with each version and `VERSIONS`,
+   and each version's prompt in `prompts/` with its entry in
+   `prompts/lock.json`), its tools, and its bounds (its steps 2 to 4),
+   `om/tests/unit/test_agent_kinds.py` with the catalog cases of its
+   step 5, read over `PRODUCT_KINDS.agents`, and the check of its step 5
+   that `prompt_breaches` finds nothing in each kind folder, which holds
+   the folder's prompt lock, and the kind in
    `om/src/<name>/om/agents/README.md`. It writes none of that skill's
-   wiring: no `om/src/<name>/om/agents/kinds.py` and no `AGENT_KINDS`,
+   wiring: no `AGENT_KINDS` (`om/src/<name>/om/agents/kinds/__init__.py`
+   holds a docstring alone, since `PRODUCT_KINDS.agents` joins each
+   folder's `VERSIONS`),
    no `agent_kinds=` in a container's call to `build_platform_managers`,
    which stands here for that skill's `build_managers`, and neither the
    API's nor the maintenance worker's container test that reads that
@@ -122,7 +153,8 @@ The shape of a kind is the four profiles in
    (`git show HEAD:om/src/<name>/om/platform_agents/kinds.py`) is the
    next version, a profile of its own beside the last, and both stay in
    `SHIPPED` while a session may run the last. A kind only this work
-   wrote changes in place.
+   wrote changes in place, and so does who may start a kind, which only
+   a start of its latest version reads.
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
    A tool the platform ships for it is a `NativeToolImpl` in the module
@@ -146,9 +178,24 @@ The shape of a kind is the four profiles in
    the whole catalog. A new kind a person talks to that acts on nothing
    takes a reach of its own, shape `kinds.OPS_ANALYST`. Its prompt says
    what it does and what it answers, never how policy treats it.
+   A kind a spawn starts has a parent, the kind the arguments or the
+   conversation say spawns it, and the parent holds what the spawn asks
+   of it: the kind's tools among its own, since a child's tools are cut
+   to its parent's (a lead, in `platform_agents/README.md`); the
+   `sub_agents` toolset, the `SUB_AGENTS` layer, and `SPAWN` in its
+   policy, as `ANALYSIS_V3` took them, when it lacks them; and, when its
+   prompt must say when to start the kind, a prompt layer that says it.
+   A parent that lacks any of them gets its next version holding them,
+   as step 2 says. Ask for that version; unattended, write it and name
+   it in the output. When no shipped kind is named its parent, none
+   changes: a product's lead starts it, as one starts the reviewer.
 5. The tests hold, over `SHIPPED`, with the helpers of
    `om/tests/contracts/platform_agents.py` (`platform_over`,
-   `Platform.start`, `calls`):
+   `Platform.start`, `calls`). An `agent` kind, whose start by a person
+   is refused, is started in each by a lead's spawn, shape
+   `test_a_lead_spawns_the_reviewer_under_its_share`, and
+   `test_a_spawn_starts_each_shipped_kind_a_lead_starts_and_refuses_the_rest`
+   reads `{Starter.AGENT}` as its `started_by`:
    - the kind is a profile that sets its powers: its tools, its done
      rule, its authority, its isolation, and its classes, in the shape of
      `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, whose
