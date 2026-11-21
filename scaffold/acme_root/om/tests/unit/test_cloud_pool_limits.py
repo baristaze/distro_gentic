@@ -1,17 +1,20 @@
 """The cloud pool's limits. A claim past the most VMs the pool holds, or
 the most its tenant holds, starts no VM: the loop waits on the resource
 and asks again, told no count, while another tenant's claim starts one.
-An operator's write of a limit holds at the next claim, with no restart,
+At the pool's maximum, a claim that cannot take a warm VM takes the place
+of an idle one, which goes first. An operator's write of a limit holds at the next claim, with no restart,
 and leaves an audit event that names the operator and the values, the
 pool's own in the platform's stream alone. The refill starts warm VMs up
 to the warm count, and never past the most."""
 
 from pathlib import Path
+from uuid import UUID
 
 import pytest
-from unit.test_cloud_pool import Pool, stage
+from unit.test_cloud_pool import KEPT, Pool, kept_record, stage
 
 from acme.infra.agent_workspaces import IsolationRefused
+from acme.infra.vms import VmState
 from acme.om.base import EMPTY_UUID, new_id
 from acme.om.cloud_pool.impl.manager import FULL_CAUSES
 from acme.om.cloud_pool.impl.operator import (
@@ -21,6 +24,7 @@ from acme.om.cloud_pool.impl.operator import (
     CloudPoolOperatorManagerImpl,
 )
 from acme.om.cloud_pool.types.limits import Full
+from acme.om.cloud_pool.types.vm import PoolVm
 from acme.om.context import (
     AppContext,
     AppType,
@@ -105,6 +109,55 @@ async def test_a_tenant_at_its_maximum_waits_while_another_tenants_claim_starts_
     assert sorted(str(row.tenant_id) for row in await pool.rows()) == sorted(
         [str(mine.org_id), str(theirs.org_id)]
     )
+
+
+async def test_a_claim_that_cannot_take_a_warm_vm_takes_an_idle_ones_place_at_the_maximum(
+    tmp_path: Path,
+) -> None:
+    async def warm_one(pool: Pool) -> PoolVm:
+        await pool.manager.sweep(stage())
+        await pool.manager.close()
+        (warm,) = [row for row in await pool.rows() if row.warm]
+        assert warm.started_at is not None and len(await pool.rows()) == 3, "at the maximum"
+        return warm
+
+    async def took_its_place(pool: Pool, warm: PoolVm, agent_session_id: UUID) -> None:
+        rows = await pool.rows()
+        assert warm.id not in {row.id for row in rows}, "the warm VM's row went"
+        assert await pool.vms.state(warm.name) is VmState.ABSENT, "the warm VM was let go"
+        (mine,) = [row for row in rows if row.agent_session_id == agent_session_id]
+        assert await pool.vms.state(mine.name) is VmState.RUNNING, "the claim's VM started"
+        assert len(rows) == 3 and not any(row.warm for row in rows), "never past the maximum"
+
+    # The VMs close egress, so a session that asks open egress takes no
+    # warm VM.
+    closed = Pool(tmp_path / "closed", closes_egress=True, warm=1, most=3, tenant_most=10)
+    await closed.image()
+    ctx = tenant()
+    await closed.prepare(ctx, new_id())
+    await closed.prepare(ctx, new_id())
+    warm = await warm_one(closed)
+    before = launched(closed)
+    differs = new_id()
+    await closed.prepare(ctx, differs)
+    assert launched(closed) == before + 1
+    await took_its_place(closed, warm, differs)
+    await closed.manager.close()
+
+    # A restore starts from its snapshot, never from a warm VM.
+    opened = Pool(tmp_path / "opened", warm=1, most=3, tenant_most=10)
+    await opened.image()
+    kept = new_id()
+    await opened.prepare(ctx, kept, KEPT)
+    taken = await opened.manager.snapshot(ctx, kept)
+    await opened.manager.release(ctx, kept)
+    await opened.prepare(ctx, new_id())
+    await opened.prepare(ctx, new_id())
+    warm = await warm_one(opened)
+    record = kept_record(kept, taken.reference, taken.digest)
+    await opened.prepare(ctx, kept, KEPT, restore=record)
+    await took_its_place(opened, warm, kept)
+    await opened.manager.close()
 
 
 async def test_an_operators_write_holds_at_the_next_claim_and_its_event_names_the_writer(

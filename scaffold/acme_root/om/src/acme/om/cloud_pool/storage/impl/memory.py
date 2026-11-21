@@ -7,7 +7,7 @@ from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 
 
@@ -26,7 +26,9 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         async with self._lock:
             self._add(vm)
 
-    async def claim(self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool) -> PoolVm | Full:
+    async def claim(
+        self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool
+    ) -> PoolClaim | Full:
         async with self._lock:
             if sum(1 for held in self._vms.values() if held.tenant_id == vm.tenant_id) >= (
                 tenant_most
@@ -49,11 +51,25 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                             }
                         )
                         self._vms[held.id] = claimed
-                        return claimed
-            if len(self._vms) >= most:
+                        return PoolClaim(vm=claimed)
+            if len(self._vms) < most:
+                self._add(vm)
+                return PoolClaim(vm=vm)
+            # Its own row takes the place of an idle warm VM, whose row goes
+            # under this lock, so no claim binds it.
+            displaced = next(
+                (
+                    held
+                    for held in self._oldest_first()
+                    if held.warm and held.started_at is not None
+                ),
+                None,
+            )
+            if displaced is None:
                 return Full.POOL
             self._add(vm)
-            return vm
+            del self._vms[displaced.id]
+            return PoolClaim(vm=vm, displaced=displaced)
 
     async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
         async with self._lock:

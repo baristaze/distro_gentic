@@ -15,7 +15,7 @@ from acme.om.cloud_pool.storage.tables.pool_tenant_limits import PoolTenantLimit
 from acme.om.cloud_pool.storage.tables.pool_vms import PoolVms
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.storage.impl.pg_base import PgStorageBase, violated_constraint
 from acme.om.storage.utils.translation import to_model, to_row, to_values
@@ -43,20 +43,19 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 await session.rollback()
                 raise _taken(error, vm.id) from error
 
-    async def claim(self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool) -> PoolVm | Full:
+    async def claim(
+        self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool
+    ) -> PoolClaim | Full:
         everyone = select(func.count()).select_from(PoolVms)
         tenants = everyone.where(PoolVms.tenant_id == vm.tenant_id)
-        standing = (
+        idle = (
             select(PoolVms)
-            .where(
-                PoolVms.agent_session_id.is_(None),
-                PoolVms.started_at.is_not(None),
-                PoolVms.egress_open == vm.egress_open,
-            )
+            .where(PoolVms.agent_session_id.is_(None), PoolVms.started_at.is_not(None))
             .order_by(PoolVms.created_at, PoolVms.id)
             .limit(1)
             .with_for_update()
         )
+        standing = idle.where(PoolVms.egress_open == vm.egress_open)
         async with self._session_for(PoolVms, org_id=EMPTY_UUID) as session:
             await session.execute(_LOCKED, {"key": POOL_LOCK})
             if (await session.execute(tenants)).scalar_one() >= tenant_most:
@@ -71,17 +70,24 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 row.bound_at = vm.bound_at
                 claimed = to_model(row, PoolVm)
                 await session.commit()
-                return claimed
+                return PoolClaim(vm=claimed)
+            displaced: PoolVm | None = None
             if (await session.execute(everyone)).scalar_one() >= most:
-                await session.rollback()
-                return Full.POOL
+                # Its own row takes the place of an idle warm VM, whose row
+                # goes under this lock, so no claim binds it.
+                place = (await session.execute(idle)).scalar_one_or_none()
+                if place is None:
+                    await session.rollback()
+                    return Full.POOL
+                displaced = to_model(place, PoolVm)
+                await session.execute(delete(PoolVms).where(PoolVms.id == place.id))
             session.add(to_row(vm, PoolVms))
             try:
                 await session.commit()
             except IntegrityError as error:
                 await session.rollback()
                 raise _taken(error, vm.id) from error
-            return vm
+            return PoolClaim(vm=vm, displaced=displaced)
 
     async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
         everyone = select(func.count()).select_from(PoolVms)

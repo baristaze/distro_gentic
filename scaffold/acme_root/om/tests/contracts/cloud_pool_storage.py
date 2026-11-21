@@ -2,7 +2,8 @@
 key until the key is spent, by its name, by the session it serves, and by
 its tenant, and every VM page by page; a claim holds its tenant's maximum
 and the pool's, and binds a warm VM once, and only once it started, at
-the egress asked, from the claim; a warm VM's row is taken only while no
+the egress asked, from the claim; at the pool's maximum, a claim that
+takes no warm VM takes an idle one's place; a warm VM's row is taken only while no
 session claimed it; a VM started again keeps when it first ran; the warm
 VMs a sweep writes never pass the count or the maximum; an erasure is
 asked once per session until it is done; and the pool's limits and a
@@ -21,7 +22,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 
 INTERFACE = CloudPoolStorageInterface
@@ -121,8 +122,10 @@ class CloudPoolStorageContract:
         asked = asked.model_copy(
             update={"bound_by": person, "bound_at": utcnow() + timedelta(minutes=30)}
         )
-        claimed = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
-        assert isinstance(claimed, PoolVm) and claimed.id == closed.id
+        got = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(got, PoolClaim) and got.displaced is None
+        claimed = got.vm
+        assert claimed.id == closed.id
         assert (claimed.tenant_id, claimed.agent_session_id, claimed.pool_id, claimed.bound_by) == (
             tenant,
             session,
@@ -135,7 +138,9 @@ class CloudPoolStorageContract:
         assert await storage.read_vm(asked.id) is None, "a warm one bound, none written"
         again = asked.model_copy(update={"id": new_id(), "agent_session_id": new_id()})
         written = await storage.claim(again, most=FAR, tenant_most=FAR, warm=True)
-        assert written == again, "the warm one starting is not claimed, so its own is written"
+        assert written == PoolClaim(vm=again), (
+            "the warm one starting is not claimed, so its own is written"
+        )
         assert await storage.read_of_session(tenant, session) == claimed
         assert await storage.read_of_session(new_id(), session) is None
         assert len(await storage.read_of_tenant(tenant, 10)) == 2
@@ -143,23 +148,53 @@ class CloudPoolStorageContract:
     async def test_a_claim_holds_its_tenants_maximum_and_the_pools(
         self, storage: CloudPoolStorageInterface
     ) -> None:
-        tenant, other = new_id(), new_id()
+        tenant = new_id()
         await storage.create_vm(make_vm(tenant_id=tenant, agent_session_id=new_id()))
-        await storage.create_vm(make_vm())  # warm, of no tenant
+        warm = make_vm()  # of no tenant
+        await storage.create_vm(warm)
         asked = make_vm(tenant_id=tenant, agent_session_id=new_id(), started=False)
-        assert await storage.claim(asked, most=FAR, tenant_most=1, warm=True) is Full.TENANT
+        for warm_asked in (True, False):
+            assert await storage.claim(asked, most=1, tenant_most=1, warm=warm_asked) is Full.TENANT
         assert await storage.read_vm(asked.id) is None
-        assert len(await storage.read_vms(10)) == 2, "nor a warm one bound"
-        theirs = make_vm(tenant_id=other, agent_session_id=new_id(), started=False)
-        assert await storage.claim(theirs, most=2, tenant_most=1, warm=False) is Full.POOL
-        assert await storage.claim(theirs, most=3, tenant_most=1, warm=False) == theirs
-        assert await storage.read_vm(theirs.id) == theirs
+        assert await storage.read_vm(warm.id) == warm, "nor a warm one bound, nor its place taken"
         late = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
-        bound = await storage.claim(late, most=3, tenant_most=1, warm=True)
-        assert isinstance(bound, PoolVm) and bound.agent_session_id == late.agent_session_id, (
+        bound = await storage.claim(late, most=2, tenant_most=1, warm=True)
+        assert isinstance(bound, PoolClaim) and bound.vm.id == warm.id, (
             "a warm one is bound at the maximum: it is counted already"
         )
+        theirs = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        assert await storage.claim(theirs, most=2, tenant_most=1, warm=False) is Full.POOL
+        assert await storage.claim(theirs, most=3, tenant_most=1, warm=False) == PoolClaim(
+            vm=theirs
+        )
+        assert await storage.read_vm(theirs.id) == theirs
         assert len(await storage.read_vms(10)) == 3
+
+    async def test_a_claim_at_the_maximum_that_takes_no_warm_vm_takes_an_idle_ones_place(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        starting = make_vm(started=False)
+        first, second = make_vm(egress_open=False), make_vm(egress_open=False)
+        for vm in (starting, first, second):
+            await storage.create_vm(vm)
+        opened = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        got = await storage.claim(opened, most=3, tenant_most=FAR, warm=True)
+        assert isinstance(got, PoolClaim) and got.vm == opened, "no warm VM of its egress stands"
+        assert got.displaced in (first, second)
+        assert await storage.read_vm(got.displaced.id) is None, "the idle warm VM's row went"
+        assert await storage.read_vm(opened.id) == opened
+        left = second if got.displaced == first else first
+        restore = make_vm(
+            egress_open=False, tenant_id=new_id(), agent_session_id=new_id(), started=False
+        )
+        assert await storage.claim(restore, most=3, tenant_most=FAR, warm=False) == PoolClaim(
+            vm=restore, displaced=left
+        ), "a claim that may take no warm VM takes an idle one's place"
+        late = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        assert await storage.claim(late, most=3, tenant_most=FAR, warm=False) is Full.POOL, (
+            "a warm VM still starting is not idle, and keeps its place"
+        )
+        assert {vm.id for vm in await storage.read_vms(10)} == {starting.id, opened.id, restore.id}
 
     async def test_the_warm_vms_written_never_pass_the_count_or_the_maximum(
         self, storage: CloudPoolStorageInterface
@@ -183,8 +218,9 @@ class CloudPoolStorageContract:
         await storage.create_vm(warm)
         await storage.create_vm(claimed)
         asked = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
-        bound = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
-        assert isinstance(bound, PoolVm)
+        got = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(got, PoolClaim)
+        bound = got.vm
         taken = warm if bound.id == claimed.id else claimed
         assert await storage.take_warm(bound.id) is False, "a session holds it"
         assert await storage.read_vm(bound.id) == bound

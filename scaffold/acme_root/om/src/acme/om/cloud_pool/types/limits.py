@@ -27,8 +27,9 @@ class PoolLimits(Identifiable, Trackable):
     version each time; with none, the pool's options hold. `warm` VMs stand
     started ahead of demand, `most` VMs the pool holds at once, warm ones
     among them, and `tenant_most` VMs one tenant holds at once where no
-    operator set it a maximum of its own. Warm VMs stand below `most`, so a
-    claim that takes no warm VM still finds room."""
+    operator set it a maximum of its own. Warm VMs stand below `most`, and
+    at the maximum a claim that takes no warm VM takes the place of an idle
+    one, so a warm VM that stands never keeps a session waiting."""
 
     warm: int = Field(ge=0, le=MOST_VMS)
     most: int = Field(ge=0, le=MOST_VMS)

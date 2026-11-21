@@ -15,7 +15,7 @@ from uuid import UUID
 
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
-from acme.om.cloud_pool.types.vm import PoolVm
+from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.context import tenantless
 
 
@@ -29,14 +29,19 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     @tenantless
-    async def claim(self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool) -> PoolVm | Full:
+    async def claim(
+        self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool
+    ) -> PoolClaim | Full:
         """Global: the VM that serves `vm`'s session, counted and written
         one claim at a time across processes. `Full.TENANT` while its
         tenant holds `tenant_most` VMs; else, with `warm`, a started warm
         VM of its egress, bound to its session, pool, and person from its
-        `bound_at`; else `Full.POOL` while the pool holds `most`; else
-        `vm`'s own row, written before its VM starts. `UniqueKeyTaken`
-        for a name or a key another holds."""
+        `bound_at`; else `vm`'s own row, written before its VM starts.
+        While the pool holds `most`, that row takes the place of the
+        oldest started warm VM no session claimed, whose row goes and
+        which the claim names as displaced, so its VM goes after;
+        `Full.POOL` where none stands. `UniqueKeyTaken` for a name or a
+        key another holds."""
         ...
 
     @abstractmethod
