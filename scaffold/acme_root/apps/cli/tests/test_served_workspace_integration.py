@@ -389,11 +389,15 @@ async def test_with_its_client_gone_a_local_session_waits_and_never_reaches_the_
     async def runs_any(spec: IsolationSpec) -> bool:
         return True
 
+    async def holds_any(spec: IsolationSpec) -> None:
+        return None
+
     async def prepare(ctx: object, agent_session_id: UUID, *rest: object) -> None:
         asked.append(agent_session_id)
         raise IsolationRefused("no VM here", clears=True)
 
     monkeypatch.setattr(runner.managers.cloud_pool, "runs", runs_any)
+    monkeypatch.setattr(runner.managers.cloud_pool, "check", holds_any)
     monkeypatch.setattr(runner.managers.cloud_pool, "prepare", prepare)
     agent_session_id, serving_task = await started_local(api, person)
     await said(runner, api, agent_session_id, "Where do you run?")
