@@ -2,8 +2,9 @@
 key until the key is spent, by its name, by the session it serves, and by
 its tenant, and every VM page by page; a claim holds its tenant's maximum
 and the pool's, and binds a warm VM once, and only once it started, at
-the egress asked, from the claim; a warm VM's row is taken only while no
-session claimed it; a VM started again keeps when it first ran; the warm
+the egress asked, from the claim; a VM a claim writes reads back cold,
+and one it binds warm or starts again does not; a warm VM's row is taken
+only while no session claimed it; a VM started again keeps when it first ran; the warm
 VMs a sweep writes never pass the count or the maximum; an erasure is
 asked once per session until it is done; and the pool's limits and a
 tenant's own maximum are written over the version read. Its VMs are the
@@ -96,6 +97,29 @@ class CloudPoolStorageContract:
             await storage.create_vm(make_vm().model_copy(update={"name": vm.name}))
         with pytest.raises(UniqueKeyTaken):
             await storage.create_vm(make_vm().model_copy(update={"key_digest": vm.key_digest}))
+
+    async def test_a_vm_a_claim_writes_reads_back_cold_and_one_bound_warm_or_restarted_not(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        warm = make_vm()
+        await storage.create_vm(warm)
+        now = utcnow()
+        asked = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        asked = asked.model_copy(update={"created_at": now, "bound_at": now})
+        assert await storage.claim(asked, most=FAR, tenant_most=FAR, warm=False) == asked
+        written = await storage.read_vm(asked.id)
+        assert written is not None and written.cold, "bound as its row was written"
+
+        claim = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        claim = claim.model_copy(update={"bound_at": utcnow()})
+        bound = await storage.claim(claim, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(bound, PoolVm) and bound.id == warm.id
+        read = await storage.read_vm(warm.id)
+        assert read is not None and not read.cold, "a warm VM is bound at its claim"
+
+        await storage.rekey(asked.id, new_id().hex, None, utcnow())
+        again = await storage.read_vm(asked.id)
+        assert again is not None and not again.cold, "a start again binds it anew"
 
     async def test_a_key_is_spent_once(self, storage: CloudPoolStorageInterface) -> None:
         vm = make_vm()
