@@ -95,7 +95,8 @@ beside the others and never inside one. The shape is
 | `kinds/<kind>/manuals/<name>.md`, `kinds/<kind>/wiki/<slug>.md` (step 6) | each manual and each entry the kind ships for its sessions |
 
 and, when the kind calls a tool the tree does not have, the tool's test
-module, as step 3 says.
+module, as step 3 says; and, for a kind whose loop runs in the request,
+`om/tests/unit/test_<kind>.py`, its own cases, as step 4 says.
 
 ## Changed
 
@@ -211,8 +212,9 @@ module, as step 3 says.
    `COMMENT`. A kind that calls tools also takes `TOOL_OUTPUTS_TOOLSET`,
    whether or not `--tools` names `read_tool_output`: a result too long
    for its window, or one elided once read, is kept outside it under a
-   notice that names that tool. The latest software engineer, analysis,
-   reviewer, and ops analyst hold it.
+   notice that names that tool, in a request's loop as in a worker's.
+   The latest software engineer, analysis, reviewer, ops analyst, and
+   support assistant hold it.
    A tool the platform ships for it is a `NativeToolImpl` in the module
    of its toolset under `tools/`, or of the toolset it is closest to
    when it is in none, shape `ReadSessionImpl` (`tools/records.py`) for
@@ -253,9 +255,14 @@ module, as step 3 says.
    run_time=REQUEST_TIME)`: it holds no workspace, no hand-off, no
    sub-agent, no job, and no tool its policy holds for a person, and
    only a person starts it. The root refuses one that breaks any of
-   these, naming each breach. Shape `kinds/support_assistant/kind.py`;
-   its tests ask it with `Platform.ask` where another kind's start it
-   with `Platform.start`.
+   these, naming each breach. Shape `kinds/support_assistant/kind.py`.
+   Its tests ask it with `Platform.ask` where another kind's start it
+   with `Platform.start`. The cases of step 5 go in
+   `test_platform_agents.py`, as every kind's do. Its own cases go in a
+   module of their own, `om/tests/unit/test_<kind>.py`, shape
+   `test_support_assistant.py`: the engine's check for a request kind,
+   `request_kind_breaches(<KIND>_KIND, specs, DEFAULT_CEILINGS) == ()`,
+   shape `test_the_support_assistant_passes_the_engines_check_for_a_request_kind`.
    A kind a spawn starts has a parent, the kind the arguments or the
    conversation say spawns it, and the parent holds what the spawn asks
    of it: the kind's tools among its own, since a child's tools are cut
@@ -286,8 +293,14 @@ module, as step 3 says.
      `test_analysis_the_planner_and_the_assistant_end_by_their_answer`
      or
      `test_the_software_engineers_success_needs_a_passing_validation_at_its_head`;
-   - a call past its policy layer is refused, shape
-     `test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused`;
+   - a call past what it holds is refused. A call to a tool it does not
+     hold, a workspace's, a shell's, or a spawn, is answered that there
+     is no tool by that name, shape
+     `test_a_call_from_the_assistant_to_a_workspace_or_a_shell_is_refused`.
+     A call its policy layer holds for a person waits for one, shape
+     the comment in `test_a_reviewer_cannot_change_what_it_reviews`. A
+     kind whose policy layer allows every tool it has, one that only
+     reads, takes the first case alone;
    - with `--roles`, a matrix version that serves not every role the
      kind calls is refused, shape
      `test_a_version_that_serves_not_every_role_its_kinds_call_is_refused`
