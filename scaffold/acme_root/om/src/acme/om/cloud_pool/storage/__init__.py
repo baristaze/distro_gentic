@@ -3,8 +3,9 @@ in the platform's own table, since a warm VM names no tenant. A row is
 written before its VM starts and deleted once its VM is gone, so
 a VM under the pool's names with no row is one nobody holds; a warm
 VM's row goes first, so no claim binds a VM being destroyed. Beside
-them, one row per erasure the pool owes, until the sweep has done it, the
-pool's own limits, and a tenant's own maximum. Every write that adds a VM
+them, one row per session whose workspace files the pool archived, with
+when it last did, until the archives go, the pool's own limits, and a
+tenant's own maximum. Every write that adds a VM
 to a count or binds one counts and writes one at a time across
 processes, so no maximum is passed."""
 
@@ -13,7 +14,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.context import tenantless
@@ -35,8 +36,8 @@ class CloudPoolStorageInterface(ABC):
         """Global: the VM that serves `vm`'s session, counted and written
         one claim at a time across processes. `Full.TENANT` while its
         tenant holds `tenant_most` VMs; else, with `warm`, a started warm
-        VM of its egress, bound to its session, pool, and person from its
-        `bound_at`; else `vm`'s own row, written before its VM starts.
+        VM of its egress, bound to its session, pool, person, and the
+        snapshot it takes back, from its `bound_at`; else `vm`'s own row, written before its VM starts.
         While the pool holds `most`, that row takes the place of the
         oldest started warm VM no session claimed, whose row goes and
         which the claim names as displaced, so its VM goes after;
@@ -133,9 +134,7 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     @tenantless
-    async def rekey(
-        self, vm_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
-    ) -> PoolVm | None:
+    async def rekey(self, vm_id: UUID, key_digest: str, at: datetime) -> PoolVm | None:
         """Global: a VM started again under a new key from `at`:
         its host is to enroll anew, and it is not sealed yet. It keeps when
         it first ran, since its disk is the one it ran on. None once it is
@@ -150,23 +149,30 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     @tenantless
-    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
-        """Global: a session's disks are to go. Answers the erasure
-        that stands for the session: this one, or one asked before it, which
-        stands as it is."""
+    async def keep_archive(self, archive: PoolArchive) -> None:
+        """Global: the session's archives were kept, or its session was
+        active, at `archive.kept_at`: its row made, or moved to then."""
         ...
 
     @abstractmethod
     @tenantless
-    async def read_erasures(self, limit: int) -> list[PoolErasure]:
-        """Global: the erasures asked and not done yet, oldest
-        first, at most `limit`."""
+    async def read_archives(self, before: datetime, limit: int) -> list[PoolArchive]:
+        """Global: the rows kept before `before`, oldest first, at most
+        `limit`."""
         ...
 
     @abstractmethod
     @tenantless
-    async def delete_erasure(self, erasure_id: UUID) -> None:
-        """Global: an erasure done."""
+    async def delete_archive(self, tenant_id: UUID, agent_session_id: UUID) -> None:
+        """Global: the session's row, once its archives went; none is no
+        error."""
+        ...
+
+    @abstractmethod
+    @tenantless
+    async def delete_tenant_archives(self, tenant_id: UUID) -> int:
+        """Global: every row of the tenant's sessions; answers how many
+        went."""
         ...
 
     @abstractmethod

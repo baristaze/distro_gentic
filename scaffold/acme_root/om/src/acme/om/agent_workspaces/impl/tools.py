@@ -32,13 +32,19 @@ of its pool holds (`PlacedWorkspacesInterface`), which this process neither
 makes nor lets go, and its checkout runs there through the relay. So is a
 session of the cloud whose workspace is a VM, when the cloud pool runs
 VMs here (`CloudPoolManagerInterface`): its workspace is the one the
-host of its own VM holds, through the relay as well. Its snapshot is
-the VM's whole disk, which the pool keeps once what the workspace
-holds is pushed, and the VM goes when the run's release comes."""
+host of its own VM holds, through the relay as well. Its snapshot keeps
+the workspace's directory alone, as a VM workspace's does: once what the
+workspace holds is pushed, the directory is packed in the VM, read out
+through the relay in parts, each sealed under the session's key and kept
+in the platform's bucket, and the VM goes when the run's release comes,
+no disk of it kept. A restore starts a VM from the pool's image and
+brings the directory back into it, so what its commands installed
+outside it comes from the image again (`pool_directory`, ADR 2070)."""
 
 import asyncio
+import contextlib
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -57,10 +63,11 @@ from acme.infra.agent_workspaces import (
     SnapshotRefused,
 )
 from acme.infra.exceptions import InfraException
-from acme.infra.transports import OutputSink
+from acme.infra.transports import OutputSink, TransportInterface
 from acme.om.agent_steps import AgentStepsManagerInterface
 from acme.om.agent_steps.types.agent_step import AgentStep
-from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot
+from acme.om.agent_steps.types.header import HASH_SCHEME, AgentWorkspaceSnapshot, SnapshotHolds
+from acme.om.agent_workspaces.impl import pool_directory
 from acme.om.agent_workspaces.manager import AgentWorkspacesManagerInterface
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import host_refusal
@@ -73,7 +80,8 @@ from acme.om.exceptions import NotFound
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.rules import named_snapshot, snapshotted_step
+from acme.om.tools.rules import injected_secrets, named_snapshot, snapshotted_step
+from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import TakenSnapshot, TakeSnapshot, ToolInterface
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import ToolPolicy, ToolPolicyLayer
@@ -86,6 +94,9 @@ class PinnedToolsOptions(OmBase):
     # How long a run's end waits for the host that holds its workspace to
     # keep a snapshot of it.
     snapshot_wait: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
+    # How long a VM of the cloud pool may take to pack its workspace's
+    # directory, or to unpack one into it.
+    pack_within: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
 
 
 EraseOnHost = Callable[[TenantContext, UUID, UUID], Awaitable[None]]
@@ -166,6 +177,8 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         erase_on_host: EraseOnHost | None = None,
         erase_purged: ErasePurged | None = None,
         cloud: CloudPoolManagerInterface | None = None,
+        transport: TransportInterface | None = None,
+        record_seal: RecordSealInterface | None = None,
         options: PinnedToolsOptions | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
@@ -176,7 +189,10 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._erase_on_host = erase_on_host
         self._erase_purged = erase_purged
         self._cloud = cloud
+        self._transport = transport
+        self._record_seal = record_seal
         self._snapshot_wait = (options or PinnedToolsOptions()).snapshot_wait
+        self._pack_within = (options or PinnedToolsOptions()).pack_within
         self._sleep = sleep
         self._clock = clock
         self._agent_workspaces = agent_workspaces
@@ -189,7 +205,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._directories: dict[UUID, int] = {}
         self._hosted: set[UUID] = set()  # the workspaces a host of the tenant's holds
         self._pooled: set[UUID] = set()  # the workspaces a VM of the cloud pool holds
-        self._kept_whole: set[UUID] = set()  # pooled ones whose VM a snapshot kept, stopped
+        self._archived: set[UUID] = set()  # pooled ones whose directory the run's end kept
         self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
@@ -308,10 +324,10 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         # The run that releases it holds it until here: a later run's
         # prepare cannot land before its first await.
         epoch = self._held.epoch_of(workspace.id)
-        # A VM the snapshot kept whole had its work pushed before it
-        # stopped, and nothing reaches it now.
-        kept_whole = workspace.id in self._kept_whole
-        if workspace.spec.mode is not IsolationMode.NONE and not kept_whole:
+        # A VM whose directory the run's end kept had its work pushed just
+        # before, and nothing ran in it since.
+        archived = workspace.id in self._archived
+        if workspace.spec.mode is not IsolationMode.NONE and not archived:
             # Kept first: a push that does not land raises, and the instance
             # and its work stay. Its commands carry the epoch of the run that
             # holds it, or, for one this process never held, the epoch read
@@ -324,11 +340,12 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             # The session resumed here while its work was kept: the instance
             # is the later run's, to let go when it ends.
             log.info("session %s: a later run holds its workspace, which stays", workspace.id)
-        elif kept_whole:
-            # Its VM's disk is the snapshot the run's end kept: the
-            # stopped VM goes, and the next loop starts one from it.
+        elif archived:
+            # Its directory is the snapshot the run's end kept: the VM
+            # goes, no disk of it kept, and the next loop's VM takes the
+            # directory back.
             assert self._cloud is not None
-            self._kept_whole.discard(workspace.id)
+            self._archived.discard(workspace.id)
             self._pooled.discard(workspace.id)
             await self._cloud.release(ctx, workspace.id)
         elif workspace.id in self._hosted or workspace.id in self._pooled:
@@ -367,9 +384,10 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
                 ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
             )
         if agent_session_id in self._pooled:
-            # Its VM is the workspace: the pool keeps its whole disk.
+            # Its VM's directory, read out through the relay and kept in
+            # the platform's bucket under the session's key.
             return await self._snapshot_on_vm(
-                ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id
+                ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
             )
         step = await self._inner.snapshot_agent_workspace(
             ctx, agent_session_id, workspace, epoch=epoch, loop_id=loop_id, tools=tools
@@ -424,7 +442,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             for host_id in sorted(hosts):
                 await self._erase_purged(org_id, agent_session_id, host_id)
         if self._cloud is not None:
-            # Its VM, and every disk the pool kept of it.
+            # Its VM, and the pool's record of its archives.
             await self._cloud.purge(org_id, agent_session_id)
         await self._agent_workspaces.forget_snapshots(org_id, agent_session_id)
         await self._agent_workspaces.purge_agent_session(org_id, agent_session_id)
@@ -432,7 +450,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._directories.pop(agent_session_id, None)
         self._hosted.discard(agent_session_id)
         self._pooled.discard(agent_session_id)
-        self._kept_whole.discard(agent_session_id)
+        self._archived.discard(agent_session_id)
 
     async def erase_snapshots(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         # The session's key is gone, so its archives are noise: they leave
@@ -444,7 +462,7 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         if self._snapshots is not None:
             await self._snapshots.purge(ctx.org_id, agent_session_id)
         if self._cloud is not None:
-            # The disks the pool kept of the session's VMs.
+            # The pool's record of the session's archives, now noise.
             await self._cloud.erase(ctx.org_id, agent_session_id)
         kept = await self._agent_workspaces.kept_snapshots(ctx, agent_session_id)
         hosts = {record.host_id for record in kept if record.host_id is not None}
@@ -632,19 +650,67 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
     ) -> AgentWorkspace:
         """The session's workspace on its VM of the cloud pool, which
-        the pool starts and the VM's host holds; the checkout is
-        brought up to the session's branch there, unless a snapshot started
-        the VM."""
+        the pool starts from its image and the VM's host holds; with
+        `restore`, its directory is the snapshot's. The checkout is brought
+        up to the session's branch there, unless a snapshot started it."""
         assert self._cloud is not None
-        kept = None if restore is None else await self._on_vms(ctx, agent_session_id, restore)
-        held = await self._cloud.prepare(ctx, agent_session_id, pinned, kept)
+        if restore is None:
+            held = await self._cloud.prepare(ctx, agent_session_id, pinned)
+        else:
+            held = await self._restored_on_vm(ctx, agent_session_id, pinned, restore, epoch)
         attached = await self._agent_workspaces.attach(
             ctx, held, epoch, restored=restore is not None
         )
         self._pooled.add(agent_session_id)
-        self._kept_whole.discard(agent_session_id)
+        self._archived.discard(agent_session_id)
         self._held.hold(attached, epoch)
         return attached
+
+    async def _restored_on_vm(
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        pinned: IsolationSpec,
+        restore: AgentWorkspaceSnapshot,
+        epoch: int,
+    ) -> AgentWorkspace:
+        """A VM of the pool whose directory holds what the snapshot
+        `restore` holds. The snapshot is one the platform's bucket keeps of a
+        directory, and its manifest is trusted by its hash before any VM is
+        asked for; a VM that serves the session for another snapshot goes,
+        since a restore replaces it whole. The directory of the VM the pool
+        gives is emptied and filled from the parts, each trusted only once
+        it opens under the session's key and matches its hash. One that
+        fails part way lets that VM go, so no half-restored directory is
+        ever found again, and touches nothing kept."""
+        assert self._cloud is not None
+        snapshots, transport, record_seal = self._archives()
+        await self._in_bucket(ctx, agent_session_id, restore)
+        if restore.holds is not SnapshotHolds.DIRECTORY:
+            raise AgentWorkspaceLost(
+                f"snapshot {restore.id} of session {agent_session_id} holds a whole workspace, "
+                "which no VM of the cloud pool starts from"
+            )
+        manifest = await snapshots.manifest(ctx, agent_session_id, restore)
+        held = await self._cloud.prepare(ctx, agent_session_id, pinned, restore.id)
+        try:
+            await pool_directory.unpack(
+                ctx,
+                transport,
+                record_seal,
+                held,
+                snapshots.parts(ctx, agent_session_id, manifest),
+                epoch=epoch,
+                within=self._pack_within,
+                now=self._clock(),
+            )
+        except BaseException:
+            try:
+                await self._cloud.release(ctx, agent_session_id)
+            except Exception:
+                log.exception("session %s: the VM of a lost restore stays", agent_session_id)
+            raise
+        return held
 
     async def _recycled(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         """The session's VM let go if it is past its age. One that does not
@@ -664,60 +730,82 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         *,
         epoch: int,
         loop_id: UUID,
+        tools: Sequence[ToolInterface],
     ) -> AgentStep:
-        """The VM's whole disk, kept by the pool once what the workspace
-        holds is pushed, while its host still runs, and the step that names
-        it. The record holds the snapshot's name and its digest, never the
-        disk; the step names the digest's hash keyed by the session, so once
-        its key is revoked nothing confirms what it held."""
+        """The VM's directory, kept as the session's snapshot once what the
+        workspace holds is pushed, while its host still runs, and the step
+        that names it. Refused before anything is packed when the session
+        keeps no content at rest. The directory is packed in the VM and
+        measured there, refused past the bound before any byte leaves,
+        scanned for an injected secret's value, then read out through the
+        relay, part by part, each sealed under the session's key and kept
+        in the platform's bucket (`SnapshotStore.keep_parts`): one that
+        fails part way keeps no part, and the snapshot before stays the
+        latest. The pack goes from the VM however it ends. The pool records
+        the session's archives first, so none is ever kept unswept. The
+        release then lets the VM go, and keeps no disk of it."""
         assert self._cloud is not None
-        if self._keyed_hash is None:
-            raise SnapshotRefused("this process keys no hash, so it records no VM's snapshot")
+        snapshots, transport, record_seal = self._archives()
+        await snapshots.at_rest(ctx, agent_session_id)
         await self._agent_workspaces.detach(ctx, workspace, epoch)
-        taken = await self._cloud.snapshot(ctx, agent_session_id)
-        # From here the VM is stopped: the release lets it go.
-        self._kept_whole.add(agent_session_id)
-        keyed = await self._keyed_hash(ctx, agent_session_id, taken.digest.encode())
-        now = self._clock()
-        record = KeptSnapshot(
-            id=new_id(),
-            created_at=now,
-            updated_at=now,
-            created_by=ctx.user_id,
-            updated_by=ctx.user_id,
-            agent_session_id=agent_session_id,
-            hash=HASH_SCHEME + keyed,
-            size=0,
-            reference=taken.reference,
-            digest=taken.digest,
-            vm=True,
-        )
-        await self._agent_workspaces.keep_snapshot(ctx, record)
-        named = AgentWorkspaceSnapshot(
-            id=record.id, hash=record.hash, size=record.size, agent_workspace_id=workspace.id
-        )
-        step = snapshotted_step(new_id(), now, agent_session_id, loop_id, named)
+        await self._cloud.archived(ctx, agent_session_id)
+        also = injected_secrets(tool.spec for tool in tools)
+        try:
+            packed = await pool_directory.pack(
+                ctx,
+                transport,
+                record_seal,
+                workspace,
+                bound=snapshots.directory_bound,
+                epoch=epoch,
+                within=self._pack_within,
+                now=self._clock(),
+            )
+            snapshots.bounded(packed.size)
+
+            def read(part_bytes: int) -> AsyncGenerator[bytes]:
+                return pool_directory.read(transport, workspace, packed, part_bytes)
+
+            async with contextlib.aclosing(read(snapshots.part_bytes)) as held:
+                await snapshots.scan(ctx, held, also=also)
+            kept = await snapshots.keep_parts(
+                ctx, agent_session_id, new_id(), workspace.id, packed.size, read
+            )
+        finally:
+            await self._dropped(ctx, workspace, epoch)
+        await self._recorded(ctx, agent_session_id, kept)
+        # From here the directory is kept: the release lets the VM go.
+        self._archived.add(agent_session_id)
+        step = snapshotted_step(new_id(), self._clock(), agent_session_id, loop_id, kept)
         (stored,) = await self._steps.append_agent_steps(ctx, agent_session_id, epoch, [step])
         return stored
 
-    async def _on_vms(
-        self, ctx: TenantContext, agent_session_id: UUID, restore: AgentWorkspaceSnapshot
-    ) -> KeptSnapshot:
-        """The snapshot a restore of a session of the cloud pool starts its
-        VM from, as the pool recorded it. One the pool did not take,
-        and one whose record does not match the step that names it, loses
-        the workspace (`AgentWorkspaceLost`)."""
-        record = await self._agent_workspaces.kept_snapshot(ctx, restore.id)
-        what = f"snapshot {restore.id} of session {agent_session_id}"
-        if record is None or not record.on_vms:
-            raise AgentWorkspaceLost(f"{what} was not taken of a VM of the cloud pool")
-        if (record.agent_session_id, record.hash, record.size) != (
-            agent_session_id,
-            restore.hash,
-            restore.size,
-        ):
-            raise AgentWorkspaceLost(f"{what} is not the one its record names")
-        return record
+    async def _dropped(self, ctx: TenantContext, workspace: AgentWorkspace, epoch: int) -> None:
+        """The pack gone from the VM, or logged: a pack left there goes
+        with the VM at the release, or at the next pack."""
+        _, transport, record_seal = self._archives()
+        try:
+            await pool_directory.drop(
+                ctx,
+                transport,
+                record_seal,
+                workspace,
+                epoch=epoch,
+                within=self._pack_within,
+                now=self._clock(),
+            )
+        except Exception:
+            log.warning("session %s: its VM keeps a pack", workspace.id, exc_info=True)
+
+    def _archives(self) -> tuple[SnapshotStore, TransportInterface, RecordSealInterface]:
+        """What keeps a VM's directory of the cloud pool: the platform's
+        bucket, and the transport that reaches its host. A process that
+        wires none keeps none (`SnapshotRefused`)."""
+        if self._snapshots is None or self._transport is None or self._record_seal is None:
+            raise SnapshotRefused(
+                "this process reaches no VM's directory of the cloud pool, so it keeps none"
+            )
+        return self._snapshots, self._transport, self._record_seal
 
     async def _recorded(
         self, ctx: TenantContext, agent_session_id: UUID, taken: AgentWorkspaceSnapshot
@@ -790,11 +878,6 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
             raise AgentWorkspaceLost(
                 f"snapshot {restore.id} is kept inside the wall of pool {record.pool_id}, "
                 f"which session {agent_session_id}'s workspace does not run in"
-            )
-        if record is not None and record.on_vms:
-            raise AgentWorkspaceLost(
-                f"snapshot {restore.id} is a disk the cloud pool's VMs keep, which "
-                f"session {agent_session_id}'s workspace does not run on"
             )
 
     # The engine's, unchanged.

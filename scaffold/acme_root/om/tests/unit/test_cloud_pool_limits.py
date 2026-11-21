@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from unit.test_cloud_pool import KEPT, Pool, kept_record, stage
+from unit.test_cloud_pool import MEDIUM, Pool, stage
 
 from acme.infra.agent_workspaces import IsolationRefused
 from acme.infra.vms import VmState
@@ -144,19 +144,16 @@ async def test_a_claim_that_cannot_take_a_warm_vm_takes_an_idle_ones_place_at_th
     await took_its_place(closed, warm, differs)
     await closed.manager.close()
 
-    # A restore starts from its snapshot, never from a warm VM.
+    # A warm VM is the default size, so a session that asks another takes
+    # none.
     opened = Pool(tmp_path / "opened", warm=1, most=3, tenant_most=10)
     await opened.image()
-    kept = new_id()
-    await opened.prepare(ctx, kept, KEPT)
-    taken = await opened.manager.snapshot(ctx, kept)
-    await opened.manager.release(ctx, kept)
     await opened.prepare(ctx, new_id())
     await opened.prepare(ctx, new_id())
     warm = await warm_one(opened)
-    record = kept_record(kept, taken.reference, taken.digest)
-    await opened.prepare(ctx, kept, KEPT, restore=record)
-    await took_its_place(opened, warm, kept)
+    larger = new_id()
+    await opened.prepare(ctx, larger, MEDIUM)
+    await took_its_place(opened, warm, larger)
     await opened.manager.close()
 
 

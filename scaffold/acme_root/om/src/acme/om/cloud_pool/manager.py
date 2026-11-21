@@ -3,15 +3,17 @@ platform's cloud, through the VMs' backend. Each VM runs the same
 host program a customer installs: it trades the key it was handed at its
 start for a host's credential of its session's pool of one, claims that
 session's work alone through the relay, and holds no credential of the
-platform's. Its session's next loop starts it again from the session's
-latest snapshot, which is the VM's whole disk."""
+platform's. The pool keeps no disk of any VM: a session kept by
+snapshots keeps its workspace's files, archived as sealed parts in the
+snapshots bucket by the platform's tools, and its next loop's VM starts
+from the pool's image and takes them back (ADR 2070). The pool records
+each session whose files are archived, so the sweep removes them once
+the session has been idle past the pool's bound."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.infra.agent_workspaces import AgentWorkspace, IsolationSpec
-from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
-from acme.om.cloud_pool.types.vm import VmSnapshot
 from acme.om.context import RequestContext, TenantContext, stageless, transition
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Enrollment
@@ -44,34 +46,33 @@ class CloudPoolManagerInterface(ABC):
         ctx: TenantContext,
         agent_session_id: UUID,
         spec: IsolationSpec,
-        restore: KeptSnapshot | None = None,
+        restore: UUID | None = None,
     ) -> AgentWorkspace:
         """The session's workspace on its VM, once the VM's host
         holds it. The VM is the one that serves the session, else a
         warm one it claims at the default size, else one of the size the
-        spec asks, started from the pool's image; with `restore`, one
-        started from that snapshot of the session's VM, held to its digest
-        first. A new VM, or a warm one claimed, counts against the most the
+        spec asks, started from the pool's image: every VM starts from it.
+        With `restore`, the id of the snapshot whose directory the caller
+        brings into the workspace, a VM that serves the session for any
+        other goes first, since a restore replaces it whole, and the one
+        that serves it next is marked for that snapshot, so a prepare asked
+        again for it, while its VM starts, keeps it. A new VM, or a warm
+        one claimed, counts against the most the
         pool holds and the most the session's tenant holds, as the pool's
         limits stand at this claim; at the pool's maximum, a new one takes
         the place of an idle warm VM, which goes. `IsolationRefused` that
         clears while either maximum stands, the VM starts, or its host has
         not prepared it in time, and the loop waits on the resource; its
         cause names no count and no other tenant's use. One that never
-        clears, as `check` refuses it, before any VM starts.
-        `AgentWorkspaceLost` when the snapshot is gone, was not taken by the
-        pool, or does not match its digest."""
+        clears, as `check` refuses it, before any VM starts."""
         ...
 
     @abstractmethod
-    async def snapshot(self, ctx: TenantContext, agent_session_id: UUID) -> VmSnapshot:
-        """Keeps the session's VM whole: its host's credential is ended
-        first, so the disk holds no credential that answers, then the
-        VM is stopped and its disk kept as a snapshot under the
-        session's names. The stopped VM stays until it is released, so
-        a snapshot whose record does not land loses nothing: the next
-        prepare starts the VM again. `SnapshotRefused` when no VM
-        serves the session."""
+    async def archived(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        """Records, before the run's end archives the session's workspace
+        files, that the session keeps archives: from now, the sweep holds
+        them to the session's last activity. A record that lands before an
+        archive that does not keep one removes nothing kept."""
         ...
 
     @abstractmethod
@@ -91,32 +92,33 @@ class CloudPoolManagerInterface(ABC):
     @abstractmethod
     async def release(self, ctx: TenantContext, agent_session_id: UUID) -> None:
         """Lets go of the VM that serves the session: its host's
-        credential ends and the VM goes, its disk with it."""
+        credential ends and the VM goes, its disk with it. No image of it
+        is kept."""
         ...
 
     @abstractmethod
     @stageless
     async def purge(self, org_id: UUID, agent_session_id: UUID) -> None:
         """System-internal: the session's purge, which runs for no
-        principal: its VM and every snapshot kept under its names
-        go."""
+        principal: its VM goes, and the record of its archives, whose
+        bytes the session's purge takes from the bucket."""
         ...
 
     @abstractmethod
     @stageless
     async def erase(self, org_id: UUID, agent_session_id: UUID) -> None:
         """System-internal: the revocation of the session's key, named with
-        its tenant: every snapshot kept under its names goes. Its VM, a
-        cache, stays. The erasure is asked first, and done at once where this
-        process reaches the VMs; elsewhere, as in the API's process, the
-        sweep does it."""
+        its tenant: the record of its archives goes, in any process, since
+        their bytes are noise and leave the bucket with the revocation. Its
+        VM, a cache, stays: nothing the pool keeps outside the seal holds
+        the session's files."""
         ...
 
     @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
         """A tenant's purge, once it was deleted past its retention: every
-        VM that serves one of its sessions goes, every snapshot kept
-        under its names, and its own maximum. Answers how many went; a
+        VM that serves one of its sessions goes, the records of its
+        sessions' archives, and its own maximum. Answers how many went; a
         tenant not past its retention loses nothing."""
         ...
 
@@ -136,17 +138,21 @@ class CloudPoolManagerInterface(ABC):
     @transition
     async def sweep(self, rctx: RequestContext) -> int:
         """System-internal: one pass of the sweep, across tenants and for
-        none, over every VM the pool holds, a page at a time, where this
-        process reaches the VMs: lets go of a VM whose first start died
+        none. First the archives, a page at a time: a session idle past the
+        pool's `archive_kept`, by its last activity, loses its archives and
+        their record; one active since has its record moved to then. Then
+        every VM the pool holds, a page at a time, where this process
+        reaches the VMs: lets go of a VM whose first start died
         with the process that started it, of one that ran and is gone, of
         one whose session, or tenant, is gone, and of one under the pool's
         names that no row holds; stops a session's VM that runs with no
         host to work for, its host never enrolled, ended, or silent, and
         keeps its disk; lets go of a warm VM past the pool's maximum age,
-        and of no session's; does the erasures asked; then starts warm VMs
-        until the pool's warm count stands, never past its maximum. A warm
-        VM's row goes before its VM, so a session that claimed it
-        meanwhile keeps it. Answers how many VMs it let go or stopped."""
+        and of no session's; then starts warm VMs until the pool's warm
+        count stands, never past its maximum. A warm VM's row goes before
+        its VM, so a session that claimed it meanwhile keeps it. Answers how
+        many sessions' archives it removed and how many VMs it let go or
+        stopped."""
         ...
 
     @abstractmethod

@@ -1,17 +1,14 @@
-"""Pure rules of the cloud pool: how its VMs and their snapshots are
-named, the key a VM is handed, what a session's spec may ask of the
-pool's VMs and the size it gets, and how many warm VMs to start. Values
-in, values out; no clock, no storage, no settings."""
+"""Pure rules of the cloud pool: how its VMs are named, the key a VM is
+handed, what a session's spec may ask of the pool's VMs and the size it
+gets, and how many warm VMs to start. Values in, values out; no clock, no
+storage, no settings."""
 
-import hashlib
 import json
 import secrets
 from collections.abc import Collection
-from uuid import UUID
 
 from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec, VmSize
 from acme.infra.agent_workspaces import refusal as infra_refusal
-from acme.om.base import EMPTY_UUID
 
 KEY_PREFIX = "hmk_"
 """A VM key's prefix. The pool hands each VM one at its start,
@@ -26,14 +23,6 @@ hex alone, is ever the pool's."""
 HASHED = 16
 """Hex digits of a new VM's random name."""
 
-OWNER = 12
-"""Hex digits of a tenant's id, and of a session's, in a snapshot's name:
-enough that no two of either share them, few enough that the name fits
-where a backend bounds it."""
-
-TAG = 8
-"""Hex digits that tell a session's snapshots apart."""
-
 DEFAULT_SIZE = VmSize.S
 """The size of a VM whose session's spec asks none, and of every warm
 VM: a claim of another size starts a VM of its own."""
@@ -45,42 +34,10 @@ def vm_name(prefix: str) -> str:
     return f"{prefix}{MARK}{secrets.token_hex(HASHED // 2)}"
 
 
-def tenant_snapshots(prefix: str, org_id: UUID) -> str:
-    """What every snapshot of a tenant's VMs is named from: its purge
-    finds them all by it."""
-    return f"{prefix}{MARK}{_hashed(org_id)}"
-
-
-def snapshots_of(prefix: str, org_id: UUID, agent_session_id: UUID) -> str:
-    """What every snapshot of a session's VMs is named from: the
-    session's purge and its key's revocation find them all by it."""
-    return f"{tenant_snapshots(prefix, org_id)}{_hashed(agent_session_id)}-"
-
-
-def snapshot_name(prefix: str, org_id: UUID, agent_session_id: UUID) -> str:
-    """A new snapshot of a session's VM, under the session's names."""
-    return snapshots_of(prefix, org_id, agent_session_id) + secrets.token_hex(TAG // 2)
-
-
-def is_snapshot(prefix: str, name: str) -> bool:
-    """Whether a name the pool gave is a snapshot's: a VM's has no
-    hyphen past the prefix."""
-    return pool_names(prefix, name) and "-" in name[len(prefix) :]
-
-
 def longest_name(prefix: str) -> str:
-    """The longest name the pool gives, which the VMs' probe holds to
-    what they can keep."""
-    return snapshots_of(prefix, EMPTY_UUID, EMPTY_UUID) + "0" * TAG
-
-
-def _hashed(id_: UUID) -> str:
-    return hashlib.sha256(id_.bytes).hexdigest()[:OWNER]
-
-
-def pool_names(prefix: str, name: str) -> bool:
-    """Whether a name the VMs hold is one the pool gives."""
-    return name.startswith(f"{prefix}{MARK}")
+    """The longest name the pool gives, a VM's, which the VMs' probe
+    holds to what they can keep. The pool keeps no disk under any name."""
+    return f"{prefix}{MARK}" + "0" * HASHED
 
 
 def new_key() -> str:

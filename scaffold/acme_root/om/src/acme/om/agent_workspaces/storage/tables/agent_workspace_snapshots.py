@@ -26,4 +26,3 @@ class AgentWorkspaceSnapshots(IdentifiableMixin, TrackableMixin, Base):
     host_id: Mapped[UUID | None]
     reference: Mapped[str]
     digest: Mapped[str | None]
-    vm: Mapped[bool]

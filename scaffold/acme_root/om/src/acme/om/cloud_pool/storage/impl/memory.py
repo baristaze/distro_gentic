@@ -5,7 +5,7 @@ from uuid import UUID
 
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
-from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.archive import PoolArchive
 from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolClaim, PoolVm
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
@@ -18,7 +18,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         self._vms: dict[UUID, PoolVm] = {}
-        self._erasures: dict[tuple[UUID, UUID], PoolErasure] = {}
+        self._archives: dict[tuple[UUID, UUID], PoolArchive] = {}
         self._limits: PoolLimits | None = None
         self._tenant_limits: dict[UUID, TenantPoolLimit] = {}
 
@@ -47,6 +47,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                                 "agent_session_id": vm.agent_session_id,
                                 "pool_id": vm.pool_id,
                                 "bound_by": vm.bound_by,
+                                "restored_from": vm.restored_from,
                                 "bound_at": vm.bound_at,
                             }
                         )
@@ -133,13 +134,10 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     async def mark_sealed(self, vm_id: UUID, at: datetime) -> None:
         await self._update(vm_id, sealed_at=at)
 
-    async def rekey(
-        self, vm_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
-    ) -> PoolVm | None:
+    async def rekey(self, vm_id: UUID, key_digest: str, at: datetime) -> PoolVm | None:
         return await self._update(
             vm_id,
             key_digest=key_digest,
-            restored_from=restored_from,
             host_id=None,
             bound_at=at,
             sealed_at=None,
@@ -149,19 +147,28 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         async with self._lock:
             self._vms.pop(vm_id, None)
 
-    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
+    async def keep_archive(self, archive: PoolArchive) -> None:
         async with self._lock:
-            return self._erasures.setdefault((erasure.tenant_id, erasure.agent_session_id), erasure)
+            at = (archive.tenant_id, archive.agent_session_id)
+            held = self._archives.get(at)
+            moved = None if held is None else held.model_copy(update={"kept_at": archive.kept_at})
+            self._archives[at] = archive if moved is None else moved
 
-    async def read_erasures(self, limit: int) -> list[PoolErasure]:
-        asked = sorted(self._erasures.values(), key=lambda e: (e.created_at, e.id))
-        return asked[:limit]
+    async def read_archives(self, before: datetime, limit: int) -> list[PoolArchive]:
+        kept = [archive for archive in self._archives.values() if archive.kept_at < before]
+        kept.sort(key=lambda archive: (archive.kept_at, archive.agent_session_id))
+        return kept[:limit]
 
-    async def delete_erasure(self, erasure_id: UUID) -> None:
+    async def delete_archive(self, tenant_id: UUID, agent_session_id: UUID) -> None:
         async with self._lock:
-            for at, erasure in list(self._erasures.items()):
-                if erasure.id == erasure_id:
-                    del self._erasures[at]
+            self._archives.pop((tenant_id, agent_session_id), None)
+
+    async def delete_tenant_archives(self, tenant_id: UUID) -> int:
+        async with self._lock:
+            held = [at for at in self._archives if at[0] == tenant_id]
+            for at in held:
+                del self._archives[at]
+            return len(held)
 
     async def read_limits(self) -> PoolLimits | None:
         return self._limits

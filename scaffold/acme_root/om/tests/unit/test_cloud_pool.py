@@ -1,9 +1,10 @@
 """The cloud pool over the VMs' twin: a VM per session, started
 from the pool's image, handed a one-use key its host trades once for a
 credential of the session's pool of one. A warm VM serves no session
-until one claims it, and the pool starts another in its place. A snapshot
-ends the host's credential, stops the VM, and keeps its disk; a
-restore holds the disk to its digest and starts a VM on a copy of it.
+until one claims it, and the pool starts another in its place. Every VM
+starts from the pool's image, and none's disk is kept: a restore lets go
+of a VM that serves the session for another snapshot, marks the one that
+serves it next, a warm one claimed included, and keeps it while it starts.
 A spec the VMs cannot hold is refused for good, a size the deployment
 does not allow among them; a VM is the machine type its size maps to,
 and a warm one the default size's. A cold start records its boot once, a
@@ -13,9 +14,9 @@ row, a page at a time: it lets go of a first start that died, one whose
 session is gone, and one no row holds, and stops a VM that runs with
 no host to work for, whose disk its session's next prepare starts again; a
 VM started again keeps its disk through a sweep and a failed start. A
-purge, an erase, and a tenant's purge take the session's disks, and no
-other session's; an erase asked where no VM is reached is done by the
-sweep. The claim and the sweep never race: a claimed VM's host is asked
+purge, an erase, and a tenant's purge take the record of the session's
+archives, and no other session's; an erase does so in a process that
+reaches no VM too. The claim and the sweep never race: a claimed VM's host is asked
 for the session's workspace only once it enrolled and its VM is sealed, and
 the session has none until its host holds it; a warm VM a session claims
 while the sweep reads it as a dead start stays the session's; and a VM
@@ -37,7 +38,6 @@ from prometheus_client import REGISTRY
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
     AgentWorkspaceBase,
-    AgentWorkspaceLost,
     Durability,
     EgressMode,
     EgressPolicy,
@@ -45,18 +45,16 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
     ResourceLimits,
-    SnapshotRefused,
     VmSize,
 )
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.vms import SEED_FILE, MachineType, VmSpec, VmState
 from acme.infra.vms.seeded import PLAIN_WRITE, SeedsChannelImpl
 from acme.infra.vms.twin import VmsNullImpl, VmsTwinImpl
-from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
-from acme.om.cloud_pool.rules import new_key, seed, snapshots_of
+from acme.om.cloud_pool.rules import new_key, seed
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
 from acme.om.cloud_pool.types.sizes import PoolSizes
 from acme.om.cloud_pool.types.vm import PoolVm
@@ -203,6 +201,7 @@ class Pool:
         self.hosts = Hosts(lambda: self.now)
         self.placed = Placed()
         self.gone: set[UUID] = set()
+        self.dropped: list[UUID] = []  # the sessions whose archives went
         self.options = CloudPoolOptions(
             prefix=PREFIX,
             image=IMAGE,
@@ -232,6 +231,8 @@ class Pool:
             self.options,
             session_gone=self.session_gone,
             expired=self.expired,
+            active_at=self.active_at,
+            drop_archives=self.drop_archives,
             stage=stage,
             clock=lambda: self.now,
         )
@@ -241,6 +242,12 @@ class Pool:
 
     async def expired(self, ctx: TenantContext) -> bool:
         return ctx.org_id in self.expired_tenants
+
+    async def active_at(self, org_id: UUID, agent_session_id: UUID) -> datetime | None:
+        return None if agent_session_id in self.gone else self.now
+
+    async def drop_archives(self, org_id: UUID, agent_session_id: UUID) -> None:
+        self.dropped.append(agent_session_id)
 
     async def image(self) -> None:
         """The pool's image: a stopped VM that holds the host program."""
@@ -276,7 +283,7 @@ class Pool:
         ctx: TenantContext,
         agent_session_id: UUID,
         spec: IsolationSpec = OPEN,
-        restore: KeptSnapshot | None = None,
+        restore: UUID | None = None,
     ) -> AgentWorkspace:
         host = asyncio.ensure_future(self.host_comes(agent_session_id))
         try:
@@ -296,23 +303,6 @@ async def pool(tmp_path: Path) -> AsyncIterator[Pool]:
 @pytest.fixture
 def ctx() -> TenantContext:
     return context(Role.SERVICE, make_org())
-
-
-def kept_record(agent_session_id: UUID, reference: str, digest: str) -> KeptSnapshot:
-    now = utcnow()
-    return KeptSnapshot(
-        id=new_id(),
-        created_at=now,
-        updated_at=now,
-        created_by=new_id(),
-        updated_by=new_id(),
-        agent_session_id=agent_session_id,
-        hash="hmac-sha256:" + "0" * 64,
-        size=0,
-        reference=reference,
-        digest=digest,
-        vm=True,
-    )
 
 
 # A VM per session, and its host.
@@ -424,12 +414,12 @@ async def test_a_size_the_deployment_does_not_allow_is_refused_for_good_before_a
 # A cold start is timed, from its start to its host's enrollment.
 
 
-def boots(source: str) -> tuple[float, float]:
-    """The boots the process recorded from `source`: how many, and their
-    seconds together."""
+def boots() -> tuple[float, float]:
+    """The boots the process recorded: how many, and their seconds
+    together."""
     name = "acme_cloud_pool_boot_seconds"
-    count = REGISTRY.get_sample_value(f"{name}_count", {"source": source}) or 0.0
-    total = REGISTRY.get_sample_value(f"{name}_sum", {"source": source}) or 0.0
+    count = REGISTRY.get_sample_value(f"{name}_count") or 0.0
+    total = REGISTRY.get_sample_value(f"{name}_sum") or 0.0
     return count, total
 
 
@@ -438,7 +428,7 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
 ) -> None:
     pool = Pool(tmp_path, warm=1)
     await pool.image()
-    before = boots("image")
+    before = boots()
     launch = pool.vms.launch
 
     async def booting(name: str, spec: VmSpec, snapshot: str | None = None) -> None:
@@ -448,7 +438,7 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
     monkeypatch.setattr(pool.vms, "launch", booting)
     await pool.prepare(ctx, new_id())
     monkeypatch.undo()
-    assert boots("image") == (before[0] + 1, before[1] + 42), "one boot, start to enrollment"
+    assert boots() == (before[0] + 1, before[1] + 42), "one boot, start to enrollment"
 
     await pool.manager.sweep(stage())
     await pool.manager.close()
@@ -459,7 +449,7 @@ async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_
     (row,) = [row for row in await pool.rows() if row.agent_session_id == claimed]
     assert row.host_id is not None and row.bound_at is not None
     assert row.created_at < row.bound_at, "a warm VM, claimed"
-    assert boots("image") == (before[0] + 1, before[1] + 42), "a warm claim records none"
+    assert boots() == (before[0] + 1, before[1] + 42), "a warm claim records none"
 
 
 # A VM is recycled at its maximum age, between runs.
@@ -506,10 +496,10 @@ async def test_a_warm_vm_past_its_age_goes_at_the_sweep_and_another_stands(
     assert await pool.vms.state(old.name) is VmState.ABSENT
 
 
-# A snapshot is the VM's whole disk.
+# A restore replaces the VM whole, from the pool's image; no disk is kept.
 
 
-async def test_a_snapshot_ends_the_host_and_keeps_the_stopped_disk_which_a_restore_starts_from(
+async def test_a_restore_replaces_the_sessions_vm_with_one_from_the_image_kept_while_it_starts(
     pool: Pool, ctx: TenantContext
 ) -> None:
     agent_session_id = new_id()
@@ -517,51 +507,40 @@ async def test_a_snapshot_ends_the_host_and_keeps_the_stopped_disk_which_a_resto
     (row,) = await pool.rows()
     (pool.vms.root / row.name / "state.bin").write_text("built")
     handed = pool.seed(row.name)["key"]
+    snapshot_id = new_id()
 
-    taken = await pool.manager.snapshot(ctx, agent_session_id)
-    assert taken.reference.startswith(snapshots_of(PREFIX, ctx.org_id, agent_session_id))
-    assert pool.hosts.retired == [row.host_id], "its credential ended before the disk was kept"
-    assert await pool.vms.state(row.name) is VmState.STOPPED, "kept until released"
-    await pool.manager.release(ctx, agent_session_id)
-    assert await pool.vms.state(row.name) is VmState.ABSENT
-    assert await pool.rows() == []
-
-    record = kept_record(agent_session_id, taken.reference, taken.digest)
-    await pool.prepare(ctx, agent_session_id, KEPT, restore=record)
+    await pool.prepare(ctx, agent_session_id, KEPT, restore=snapshot_id)
     (restored,) = await pool.rows()
-    assert restored.restored_from == record.id and restored.name != row.name
-    assert (pool.vms.root / restored.name / "state.bin").read_text() == "built"
-    assert pool.seed(restored.name)["key"] != handed, "a VM started again takes a new key"
+    assert restored.restored_from == snapshot_id and restored.name != row.name
+    assert pool.hosts.retired == [row.host_id], "the VM it replaced was let go"
+    assert await pool.vms.state(row.name) is VmState.ABSENT
+    assert not (pool.vms.root / restored.name / "state.bin").exists(), "nothing of its disk"
+    assert (pool.vms.root / restored.name / "host-program").exists(), "from the pool's image"
+    assert pool.seed(restored.name)["key"] != handed
 
     # Asked again for the same restore, the VM it started stands.
-    await pool.manager.prepare(ctx, agent_session_id, KEPT, record)
+    await pool.manager.prepare(ctx, agent_session_id, KEPT, snapshot_id)
     assert [r.id for r in await pool.rows()] == [restored.id]
-
-
-async def test_a_restore_from_a_disk_gone_or_altered_loses_the_workspace(
-    pool: Pool, ctx: TenantContext
-) -> None:
-    agent_session_id = new_id()
-    await pool.prepare(ctx, agent_session_id, KEPT)
-    taken = await pool.manager.snapshot(ctx, agent_session_id)
     await pool.manager.release(ctx, agent_session_id)
-
-    altered = kept_record(agent_session_id, taken.reference, "sha256:" + "1" * 64)
-    with pytest.raises(AgentWorkspaceLost, match="does not match its digest"):
-        await pool.manager.prepare(ctx, agent_session_id, KEPT, altered)
-    await pool.vms.destroy(taken.reference)
-    gone = kept_record(agent_session_id, taken.reference, taken.digest)
-    with pytest.raises(AgentWorkspaceLost, match="gone"):
-        await pool.manager.prepare(ctx, agent_session_id, KEPT, gone)
-    bucket = gone.model_copy(update={"vm": False, "digest": None})
-    with pytest.raises(AgentWorkspaceLost, match="not taken of a VM"):
-        await pool.manager.prepare(ctx, agent_session_id, KEPT, bucket)
-    assert await pool.rows() == [], "nothing started"
+    assert await pool.vms.names(PREFIX) == [IMAGE], "no disk of any VM is kept"
+    assert not [call for call in pool.vms.calls if call[0] == "snapshot"]
 
 
-async def test_a_snapshot_with_no_vm_is_refused(pool: Pool, ctx: TenantContext) -> None:
-    with pytest.raises(SnapshotRefused):
-        await pool.manager.snapshot(ctx, new_id())
+async def test_a_restore_claims_a_warm_vm_since_every_vm_starts_from_the_image(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (warm,) = await pool.rows()
+    agent_session_id, snapshot_id = new_id(), new_id()
+
+    await pool.prepare(ctx, agent_session_id, KEPT, restore=snapshot_id)
+    await pool.manager.close()
+
+    mine = [row for row in await pool.rows() if row.agent_session_id == agent_session_id]
+    assert [(row.id, row.restored_from) for row in mine] == [(warm.id, snapshot_id)]
 
 
 # What the VMs cannot hold is refused for good.
@@ -774,20 +753,17 @@ async def test_a_warm_vm_claimed_after_standing_long_waits_for_its_host_from_the
     assert await pool.vms.state(warm.name) is VmState.RUNNING
 
 
-async def test_an_erase_asked_where_no_vm_is_reached_is_done_by_the_sweep(
+async def test_an_erase_in_a_process_that_reaches_no_vm_forgets_the_sessions_archives(
     pool: Pool, ctx: TenantContext
 ) -> None:
     agent_session_id = new_id()
     await pool.prepare(ctx, agent_session_id, KEPT)
-    taken = (await pool.manager.snapshot(ctx, agent_session_id)).reference
+    await pool.manager.archived(ctx, agent_session_id)
     api = pool.built(VmsNullImpl())  # the API's process reaches no VM
     await api.erase(ctx.org_id, agent_session_id)
     await api.erase(ctx.org_id, agent_session_id)  # asked again, as every revocation call does
-    assert await pool.vms.state(taken) is VmState.STOPPED
-    assert len(await pool.storage.read_erasures(10)) == 1
-    await pool.manager.sweep(stage())
-    assert await pool.vms.state(taken) is VmState.ABSENT
-    assert await pool.storage.read_erasures(10) == []
+    assert await pool.storage.read_archives(pool.now + timedelta(days=365), 10) == []
+    assert len(await pool.rows()) == 1, "its VM, a cache, stays"
 
 
 async def test_a_deleted_tenants_vm_goes_at_the_next_sweep(tmp_path: Path) -> None:
@@ -829,39 +805,40 @@ async def test_a_deleted_tenants_vm_goes_at_the_next_sweep(tmp_path: Path) -> No
     assert [row.id for row in await rows.read_vms(10)] == [held["Kept"].id]
 
 
-async def test_a_purge_and_an_erase_take_the_sessions_disks_and_no_other_sessions(
+async def test_a_purge_and_an_erase_take_the_sessions_archives_and_no_other_sessions(
     pool: Pool, ctx: TenantContext
 ) -> None:
     mine, theirs = new_id(), new_id()
-    taken: dict[UUID, str] = {}
     for agent_session_id in (mine, theirs):
         await pool.prepare(ctx, agent_session_id, KEPT)
-        taken[agent_session_id] = (await pool.manager.snapshot(ctx, agent_session_id)).reference
+        await pool.manager.archived(ctx, agent_session_id)
+    later = pool.now + timedelta(days=365)
     await pool.manager.erase(ctx.org_id, mine)
-    assert await pool.vms.state(taken[mine]) is VmState.ABSENT
-    assert await pool.vms.state(taken[theirs]) is VmState.STOPPED
+    assert [a.agent_session_id for a in await pool.storage.read_archives(later, 10)] == [theirs]
     assert len(await pool.rows()) == 2, "an erase keeps the VMs, caches"
 
+    await pool.manager.archived(ctx, mine)
     await pool.manager.purge(ctx.org_id, mine)
     assert [row.agent_session_id for row in await pool.rows()] == [theirs]
-    assert await pool.vms.state(taken[theirs]) is VmState.STOPPED
+    assert [a.agent_session_id for a in await pool.storage.read_archives(later, 10)] == [theirs]
 
 
-async def test_a_tenants_purge_waits_for_its_expiry_then_takes_every_vm_and_disk(
+async def test_a_tenants_purge_waits_for_its_expiry_then_takes_every_vm_and_archive(
     pool: Pool, ctx: TenantContext
 ) -> None:
     other = context(Role.SERVICE, make_org())
     for tenant in (ctx, other):
         agent_session_id = new_id()
         await pool.prepare(tenant, agent_session_id, KEPT)
-        await pool.manager.snapshot(tenant, agent_session_id)
+        await pool.manager.archived(tenant, agent_session_id)
         await pool.prepare(tenant, new_id())
     assert await pool.manager.purge_tenant(ctx) == 0, "not past its retention"
     pool.expired_tenants.add(ctx.org_id)
-    assert await pool.manager.purge_tenant(ctx) == 3
+    assert await pool.manager.purge_tenant(ctx) == 3, "its two VMs and its archives' record"
     assert {row.tenant_id for row in await pool.rows()} == {other.org_id}
-    left = await pool.vms.names(PREFIX + "p")
-    assert len(left) == 3, "the other tenant's two VMs and its disk"
+    kept = await pool.storage.read_archives(pool.now + timedelta(days=365), 10)
+    assert [archive.tenant_id for archive in kept] == [other.org_id]
+    assert len(await pool.vms.names(PREFIX + "p")) == 2, "the other tenant's two VMs"
 
 
 # The claim and the sweep never race.
