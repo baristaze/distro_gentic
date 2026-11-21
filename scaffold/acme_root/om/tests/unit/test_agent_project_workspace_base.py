@@ -39,7 +39,7 @@ from acme.om.platform_root import PlatformRootOptions, ProductKinds
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 from contracts.agent_workspaces import AgentProjectsTwin
-from contracts.loops import ASSISTANT, reply, said
+from contracts.loops import ASSISTANT, reply, said, use
 from contracts.platform_loops import PlatformLoop, platform_loop_over
 
 NONE = EgressPolicy(mode=EgressMode.NONE)
@@ -148,8 +148,9 @@ class AgentWorkspaceBases:
         )
 
     async def run(self, agent_session_id: UUID) -> LoopOutcome | None:
+        """A loop whose first call reaches the workspace, which prepares it."""
         await self.loop.say(agent_session_id, "Check the report.")
-        self.loop.anthropic.add(reply(said("Checked.")))
+        self.loop.anthropic.add(reply(use("lookup")), reply(said("Checked.")))
         return (await self.loop.loops.run(self.loop.owner, agent_session_id)).outcome
 
     async def pinned(self, agent_session_id: UUID) -> AgentWorkspaceBase | None:
