@@ -29,7 +29,13 @@ class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
     snapshot and starts from none, nor from a base: the pool keeps the
     VM's whole disk, and starts the VM again from it. Its release ends
     what its commands left running and keeps its files, as a host
-    directory's does."""
+    directory's does. Its `check` refuses what its `prepare` refuses of the
+    spec alone."""
+
+    async def check(self, spec: IsolationSpec) -> None:
+        why = _refusal(spec)
+        if why is not None:
+            raise IsolationRefused(why, cause=why)
 
     async def prepare(
         self,
@@ -41,14 +47,9 @@ class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
         *,
         building: bool = False,
     ) -> AgentWorkspace:
-        why = refusal(
-            spec,
-            mode=IsolationMode.VM,
-            egress={EgressMode.OPEN, EgressMode.NONE},
-            limits=("size",),
-        )
-        if why is None and (snapshot is not None or base is not None or spec.base is not None):
-            why = "a VM's workspace starts from the VM as its pool started it: " + KEPT_BY_THE_POOL
+        why = _refusal(spec)
+        if why is None and (snapshot is not None or base is not None):
+            why = _FROM_THE_POOL
         if why is not None:
             raise IsolationRefused(why)
         directory = self._directory(org_id, agent_workspace_id)
@@ -63,3 +64,20 @@ class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
 
     def describe(self) -> str:
         return f"workspaces=vm({self._root})"
+
+
+_FROM_THE_POOL = "a VM's workspace starts from the VM as its pool started it: " + KEPT_BY_THE_POOL
+
+
+def _refusal(spec: IsolationSpec) -> str | None:
+    """Why a VM of the pool never holds `spec`: another level, an egress
+    its network cannot hold, a limit other than its size, or a base."""
+    why = refusal(
+        spec,
+        mode=IsolationMode.VM,
+        egress={EgressMode.OPEN, EgressMode.NONE},
+        limits=("size",),
+    )
+    if why is None and spec.base is not None:
+        why = _FROM_THE_POOL
+    return why
