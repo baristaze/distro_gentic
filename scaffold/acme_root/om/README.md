@@ -229,7 +229,7 @@ goes at its run's end, once its work is kept.
 
 ## The agents the platform ships
 
-The platform ships six kinds of agent. The **software engineer** takes
+The platform ships seven kinds of agent. The **software engineer** takes
 an objective to a validated, reviewable change in a workspace of its
 own. **Analysis** reads what a run produced and turns it into findings.
 The **planner** turns findings into tasks, and hands new work to an
@@ -245,7 +245,11 @@ answers with findings, each with a file, a line, and a grade; it changes
 nothing, and a person approves each comment it posts. The **ops
 analyst** reads the tenant's sessions and what they wait on, its hosts
 and what they offer, and its budgets' spend, on a person's own
-permissions, and acts on none of them.
+permissions, and acts on none of them. The **support assistant** answers
+in the portal's support dock: it reads and drafts what the platform
+assistant does, on a person's own permissions, and hands no work on. Its
+loop runs in the request that asks it, so the dock shows its answer as
+it is written; every other kind's runs in a worker.
 
 A kind whose toolsets include starting sub-agents is a lead: it starts
 the others, such as a software engineer on a change and the reviewer on
