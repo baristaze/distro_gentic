@@ -70,11 +70,17 @@ The shape of a transport is `TransportContainerImpl` in
    `release` lets the machine go and keeps the files, so the next
    `prepare` finds them; `purge` removes the machine and the files by
    ids alone, and one already gone is no error. Nothing the provider
-   holds in memory is needed to find a workspace again.
-2. `prepare` checks the spec before it creates anything:
+   holds in memory is needed to find a workspace again. A provider that
+   keeps a workspace whole takes `KeepsWholeMixin`, as the container
+   provider does; one that keeps its directory alone implements
+   `keeps_directory`, `pack`, `read`, `drop`, and `restore`.
+2. `check` refuses a spec the backend can never hold and makes nothing:
+   the loop asks it before its first model call. `prepare` refuses the
+   same before it creates anything:
    `refusal(spec, mode=..., egress=..., limits=...)` answers why the
    backend cannot hold it, and the provider raises `IsolationRefused`
-   with it. A spec at another mode is refused, never run at a weaker
+   with it, its `cause` the same text, from `check` and `prepare` alike.
+   A spec at another mode is refused, never run at a weaker
    one, and a backend that cannot reach what it needs (its daemon, its
    image) refuses rather than fall back to another backend, as
    `test_a_container_spec_with_no_docker_is_refused_and_never_swapped_for_a_directory`
@@ -95,8 +101,9 @@ The shape of a transport is `TransportContainerImpl` in
    fake of its client, shape `LocalDocker` in `infra/tests/test_agent_workspaces.py`;
    a test that needs the real one is marked `integration` and skipped
    when the machine lacks it, as `TestTransportContainer` is:
-   - each spec it cannot hold is refused before the client is called,
-     a parametrized list shaped as `CONTAINER_REFUSES`;
+   - each spec it cannot hold is refused by `check` and by `prepare`
+     before the client is called, a parametrized list shaped as
+     `CONTAINER_REFUSES`;
    - a spec at its mode is met; a second `prepare` finds the same
      workspace; its files outlive a `release`;
    - a `purge` by ids removes the machine and the files, and a second
