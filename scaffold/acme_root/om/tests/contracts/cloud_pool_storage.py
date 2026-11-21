@@ -1,12 +1,15 @@
 """The contract every cloud pool storage meets: a VM is found by its
 key until the key is spent, by its name, by the session it serves, and by
-its tenant, and every VM page by page; a warm VM is claimed once,
-and only once it started, at the egress asked, bound from the claim; a
-VM started again keeps when it first ran; the warm VMs a sweep
-writes never pass the count; and an erasure is asked once per session until
-it is done. Its rows are the platform's, so it takes no tenant first and
-names no cross-tenant case; the two reads by tenant hold to it by their
-predicate, and another tenant's finds nothing."""
+its tenant, and every VM page by page; a claim holds its tenant's maximum
+and the pool's, and binds a warm VM once, and only once it started, at
+the egress asked, from the claim; a warm VM's row is taken only while no
+session claimed it; a VM started again keeps when it first ran; the warm
+VMs a sweep writes never pass the count or the maximum; an erasure is
+asked once per session until it is done; and the pool's limits and a
+tenant's own maximum are written over the version read. Its VMs are the
+platform's rows, read by their predicate, and another tenant's finds
+nothing; a tenant's own maximum is that tenant's, and its cases present
+another tenant's."""
 
 import secrets
 from datetime import timedelta
@@ -17,15 +20,34 @@ import pytest
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolVm
-from acme.om.exceptions import UniqueKeyTaken
+from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 
 INTERFACE = CloudPoolStorageInterface
 """The storage interface whose cross-tenant cases this suite holds."""
 
-CROSS_TENANT_CASES: frozenset[str] = frozenset()
-"""`CloudPoolStorageInterface` takes no tenant first: its rows are the
-platform's."""
+CROSS_TENANT_CASES: frozenset[str] = frozenset(
+    {"read_tenant_limit", "write_tenant_limit", "delete_tenant_limit"}
+)
+"""A tenant's own maximum is the one row `CloudPoolStorageInterface` keys by
+its tenant; the VMs and the pool's limits are the platform's."""
+
+FAR = 1000
+"""A maximum no case reaches."""
+
+
+def make_limit(most: int, version: int = 1) -> TenantPoolLimit:
+    now = utcnow()
+    return TenantPoolLimit(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=new_id(),
+        updated_by=new_id(),
+        most=most,
+        version=version,
+    )
 
 
 def make_vm(
@@ -92,35 +114,131 @@ class CloudPoolStorageContract:
         closed = make_vm(egress_open=False)
         await storage.create_vm(starting)
         await storage.create_vm(closed)
-        tenant, session, pool, person = new_id(), new_id(), new_id(), new_id()
-        at = utcnow() + timedelta(minutes=30)
-        assert await storage.claim_warm(tenant, session, pool, person, True, at) is None
-        claimed = await storage.claim_warm(tenant, session, pool, person, False, at)
-        assert claimed is not None and claimed.id == closed.id
+        tenant, session, person = new_id(), new_id(), new_id()
+        asked = make_vm(
+            egress_open=False, tenant_id=tenant, agent_session_id=session, started=False
+        )
+        asked = asked.model_copy(
+            update={"bound_by": person, "bound_at": utcnow() + timedelta(minutes=30)}
+        )
+        claimed = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(claimed, PoolVm) and claimed.id == closed.id
         assert (claimed.tenant_id, claimed.agent_session_id, claimed.pool_id, claimed.bound_by) == (
             tenant,
             session,
-            pool,
+            asked.pool_id,
             person,
         )
-        assert claimed.bound_at == at and claimed.started_at == closed.started_at
+        assert claimed.bound_at == asked.bound_at and claimed.started_at == closed.started_at
+        assert claimed.name == closed.name and claimed.key_digest == closed.key_digest
         assert await storage.read_vm(closed.id) == claimed
-        assert await storage.claim_warm(tenant, new_id(), pool, person, False, at) is None
+        assert await storage.read_vm(asked.id) is None, "a warm one bound, none written"
+        again = asked.model_copy(update={"id": new_id(), "agent_session_id": new_id()})
+        written = await storage.claim(again, most=FAR, tenant_most=FAR, warm=True)
+        assert written == again, "the warm one starting is not claimed, so its own is written"
         assert await storage.read_of_session(tenant, session) == claimed
         assert await storage.read_of_session(new_id(), session) is None
-        assert await storage.read_of_tenant(tenant, 10) == [claimed]
+        assert len(await storage.read_of_tenant(tenant, 10)) == 2
 
-    async def test_the_warm_vms_written_never_pass_the_count(
+    async def test_a_claim_holds_its_tenants_maximum_and_the_pools(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        tenant, other = new_id(), new_id()
+        await storage.create_vm(make_vm(tenant_id=tenant, agent_session_id=new_id()))
+        await storage.create_vm(make_vm())  # warm, of no tenant
+        asked = make_vm(tenant_id=tenant, agent_session_id=new_id(), started=False)
+        assert await storage.claim(asked, most=FAR, tenant_most=1, warm=True) is Full.TENANT
+        assert await storage.read_vm(asked.id) is None
+        assert len(await storage.read_vms(10)) == 2, "nor a warm one bound"
+        theirs = make_vm(tenant_id=other, agent_session_id=new_id(), started=False)
+        assert await storage.claim(theirs, most=2, tenant_most=1, warm=False) is Full.POOL
+        assert await storage.claim(theirs, most=3, tenant_most=1, warm=False) == theirs
+        assert await storage.read_vm(theirs.id) == theirs
+        late = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        bound = await storage.claim(late, most=3, tenant_most=1, warm=True)
+        assert isinstance(bound, PoolVm) and bound.agent_session_id == late.agent_session_id, (
+            "a warm one is bound at the maximum: it is counted already"
+        )
+        assert len(await storage.read_vms(10)) == 3
+
+    async def test_the_warm_vms_written_never_pass_the_count_or_the_maximum(
         self, storage: CloudPoolStorageInterface
     ) -> None:
         await storage.create_vm(make_vm())
         await storage.create_vm(make_vm(tenant_id=new_id(), agent_session_id=new_id()))
         made = [make_vm(started=False) for _ in range(3)]
-        assert await storage.reserve_warm(2, made) == 1, "one stands warm already"
+        assert await storage.reserve_warm(2, FAR, made) == 1, "one stands warm already"
         assert await storage.read_vm(made[0].id) == made[0]
         assert await storage.read_vm(made[1].id) is None
-        assert await storage.reserve_warm(2, [make_vm(started=False)]) == 0
+        assert await storage.reserve_warm(2, FAR, [make_vm(started=False)]) == 0
         assert len(await storage.read_vms(10)) == 3
+        assert await storage.reserve_warm(5, 4, [make_vm(started=False) for _ in range(3)]) == 1
+        assert await storage.reserve_warm(5, 4, [make_vm(started=False)]) == 0
+        assert len(await storage.read_vms(10)) == 4
+
+    async def test_a_warm_vms_row_is_taken_only_while_no_session_claimed_it(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        warm, claimed = make_vm(), make_vm()
+        await storage.create_vm(warm)
+        await storage.create_vm(claimed)
+        asked = make_vm(tenant_id=new_id(), agent_session_id=new_id(), started=False)
+        bound = await storage.claim(asked, most=FAR, tenant_most=FAR, warm=True)
+        assert isinstance(bound, PoolVm)
+        taken = warm if bound.id == claimed.id else claimed
+        assert await storage.take_warm(bound.id) is False, "a session holds it"
+        assert await storage.read_vm(bound.id) == bound
+        assert await storage.take_warm(taken.id) is True
+        assert await storage.read_vm(taken.id) is None
+        assert await storage.take_warm(taken.id) is False, "gone"
+
+    async def test_the_pools_limits_are_written_over_the_version_read(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        assert await storage.read_limits() is None
+        now = utcnow()
+        first = PoolLimits(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=new_id(),
+            updated_by=new_id(),
+            warm=1,
+            most=4,
+            tenant_most=2,
+        )
+        assert await storage.write_limits(first, None) == first
+        assert await storage.read_limits() == first
+        with pytest.raises(PreconditionFailed):
+            await storage.write_limits(first.model_copy(update={"id": new_id()}), None)
+        second = first.model_copy(update={"id": new_id(), "most": 8, "version": 2})
+        assert await storage.write_limits(second, 1) == second
+        with pytest.raises(PreconditionFailed):
+            await storage.write_limits(second.model_copy(update={"id": new_id(), "version": 2}), 1)
+        assert await storage.read_limits() == second
+
+    async def test_a_tenants_own_maximum_is_written_over_its_version_and_another_finds_none(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        tenant, other = new_id(), new_id()
+        assert await storage.read_tenant_limit(tenant) is None
+        first = make_limit(3)
+        assert await storage.write_tenant_limit(tenant, first, None) == first
+        assert await storage.read_tenant_limit(tenant) == first
+        assert await storage.read_tenant_limit(other) is None
+        with pytest.raises(PreconditionFailed):
+            await storage.write_tenant_limit(tenant, make_limit(4), None)
+        with pytest.raises(PreconditionFailed):
+            await storage.write_tenant_limit(other, first.model_copy(update={"most": 9}), 1)
+        assert await storage.read_tenant_limit(other) is None, "another tenant's write lands none"
+        second = first.model_copy(update={"most": 5, "version": 2})
+        assert await storage.write_tenant_limit(tenant, second, 1) == second
+        with pytest.raises(PreconditionFailed):
+            await storage.write_tenant_limit(tenant, second, 1)
+        assert await storage.delete_tenant_limit(other) is None
+        assert await storage.read_tenant_limit(tenant) == second, "another tenant's delete"
+        assert await storage.delete_tenant_limit(tenant) == second
+        assert await storage.read_tenant_limit(tenant) is None
 
     async def test_a_vm_started_again_takes_a_new_key_and_its_host_anew(
         self, storage: CloudPoolStorageInterface

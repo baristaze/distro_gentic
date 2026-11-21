@@ -144,9 +144,13 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "benchmarks": TableScope(ScopeKind.SYSTEM),
     # The VMs the cloud pool started: the platform's own record, since a
     # warm VM serves no tenant until a session claims it. Beside them,
-    # the erasures it owes, which its sweep reads across tenants.
+    # the erasures it owes, which its sweep reads across tenants, and its
+    # own limits, which no tenant reads.
     "pool_vms": TableScope(ScopeKind.SYSTEM),
     "pool_erasures": TableScope(ScopeKind.SYSTEM),
+    "pool_limits": TableScope(ScopeKind.SYSTEM),
+    # A tenant's own maximum of the cloud pool's VMs, which an operator sets.
+    "pool_tenant_limits": TableScope(ScopeKind.ORG),
     # The platform's tenant rows.
     "retention_policies": TableScope(ScopeKind.ORG),
     "agent_session_retention": TableScope(ScopeKind.ORG),

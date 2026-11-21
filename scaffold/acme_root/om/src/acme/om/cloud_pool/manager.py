@@ -39,11 +39,15 @@ class CloudPoolManagerInterface(ABC):
         holds it. The VM is the one that serves the session, else a
         warm one it claims, else one started from the pool's image; with
         `restore`, one started from that snapshot of the session's VM,
-        held to its digest first. `IsolationRefused` that clears while the
-        VM starts or its host has not prepared it in time, and the loop
-        waits on the resource; one that never clears for a spec the pool's
-        VMs cannot hold. `AgentWorkspaceLost` when the snapshot is gone, was
-        not taken by the pool, or does not match its digest."""
+        held to its digest first. A new VM, or a warm one claimed, counts
+        against the most the pool holds and the most the session's tenant
+        holds, as the pool's limits stand at this claim. `IsolationRefused`
+        that clears while either maximum stands, the VM starts, or its
+        host has not prepared it in time, and the loop waits on the
+        resource; its cause names no count and no other tenant's use. One
+        that never clears for a spec the pool's VMs cannot hold.
+        `AgentWorkspaceLost` when the snapshot is gone, was not taken by the
+        pool, or does not match its digest."""
         ...
 
     @abstractmethod
@@ -89,9 +93,9 @@ class CloudPoolManagerInterface(ABC):
     @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
         """A tenant's purge, once it was deleted past its retention: every
-        VM that serves one of its sessions goes, and every snapshot
-        kept under its names. Answers how many went; a tenant not past its
-        retention loses nothing."""
+        VM that serves one of its sessions goes, every snapshot kept
+        under its names, and its own maximum. Answers how many went; a
+        tenant not past its retention loses nothing."""
         ...
 
     @abstractmethod
@@ -110,14 +114,16 @@ class CloudPoolManagerInterface(ABC):
     @transition
     async def sweep(self, rctx: RequestContext) -> int:
         """System-internal: one pass of the sweep, across tenants and for
-        none, over every VM the pool holds, a page at a time: lets go of
-        a VM whose first start died with the process that started it,
-        of one whose session, or tenant, is gone, and of one under the pool's
+        none, over every VM the pool holds, a page at a time, where this
+        process reaches the VMs: lets go of a VM whose first start died
+        with the process that started it, of one that ran and is gone, of
+        one whose session, or tenant, is gone, and of one under the pool's
         names that no row holds; stops a session's VM that runs with no
         host to work for, its host never enrolled, ended, or silent, and
         keeps its disk; does the erasures asked; then starts warm VMs
-        until the pool's warm count stands. Answers how many VMs it let
-        go or stopped."""
+        until the pool's warm count stands, never past its maximum. A warm
+        VM's row goes before its VM, so a session that claimed it
+        meanwhile keeps it. Answers how many VMs it let go or stopped."""
         ...
 
     @abstractmethod

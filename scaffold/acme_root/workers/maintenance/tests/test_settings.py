@@ -83,7 +83,6 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "vm_open_group": "the cloud pool's VMs, which no deployment runs yet",
     "cloud_pool_image": "the runner's cloud pool only",
     "cloud_pool_api_url": "the runner's cloud pool only",
-    "cloud_pool_warm": "the runner's cloud pool only",
     "flags_file": "the local flags backend only",
     "log_level": "INFO everywhere",
     "otel_endpoint": "traces go to the collector sidecar, wired in the task, not a knob",

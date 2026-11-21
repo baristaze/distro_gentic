@@ -6,8 +6,9 @@ from uuid import UUID
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
+from acme.om.cloud_pool.types.limits import Full, PoolLimits, TenantPoolLimit
 from acme.om.cloud_pool.types.vm import PoolVm
-from acme.om.exceptions import UniqueKeyTaken
+from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 
 
 class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
@@ -18,18 +19,57 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         self._lock = asyncio.Lock()
         self._vms: dict[UUID, PoolVm] = {}
         self._erasures: dict[tuple[UUID, UUID], PoolErasure] = {}
+        self._limits: PoolLimits | None = None
+        self._tenant_limits: dict[UUID, TenantPoolLimit] = {}
 
     async def create_vm(self, vm: PoolVm) -> None:
         async with self._lock:
             self._add(vm)
 
-    async def reserve_warm(self, wanted: int, made: Sequence[PoolVm]) -> int:
+    async def claim(self, vm: PoolVm, *, most: int, tenant_most: int, warm: bool) -> PoolVm | Full:
+        async with self._lock:
+            if sum(1 for held in self._vms.values() if held.tenant_id == vm.tenant_id) >= (
+                tenant_most
+            ):
+                return Full.TENANT
+            if warm:
+                for held in self._oldest_first():
+                    if (
+                        held.warm
+                        and held.started_at is not None
+                        and (held.egress_open == vm.egress_open)
+                    ):
+                        claimed = held.model_copy(
+                            update={
+                                "tenant_id": vm.tenant_id,
+                                "agent_session_id": vm.agent_session_id,
+                                "pool_id": vm.pool_id,
+                                "bound_by": vm.bound_by,
+                                "bound_at": vm.bound_at,
+                            }
+                        )
+                        self._vms[held.id] = claimed
+                        return claimed
+            if len(self._vms) >= most:
+                return Full.POOL
+            self._add(vm)
+            return vm
+
+    async def reserve_warm(self, wanted: int, most: int, made: Sequence[PoolVm]) -> int:
         async with self._lock:
             warm = sum(1 for vm in self._vms.values() if vm.warm)
-            written = list(made[: warm_to_start(wanted, warm)])
+            written = list(made[: warm_to_start(wanted, warm, most - len(self._vms))])
             for vm in written:
                 self._add(vm)
             return len(written)
+
+    async def take_warm(self, vm_id: UUID) -> bool:
+        async with self._lock:
+            vm = self._vms.get(vm_id)
+            if vm is None or not vm.warm:
+                return False
+            del self._vms[vm_id]
+            return True
 
     async def read_vm(self, vm_id: UUID) -> PoolVm | None:
         return self._vms.get(vm_id)
@@ -59,31 +99,6 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     async def read_vms(self, limit: int, after: UUID | None = None) -> list[PoolVm]:
         by_id = sorted(self._vms.values(), key=lambda m: m.id)
         return [m for m in by_id if after is None or m.id > after][:limit]
-
-    async def claim_warm(
-        self,
-        tenant_id: UUID,
-        agent_session_id: UUID,
-        pool_id: UUID,
-        bound_by: UUID,
-        egress_open: bool,
-        at: datetime,
-    ) -> PoolVm | None:
-        async with self._lock:
-            for vm in self._oldest_first():
-                if vm.warm and vm.started_at is not None and vm.egress_open == egress_open:
-                    claimed = vm.model_copy(
-                        update={
-                            "tenant_id": tenant_id,
-                            "agent_session_id": agent_session_id,
-                            "pool_id": pool_id,
-                            "bound_by": bound_by,
-                            "bound_at": at,
-                        }
-                    )
-                    self._vms[vm.id] = claimed
-                    return claimed
-            return None
 
     async def mark_started(self, vm_id: UUID, at: datetime) -> None:
         await self._update(vm_id, started_at=at)
@@ -131,6 +146,34 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
             for at, erasure in list(self._erasures.items()):
                 if erasure.id == erasure_id:
                     del self._erasures[at]
+
+    async def read_limits(self) -> PoolLimits | None:
+        return self._limits
+
+    async def write_limits(self, limits: PoolLimits, version: int | None) -> PoolLimits:
+        async with self._lock:
+            standing = None if self._limits is None else self._limits.version
+            if standing != version:
+                raise PreconditionFailed("the cloud pool's limits were written meanwhile")
+            self._limits = limits
+            return limits
+
+    async def read_tenant_limit(self, org_id: UUID) -> TenantPoolLimit | None:
+        return self._tenant_limits.get(org_id)
+
+    async def write_tenant_limit(
+        self, org_id: UUID, limit: TenantPoolLimit, version: int | None
+    ) -> TenantPoolLimit:
+        async with self._lock:
+            held = self._tenant_limits.get(org_id)
+            if (None if held is None else held.version) != version:
+                raise PreconditionFailed(f"org {org_id}'s VM maximum was written meanwhile")
+            self._tenant_limits[org_id] = limit
+            return limit
+
+    async def delete_tenant_limit(self, org_id: UUID) -> TenantPoolLimit | None:
+        async with self._lock:
+            return self._tenant_limits.pop(org_id, None)
 
     def _add(self, vm: PoolVm) -> None:
         for held in self._vms.values():

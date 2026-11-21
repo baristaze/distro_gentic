@@ -35,8 +35,7 @@ class PlatformInfraSettings(BaseSettings):
     # VM, each running the host program, which reaches the platform at
     # `cloud_pool_api_url`. Every VM starts from `cloud_pool_image`, a
     # snapshot of the VMs that holds the host program: a stopped
-    # VM's name on Lima, the AMI id on ec2; empty runs no pool.
-    # `cloud_pool_warm` VMs stand started ahead of demand.
+    # VM's name on Lima, the AMI id on ec2; empty runs no pool. Its
+    # limits are records its operators write, never a setting.
     cloud_pool_image: str = ""
     cloud_pool_api_url: str = ""
-    cloud_pool_warm: int = Field(default=0, ge=0)

@@ -64,8 +64,9 @@ from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.change_events import ChangeEventsManagerInterface
 from acme.om.change_events.impl.manager import ChangeEventsOptions
-from acme.om.cloud_pool import CloudPoolManagerInterface
+from acme.om.cloud_pool import CloudPoolManagerInterface, CloudPoolOperatorManagerInterface
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
+from acme.om.cloud_pool.impl.operator import CloudPoolOperatorManagerImpl
 from acme.om.context import RequestContext, TenantContext
 from acme.om.evidence import (
     EvidenceManagerInterface,
@@ -180,6 +181,7 @@ class PlatformManagers(Managers):
     hosts: HostsManagerInterface
     exec_relay: ExecRelayManagerInterface
     cloud_pool: CloudPoolManagerInterface
+    cloud_pool_operator: CloudPoolOperatorManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     agent_projects: AgentProjectsManagerInterface
     benchmarks: BenchmarksManagerInterface
@@ -1052,6 +1054,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             session = await sessions_rows.read_agent_session(org_id, agent_session_id)
             return session is None or session.deleted_at is not None
 
+        self._pooling = options.cloud_pool_options or CloudPoolOptions()
         self._cloud_pool = CloudPoolManagerImpl(
             storage.get_cloud_pool_storage(),
             infra.get_vms(),
@@ -1059,7 +1062,7 @@ class RootHooksPlatformImpl(RootHooksInterface):
             lambda: self.managers.hosts,
             lambda: placed_workspaces,
             lambda: self.managers.exec_relay,
-            options.cloud_pool_options or CloudPoolOptions(),
+            self._pooling,
             session_gone=session_gone,
             expired=tenancy.tenant_expired,
             stage=options.cloud_pool_stage,
@@ -1255,6 +1258,14 @@ class RootHooksPlatformImpl(RootHooksInterface):
                 kept=self._held_to_pins.keep_on_host,
             ),
             cloud_pool=self._cloud_pool,
+            # The pool's limits, and a tenant's own maximum, which every claim
+            # reads, as its operators write them.
+            cloud_pool_operator=CloudPoolOperatorManagerImpl(
+                storage.get_cloud_pool_storage(),
+                storage.get_tenancy_storage(),
+                storage.get_change_event_storage(),
+                self._pooling,
+            ),
             # The validation sessions: platform work on the queue, with no
             # agent.
             platform_agents=PlatformAgentsManagerImpl(
