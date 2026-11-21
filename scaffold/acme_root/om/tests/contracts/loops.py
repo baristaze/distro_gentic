@@ -86,10 +86,11 @@ class Found(OmBase):
 
 
 class Lookup(ToolInterface):
-    """A read-only lookup that touches no workspace. It keeps who it ran as,
-    and holds its first call until `release` is set when `holds` is. When
+    """A read-only lookup that runs nothing. It keeps who it ran as, and
+    holds its first call until `release` is set when `holds` is. When
     `remote` is, it reads its target from the system it acts on, an await
-    that suspends."""
+    that suspends. It declares that it reaches the workspace, as a tool
+    that says nothing does, unless `workspace` is False."""
 
     def __init__(
         self,
@@ -98,6 +99,7 @@ class Lookup(ToolInterface):
         effect: Effect = Effect.READ_ONLY,
         authorization_class: str = ToolClass.READ,
         holds: bool = False,
+        workspace: bool = True,
     ) -> None:
         self._spec = ToolSpec(
             name=name,
@@ -108,6 +110,7 @@ class Lookup(ToolInterface):
             authorization_class=authorization_class,
             effect=effect,
             interruptible=True,
+            workspace=workspace,
         )
         self.holds = holds
         self.remote = False
@@ -358,6 +361,14 @@ class Loop:
         )
 
 
+def _tools_options(
+    options: ToolsOptions | None, ceilings: ToolPolicyLayer | None
+) -> ToolsOptions | None:
+    if ceilings is None:
+        return options
+    return (options or ToolsOptions()).model_copy(update={"ceilings": ceilings})
+
+
 def loop_over(
     tmp_path: Path,
     *,
@@ -376,6 +387,7 @@ def loop_over(
     sessions: AgentSessionsOptions | None = None,
     infra: InfraLocalImpl | None = None,
     hooks: LoopHooksInterface | None = None,
+    tools_options: ToolsOptions | None = None,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
@@ -386,7 +398,8 @@ def loop_over(
     suite of a gate of its own builds it from the managers and the clock.
     `language_models_layer` goes to the root as a layer's root hands it in, and the
     loop takes the layer's call credentials. `ceilings` None keeps the
-    platform's, and `sessions` None is the sessions' own options. `infra`
+    platform's, and `sessions` None is the sessions' own options;
+    `tools_options` None is the tools' own, with `ceilings`. `infra`
     None is the local root over `tmp_path`; a suite on real Docker hands in
     one whose workspaces are containers. `hooks` None is the null hooks; a
     suite of a layer's hooks hands in its own."""
@@ -412,7 +425,7 @@ def loop_over(
             tool_catalog=every,
             attachment_reader=reader,
             language_models_layer=language_models_layer,
-            tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
+            tools_options=_tools_options(tools_options, ceilings),
             agent_sessions_options=sessions,
             loop_hooks=hooks,
         ),

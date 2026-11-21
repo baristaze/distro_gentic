@@ -316,6 +316,8 @@ def tools_over(
         secrets or SecretsLocalImpl(Path(tempfile.mkdtemp(prefix="secrets-")) / "secrets.env"),
         secret_names,
         options.purge_batch,
+        directory_bound=options.directory_bound,
+        part_bytes=options.snapshot_part_bytes,
     )
     bases = AgentWorkspaceBases(
         buckets,
@@ -413,6 +415,7 @@ async def put_call(
         principal=a_person(),
         authority=AuthorityMode.STEADY,
         agent=AgentRef(kind="delivery", version=1, agent_session_id=agent_session_id),
+        workspace=True,
     )
     stored = await steps.append_agent_steps(
         ctx, agent_session_id, epoch, [model_request, model_response, request]
