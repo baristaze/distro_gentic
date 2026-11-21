@@ -152,6 +152,7 @@ DROPPED_TABLE_ROLES: dict[str, DatabaseRole] = {
     "projects": DatabaseRole.CORE,
     "session_projects": DatabaseRole.CORE,
     "exec_parts": DatabaseRole.CORE,
+    "pool_erasures": DatabaseRole.CORE,
 }
 """Tables the migration chain made and later dropped or renamed, by the name
 they had. No process reaches them, so `role_for` does not know them; only the
