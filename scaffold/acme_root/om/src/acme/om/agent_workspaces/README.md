@@ -198,7 +198,7 @@ rebuilt from.
   the platform's loop hooks hold the pin to where the session runs
   (`pinned.PinnedWorkspacesInterface`, the tools manager's): what a
   prepare there would refuse for good ends the loop errored, no call
-  spent.
+  spent, its end naming the cause for a person.
 - The checkout runs in the workspace through the transport the tools
   take, each command under the epoch its run held when it began, so a run
   that lost its claim moves nothing: for a session

@@ -33,6 +33,7 @@ from acme.om.base import new_id
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
 from acme.om.cloud_pool.types.sizes import SIZES
 from acme.om.platform_agents.kinds import SOFTWARE_ENGINEER
+from acme.om.platform_loop_hooks import NEVER_HELD
 from acme.om.platform_root import PlatformRootOptions
 
 from contracts.agent_workspaces import AgentProjectsTwin
@@ -147,7 +148,7 @@ async def test_a_spec_the_pool_never_holds_is_refused_before_any_model_call(
     ],
     ids=["its agent project's allowlist", "its agent project's workspace base"],
 )
-async def test_a_pin_the_pool_never_holds_is_refused_before_any_model_call(
+async def test_a_pin_the_pool_never_holds_ends_the_loop_before_any_model_call_naming_its_cause(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -157,7 +158,8 @@ async def test_a_pin_the_pool_never_holds_is_refused_before_any_model_call(
     """A kind the pool holds, pinned to more than its kind in its agent
     project: an allowlist's egress, which no VM holds, or a workspace base,
     which no VM starts from. The pin is held before the first model call,
-    and the loop ends errored with no call spent and no VM started."""
+    and the loop ends errored with no call spent and no VM started, its end
+    naming the cause for a person."""
     agent_projects = AgentProjectsTwin(repository=None)
     loop, started = await pooled(tmp_path, monkeypatch, agent_projects)
     if asks == "allowlist":
@@ -186,4 +188,7 @@ async def test_a_pin_the_pool_never_holds_is_refused_before_any_model_call(
     assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.ERRORED)
     assert loop.anthropic.calls == [], "refused before any model call"
     assert started == [], "no VM started"
-    assert any(cause in record.getMessage() for record in caplog.records), "the cause"
+    assert any(cause in record.getMessage() for record in caplog.records), "the log's"
+    ended = (await loop.history(agent_session_id))[-1]
+    assert ended.type is AgentStepType.LOOP_ENDED and isinstance(ended.header, LoopEndedHeader)
+    assert ended.header.cause == f"{NEVER_HELD}: {cause}", "the person's"

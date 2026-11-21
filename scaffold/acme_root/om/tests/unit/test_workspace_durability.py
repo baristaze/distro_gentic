@@ -39,7 +39,12 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.agent_projects.impl.retention import SessionAgentProjectBoundImpl
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
-from acme.om.agent_steps.types.header import AgentWorkspaceSnapshot, LoopOutcome, ParkReason
+from acme.om.agent_steps.types.header import (
+    AgentWorkspaceSnapshot,
+    LoopEndedHeader,
+    LoopOutcome,
+    ParkReason,
+)
 from acme.om.agent_workspaces.impl.tools import PinnedToolsOptions, ToolsManagerAgentWorkspacesImpl
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.rules import session_branch
@@ -51,6 +56,7 @@ from acme.om.base import OmBase, new_id, utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
 from acme.om.hosts.types.placement import PlacementState
+from acme.om.platform_loop_hooks import UNNAMED
 from acme.om.platform_root import PlatformRootOptions
 from acme.om.privacy.types.agent_session_privacy import StorageMode
 from acme.om.retention.impl.keys import TenantKeysImpl
@@ -298,7 +304,9 @@ async def test_a_refusal_for_good_of_a_kept_workspace_ends_the_loop_with_its_rea
     """A provider that cannot snapshot refuses a workspace kept by snapshots
     on every host like it, in its check as in its prepare: the session's pin
     is held to it before the first model call, and the loop ends with the
-    reason, no call spent, never a wait that no host ends. A refusal of the
+    reason, no call spent, never a wait that no host ends. The refusal names
+    no cause, so the loop's end tells the person what the pin asks, never
+    the refusal's message, which reaches the log alone. A refusal of the
     isolation alone waits on the resource at the first call that reaches
     the workspace, since another host may give it."""
     loop, twin = kept_loop(tmp_path)
@@ -324,6 +332,8 @@ async def test_a_refusal_for_good_of_a_kept_workspace_ends_the_loop_with_its_rea
         assert not requests, "no call spent"
         assert ran.outcome is ends
         assert any(reason in record.getMessage() for record in caplog.records)
+        ended = (await loop.history(agent_session_id))[-1]
+        assert isinstance(ended.header, LoopEndedHeader) and ended.header.cause == UNNAMED
     else:
         assert len(requests) == 1, "waits at the first call that reaches it"
         session = await loop.managers.agent_sessions.get_agent_session(loop.owner, agent_session_id)
