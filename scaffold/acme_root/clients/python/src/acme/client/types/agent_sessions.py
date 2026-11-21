@@ -9,6 +9,7 @@ from acme.client.schema.agent_sessions import (
     AgentStepPageView,
     AgentStepView,
     ParkView,
+    WorkspacePlace,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "AgentStepPageView",
     "AgentStepView",
     "ParkView",
+    "WorkspacePlace",
 ]

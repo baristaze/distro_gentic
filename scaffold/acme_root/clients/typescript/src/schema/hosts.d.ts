@@ -49,6 +49,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{agent_session_id}/workspace-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Client Key
+         * @description A one-use key, in the clear once, that the person's own client trades
+         *     at `POST /hosts/enrollments` to serve their session's local workspace
+         *     from the machine it runs on. A 409 `workspace_held_elsewhere` for a
+         *     session whose workspace a VM of the cloud pool, a host of a pool, or
+         *     another person's client holds: the client follows it and serves
+         *     nothing. A retry mints another key, so it takes no Idempotency-Key.
+         */
+        post: operations["issue_client_key"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/claimants/enrollments": {
         parameters: {
             query?: never;
@@ -366,8 +391,9 @@ export interface paths {
         /**
          * Enroll
          * @description A host enrolls once, with its tenant's enrollment token as its bearer,
-         *     and gets a credential of its own. A retry enrolls another host, so it
-         *     takes no Idempotency-Key.
+         *     and gets a credential of its own; a person's own client enrolls the
+         *     same way with the one-use key its session's workspace was issued. A
+         *     retry enrolls another host, so it takes no Idempotency-Key.
          */
         post: operations["enroll"];
         delete?: never;
@@ -412,7 +438,13 @@ export interface paths {
          *     grace.
          */
         post: operations["rotate"];
-        delete?: never;
+        /**
+         * End Host
+         * @description The host ends itself as it stops: its credentials end at once, and
+         *     its pool waits for another. A person's client that served a session's
+         *     workspace ends so.
+         */
+        delete: operations["end_host"];
         options?: never;
         head?: never;
         patch?: never;
@@ -917,6 +949,27 @@ export interface components {
             token: string | null;
         };
         /**
+         * IssuedClientKeyView
+         * @description A one-use key in the clear, once: the person's own client trades it,
+         *     at once, for a host's credential of the session's local pool of one, and
+         *     serves the session's workspace with it. It is minted on every call, so a
+         *     retry mints another, and the one never traded expires on its own.
+         */
+        IssuedClientKeyView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Key */
+            key: string | null;
+        };
+        /**
          * IssuedEnrollmentTokenView
          * @description The token in the clear, once: it enrolls claimants of its kind into
          *     its pool until it expires or is revoked. It is minted on every call, so
@@ -1208,6 +1261,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlacementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_client_key: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedClientKeyView"];
                 };
             };
             /** @description Validation Error */
@@ -1896,6 +1984,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IssuedHostCredentialView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_host: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

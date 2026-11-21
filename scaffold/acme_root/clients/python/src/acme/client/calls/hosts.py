@@ -19,6 +19,7 @@ from acme.client.types.hosts import (
     ClaimView,
     HostView,
     IssuedClaimantCredentialView,
+    IssuedClientKeyView,
     IssuedHostCredentialView,
 )
 
@@ -69,6 +70,19 @@ class HostsCalls(Transport):
             token=key,
         )
         return IssuedHostCredentialView.model_validate(answer)
+
+    async def issue_client_key(self, agent_session_id: UUID) -> IssuedClientKeyView:
+        """A one-use key, in the clear once, for the person's own client to
+        serve their session's local workspace with: its host trades it at
+        `enroll_host`, as an enrollment token. A 409
+        `workspace_held_elsewhere` for any session whose workspace is not
+        theirs to serve. Never retried: a retry mints another key."""
+        answer = await self.request("POST", f"/v1/agent-sessions/{agent_session_id}/workspace-keys")
+        return IssuedClientKeyView.model_validate(answer)
+
+    async def end_host(self) -> None:
+        """The host ends itself, its credentials with it, as it stops."""
+        await self.request("DELETE", "/v1/hosts/me/credentials")
 
     async def rotate_host_credential(self) -> IssuedHostCredentialView:
         """The host's next credential; the one this client holds ends after

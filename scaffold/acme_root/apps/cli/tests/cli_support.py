@@ -27,6 +27,7 @@ from typer.testing import CliRunner
 
 from acme.apps.cli import main
 from acme.client.client import ApiClient
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.buckets.local import BucketsLocalImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
@@ -46,7 +47,18 @@ ASSISTANT = AgentKind(
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=1, count=0),
 )
-"""The one agent kind the in-process API runs; no loop runs behind it."""
+"""The one agent kind with no workspace the in-process API runs; no loop
+runs behind it."""
+CODER = ASSISTANT.model_copy(
+    update={
+        "name": "coder",
+        "isolation": IsolationSpec(
+            mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE)
+        ),
+    }
+)
+"""A kind that works in a container of its own: its workspace is the
+cloud's, or a person's own machine serves it."""
 
 
 class Hop(httpx.AsyncBaseTransport):
@@ -175,7 +187,7 @@ def stack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Stack]:
     container = build_container(
         tmp_path,
         integrations=IntegrationsOverImpl(twin, absent_model_providers()),
-        agent_kinds=(ASSISTANT,),
+        agent_kinds=(ASSISTANT, CODER),
     )
     owner, org = run(
         container.managers.tenancy.bootstrap(

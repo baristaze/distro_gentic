@@ -82,7 +82,7 @@ from acme.om.exceptions import NotFound, Unavailable
 from acme.om.exec_relay import ExecRelayManagerInterface
 from acme.om.exec_relay.impl.instances import PlacedInstancesRelayedImpl
 from acme.om.exec_relay.impl.manager import ExecRelayManagerImpl, ExecRelayOptions
-from acme.om.exec_relay.impl.placement import PlacementClaimsRelayedImpl
+from acme.om.exec_relay.impl.placement import ItemTreesSessionsImpl, PlacementClaimsRelayedImpl
 from acme.om.exec_relay.impl.transport import TransportRelayImpl
 from acme.om.exec_relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.hosts import HostsManagerInterface
@@ -1175,6 +1175,8 @@ class RootHooksPlatformImpl(RootHooksInterface):
         outbox = managers.outbox
         placing = options.placement_options or PlacementOptions()
         hosting = options.hosts_options or HostsOptions()
+        # A person's own client serves its session's tree: a claim reads an
+        # item's session, or an instance's, up to its tree's root.
         placement = PlacementManagerImpl(
             storage.get_placement_storage(),
             managers.work,
@@ -1182,6 +1184,9 @@ class RootHooksPlatformImpl(RootHooksInterface):
             placing,
             self._work_kinds,
             self._claimant_kinds,
+            trees=ItemTreesSessionsImpl(
+                storage.get_agent_session_storage(), storage.get_exec_relay_storage()
+            ),
         )
         # A host's credential, its claims through placement, and where each
         # session runs. An exec item a claim takes is started by the exec

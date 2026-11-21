@@ -1,11 +1,15 @@
 """A session from the terminal, against the whole API in-process: started,
-spoken to, steered, and read one step a line; and `steps --follow`, which
-reads until the loop stops and exits by how it ended. No runner works
+spoken to, steered, and read one step a line; `steps --follow`, which
+reads until the loop stops and exits by how it ended; and `attach`, which
+serves a person's own local session from this machine and follows any
+other. No runner works
 behind the API here, so a case writes the loop's steps itself, the way a
 run writes them."""
 
+import json
 from uuid import UUID
 
+import pytest
 from api_support import AGENT_PROJECT_ID, OWNER, run, seed_request
 from cli_support import Stack
 
@@ -14,6 +18,7 @@ from acme.om.agent_steps.types.header import LoopOutcome, Park, ParkReason
 from acme.om.agents.loop_rules import ended_step
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
+from acme.om.hosts.types.host import Advertisement, Enrollment, IsolationMode
 
 from contracts.agent_step_storage import make_request, make_response
 
@@ -159,3 +164,104 @@ def test_a_loops_end_and_its_park_say_their_cause_on_their_line(stack: Stack) ->
         "parked",
         "person, until agent_workspace: the snapshot is gone",
     ]
+
+
+def served_here(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """This machine's serving, recorded: each key it was handed, and it
+    stops at once."""
+    keys: list[str] = []
+
+    async def serve_here(api_url: str, key: str) -> None:
+        keys.append(key)
+
+    monkeypatch.setattr(main, "serve_here", serve_here)
+    return keys
+
+
+def test_a_local_session_is_served_from_this_machine_its_kind_asking_for_a_workspace(
+    stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys = served_here(monkeypatch)
+    started = stack.acme(
+        "agent-session",
+        "start",
+        "coder",
+        "fix the export",
+        "--agent-project",
+        AGENT_PROJECT_ID,
+        "--workspace",
+        "local",
+    )
+    assert started.exit_code == 0, started.output
+    agent_session_id = started.output.split()[1]
+    assert f"serving session {agent_session_id}'s workspace from this machine" in started.output
+    assert len(keys) == 1 and keys[0].startswith("hck_")
+    hosts = stack.container.managers.hosts
+    placed = run(hosts.placement_of(owner_context(stack), UUID(agent_session_id)))
+    assert placed.pool is not None and placed.pool.region == "local" and placed.waiting
+    # Attached again, this machine serves it with a key of its own.
+    attached = stack.acme("agent-session", "attach", agent_session_id)
+    assert attached.exit_code == 0, attached.output
+    assert len(keys) == 2 and keys[1] != keys[0]
+    # A kind that asks for no workspace has none to serve.
+    refused = stack.acme(
+        "agent-session",
+        "start",
+        "assistant",
+        "a question",
+        "--agent-project",
+        AGENT_PROJECT_ID,
+        "--workspace",
+        "local",
+    )
+    assert refused.exit_code == main.EXIT_REFUSED
+    assert "asks for no workspace" in refused.output and len(keys) == 2
+
+
+def test_attaching_to_a_session_a_vm_holds_follows_its_steps_and_serves_nothing(
+    stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keys = served_here(monkeypatch)
+    started = stack.acme(
+        "agent-session",
+        "start",
+        "coder",
+        "on the cloud",
+        "--agent-project",
+        AGENT_PROJECT_ID,
+        "--workspace",
+        "cloud",
+    )
+    assert started.exit_code == 0, started.output
+    agent_session_id = started.output.split()[1]
+    (start,) = [
+        r for r in stack.api.sent if r.method == "POST" and r.url.path == "/v1/agent-sessions"
+    ]
+    assert json.loads(start.content)["workspace"] == "cloud"
+    # The cloud pool made the session its pool of one, and a VM's host
+    # holds its workspace.
+    ctx = owner_context(stack)
+    hosts = stack.container.managers.hosts
+    pool = run(hosts.session_pool(ctx, UUID(agent_session_id), "eu-west"))
+    vm = Enrollment(
+        name="vm-1",
+        advertisement=Advertisement(
+            os="Linux", shell="/bin/sh", isolation_modes=(IsolationMode.VM,)
+        ),
+        exec_version=3,
+    )
+    run(hosts.admit_vm(seed_request(), ctx.org_id, pool.id, ctx.user_id, UUID(int=1), vm))
+    stack.acme("agent-session", "say", agent_session_id, "Build it.")
+    a_loop_ran(stack, agent_session_id, LoopOutcome.SUCCEEDED)
+
+    attached = stack.acme("agent-session", "attach", agent_session_id)
+
+    assert attached.exit_code == 0, attached.output
+    assert "following: " in attached.output and "a VM of the cloud pool holds it" in attached.output
+    lines = [line.split() for line in attached.output.splitlines()]
+    steps = [words[1] for words in lines if words and words[0].isdigit()]
+    assert steps == ["message", "model_request", "model_response", "loop_ended"]
+    # Refused as a server: no key reached this machine, and the VM's host is
+    # the only one its pool holds.
+    assert keys == []
+    assert [status.host.name for status in run(hosts.get_hosts(ctx, pool.id))] == ["vm-1"]

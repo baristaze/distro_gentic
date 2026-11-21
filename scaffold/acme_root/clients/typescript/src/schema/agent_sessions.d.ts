@@ -1045,7 +1045,10 @@ export interface components {
          * StartAgentSessionRequest
          * @description A session to start on the latest version of a kind the product runs,
          *     in an agent project of the caller's tenant. Outside a local stack a session
-         *     starts in an agent project or not at all.
+         *     starts in an agent project or not at all. Its workspace is the cloud's
+         *     unless `workspace` says `local`, which pins it to a pool of one of its
+         *     own that only its person's client serves; a kind that asks for no
+         *     workspace is refused it.
          */
         StartAgentSessionRequest: {
             /** Agent Project Id */
@@ -1054,6 +1057,7 @@ export interface components {
             kind: string;
             /** Title */
             title: string;
+            workspace?: components["schemas"]["WorkspacePlace"] | null;
         };
         /**
          * StopReason
@@ -1305,6 +1309,16 @@ export interface components {
              */
             request_id: string;
         };
+        /**
+         * WorkspacePlace
+         * @description Where a session's workspace is held, when its kind asks for one: in
+         *     the platform's cloud, on a VM of the cloud pool when its kind asks a VM,
+         *     or on the machine of the person who started it, served by their own
+         *     client for as long as it runs. A session whose kind asks for no
+         *     workspace has none, and runs with no workspace tools.
+         * @enum {string}
+         */
+        WorkspacePlace: "cloud" | "local";
         /** ValidationError */
         ValidationError: {
             /** Context */

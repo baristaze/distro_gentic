@@ -224,21 +224,6 @@ class SnapshotView(BaseModel):
     size: Annotated[int, Field(title='Size')]
 
 
-class StartAgentSessionRequest(BaseModel):
-    """
-    A session to start on the latest version of a kind the product runs,
-    in an agent project of the caller's tenant. Outside a local stack a session
-    starts in an agent project or not at all.
-    """
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
-    kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
-    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
-
-
 class StopReason(StrEnum):
     """
     Why a model's response stopped, as the wire carries it: the model
@@ -364,6 +349,19 @@ class WaitLineParkView(BaseModel):
     request_id: Annotated[UUID, Field(title='Request Id')]
 
 
+class WorkspacePlace(StrEnum):
+    """
+    Where a session's workspace is held, when its kind asks for one: in
+    the platform's cloud, on a VM of the cloud pool when its kind asks a VM,
+    or on the machine of the person who started it, served by their own
+    client for as long as it runs. A session whose kind asks for no
+    workspace has none, and runs with no workspace tools.
+    """
+
+    cloud = 'cloud'
+    local = 'local'
+
+
 class AgentSessionModelUsageView(BaseModel):
     """
     What a session's model calls used, as each provider reported it, per
@@ -440,6 +438,25 @@ class ParkView(BaseModel):
     retry_at: Annotated[AwareDatetime | None, Field(title='Retry At')]
     unlock: Annotated[str, Field(title='Unlock')]
     wait_line: WaitLineParkView | None = None
+
+
+class StartAgentSessionRequest(BaseModel):
+    """
+    A session to start on the latest version of a kind the product runs,
+    in an agent project of the caller's tenant. Outside a local stack a session
+    starts in an agent project or not at all. Its workspace is the cloud's
+    unless `workspace` says `local`, which pins it to a pool of one of its
+    own that only its person's client serves; a kind that asks for no
+    workspace is refused it.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agent_project_id: Annotated[UUID | None, Field(title='Agent Project Id')] = None
+    kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+    title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
+    workspace: WorkspacePlace | None = None
 
 
 class ToolCallView(BaseModel):

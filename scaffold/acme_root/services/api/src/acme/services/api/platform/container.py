@@ -173,6 +173,7 @@ def build_platform_api(
         agent_projects=managers.agent_projects,
         agent_project_required=agent_project_required,
         kinds=managers.kinds,
+        place_locally=managers.hosts.place_locally,
     )
     services = build_platform_services(
         engine,

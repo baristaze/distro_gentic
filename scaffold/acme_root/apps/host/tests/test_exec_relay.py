@@ -115,6 +115,8 @@ async def relay_to(
     flush_seconds: float = 0.0,
     servers: HostServers | None = None,
     window_chars: int = 32_000,
+    readable: tuple[str, ...] | None = None,
+    min_isolation: HostMode = HostMode.directory,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
@@ -122,7 +124,9 @@ async def relay_to(
     agent project alone, and the session belongs to `agent_project_id`. With `wire`, the
     host reaches the platform through it, and with `now` it reads its time.
     It sends what a command prints at once, or `flush_seconds` apart or
-    `window_chars` at a time, and starts the MCP servers `servers` names."""
+    `window_chars` at a time, and starts the MCP servers `servers` names.
+    Its owner names the paths it reads in `readable`, its workspace's
+    directory unless named, and its minimum isolation in `min_isolation`."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -143,9 +147,9 @@ async def relay_to(
         api.settings(tmp_path / "home", await api.token(pool.id)),
         Ceilings(
             agent_projects=None if serves is None else frozenset({serves}),
-            min_isolation=HostMode.directory,
+            min_isolation=min_isolation,
             egress=frozenset(),
-            readable=(str(where),),
+            readable=(str(where),) if readable is None else readable,
         ),
         probes(HostMode.directory),
         lambda token: ApiClient(
@@ -422,9 +426,35 @@ async def test_an_item_past_the_hosts_ceilings_is_refused_at_once(relayed: Relay
     )
     waiting = asyncio.ensure_future(relayed.runner.run(other, spec, seal=NO_SEAL))
     await claims(relayed.host, waiting)
-    with pytest.raises(Exception, match="egress beyond this host's allowlist") as refused:
+    with pytest.raises(Exception, match="egress: egress beyond this host's allowlist") as refused:
         await waiting
     assert getattr(refused.value, "code", None) == "refused_by_host"
+
+
+async def test_a_command_past_the_owners_paths_or_isolation_is_refused_by_name_before_it_runs(
+    api: Stack, tmp_path: Path
+) -> None:
+    marker = tmp_path / "ran"
+
+    async def refused(relayed: Relayed) -> str:
+        spec = command(relayed.epoch, "sh", "-c", f"touch {marker}")
+        waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+        await claims(relayed.host, waiting)
+        with pytest.raises(Exception) as refusal:
+            await waiting
+        assert getattr(refusal.value, "code", None) == "refused_by_host"
+        return str(refusal.value)
+
+    # A workspace whose directory its owner does not let a result read: its
+    # call is refused at the claim, by the ceiling's name, and runs nothing.
+    (tmp_path / "paths").mkdir()
+    elsewhere = await relay_to(api, tmp_path / "paths", readable=("/srv/work",))
+    assert "readable: a read outside this host's readable paths" in await refused(elsewhere)
+    # A directory, on a host whose owner asks a container at the least.
+    (tmp_path / "isolation").mkdir()
+    weaker = await relay_to(api, tmp_path / "isolation", min_isolation=HostMode.container)
+    assert "min_isolation: isolation directory below this host's minimum" in await refused(weaker)
+    assert not marker.exists()
 
 
 async def test_an_item_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_run(
@@ -547,7 +577,9 @@ async def test_a_relayed_call_names_its_sessions_agent_project_to_the_hosts_ceil
         ran = await waiting
         assert (ran.exit_code, ran.stdout) == (0, "ours\n")
     else:
-        with pytest.raises(Exception, match="an agent project this host does not serve"):
+        with pytest.raises(
+            Exception, match="agent_projects: an agent project this host does not serve"
+        ):
             await waiting
 
 
@@ -569,7 +601,9 @@ async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_
             break
         await asyncio.sleep(0.01)
     assert handled is not None
-    assert handled.refused == ["a person's command, which this host does not accept"]
+    assert handled.refused == [
+        "people_commands: a person's command, which this host does not accept"
+    ]
     ended = await watch.command(person, agent_session_id, command.key, -1)
     assert ended.state is ExecState.DONE and ended.outcome is not None
     assert ended.outcome.refused == "refused_by_host" and ended.outcome.exit_code is None

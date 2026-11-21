@@ -13,7 +13,9 @@ uv run acme-host run          # every start after it
 
 On a tenant's machine it runs as a service of a user of its own, which
 [deployment/host/](../../deployment/host/README.md) installs on Linux and
-macOS.
+macOS. A person's own CLI runs the same program, with its `serve` extra,
+to serve the workspace of a session of theirs from their machine
+(`acme agent-session start --workspace local`, or `attach`).
 
 ## What it does
 
@@ -47,8 +49,18 @@ macOS.
   credential, a secret of its own store.
   Every item it claims is held to them, and to the modes it probed,
   before anything runs. An item that does not say what it needs is read
-  as asking the most. Nothing the platform sends changes a ceiling, and
-  a host with no ceilings file does not start.
+  as asking the most, and a refusal names the ceiling that refused.
+  Nothing the platform sends changes a ceiling, and a host with no
+  ceilings file does not start.
+- **Serves a person's own session, as their client.** Run by a person's
+  CLI, it trades the one-use key the platform issued for that session
+  for a credential of the session's local pool of one, and claims the
+  work of that session's tree alone: the session, its sub-agents, and
+  the instances their checks ask for. It runs from a home of its own
+  that goes as it stops.
+  Its owner's ceilings and secrets are this machine's, in the host's
+  home. As it stops it ends its host, and the session waits for the next
+  client.
 - **Prepares the workspaces of its pool.** A session pinned to its pool
   asks a host of the pool to prepare its workspace. The host that claims
   the ask makes it to the session's isolation, a container per session,
