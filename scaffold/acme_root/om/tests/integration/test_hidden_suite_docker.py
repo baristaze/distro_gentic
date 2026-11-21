@@ -9,7 +9,10 @@ on the path puts them nowhere the digest runs them, so the digest after its
 trial is the one before it. A head whose tree holds what a runner's tool
 reads from the folder it starts in, a `conftest.py` and a `pyproject.toml`
 for pytest and a `json.py` for `python3 -m`, has none of it loaded: the
-runner runs outside the tree."""
+runner runs outside the tree. A check of the same request with one
+command, which runs the head's code as the container's own user and
+rewrites the runner's copy, runs after the hidden check is scored, so
+the copy as the suite wrote it scores the case."""
 
 import importlib.util
 import io
@@ -174,6 +177,41 @@ for folder in os.environ["PATH"].split(":"):
 )
 """A head that leaves the defect, and whose code puts its own `sha256sum` and
 `stat` first on the path, each answering a digest of its own."""
+FORGED = SUITE_RUNNER.replace("total == 5", "True")
+"""A runner that passes every head."""
+REWRITES = (
+    DEFECT
+    + f"""
+if __name__ == "__main__":
+    import datetime, json, sys
+
+    try:
+        with open("../suite/hidden/totals_suite.py", "w") as runner:
+            runner.write({FORGED!r})
+        print("the runners' copy: rewritten", file=sys.stderr)
+    except OSError as refused:
+        print(f"the runners' copy: refused: {{refused.strerror}}", file=sys.stderr)
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    start = {{"kind": "start", "schema_version": 1, "check": "totals-visible",
+             "check_version": "1", "version": sys.argv[1], "dirty": False,
+             "environment": {{"image": "python"}}, "host": "instance",
+             "isolation": "container", "started_at": now}}
+    end = {{"kind": "end", "outcome": "passed", "finished_at": now}}
+    with open(sys.argv[2], "w") as stream:
+        stream.write(json.dumps(start) + "\\n" + json.dumps(end) + "\\n")
+"""
+)
+"""A head that leaves the defect, and whose code, run as a script, rewrites
+the hidden runner's copy to pass every head, then passes its own check."""
+VISIBLE = CheckDeclaration(
+    name="totals-visible",
+    version="1",
+    command=("python3", "src/totals.py", "{version}", "{out}"),
+    kind="suite",
+    schema_version=1,
+)
+"""A check with one command, which runs the head's code as the instance's
+own user."""
 TESTED = CheckDeclaration(
     name="totals-complete",
     version="1",
@@ -342,10 +380,12 @@ async def judged(
     head: Mapping[str, str],
     check: CheckDeclaration = COMPLETE,
     suite: Mapping[str, str | bytes] = SUITE,
+    before: tuple[CheckDeclaration, ...] = (),
 ) -> tuple[RunOutcome, Recorded]:
     """The hidden check's one trial at a head whose files are `head`, with
-    the suite's files protected: the run's outcome, and the transport that
-    ran it."""
+    the suite's files protected, in a request that lists `before` ahead of
+    it, one trial each: the hidden run's outcome, and the transport that
+    ran them."""
     files = {**head, **suite}
 
     async def tree(*_: object) -> bytes:
@@ -369,11 +409,11 @@ async def judged(
         version=HEAD,
         source=SOURCE,
         protected=("hidden/**",),
-        checks=(check,),
-        trials=(1,),
+        checks=(*before, check),
+        trials=(1,) * (len(before) + 1),
     )
     report = await executor.run(ctx, request)
-    (record,) = collect(
+    records = collect(
         report.results,
         executor=report.executor,
         agent_session_id=request.agent_session_id,
@@ -383,7 +423,8 @@ async def judged(
         now=utcnow(),
         prepared=report.prepared,
     )
-    return record.outcome, transport
+    assert [each.check for each in records] == [each.name for each in request.checks]
+    return records[-1].outcome, transport
 
 
 def ran(transport: Recorded, script: str) -> tuple[CommandSpec, CommandResult]:
@@ -449,3 +490,15 @@ async def test_a_head_whose_tree_holds_what_the_runners_tools_read_has_none_of_i
     assert (runner.cwd, runner.user) == ("suite", None)
     # The runner's own tests decide the case: the defect fails.
     assert outcome is RunOutcome.FAILED
+
+
+async def test_a_check_that_runs_the_heads_code_as_the_runners_user_changes_no_hidden_verdict(
+    tmp_path: Path,
+) -> None:
+    outcome, transport = await judged(tmp_path, {"src/totals.py": REWRITES}, before=(VISIBLE,))
+    assert "the runners' copy: rewritten" in stderr_of(transport, "src/totals.py")
+    # The runner scored the head from the copy as the suite wrote it: the
+    # defect fails, though the request listed the other check first.
+    assert outcome is RunOutcome.FAILED
+    order = [spec.argv[1] for spec, _ in transport.ran if spec.argv[0] == "python3"]
+    assert order == ["hidden/totals_head.py", "hidden/totals_suite.py", "src/totals.py"]
