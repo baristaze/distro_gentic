@@ -183,6 +183,19 @@ class IssuedClaimantCredentialView(BaseModel):
     token: Annotated[str | None, Field(title='Token')]
 
 
+class IssuedClientKeyView(BaseModel):
+    """
+    A one-use key in the clear, once: the person's own client trades it,
+    at once, for a host's credential of the session's local pool of one, and
+    serves the session's workspace with it. It is minted on every call, so a
+    retry mints another, and the one never traded expires on its own.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    key: Annotated[str | None, Field(title='Key')]
+
+
 class IssuedEnrollmentTokenView(BaseModel):
     """
     The token in the clear, once: it enrolls claimants of its kind into

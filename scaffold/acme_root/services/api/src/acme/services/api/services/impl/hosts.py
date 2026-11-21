@@ -53,6 +53,7 @@ from acme.services.api.types.hosts import (
     HeartbeatRequest,
     HostView,
     IssuedClaimantCredentialView,
+    IssuedClientKeyView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
@@ -232,6 +233,16 @@ class HostsServiceImpl(HostsServiceInterface):
             token=issued.token, enrollment=token_view(issued.enrollment)
         )
 
+    async def issue_client_key(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> IssuedClientKeyView:
+        issued = await self._hosts.issue_client_key(ctx, agent_session_id)
+        return IssuedClientKeyView(
+            key=issued.token,
+            agent_session_id=agent_session_id,
+            expires_at=issued.enrollment.expires_at,
+        )
+
     async def revoke_enrollment_token(
         self, ctx: TenantContext, token_id: UUID
     ) -> EnrollmentTokenView:
@@ -281,6 +292,9 @@ class HostsServiceImpl(HostsServiceInterface):
 
     async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredentialView:
         return credential_view(await self._hosts.rotate(rctx, host))
+
+    async def end_host(self, rctx: RequestContext, host: HostIdentity) -> None:
+        await self._hosts.end_host(rctx, host)
 
     async def heartbeat(
         self, rctx: RequestContext, host: HostIdentity, body: HeartbeatRequest

@@ -2,13 +2,17 @@
 the orgs, the switch between them, who the session is, a file's upload, and
 a session with an agent: started, spoken to, steered, and read.
 `listen` stays and prints every change in the org as it happens, and
-`agent-session steps --follow` every step of a loop until it stops. Every
-command is a thin call into the client; the API decides, the CLI shows.
+`agent-session steps --follow` every step of a loop until it stops.
+`agent-session attach`, and a start whose workspace is local, serve the
+person's own session's workspace from this machine until stopped, and
+follow any other session. Every command is a thin call into the client;
+the API decides, the CLI shows.
 A product's own command groups mount after these (`product_commands`).
 Exit codes: 0 done, 1 the API refused, 2 usage, 3 not signed in, 4 the API
 is unreachable, 5 a followed loop stopped without succeeding."""
 
 import asyncio
+import contextlib
 import json
 import mimetypes
 import sys
@@ -46,6 +50,7 @@ from acme.client.types.agent_sessions import (
     AgentSessionStatus,
     AgentSessionView,
     AgentStepView,
+    WorkspacePlace,
 )
 from acme.client.types.connectors import ConnectorReviewRequest, ConnectorView
 from acme.client.types.media import FileView
@@ -443,6 +448,9 @@ AgentSessionId = Annotated[
 ]
 FOLLOW_SECONDS = 1.0
 """How long `steps --follow` waits between two reads of the history."""
+HELD_ELSEWHERE = "workspace_held_elsewhere"
+"""The refusal a client reads as "follow": the session's workspace is not
+its person's own local one, so this machine serves nothing."""
 
 
 @agent_session_app.command("start")
@@ -453,19 +461,113 @@ def start_agent_session(
         UUID | None,
         typer.Option(help="The agent project it works in; a stack outside local refuses none."),
     ] = None,
+    workspace: Annotated[
+        WorkspacePlace | None,
+        typer.Option(
+            help="Where its workspace is held: cloud, the platform's; local, served from "
+            "this machine until stopped. A kind that asks for none has none."
+        ),
+    ] = None,
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Start a session on a kind, in an agent project. It is idle until a message wakes it."""
+    """Start a session on a kind, in an agent project. It is idle until a message wakes it.
+    With a local workspace, this machine serves it and prints its steps until stopped."""
+    api_url = setting(lambda: config.credentials(api))[0]
+    run(
+        lambda client: start_session(
+            client,
+            api_url,
+            kind,
+            title,
+            agent_project=agent_project,
+            workspace=workspace,
+            as_json=as_json,
+        ),
+        api,
+    )
 
-    async def go(client: ApiClient) -> None:
-        started = await client.start_agent_session(kind, title, agent_project_id=agent_project)
-        if as_json:
-            typer.echo(started.model_dump_json(indent=2))
-        else:
-            typer.echo(f"started {started.id} on {started.kind} {started.kind_version}")
 
-    run(go, api)
+async def start_session(
+    client: ApiClient,
+    api_url: str,
+    kind: str,
+    title: str,
+    *,
+    agent_project: UUID | None,
+    workspace: WorkspacePlace | None,
+    as_json: bool,
+) -> AgentSessionView:
+    """Starts the session and prints it; one whose workspace is local this
+    machine then serves until stopped (`attach_to`)."""
+    started = await client.start_agent_session(
+        kind, title, agent_project_id=agent_project, workspace=workspace
+    )
+    if as_json:
+        typer.echo(started.model_dump_json(indent=2))
+    else:
+        typer.echo(f"started {started.id} on {started.kind} {started.kind_version}")
+    if workspace is WorkspacePlace.local:
+        await attach_to(client, api_url, started.id, as_json=as_json)
+    return started
+
+
+@agent_session_app.command("attach")
+def attach(agent_session_id: AgentSessionId, as_json: Json = False, api: Api = None) -> None:
+    """Serve your own session's local workspace from this machine, and print its
+    steps, until stopped. Any other session, whose workspace a VM of the cloud
+    pool, a host, or another person's client holds, is followed as
+    `steps --follow` follows it, and this machine serves nothing."""
+    api_url = setting(lambda: config.credentials(api))[0]
+    if not run(lambda client: attach_to(client, api_url, agent_session_id, as_json=as_json), api):
+        raise typer.Exit(EXIT_UNSUCCESSFUL)
+
+
+async def attach_to(
+    client: ApiClient, api_url: str, agent_session_id: UUID, *, as_json: bool
+) -> bool:
+    """Serves the session's workspace from this machine while it is the
+    person's own local one, printing its steps beside, until stopped; any
+    other session it follows to its loop's end, serving nothing. Whether a
+    followed loop ended succeeded."""
+    try:
+        issued = await client.issue_client_key(agent_session_id)
+    except ApiError as error:
+        if error.status != 409 or error.code != HELD_ELSEWHERE:
+            raise
+        typer.echo(f"following: {error.message}", err=True)
+        return await follow_steps(client, agent_session_id, as_json=as_json)
+    if issued.key is None:
+        _fail("the API issued no key to serve the session with", EXIT_REFUSED)
+    typer.echo(
+        f"serving session {agent_session_id}'s workspace from this machine until stopped",
+        err=True,
+    )
+    following = asyncio.ensure_future(
+        follow_steps(client, agent_session_id, as_json=as_json, to_the_end=False)
+    )
+    try:
+        await serve_here(api_url, issued.key)
+    finally:
+        following.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await following
+    return True
+
+
+async def serve_here(api_url: str, key: str) -> None:
+    """The host program's own claim loop, serving the session `key` was
+    issued for from this machine until stopped, held to the owner's ceilings
+    in the host's home (`acme.apps.host.serving`). The host program is the
+    CLI's `serve` extra."""
+    try:
+        from acme.apps.host import serving
+    except ImportError:
+        _fail("serving a workspace needs the host program: install acme-cli[serve]", EXIT_USAGE)
+    try:
+        await serving.serve_session(api_url, key)
+    except serving.STOPS as error:
+        _fail(f"this machine serves the session no more: {error}", EXIT_REFUSED)
 
 
 @agent_session_app.command("list")
@@ -565,30 +667,59 @@ def steps(
     """The session's history, one step a line, in its order."""
 
     async def go(client: ApiClient) -> bool:
-        seen: list[AgentStepView] = []
-        cursor = after
-        stopped: AgentSessionView | None = None
-        while True:
-            page = await client.agent_session_steps(agent_session_id, cursor)
-            for step in page.items:
-                typer.echo(step.model_dump_json() if as_json else step_line(step))
-            seen.extend(page.items)
-            cursor = page.items[-1].seq if page.items else cursor
-            if page.has_more:
-                continue
-            if not follow:
-                return True
-            if stopped is not None:
-                return follow_succeeded(stopped, seen)
-            session = await client.agent_session(agent_session_id)
-            if settled(session):
-                # One more read: the steps the loop wrote before it stopped.
-                stopped = session
-                continue
-            await pause(FOLLOW_SECONDS)
+        if not follow:
+            await read_steps(client, agent_session_id, after, as_json=as_json)
+            return True
+        return await follow_steps(client, agent_session_id, after, as_json=as_json)
 
     if not run(go, api):
         raise typer.Exit(EXIT_UNSUCCESSFUL)
+
+
+async def read_steps(
+    client: ApiClient,
+    agent_session_id: UUID,
+    after: int,
+    *,
+    as_json: bool,
+    seen: list[AgentStepView] | None = None,
+) -> int:
+    """Prints every step after `after` there is now, one a line, adding each
+    to `seen`; the seq of the last one printed, or `after`."""
+    cursor = after
+    while True:
+        page = await client.agent_session_steps(agent_session_id, cursor)
+        for step in page.items:
+            typer.echo(step.model_dump_json() if as_json else step_line(step))
+        if seen is not None:
+            seen.extend(page.items)
+        cursor = page.items[-1].seq if page.items else cursor
+        if not page.has_more:
+            return cursor
+
+
+async def follow_steps(
+    client: ApiClient,
+    agent_session_id: UUID,
+    after: int = 0,
+    *,
+    as_json: bool,
+    to_the_end: bool = True,
+) -> bool:
+    """Prints the session's steps as they come. `to_the_end`, it stops once
+    the loop stops, and says whether it ended succeeded; otherwise it reads
+    on until cancelled, as a machine that serves the session does."""
+    seen: list[AgentStepView] = []
+    cursor = after
+    while True:
+        cursor = await read_steps(client, agent_session_id, cursor, as_json=as_json, seen=seen)
+        if to_the_end:
+            session = await client.agent_session(agent_session_id)
+            if settled(session):
+                # One more read: the steps the loop wrote before it stopped.
+                await read_steps(client, agent_session_id, cursor, as_json=as_json, seen=seen)
+                return follow_succeeded(session, seen)
+        await pause(FOLLOW_SECONDS)
 
 
 # A tenant's configuration

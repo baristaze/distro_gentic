@@ -273,6 +273,15 @@ host in the pool is online. It never moves to the cloud unless a
 principal changes its placement, because a team pins a machine for a
 reason: a device, a license, a build that must stay local.
 
+A session's workspace has three places. It has none when its kind asks
+for none, and runs with no workspace tools. It is the cloud's, a VM of
+the cloud pool when its kind asks for one, from any client. Or it is
+**local**: the person who starts the session serves it from their own
+machine, through their own client, for as long as the client runs
+([Workspace Hosts](#workspace-hosts)). A local session is pinned to a
+pool of one of its own, and waits, as any pinned session does, while no
+client serves it.
+
 Placement keeps the checkout, the builds, the devices, and the secrets
 inside the wall, never the content the model reads. Every tool result,
 source code included, is stored in the platform's history and sent to
@@ -314,8 +323,9 @@ in.
   platform cannot raise: the agent projects it serves, its minimum
   isolation, its egress, the paths it lets a result read, whether it
   accepts people's commands, and the MCP servers it starts, each named
-  whole ([Connectors](#connectors)). A compromised control plane still
-  cannot widen what a host does.
+  whole ([Connectors](#connectors)). A refusal names the ceiling that
+  refused. A compromised control plane still cannot widen what a host
+  does.
 - **What it holds.** No database credential, no model key, no history:
   its own credential, its local secret store (keyed by tenant first, as
   every secret is), and the files of its workspaces. The one credential
@@ -326,6 +336,21 @@ in.
   so its `exec` work goes to that host's lane. A host that is lost takes
   its workspaces with it, since a workspace is a cache, and the next
   loop prepares another in the same pool.
+- **A person's own client.** A client serves a session's local
+  workspace as a host of the session's pool of one, on a credential of
+  that session's tree, never on the person's own: it is handed the work
+  of the session, of its sub-agents, and of the instances their checks
+  ask for, and no other session's. The platform issues the person who
+  started the session a one-use key, and the client trades it once, as
+  a VM of the cloud pool does. It runs the host program's own claim
+  loop, so the exec relay, the owner's ceilings, and every wall stay
+  one; its machine's ceilings are the host's file, which a person
+  writes as any owner does. Its workspace is a container on the
+  person's own engine, and the container is its wall. The latest client
+  serves: a new one ends the one before, and a client ends its host as
+  it stops. A client that attaches to a session whose workspace a VM, a
+  host, or another person's client holds is told to follow: it streams
+  the session and serves nothing, so no workspace has two servers.
 
 ### The Cloud Pool
 

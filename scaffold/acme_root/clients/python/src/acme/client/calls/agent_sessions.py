@@ -13,6 +13,7 @@ from acme.client.types.agent_sessions import (
     AgentSessionView,
     AgentStepPageView,
     AgentStepView,
+    WorkspacePlace,
 )
 
 
@@ -25,14 +26,18 @@ class AgentSessionsCalls(Transport):
         title: str,
         *,
         agent_project_id: UUID | None = None,
+        workspace: WorkspacePlace | None = None,
         idempotency_key: str | None = None,
     ) -> AgentSessionView:
         """A session on the latest version of `kind`, idle until a message
         wakes it, in `agent_project_id`: a stack outside a local one refuses a
-        session in none. Always under an idempotency key."""
+        session in none. Its workspace is held where `workspace` says, the
+        cloud's unless it names `local`. Always under an idempotency key."""
         body: dict[str, object] = {"kind": kind, "title": title}
         if agent_project_id is not None:
             body["agent_project_id"] = str(agent_project_id)
+        if workspace is not None:
+            body["workspace"] = workspace.value
         started = await self.request(
             "POST",
             "/v1/agent-sessions",

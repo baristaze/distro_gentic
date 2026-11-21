@@ -12,6 +12,7 @@ from acme.client.schema.hosts import (
     HostView,
     IsolationMode,
     IssuedClaimantCredentialView,
+    IssuedClientKeyView,
     IssuedHostCredentialView,
 )
 
@@ -26,5 +27,6 @@ __all__ = [
     "HostView",
     "IsolationMode",
     "IssuedClaimantCredentialView",
+    "IssuedClientKeyView",
     "IssuedHostCredentialView",
 ]

@@ -85,12 +85,16 @@ def pool_lane(pool_id: UUID) -> str:
     return f"pool:{pool_id}"
 
 
-def another_session(claimant: Claimant, item: WorkItem) -> bool:
-    """Whether an item is another session's than the one session its
-    claimant serves: a VM of the cloud pool runs its own session's
-    work and nothing else, whatever lane the item reached it on, so an item
-    that names no session is not its session's either. A claimant that
-    serves no one session takes any."""
+def another_session(claimant: Claimant, item: WorkItem, root: UUID | None = None) -> bool:
+    """Whether an item is another session's than the ones its claimant
+    serves: a VM of the cloud pool runs its own session's work and nothing
+    else, whatever lane the item reached it on, so an item that names no
+    session is not its session's either. A person's own client
+    (`serves_tree`) runs its session's tree: an item whose session's tree
+    has its session at the root, `root` as placement read it, is its own.
+    A claimant that serves no one session takes any."""
     if claimant.agent_session_id is None:
         return False
-    return str(item.payload.get("agent_session_id")) != str(claimant.agent_session_id)
+    if str(item.payload.get("agent_session_id")) == str(claimant.agent_session_id):
+        return False
+    return not (claimant.serves_tree and root == claimant.agent_session_id)
