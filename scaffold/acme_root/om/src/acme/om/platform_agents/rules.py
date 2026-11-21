@@ -49,6 +49,11 @@ REACHES: Mapping[str, Reach] = {
     # The ops analyst reads the tenant's operations and acts on none of them:
     # a fix it finds is an objective a person hands on.
     kinds.OPS_ANALYST: Reach(frozenset({ToolClass.READ}), AuthorityMode.DELEGATED, "only reads"),
+    # The support assistant reads what the assistant reads, in the request
+    # that asks it: a request hands no work on.
+    kinds.SUPPORT_ASSISTANT: Reach(
+        frozenset({ToolClass.READ}), AuthorityMode.DELEGATED, "only reads"
+    ),
     # The reviewer reads what it reviews through the forge, and comments on
     # it through the forge's integration, which a person approves: nothing
     # it holds writes a file, runs code, or pushes.

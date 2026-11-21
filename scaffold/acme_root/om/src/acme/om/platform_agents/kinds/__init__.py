@@ -36,6 +36,10 @@ engine runs every one of them the same way.
   permissions: its sessions and what they wait on, its hosts and what they
   offer, its budgets and their spend. Every tool it holds reads; a fix it
   finds leaves as an objective a person hands to a software engineer.
+- The support assistant answers in the portal's support dock. It reads
+  what the platform assistant reads and holds nothing else: its loop runs
+  in the request that asks it, so the dock shows its answer as it
+  streams. It hands no work on, since a request starts no session.
 
 A lead is a kind like any other, whose toolsets include `sub_agents`: it
 starts the others as sub-agents, such as a software engineer on a change and a
@@ -84,6 +88,7 @@ PLANNER = "planner"
 PLATFORM_ASSISTANT = "platform_assistant"
 REVIEWER = "reviewer"
 OPS_ANALYST = "ops_analyst"
+SUPPORT_ASSISTANT = "support_assistant"
 
 # The tools the shipped kinds call, by name (`tools/`).
 LIST_FILES = "list_files"
