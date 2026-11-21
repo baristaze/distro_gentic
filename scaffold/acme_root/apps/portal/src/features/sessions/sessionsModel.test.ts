@@ -95,18 +95,18 @@ describe("sessions model", () => {
     expect(ids({ status: "needs_you" })).toEqual(["Asks"]);
   });
 
-  it("leaves support conversations out, and shows them under the platform assistant's filter", () => {
+  it("leaves support conversations out, and shows them under the support assistant's filter", () => {
     const one = (id: string, over: Partial<agent_sessions.AgentSessionView>): agent_sessions.AgentSessionView => ({ ...session, id, ...over });
     const sessions = [
       one("work", { title: "Fix the flaky test", kind: "software_engineer" }),
-      one("support", { title: "Support", kind: "platform_assistant", created_by: "u1" }),
-      one("theirs", { title: "Support", kind: "platform_assistant", created_by: "u2" }),
-      one("composed", { title: "Draft the webhook settings", kind: "platform_assistant" }),
+      one("support", { title: "Support", kind: "support_assistant", created_by: "u1" }),
+      one("theirs", { title: "Support", kind: "support_assistant", created_by: "u2" }),
+      one("composed", { title: "Support", kind: "platform_assistant" }),
     ];
     const ids = (kind: string) =>
       listed(sessions, { view: "mine", status: "any", kind, archived: false, query: "" }).map((each) => each.id);
     expect(ids("")).toEqual(["work", "composed"]);
-    expect(ids("platform_assistant")).toEqual(["support", "theirs", "composed"]);
+    expect(ids("support_assistant")).toEqual(["support", "theirs"]);
   });
 
   it("starts a session only with a title and a kind, trimmed", () => {

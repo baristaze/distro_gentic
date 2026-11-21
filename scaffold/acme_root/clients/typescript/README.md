@@ -17,7 +17,10 @@ generated schema.
   app headers, and a deadline. A refusal is an `ApiError` with its code and
   request id, and a 401 to the bearer the tab holds hands it back to the
   app. `src/retry.ts` is the one retry: only a failure that can differ, and
-  a write only under an idempotency key.
+  a write only under an idempotency key. `stream` posts a call the API
+  answers with server-sent events and hands each over as it arrives: its
+  deadline covers the answer's headers, its caller's signal ends it, and it
+  is never retried.
 - `src/store.ts` reaches the object store through a URL the API signed, and
   `src/page.ts` reads a file of the page's own origin, such as
   `/config.json`. Neither is the API, so neither carries its headers.

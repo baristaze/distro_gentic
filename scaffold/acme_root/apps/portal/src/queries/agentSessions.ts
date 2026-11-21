@@ -4,8 +4,8 @@
 // is never in a list. A list is the person's own (`mine`: the ones they made
 // or take part in) or every one they see (`visible`).
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
-import type { agent_playbooks, agent_sessions, attribution, evidence, watch } from "@acme/client";
+import { useCallback, useEffect, useMemo } from "react";
+import type { agent_playbooks, agent_sessions, attribution, evidence, StreamEvent, watch } from "@acme/client";
 import { api } from "../app/api";
 import { keys } from "./keys";
 
@@ -294,6 +294,38 @@ export function useJoinSession() {
         queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
       ]),
   });
+}
+
+/** A question to a session whose kind's loop runs in the request that asks
+ * it, or one that starts a session of that kind when `id` is null. Each
+ * event of its stream is handed to `onEvent` as it arrives; once the stream
+ * ends, the session's reads and the lists are read again before it
+ * resolves, so the history holds what the stream showed. */
+export function useAsk() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    async (
+      id: string | null,
+      body: agent_sessions.StartQuestionRequest | agent_sessions.QuestionRequest,
+      onEvent: (event: StreamEvent) => void,
+      signal?: AbortSignal,
+    ): Promise<void> => {
+      let asked = id;
+      const heard = (event: StreamEvent) => {
+        if (event.event === "session") asked = (event.data as agent_sessions.QuestionSessionEvent).agent_session_id;
+        onEvent(event);
+      };
+      try {
+        await api.stream(id === null ? "/v1/agent-sessions/questions" : `${path(id)}/questions`, body, heard, { signal });
+      } finally {
+        await Promise.all([
+          ...(asked === null ? [] : [queryClient.invalidateQueries({ queryKey: keys.agentSessions.one(asked) })]),
+          queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
+        ]);
+      }
+    },
+    [queryClient],
+  );
 }
 
 /** A message to a session the caller names at the call: Home sends the

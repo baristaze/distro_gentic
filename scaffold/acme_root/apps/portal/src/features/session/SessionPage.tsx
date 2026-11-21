@@ -8,6 +8,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Lock } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { errorMessage } from "../../app/errorMessage";
+import { isSupport } from "../../app/shell/supportModel";
 import { usePageCommands, usePaneSplit } from "../../app/shell/shellContext";
 import {
   ArchiveIcon,
@@ -178,12 +179,21 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
 }
 
 /** Pinned under the chat: a reply or a steer, or the answer while the agent
- * asks. Send works at any time, running or not, on Cmd-Enter too: a message
+ * asks; a support conversation is asked in the dock alone. Send works at any time, running or not, on Cmd-Enter too: a message
  * sent while the agent works is queued, and its next step reads it. While
  * the session runs, Pause sits beside Send and never replaces it. */
 function Composer({ vm }: { vm: SessionVm }) {
   const [draft, setDraft] = useState("");
   const sharing = vm.sharing;
+  // The support assistant answers in the request that asks it, which only
+  // the dock sends: a message here would reach no worker.
+  if (vm.session && isSupport(vm.session.raw)) {
+    return (
+      <div className="acme-session-composer">
+        <Muted>Ask in the support dock: the support assistant answers there as it writes.</Muted>
+      </div>
+    );
+  }
   if (sharing?.mayJoin) {
     return (
       <div className="acme-session-composer">

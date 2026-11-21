@@ -3,7 +3,8 @@
 // search, New session, the slot's entries, the sessions grouped by what
 // they ask, each parent folding its sub-agents, and the user chip), the
 // search over the whole app, its keys, the toast a session raises when it
-// starts to need its person, and the support dock beside the page.
+// starts to need its person, and the support dock beside the page, whose
+// questions stream their answers back in the request that asks them.
 // The real shell, chips, and menus run over a fake transport; the pages
 // behind the routes are stand-ins.
 import { act, createElement, type ReactNode } from "react";
@@ -28,6 +29,16 @@ const net = vi.hoisted(() => ({
   permissions: ["read", "write"] as string[],
   sessions: [] as unknown[],
   started: 0,
+  // The questions the dock asked, the history each session reads back, and
+  // the answer the next question streams: its pieces, a hold after the first
+  // while a test looks, and its end.
+  asked: [] as { path: string; body: unknown }[],
+  history: {} as Record<string, unknown[]>,
+  answer: {
+    pieces: ["It waits ", "on a host."],
+    hold: null as Promise<void> | null,
+    end: { end: "ended", outcome: "succeeded", cause: null } as Record<string, unknown>,
+  },
 }));
 
 const at = "2026-10-05T10:00:00Z";
@@ -53,6 +64,32 @@ const session = (id: string, over: Partial<agent_sessions.AgentSessionView> = {}
   ...over,
 });
 
+// What every step the dock reads back carries besides its kind and text.
+const stepBase = {
+  loop_id: "l",
+  thinking: "",
+  tool_uses: [],
+  tool_use_id: null,
+  agent: null,
+  created_at: at,
+  command: null,
+  failure: null,
+  outcome: null,
+  park: null,
+  refs: [],
+  responds_to: null,
+  snapshot: null,
+  stop_reason: null,
+  tool: null,
+  tools: [],
+  usage: null,
+  cause: null,
+  author: null,
+  participant: false,
+  steerer: null,
+  visibility: null,
+};
+
 vi.mock("../api", () => ({
   api: {
     get: (path: string) => {
@@ -66,7 +103,7 @@ vi.mock("../api", () => ({
       if (one) {
         const found = all.find((each) => each.id === one[1]);
         if (!found) return Promise.reject(new Error(`no session ${one[1]}`));
-        if (one[2] === "/steps") return Promise.resolve({ items: [], has_more: false });
+        if (one[2] === "/steps") return Promise.resolve({ items: net.history[found.id] ?? [], has_more: false });
         // Its sub-agents, as the children route answers one who sees its root.
         if (one[2] === "/children") return Promise.resolve({ items: all.filter((each) => each.parent_id === found.id), next_cursor: null });
         // The call it holds for a decision, while it is parked on one.
@@ -96,6 +133,29 @@ vi.mock("../api", () => ({
       }
       if (/^\/v1\/agent-sessions\/[^/]+\/messages$/.test(path)) return Promise.resolve({});
       return Promise.reject(new Error(`no answer for ${path}`));
+    },
+    // A question, answered as the API streams it: the session, the text in
+    // pieces, and the end.
+    stream: async (path: string, body: unknown, onEvent: (event: { event: string; data: unknown }) => void) => {
+      net.asked.push({ path, body });
+      let id: string;
+      if (path === "/v1/agent-sessions/questions") {
+        net.started += 1;
+        const started = session(`support-${net.started}`, { kind: "support_assistant", title: "Support" });
+        net.sessions = [...net.sessions, started];
+        id = started.id;
+      } else {
+        const continued = /^\/v1\/agent-sessions\/([^/]+)\/questions$/.exec(path);
+        if (!continued) throw new Error(`no stream for ${path}`);
+        id = continued[1]!;
+      }
+      const n = net.asked.length;
+      onEvent({ event: "session", data: { agent_session_id: id, agent_step_id: `q-${n}`, seq: 1 } });
+      for (const [index, text] of net.answer.pieces.entries()) {
+        onEvent({ event: "text", data: { agent_step_id: `a-${n}`, n: index, index: 0, text } });
+        if (index === 0 && net.answer.hold) await net.answer.hold;
+      }
+      onEvent({ event: "end", data: { agent_session_id: id, loop_id: "l", first_seq: 1, last_seq: 4, ...net.answer.end } });
     },
   },
 }));
@@ -170,6 +230,9 @@ beforeEach(async () => {
   net.permissions = ["read", "write"];
   net.sessions = [];
   net.started = 0;
+  net.asked.length = 0;
+  net.history = {};
+  net.answer = { pieces: ["It waits ", "on a host."], hold: null, end: { end: "ended", outcome: "succeeded", cause: null } };
   localStorage.clear();
   useSupportStore.setState({ conversations: {} });
   Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
@@ -530,32 +593,70 @@ describe("the support dock", () => {
     expect(q(".acme-main")!.hidden).toBe(false);
   });
 
-  it("starts the person's conversation on the platform assistant with their first message, the page riding as data, and continues it", async () => {
+  const answered = (id: string, text: string) => [
+    { id: `${id}-q`, seq: 1, type: "message", actor: "person", origin: "portal", text: "Why is this one stuck?", ...stepBase },
+    { id: `${id}-a`, seq: 2, type: "model_response", actor: "model", origin: "engine", text, ...stepBase },
+  ];
+
+  it("asks the support assistant with the person's first question, the page riding as data, and shows the answer as it streams", async () => {
+    let release = () => undefined as void;
+    net.answer.hold = new Promise<void>((resolve) => (release = resolve));
     await mount("/sessions/s1");
     await act(async () => ask().click());
     await typeIn("Why is this one stuck?");
     await send();
-    expect(net.posts.map((post) => post.path)).toEqual(["/v1/agent-sessions", "/v1/agent-sessions/support-1/messages"]);
-    expect(net.posts[0]!.body).toEqual({ kind: "platform_assistant", title: "Support" });
-    const text = (net.posts[1]!.body as { text: string }).text;
-    expect(text.split("\n").slice(0, 3)).toEqual(["Why is this one stuck?", "", "~~~page"]);
-    expect(JSON.parse(text.split("\n")[3]!)).toMatchObject({ path: "/sessions/s1" });
+
+    // The question went to the request route, never as a message a worker runs.
+    expect(net.asked.map((one) => one.path)).toEqual(["/v1/agent-sessions/questions"]);
+    expect(net.posts).toEqual([]);
+    const body = net.asked[0]!.body as { kind: string; title: string; text: string };
+    expect(body).toMatchObject({ kind: "support_assistant", title: "Support" });
+    expect(body.text.split("\n").slice(0, 3)).toEqual(["Why is this one stuck?", "", "~~~page"]);
+    expect(JSON.parse(body.text.split("\n")[3]!)).toMatchObject({ path: "/sessions/s1" });
     expect(useSupportStore.getState().conversations["o1/u1"]).toBe("support-1");
     expect(field().value).toBe("");
+    // The first piece shows while the rest is still on its way.
+    expect(dock()!.textContent).toContain("It waits");
+    expect(dock()!.textContent).not.toContain("on a host.");
+    expect(dock()!.textContent).toContain("Answering");
+    expect(q<HTMLButtonElement>("aside[aria-label='Support'] button[aria-label='Send']")!.disabled).toBe(true);
+
+    net.history["support-1"] = answered("support-1", "It waits on a host.");
+    await act(async () => release());
+    await settle();
+    expect(dock()!.textContent).toContain("It waits on a host.");
+    expect(dock()!.textContent).not.toContain("Answering");
+    expect(q(".acme-dock-stopped")).toBeNull();
 
     await typeIn("And the other one?");
     await send();
-    expect(net.posts.map((post) => post.path).slice(2)).toEqual(["/v1/agent-sessions/support-1/messages"]);
+    expect(net.asked.map((one) => one.path).slice(1)).toEqual(["/v1/agent-sessions/support-1/questions"]);
+    expect(net.asked[1]!.body).toEqual({ text: expect.stringContaining("And the other one?") as unknown });
+  });
+
+  it("ends an answer a park stopped with its cause in the dock, and the next question runs", async () => {
+    net.answer.end = { end: "ended", outcome: "inconclusive", cause: "a request waits for nothing: the loop parks on budget (spend_budget)" };
+    await mount("/sessions");
+    await act(async () => ask().click());
+    await typeIn("Why is it slow?");
+    await send();
+    expect(q(".acme-dock-stopped")!.textContent).toBe("Stopped: a request waits for nothing: the loop parks on budget (spend_budget).");
+
+    net.answer.end = { end: "ended", outcome: "succeeded", cause: null };
+    await typeIn("And now?");
+    await send();
+    expect(net.asked.map((one) => one.path)).toEqual(["/v1/agent-sessions/questions", "/v1/agent-sessions/support-1/questions"]);
+    expect(q(".acme-dock-stopped")).toBeNull();
   });
 
   it("never reads another member's session through the dock, nor a session of another kind, and starts the person's own instead", async () => {
     net.sessions = [
-      session("theirs", { kind: "platform_assistant", created_by: "u2" }),
+      session("theirs", { kind: "support_assistant", title: "Support", created_by: "u2" }),
       session("software_engineer", { kind: "software_engineer" }),
     ];
     for (const kept of ["theirs", "software_engineer"]) {
       net.gets.length = 0;
-      net.posts.length = 0;
+      net.asked.length = 0;
       useSupportStore.setState({ conversations: { "o1/u1": kept } });
       await mount("/sessions");
       await act(async () => ask().click());
@@ -566,15 +667,15 @@ describe("the support dock", () => {
       expect(q("aside[aria-label='Support'] a[href^='/sessions/']")).toBeNull();
       await typeIn("Hello");
       await send();
-      expect(net.posts[0]!.path).toBe("/v1/agent-sessions");
-      expect(net.posts[1]!.path).not.toContain(kept);
+      expect(net.asked.map((one) => one.path)).toEqual(["/v1/agent-sessions/questions"]);
+      expect(net.gets.filter((path) => path.startsWith(`/v1/agent-sessions/${kept}/`))).toEqual([]);
       await act(async () => root.render(null));
       queryClient.clear();
     }
   });
 
-  it("continues the person's own conversation, and New conversation starts the next message afresh", async () => {
-    net.sessions = [session("work"), session("mine", { kind: "platform_assistant", title: "Support" })];
+  it("continues the person's own conversation, and New conversation starts the next question afresh", async () => {
+    net.sessions = [session("work"), session("mine", { kind: "support_assistant", title: "Support" })];
     useSupportStore.setState({ conversations: { "o1/u1": "mine" } });
     await mount("/sessions");
     await act(async () => ask().click());
@@ -583,10 +684,13 @@ describe("the support dock", () => {
     expect(q("aside[aria-label='Support'] a[href='/sessions/mine']")!.textContent).toBe("As a session");
     // The left bar lists the work; the conversation is the dock's.
     expect(group("Recent")).toEqual(["work"]);
+    await typeIn("Still there?");
+    await send();
+    expect(net.asked.map((one) => one.path)).toEqual(["/v1/agent-sessions/mine/questions"]);
     await act(async () => q<HTMLButtonElement>("button[aria-label='New conversation']")!.click());
     expect(useSupportStore.getState().conversations["o1/u1"]).toBeUndefined();
     await typeIn("A new question");
     await send();
-    expect(net.posts.map((post) => post.path)).toEqual(["/v1/agent-sessions", "/v1/agent-sessions/support-1/messages"]);
+    expect(net.asked.map((one) => one.path).slice(1)).toEqual(["/v1/agent-sessions/questions"]);
   });
 });

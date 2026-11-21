@@ -1,5 +1,6 @@
 // The support dock: the shell's column at the right edge, a conversation
-// with the platform assistant beside whatever page is open. It never
+// with the support assistant beside whatever page is open. Its answer shows
+// as it is written, and an answer stopped short says why. It never
 // navigates on its own, and no page opens anything in it. A link in a reply
 // that the router serves is a chip, which opens its page in the main area
 // and leaves the dock as it is; any other link is text with its address.
@@ -132,12 +133,17 @@ export function SupportDock({
       ) : (
         <Timeline vm={vm.timeline} compact link={links} empty="Nothing yet." />
       )}
+      {vm.stopped ? (
+        <p className="acme-dock-stopped" role="status">
+          {vm.stopped}
+        </p>
+      ) : null}
       <div className="acme-dock-composer">
         {vm.maySend ? (
           <form className="acme-composer" aria-label="Ask support" onSubmit={onSubmit}>
             <TextArea label="Ask support" hideLabel rows={2} autoFocus placeholder={SUPPORT_EXAMPLE} value={draft} onChange={onDraft} onKeyDown={onKey} />
             <div className="acme-composer-bar">
-              {vm.working ? <Muted>Working: send at any time</Muted> : null}
+              {vm.working ? <Muted>Answering</Muted> : null}
               <span className="acme-composer-gap" />
               <Tooltip tip="Send" shortcut="⌘↵" side="top">
                 <button type="submit" className="acme-send" aria-label="Send" disabled={vm.sending || !draft.trim()}>

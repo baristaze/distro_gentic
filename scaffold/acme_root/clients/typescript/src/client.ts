@@ -1,7 +1,9 @@
 // One transport client: bearer, app header, the error envelope parsed into
 // a typed error carrying the request id, a 401 that clears authentication,
-// a deadline on every call, and the app's one retry. Every browser app sends
-// through it, and nothing outside this package calls fetch.
+// a deadline on every call, and the app's one retry. A call answered with a
+// stream of server-sent events hands each event over as it arrives. Every
+// browser app sends through it, and nothing outside this package calls
+// fetch.
 
 import type { LastOwnerDetail, OwnedOrgRef } from "./types/common";
 import {
@@ -102,6 +104,12 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** One server-sent event: its name, and its data, one line of JSON, parsed. */
+export interface StreamEvent {
+  event: string;
+  data: unknown;
+}
+
 export interface ApiClient {
   readonly baseUrl: string;
   request<T>(method: string, path: string, body?: unknown, options?: RequestOptions): Promise<T>;
@@ -109,6 +117,14 @@ export interface ApiClient {
   post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   del<T>(path: string, options?: RequestOptions): Promise<T>;
+  /**
+   * A POST answered with server-sent events, each handed to `onEvent` as it
+   * arrives; it resolves once the stream ends. The deadline covers the
+   * answer's headers alone, since a stream lasts as long as its work, and the
+   * caller's signal ends it, which the server reads as the caller gone. It is
+   * sent once and never retried: a stream is no outcome to replay.
+   */
+  stream(path: string, body: unknown, onEvent: (event: StreamEvent) => void, options?: RequestOptions): Promise<void>;
   websocketUrl(path: string): string;
 }
 
@@ -129,6 +145,27 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** The events a stream's text holds whole, and the rest, which waits for
+ * more: an event ends at a blank line, its `event:` line names it, and its
+ * `data:` lines join into its data. */
+export function sseEvents(buffer: string): { events: StreamEvent[]; rest: string } {
+  const frames = buffer.replace(/\r\n/g, "\n").split("\n\n");
+  const rest = frames.pop() ?? "";
+  const events: StreamEvent[] = [];
+  for (const frame of frames) {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+    }
+    if (data.length === 0) continue;
+    const parsed = parseJson(data.join("\n"));
+    if (parsed !== undefined) events.push({ event, data: parsed });
+  }
+  return { events, rest };
 }
 
 function statusMessage(response: Response): string {
@@ -166,14 +203,10 @@ export function createClient(options: ClientOptions): ApiClient {
   const retryAttempts = options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS;
   const retryPolicy = requestRetryPolicy(options.retryBaseDelayMs);
 
-  async function attempt<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    requestOptions: RequestOptions = {},
-  ): Promise<T> {
+  /** The headers of a call, and the bearer it carries. */
+  function headersOf(accept: string, body: unknown, requestOptions: RequestOptions): { headers: Headers; token: string | null } {
     const headers = new Headers({
-      Accept: "application/json",
+      Accept: accept,
       "X-App": options.app,
       "X-App-Version": options.appVersion,
     });
@@ -182,6 +215,39 @@ export function createClient(options: ClientOptions): ApiClient {
     if (body !== undefined) headers.set("Content-Type", "application/json");
     if (requestOptions.idempotencyKey) headers.set("Idempotency-Key", requestOptions.idempotencyKey);
     if (requestOptions.ifMatch !== undefined) headers.set("If-Match", `"${requestOptions.ifMatch}"`);
+    return { headers, token };
+  }
+
+  /** The refusal a response that is not ok carries, typed; a 401 to the
+   * bearer the tab holds clears authentication first. */
+  function refusal(response: Response, text: string, token: string | null): ApiError {
+    const requestId = response.headers.get("x-request-id");
+    // A refusal belongs to the bearer sent, not a replacement session or
+    // a separate login credential used to choose an org.
+    if (response.status === 401 && token && token === options.getToken()) options.onUnauthorized(token);
+    const parsed = isJson(response.headers.get("content-type")) ? parseJson(text) : undefined;
+    const retryAfterMs = retryAfterHeaderMs(response.headers.get("retry-after"));
+    if (isErrorEnvelope(parsed)) {
+      return new ApiError(
+        response.status,
+        parsed.error.code,
+        parsed.error.message,
+        parsed.error.request_id ?? requestId,
+        retryAfterMs,
+        parsed.error.stream ?? null,
+        parsed.error.last_owner?.orgs ?? [],
+      );
+    }
+    return new ApiError(response.status, "unknown_error", statusMessage(response), requestId, retryAfterMs);
+  }
+
+  async function attempt<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    requestOptions: RequestOptions = {},
+  ): Promise<T> {
+    const { headers, token } = headersOf("application/json", body, requestOptions);
 
     // One signal for the whole call: the deadline, and the caller's own
     // signal when it hands one over. Reading the body counts against the
@@ -216,26 +282,9 @@ export function createClient(options: ClientOptions): ApiClient {
     // The status and the content type decide before the body is read as
     // JSON: a 401 clears authentication whatever its body says, and a proxy's
     // HTML 502 or 504 is a typed error with the status, not a parse failure.
+    if (!response.ok) throw refusal(response, text, token);
     const requestId = response.headers.get("x-request-id");
-    // A refusal belongs to the bearer sent, not a replacement session or
-    // a separate login credential used to choose an org.
-    if (response.status === 401 && token && token === options.getToken()) options.onUnauthorized(token);
     const parsed = isJson(response.headers.get("content-type")) ? parseJson(text) : undefined;
-    if (!response.ok) {
-      const retryAfterMs = retryAfterHeaderMs(response.headers.get("retry-after"));
-      if (isErrorEnvelope(parsed)) {
-        throw new ApiError(
-          response.status,
-          parsed.error.code,
-          parsed.error.message,
-          parsed.error.request_id ?? requestId,
-          retryAfterMs,
-          parsed.error.stream ?? null,
-          parsed.error.last_owner?.orgs ?? [],
-        );
-      }
-      throw new ApiError(response.status, "unknown_error", statusMessage(response), requestId, retryAfterMs);
-    }
     if (response.status === 204 || text === "") return undefined as T;
     if (parsed === undefined) {
       throw new ApiError(response.status, "not_json", `${method} ${path} answered with something other than JSON`, requestId);
@@ -270,9 +319,63 @@ export function createClient(options: ClientOptions): ApiClient {
     }
   }
 
+  async function stream(
+    path: string,
+    body: unknown,
+    onEvent: (event: StreamEvent) => void,
+    requestOptions: RequestOptions = {},
+  ): Promise<void> {
+    const { headers, token } = headersOf("text/event-stream", body, requestOptions);
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new RequestTimeout("POST", path, options.timeoutMs)),
+      options.timeoutMs,
+    );
+    const callerSignal = requestOptions.signal;
+    const forwardAbort = () => controller.abort(callerSignal?.reason);
+    if (callerSignal?.aborted) forwardAbort();
+    else callerSignal?.addEventListener("abort", forwardAbort, { once: true });
+    try {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}${path}`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        // The deadline is the answer's: the stream that follows runs as long
+        // as its work, and the caller's signal ends it.
+        clearTimeout(timer);
+      }
+      if (!response.ok) throw refusal(response, await response.text(), token);
+      if (!/^text\/event-stream\b/i.test(response.headers.get("content-type") ?? "") || !response.body) {
+        throw new ApiError(response.status, "not_event_stream", `POST ${path} answered with something other than a stream of events`, response.headers.get("x-request-id"));
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const read = sseEvents(done ? `${buffer}\n\n` : buffer);
+        buffer = read.rest;
+        for (const event of read.events) onEvent(event);
+        if (done) return;
+      }
+    } catch (error) {
+      throw controller.signal.aborted ? controller.signal.reason : error;
+    } finally {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener("abort", forwardAbort);
+    }
+  }
+
   return {
     baseUrl,
     request,
+    stream,
     get: (path, requestOptions) => request("GET", path, undefined, requestOptions),
     post: (path, body, requestOptions) => request("POST", path, body, requestOptions),
     patch: (path, body, requestOptions) => request("PATCH", path, body, requestOptions),
