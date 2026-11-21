@@ -209,20 +209,6 @@ class QuestionRequest(BaseModel):
     text: Annotated[str, Field(max_length=100000, min_length=1, title='Text')]
 
 
-class QuestionView(BaseModel):
-    """
-    What a session asks of a person now: a park on a person that is no
-    call's decision, such as a step guard to lift, a deadline to move, or a
-    principal to name. `unlock` is what clears it, sent as a control; `seq`
-    is the step that parked it.
-    """
-
-    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
-    asked_at: Annotated[AwareDatetime, Field(title='Asked At')]
-    seq: Annotated[int, Field(title='Seq')]
-    unlock: Annotated[str, Field(title='Unlock')]
-
-
 class SnapshotView(BaseModel):
     """
     A workspace's snapshot a step names: its id, which a restore names,
@@ -304,6 +290,22 @@ class TreeBoundsView(BaseModel):
     height: Annotated[int, Field(title='Height')]
     root_id: Annotated[UUID, Field(title='Root Id')]
     size: Annotated[int, Field(title='Size')]
+
+
+class UnlockView(BaseModel):
+    """
+    What a session waits on a person to unlock now: a park on a person
+    that is no call's decision, such as an answer to give, a step guard to
+    lift, a deadline to move, or a principal to name. `unlock` is what
+    clears it, sent as a control; `seq` is the step that parked it. A
+    question is another thing: what a person asks a kind whose loop runs in
+    the request.
+    """
+
+    agent_session_id: Annotated[UUID, Field(title='Agent Session Id')]
+    asked_at: Annotated[AwareDatetime, Field(title='Asked At')]
+    seq: Annotated[int, Field(title='Seq')]
+    unlock: Annotated[str, Field(title='Unlock')]
 
 
 class UsageRecordView(BaseModel):

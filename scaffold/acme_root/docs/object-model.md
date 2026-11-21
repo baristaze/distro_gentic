@@ -2,8 +2,8 @@
 
 What each thing in Acme is, what owns it, the states it moves through,
 and what moves it between them. It is written for the people who run
-their part of the platform, and the platform assistant and the operator
-explain from it. Each section names the reader that shows the thing
+their part of the platform, and the platform assistant, the support
+assistant, and the operator explain from it. Each section names the reader that shows the thing
 live. A reader shows only what the asking person may read.
 
 ## The org and its people
@@ -219,5 +219,5 @@ own, never in this one, in the same shape: each of its entities, what
 owns it, its states and what moves it, every state that waits and what
 clears it, and the reader that shows it. It lists that document for the
 tenant's users in the knowledge map, and names it in its slot
-(`ProductKinds.object_model`). The platform assistant then reads it
-beside this one.
+(`ProductKinds.object_model`). The platform assistant and the support
+assistant then read it beside this one.

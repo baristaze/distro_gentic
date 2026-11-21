@@ -15,7 +15,9 @@ the kinds of thing [Acme is made of](../../../../README.md).
   its description.
 - **Attachment**: a kind the connector is attached to, for one agent
   project or for the whole tenant, deferred until the agent loads it
-  unless it says otherwise.
+  unless it says otherwise. A kind whose loop runs in the request that
+  asks it takes none: a connector's call outlasts the request, and most
+  wait for a person.
 - **Pin**: what a session holds of its tenant's connectors, written as its
   first run begins.
 

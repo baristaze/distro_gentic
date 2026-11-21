@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
-import { useAgentSession, useApprovals, useSendMessage, useSessionActions, useStartSession, useSteps } from "../../queries/agentSessions";
-import { useLiveStreams } from "../../queries/live";
+import { useCallback, useMemo, useState } from "react";
+import type { agent_sessions } from "@acme/client";
+import { useAgentSession, useAsk, useSessionActions, useSteps } from "../../queries/agentSessions";
+import type { LiveStream } from "../../queries/live";
 import { useMe } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
 import { useSupportStore } from "../../store/support";
@@ -11,18 +12,20 @@ import { useNow } from "../../features/session/useSessionVm";
 import { errorMessage } from "../errorMessage";
 import type { SlotSession } from "../product";
 import { useSlot } from "../slot";
-import { ASSISTANT_KIND, continues, conversationKey, SUPPORT_TITLE } from "./supportModel";
+import { continues, conversationKey, endLine, failedLine, heard, SUPPORT_KIND, SUPPORT_TITLE } from "./supportModel";
 import { withPage, type PageContext } from "./supportLinks";
 
 const NOTHING: readonly never[] = [];
 
 /** The support dock's conversation: the person's standing session with the
- * platform assistant, read as its page reads it, compact. The id this
+ * support assistant, read as its page reads it, compact. The id this
  * browser keeps is read back first, and nothing else of it is asked for
- * unless it is the person's own. A message carries the page the person is
- * on, as data, and the first one starts the conversation. Send works at any
- * time: a message sent while the assistant works is queued, and its next
- * step reads it. */
+ * unless it is the person's own. A question carries the page the person is
+ * on, as data, and the first one starts the conversation. The assistant
+ * answers in the request that asks it: its text shows as the stream brings
+ * it, and the history is read again once the stream ends. One question at a
+ * time: the next is sent once the answer is in, or stopped short with its
+ * cause shown. */
 export function useSupportVm(page: PageContext) {
   const slot = useSlot();
   const me = useMe();
@@ -35,56 +38,63 @@ export function useSupportVm(page: PageContext) {
   const kept = useAgentSession(keptId ?? "", keptId !== null);
   const record = kept.data && kept.data.id === keptId && continues(kept.data, meId) ? kept.data : undefined;
   const id = record?.id ?? null;
-  const status = record?.status;
-  const runs = status === "running" || status === "pending";
-  const steps = useSteps(id ?? "", runs || status === "parked", id !== null);
-  const approvals = useApprovals(id ?? "", id !== null && status === "parked");
-  const live = useLiveStreams(id ?? "", id !== null && runs);
-  const now = useNow(runs);
+  // The stream is the live view: the history is read when the stream starts
+  // and once it ends, and never polled.
+  const steps = useSteps(id ?? "", false, id !== null);
+  const [asking, setAsking] = useState(false);
+  const [live, setLive] = useState<LiveStream[]>([]);
+  const [stopped, setStopped] = useState<string | null>(null);
+  const now = useNow(asking);
   const actions = useSessionActions(id ?? "");
-  const start = useStartSession();
-  const message = useSendMessage();
+  const ask = useAsk();
   const fail = useCallback((what: string) => (caught: unknown) => notify(errorMessage(caught, what), { tone: "problem" }), [notify]);
 
   const tools = slot.tools;
   const gists = useMemo(() => Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, tool.gist])), [tools]);
   const carded = useMemo(() => new Set(Object.entries(tools).flatMap(([name, tool]) => (tool.card ? [name] : []))), [tools]);
   const history = steps.data;
-  const held = approvals.data;
   const chat = useMemo(
     () =>
       record && history
-        ? timeline({ steps: history, live, session: record, held: held ?? [], gists, carded, children: NOTHING, handed: NOTHING, parent: null, now })
+        ? timeline({ steps: history, live, session: record, held: NOTHING, gists, carded, children: NOTHING, handed: NOTHING, parent: null, now })
         : null,
-    [record, history, live, held, gists, carded, now],
+    [record, history, live, gists, carded, now],
   );
   const marks = useMemo(() => (chat ? outline(chat.entries) : []), [chat]);
   const slotSession: SlotSession | null = useMemo(
-    () => (record ? { session: record, calls: chat ? callsOf(chat.entries) : [], running: runs, open: () => undefined } : null),
-    [record, chat, runs],
+    () => (record ? { session: record, calls: chat ? callsOf(chat.entries) : [], running: asking, open: () => undefined } : null),
+    [record, chat, asking],
   );
   const mayWrite = me.data?.permissions.includes("write") ?? false;
   const may = record ? allowed(record, mayWrite, me.data?.user.id ?? null) : null;
 
-  /** Sends what the person typed, with the page they are on; the first
-   * message starts the conversation. */
+  /** Asks what the person typed, with the page they are on; the first
+   * question starts the conversation. The draft clears once the question is
+   * stored, and stays when it is refused. */
   const send = (text: string, done: () => void) => {
-    const body = withPage(text, page);
-    if (id !== null) {
-      message.mutate({ id, text: body }, { onSuccess: done, onError: fail("The message was not sent.") });
-      return;
-    }
-    if (key === null) return;
-    start.mutate(
-      { kind: ASSISTANT_KIND, title: SUPPORT_TITLE },
-      {
-        onSuccess: (session) => {
-          keep(key, session.id);
-          message.mutate({ id: session.id, text: body }, { onSuccess: done, onError: fail("The message was not sent.") });
-        },
-        onError: fail("Support could not start a conversation."),
-      },
-    );
+    if (key === null || asking) return;
+    const said = withPage(text, page);
+    const body = id === null ? { kind: SUPPORT_KIND, title: SUPPORT_TITLE, text: said } : { text: said };
+    setAsking(true);
+    setStopped(null);
+    setLive([]);
+    void ask(id, body, (event) => {
+      if (event.event === "session") {
+        if (id === null) keep(key, (event.data as agent_sessions.QuestionSessionEvent).agent_session_id);
+        done();
+      } else if (event.event === "text") {
+        setLive((held) => heard(held, event.data as agent_sessions.QuestionTextEvent));
+      } else if (event.event === "end") {
+        setStopped(endLine(event.data as agent_sessions.QuestionEndEvent));
+      } else if (event.event === "error") {
+        setStopped(failedLine(event.data as agent_sessions.QuestionErrorEvent));
+      }
+    })
+      .catch(fail("The question was not sent."))
+      .finally(() => {
+        setAsking(false);
+        setLive([]);
+      });
   };
 
   const vm: TimelineVm = {
@@ -110,15 +120,18 @@ export function useSupportVm(page: PageContext) {
     id,
     /** Whether the person's conversation is still being read back. */
     reading: keptId !== null && kept.isPending,
-    /** Whether the assistant works now. */
-    working: runs,
+    /** Whether the assistant answers now. */
+    working: asking,
+    /** Why the last answer stopped short, until the next question. */
+    stopped,
     /** Whether the person may send: a member who may only read cannot. */
     maySend: mayWrite && key !== null,
-    sending: start.isPending || message.isPending,
+    sending: asking,
     send,
-    /** The next message starts a new conversation; this one stays a session. */
+    /** The next question starts a new conversation; this one stays a session. */
     fresh: () => {
       if (key !== null) forget(key);
+      setStopped(null);
     },
   };
 }

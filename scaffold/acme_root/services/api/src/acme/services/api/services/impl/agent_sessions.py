@@ -58,8 +58,8 @@ from acme.services.api.services.impl.questions import (
 from acme.services.api.services.impl.session_reads import (
     approvals_of,
     bounds_of,
-    questions_of,
     tool_calls_of,
+    unlocks_of,
     usage_of,
     waits_on_approval,
 )
@@ -89,7 +89,6 @@ from acme.services.api.types.agent_sessions import (
     QuestionEndView,
     QuestionRequest,
     QuestionSessionView,
-    QuestionView,
     SnapshotView,
     StartAgentSessionRequest,
     StartQuestionRequest,
@@ -97,6 +96,7 @@ from acme.services.api.types.agent_sessions import (
     ToolCallPageView,
     ToolOutputPageView,
     ToolUseView,
+    UnlockView,
     VisibilityRequest,
     WorkspacePlace,
 )
@@ -629,11 +629,11 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
             has_more=page.has_more,
         )
 
-    async def get_questions(self, ctx: TenantContext, agent_session_id: UUID) -> list[QuestionView]:
+    async def get_unlocks(self, ctx: TenantContext, agent_session_id: UUID) -> list[UnlockView]:
         session = await self._sessions.get_agent_session(ctx, agent_session_id)
         if session.park is None:
             return []
-        return questions_of(session, await self._history(ctx, agent_session_id))
+        return unlocks_of(session, await self._history(ctx, agent_session_id))
 
     async def get_approvals(self, ctx: TenantContext, agent_session_id: UUID) -> list[ApprovalView]:
         session = await self._sessions.get_agent_session(ctx, agent_session_id)

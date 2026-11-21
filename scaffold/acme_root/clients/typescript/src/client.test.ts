@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createClient, RequestTimeout, type ClientOptions } from "./client";
+import { ApiError, createClient, RequestTimeout, sseEvents, type ClientOptions, type StreamEvent } from "./client";
 
 // A fetch that never answers on its own and rejects with the signal's reason
 // once it is aborted, or at once when it already is, the way a real fetch does.
@@ -334,5 +334,70 @@ describe("the transport client's one retry", () => {
     const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse(503, {})));
     await expect(client({ fetchImpl }).get("/v1/api-keys")).rejects.toBeInstanceOf(ApiError);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A body that arrives in the pieces given, one read each, as a stream does.
+function streamed(pieces: readonly string[], status = 200, contentType = "text/event-stream"): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const piece of pieces) controller.enqueue(encoder.encode(piece));
+      controller.close();
+    },
+  });
+  return new Response(body, { status, headers: { "content-type": contentType } });
+}
+
+describe("transport client stream", () => {
+  it("hands each server-sent event over as it arrives, a frame split across reads among them", async () => {
+    const pieces = ['event: session\ndata: {"agent_session_id":"s1"}\n\nevent: te', 'xt\ndata: {"text":"Hel"}\n\n', 'event: text\ndata: {"text":"lo"}\n\nevent: end\ndata: {"outcome":"succeeded"}\n\n'];
+    const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(streamed(pieces)));
+    const seen: StreamEvent[] = [];
+
+    await client({ fetchImpl }).stream("/v1/agent-sessions/questions", { text: "Hi" }, (event) => seen.push(event));
+
+    expect(seen).toEqual([
+      { event: "session", data: { agent_session_id: "s1" } },
+      { event: "text", data: { text: "Hel" } },
+      { event: "text", data: { text: "lo" } },
+      { event: "end", data: { outcome: "succeeded" } },
+    ]);
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(new Headers(init?.headers).get("Accept")).toBe("text/event-stream");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer tok_1");
+  });
+
+  it("outlives the deadline once the answer's headers are in, and a refusal before them is typed", async () => {
+    let send: (piece: string) => void = () => undefined;
+    let close: () => void = () => undefined;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        send = (piece) => controller.enqueue(encoder.encode(piece));
+        close = () => controller.close();
+      },
+    });
+    const fetchImpl: typeof fetch = () => Promise.resolve(new Response(body, { headers: { "content-type": "text/event-stream" } }));
+    const seen: StreamEvent[] = [];
+    const running = client({ fetchImpl }).stream("/v1/q", {}, (event) => seen.push(event));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    send('event: end\ndata: {"end":"ended"}\n\n');
+    close();
+    await running;
+    expect(seen).toEqual([{ event: "end", data: { end: "ended" } }]);
+
+    const refused = jsonResponse(403, { error: { code: "not_authorized", message: "only the steerer asks", request_id: "req_1" } });
+    const failure = await client({ fetchImpl: () => Promise.resolve(refused) })
+      .stream("/v1/q", {}, () => undefined)
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 403, code: "not_authorized", message: "only the steerer asks" });
+  });
+
+  it("reads a frame's data lines as one, and drops a frame with none", () => {
+    expect(sseEvents("event: ping\n\nevent: a\ndata: [1,\ndata: 2]\n\nevent: b\ndata: {")).toEqual({
+      events: [{ event: "a", data: [1, 2] }],
+      rest: "event: b\ndata: {",
+    });
   });
 });

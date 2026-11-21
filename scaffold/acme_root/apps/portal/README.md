@@ -53,7 +53,7 @@ writes it again.
 ## Support
 
 "?" beside the user chip, ⌘/, or "Ask support" in the search opens the
-support dock: a conversation with the platform assistant at the right
+support dock: a conversation with the support assistant at the right
 edge, beside whatever page is open. ✕ or Esc closes it. The dock is the
 shell's own column, so it never shares one with the page. When a session's
 page is short of room, its pane folds to its icon rail first, and only then
@@ -63,9 +63,13 @@ page's width.
 
 A link in a reply is a chip only when the router serves its address; it
 opens that page in the main area and leaves the dock as it is. Any other
-link shows as its words and its address. Each message carries the page the
-person is on, as data. The dock keeps its draft and its conversation while
-the person moves between pages, and continues a person's standing
+link shows as its words and its address. Each question carries the page the
+person is on, as data. The support assistant answers in the request that
+asks it, so its answer shows as it is written, with no queue before its
+first word; an answer a park stopped short says why, and the next question
+runs ([ADR 2071](../../docs/adr/2071-the-support-dock-asks-a-kind-that-answers-in-the-request.md)).
+One question runs at a time. The dock keeps its draft and its conversation
+while the person moves between pages, and continues a person's standing
 conversation only when it is their own
 ([ADR 2045](../../docs/adr/2045-the-support-dock-continues-a-conversation-only-when-it-is-the-persons-own.md)).
 

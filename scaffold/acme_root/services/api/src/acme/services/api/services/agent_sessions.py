@@ -29,11 +29,11 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     PrincipalRequest,
     QuestionRequest,
-    QuestionView,
     StartAgentSessionRequest,
     StartQuestionRequest,
     ToolCallPageView,
     ToolOutputPageView,
+    UnlockView,
     VisibilityRequest,
 )
 
@@ -232,9 +232,9 @@ class AgentSessionsServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_questions(self, ctx: TenantContext, agent_session_id: UUID) -> list[QuestionView]:
-        """What the session asks of a person now, other than a call's
-        decision; empty when it waits on nobody."""
+    async def get_unlocks(self, ctx: TenantContext, agent_session_id: UUID) -> list[UnlockView]:
+        """What the session waits on a person to unlock now, other than a
+        call's decision; empty when it waits on nobody."""
         ...
 
     @abstractmethod

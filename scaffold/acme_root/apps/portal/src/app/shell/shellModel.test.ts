@@ -99,19 +99,19 @@ it("narrows by agent and status, and leaves the archived out unless asked", () =
   expect(groupOf(sessions[3]!)).toBe("recent");
 });
 
-it("leaves support conversations out of every group, and shows them under the platform assistant's filter", () => {
+it("leaves support conversations out of every group, and shows them under the support assistant's filter", () => {
   const sessions = [
     session("work"),
-    session("support", { kind: "platform_assistant", title: "Support" }),
-    session("asking", { kind: "platform_assistant", title: "Support", status: "parked", park: park("person", "approval") }),
-    session("composed", { kind: "platform_assistant", title: "Draft the webhook settings" }),
+    session("support", { kind: "support_assistant", title: "Support" }),
+    session("asking", { kind: "support_assistant", title: "Support", status: "running" }),
+    session("composed", { kind: "platform_assistant", title: "Support" }),
   ];
   const shown = (kind: string) => {
     const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, kind } });
     return [...groups.needsYou, ...groups.running, ...groups.recent].map((row) => row.id).sort();
   };
   expect(shown("")).toEqual(["composed", "work"]);
-  expect(shown("platform_assistant")).toEqual(["asking", "composed", "support"]);
+  expect(shown("support_assistant")).toEqual(["asking", "support"]);
 });
 
 it("says each status in words", () => {

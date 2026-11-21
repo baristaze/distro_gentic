@@ -84,8 +84,9 @@ class ConnectorsManagerInterface(ABC):
     ) -> Connector:
         """The connector attached to a kind, for an agent project of the tenant or
         for every session: an attachment of that kind and agent project already
-        held is replaced. A kind no catalog holds, or one whose toolsets
-        share the connector's name, is `ValidationFailed`."""
+        held is replaced. A kind no catalog holds, one whose toolsets share
+        the connector's name, or one whose loop runs in the request that asks
+        it is `ValidationFailed`."""
         ...
 
     @abstractmethod

@@ -27,6 +27,7 @@ from api_support import (
     add_member,
     build_container,
     enrol_operator,
+    seed_matrix,
     seed_request,
     sign_in,
     sign_in_as,
@@ -141,6 +142,12 @@ class Case:
             funding=FundingMode.PLATFORM, key_ref=None, unit_plan_id=plan, zone="UTC"
         )
         await agent_billing.open_spend_account(await self.ctx(owner), request)
+        await seed_matrix(
+            self.container.storage,
+            self.container.managers,
+            seed_request(),
+            self.container.managers.kinds.kinds,
+        )
         _, other = await self.container.managers.tenancy.bootstrap(
             seed_request(), "Bravo", "bravo", "owner@bravo.test", "Owner"
         )

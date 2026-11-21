@@ -97,4 +97,5 @@ def build_agent_automations(
         agent_project_required=agent_project_required,
         actions=AgentAutomationActions(actions(lambda: managers)),
         agent_playbooks=agent_playbooks,
+        kinds=managers.kinds,
     )

@@ -1076,37 +1076,6 @@
         "title": "QuestionRequest",
         "type": "object"
       },
-      "QuestionView": {
-        "description": "What a session asks of a person now: a park on a person that is no\ncall's decision, such as a step guard to lift, a deadline to move, or a\nprincipal to name. `unlock` is what clears it, sent as a control; `seq`\nis the step that parked it.",
-        "properties": {
-          "agent_session_id": {
-            "format": "uuid",
-            "title": "Agent Session Id",
-            "type": "string"
-          },
-          "asked_at": {
-            "format": "date-time",
-            "title": "Asked At",
-            "type": "string"
-          },
-          "seq": {
-            "title": "Seq",
-            "type": "integer"
-          },
-          "unlock": {
-            "title": "Unlock",
-            "type": "string"
-          }
-        },
-        "required": [
-          "agent_session_id",
-          "seq",
-          "asked_at",
-          "unlock"
-        ],
-        "title": "QuestionView",
-        "type": "object"
-      },
       "SnapshotView": {
         "description": "A workspace's snapshot a step names: its id, which a restore names,\nthe hash of its bytes keyed by its session, its size in bytes, and the\nworkspace it was taken from.",
         "properties": {
@@ -1465,6 +1434,37 @@
           "size"
         ],
         "title": "TreeBoundsView",
+        "type": "object"
+      },
+      "UnlockView": {
+        "description": "What a session waits on a person to unlock now: a park on a person\nthat is no call's decision, such as an answer to give, a step guard to\nlift, a deadline to move, or a principal to name. `unlock` is what\nclears it, sent as a control; `seq` is the step that parked it. A\nquestion is another thing: what a person asks a kind whose loop runs in\nthe request.",
+        "properties": {
+          "agent_session_id": {
+            "format": "uuid",
+            "title": "Agent Session Id",
+            "type": "string"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "unlock": {
+            "title": "Unlock",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_session_id",
+          "seq",
+          "asked_at",
+          "unlock"
+        ],
+        "title": "UnlockView",
         "type": "object"
       },
       "UsageRecordView": {
@@ -3806,100 +3806,6 @@
       }
     },
     "/v1/agent-sessions/{agent_session_id}/questions": {
-      "get": {
-        "description": "What the session waits on a person for, other than a call's decision.",
-        "operationId": "get_questions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "agent_session_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Agent Session Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-app-version",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-App-Version"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/QuestionView"
-                  },
-                  "title": "Response Get Questions",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "common.json#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Questions",
-        "tags": [
-          "agent_sessions"
-        ]
-      },
       "post": {
         "description": "A question to a session the caller steers: its loop runs in this\nrequest, and streams.",
         "operationId": "ask",
@@ -4531,6 +4437,102 @@
         ]
       }
     },
+    "/v1/agent-sessions/{agent_session_id}/unlocks": {
+      "get": {
+        "description": "What the session waits on a person to unlock, other than a call's decision.",
+        "operationId": "get_unlocks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnlockView"
+                  },
+                  "title": "Response Get Unlocks",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Unlocks",
+        "tags": [
+          "agent_sessions"
+        ]
+      }
+    },
     "/v1/agent-sessions/{agent_session_id}/usage": {
       "get": {
         "description": "The tokens the session's model calls used, per model and in total.",
@@ -4835,7 +4837,7 @@
   },
   "tags": [
     {
-      "description": "Agent session routes: start a session on a kind, list the ones a\nperson takes part in or sees, and a session's children, a page at a time,\nread one, archive, delete, and restore it, join one or leave it, switch\nwho sees it, hand its steer on, send it a message or a control, decide a\ntool call it waits on, clear the park a person clears, and read its\nhistory and its tool outputs a page at a time. A session's derived reads\nfollow: what it asks of a person, the calls it holds for a decision, its\nbounds, its tool calls, and what its model calls used. Each function is\none call into the agent\nsessions service; every create runs under the idempotency record, so a\nretried send is one step. The loop runs in the session runner: a route\nwrites what a person said and answers once it is durable. A session the\ncaller does not see answers 404, as one that never existed.\n\nA kind whose loop runs in the request that asks it is asked a question\ninstead (ADR 1044): the route writes it, runs the loop in the request, and\nanswers with its stream, as server-sent events. A question is no create\nthe idempotency record replays: a stream is no outcome to record, and the\nquestion asked again is a question of its own.\n\nEach park a person clears has its route, held to the permission its\nmanager checks, and clearing it wakes the session: a message answers a\nquestion, a decision an approval, a moved deadline the deadline, an\nassignment a principal who no longer holds, a giving back the hand-over\nits holder holds, a job's completion its job, and an unlock the step\nguard, a spender, a lost workspace, and a key or a price fixed outside.\n\nOn the operator plane (`routers/tenancy.py`), an operator token that may\nread reads what one session's model calls used and cost.",
+      "description": "Agent session routes: start a session on a kind, list the ones a\nperson takes part in or sees, and a session's children, a page at a time,\nread one, archive, delete, and restore it, join one or leave it, switch\nwho sees it, hand its steer on, send it a message or a control, decide a\ntool call it waits on, clear the park a person clears, and read its\nhistory and its tool outputs a page at a time. A session's derived reads\nfollow: what it waits on a person to unlock, the calls it holds for a decision, its\nbounds, its tool calls, and what its model calls used. Each function is\none call into the agent\nsessions service; every create runs under the idempotency record, so a\nretried send is one step. The loop runs in the session runner: a route\nwrites what a person said and answers once it is durable. A session the\ncaller does not see answers 404, as one that never existed.\n\nA kind whose loop runs in the request that asks it is asked a question\ninstead (ADR 1044): the route writes it, runs the loop in the request, and\nanswers with its stream, as server-sent events. A question is no create\nthe idempotency record replays: a stream is no outcome to record, and the\nquestion asked again is a question of its own.\n\nEach park a person clears has its route, held to the permission its\nmanager checks, and clearing it wakes the session: a message answers a\nquestion, a decision an approval, a moved deadline the deadline, an\nassignment a principal who no longer holds, a giving back the hand-over\nits holder holds, a job's completion its job, and an unlock the step\nguard, a spender, a lost workspace, and a key or a price fixed outside.\n\nOn the operator plane (`routers/tenancy.py`), an operator token that may\nread reads what one session's model calls used and cost.",
       "name": "agent_sessions"
     }
   ]

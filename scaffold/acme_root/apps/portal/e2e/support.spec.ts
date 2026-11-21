@@ -1,12 +1,12 @@
 // The support dock beside a parked session, on the stack the timeline check
 // runs (`portal_stack.py`), with the scripted provider playing the support
-// scene (`portal_check.py script <path> --scene support`): the platform
-// assistant searches its corpus, then answers with a link to a page of the
-// portal and a link to another site. `portal_check.py tree` writes the
-// parked session. "?" opens the dock, the session's pane folds to its rail,
-// Send stays open while the assistant works, the answer's portal link is a
-// chip that opens its page in the main area while the dock keeps the
-// conversation, and the other link is text. Expanded, and as a sheet under
+// scene (`portal_check.py script <path> --scene support`), paced: the
+// support assistant searches its corpus, then answers with a link to a page
+// of the portal and a link to another site, in the request that asks it.
+// `portal_check.py tree` writes the parked session. "?" opens the dock, the
+// session's pane folds to its rail, the answer streams in while Send waits
+// for it, the answer's portal link is a chip that opens its page in the main
+// area while the dock keeps the conversation, and the other link is text. Expanded, and as a sheet under
 // 1100 pixels, it is shot light and dark under e2e/screenshots/.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -46,7 +46,7 @@ function parkedRoot(): string {
   return (JSON.parse(printed.trim().split("\n").pop()!) as { root: string }).root;
 }
 
-test("support beside a parked session: the pane folds first, Send stays open while it works, and a chip opens its page while the dock keeps the conversation", async ({ browser }) => {
+test("support beside a parked session: the pane folds first, the answer streams in the request, and a chip opens its page while the dock keeps the conversation", async ({ browser }) => {
   const root = parkedRoot();
   const owner = await signedIn(browser, mintLogins(OWNER), OWNER, ORG);
   await owner.goto(`/sessions/${root}`);
@@ -79,18 +79,26 @@ test("support beside a parked session: the pane folds first, Send stays open whi
   await rail.getByRole("button").first().click();
   await expect(pane.locator(".acme-pane-peek")).toHaveCount(0);
 
-  // A question, with the page as data; Send stays open while it works.
+  // A question, with the page as data, answered in its request: the answer
+  // streams in while Send waits for it, and the next question may follow.
   const field = dock.getByRole("textbox", { name: "Ask support" });
   const send = dock.getByRole("button", { name: "Send" });
   await field.fill("Why is this session parked?");
   await send.click();
   await expect(field).toHaveValue("");
-  const works = dock.getByText("Working: send at any time");
-  await expect(works).toBeVisible();
+  const streamed = dock.locator(".acme-prose[data-live]");
+  await expect(streamed).toBeVisible({ timeout: 30_000 });
+  await expect(dock.getByText("Answering")).toBeVisible();
+  await expect(send).toBeDisabled();
+  console.log(`streaming: ${(await streamed.innerText()).slice(0, 60)}`);
+  await shoot(owner, "dock-streaming");
+  await expect(streamed).toHaveCount(0, { timeout: 30_000 });
+  await expect(dock).toContainText(ANSWER);
+  await expect(dock.getByText("Answering")).toHaveCount(0);
+  await expect(dock.locator(".acme-dock-stopped")).toHaveCount(0);
   await field.fill("And how long will it wait?");
   await expect(send).toBeEnabled();
-  console.log(`while it works: Send enabled ${await send.isEnabled()} · still working ${await works.isVisible()}`);
-  await shoot(owner, "dock-working");
+  await shoot(owner, "dock-answered");
   await field.fill("");
 
   // The answer: a chip for the portal's page, text for the other site.

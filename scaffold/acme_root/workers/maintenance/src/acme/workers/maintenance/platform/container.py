@@ -232,6 +232,7 @@ class WorkerPlatform:
             managers.work,
             managers.tenancy,
             StalledOptions(batch=STALLED_SWEEP_BATCH),
+            managers.kinds,
         )
         self.park_alerts = build_park_alerts(
             storage,

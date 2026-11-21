@@ -92,6 +92,10 @@ SETTINGS = {
     ): "e6d3bb7229ec1cc222d688dc4cbfd2fbdc9748dcbe7e32d92a1e97bf26d5f765",
     (kinds.REVIEWER, 1): "7136765176c7c91b89ca2effc4f5c94fecf54306c2c168ebf856797c0528ad79",
     (kinds.OPS_ANALYST, 1): "bb0c19ce54d8e4968fcd158d39161a0c7c1d53edba3d8ab60300f1688108df1d",
+    (
+        kinds.SUPPORT_ASSISTANT,
+        1,
+    ): "e5f4ea0fc5091b77a1b876a8971b6241df446cd7df9227c69f4987af4a9e2e38",
 }
 """Each version of each shipped kind, and the digest of its settings: every
 field it sets but its prompt, which its folder's lock pins. A released

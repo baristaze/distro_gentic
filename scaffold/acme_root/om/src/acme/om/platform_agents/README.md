@@ -115,6 +115,13 @@ calls, and holds its workspace warm for a while after a loop.
   each offers, its budgets and what they spent, and its agent projects
   and agent automations. Every tool it holds reads. A fix it finds
   leaves as an objective a person hands to a software engineer.
+- **The support assistant** answers in the portal's support dock. It
+  reads and drafts what the assistant does, a product's readers and its
+  section of the object model among them, and hands no work on. Its loop
+  runs in the request that asks it, within the engine's bounds of a
+  request, so the dock shows its answer as it is written
+  ([ADR 2071](../../../../../docs/adr/2071-the-support-dock-asks-a-kind-that-answers-in-the-request.md)).
+  Every other kind here runs in a worker.
 - **A lead** is any kind whose toolsets include `sub_agents`: it starts
   the others, such as a software engineer on a change and the reviewer
   on its pull request, and answers with their reports. It holds every
@@ -129,7 +136,8 @@ calls, and holds its workspace warm for a while after a loop.
   `read_agent_project`; and `list_agent_automations` and
   `read_agent_automation`, with its recent runs. Each answers a record's
   shape, never a session's content, and bounds its list. A product adds
-  readers of its own through its slot.
+  readers of its own through its slot, and they join the support
+  assistant's too.
 - **The corpus**: what the [knowledge map](../../../../../llms.txt) lists
   for the tenant's users, read once when the process starts. A document
   listed only for the platform's own people is not in it. Among it is
@@ -160,6 +168,10 @@ calls, and holds its workspace warm for a while after a loop.
   slow. It reads first, with the assistant's readers, `list_hosts`, and
   `read_spend`, then says what it waits on, what clears it, who may
   clear it, and where, and writes any engineering fix as an objective.
+- **Ask support.** A person asks in the support dock. The support
+  assistant reads first, answers in the request, and streams its answer;
+  where its loop would park, it stops with the cause, and the next
+  question runs. Engineering work it names is a person's to start.
 - **Ask the assistant.** A person types in an assistant's session. It
   searches the corpus, reads live state, drafts, or hands work on, and
   answers. Asked why something waits, it reads first, then says what it
@@ -240,12 +252,14 @@ calls, and holds its workspace warm for a while after a loop.
   two tools of one name, is refused when the process starts, and so is a
   product's slot that names a tool the catalog does not hold, one past
   reading and handing on, or one the assistant holds already.
-- **The ops analyst only reads, and the reviewer reads and comments.**
-  The ops analyst's authority is delegated and the reviewer's steady;
-  neither has a workspace. Every tool the ops analyst holds reads, and
-  every tool the reviewer holds reads but the forge's comment. A version
-  of either that reaches further, whoever declares it, is refused when
-  the process starts, over the whole catalog, the engine's tools
+- **The ops analyst and the support assistant only read, and the
+  reviewer reads and comments.** The ops analyst's and the support
+  assistant's authority is delegated and the reviewer's steady; none has
+  a workspace. Every tool the ops analyst and the support assistant hold
+  reads, and every tool the reviewer holds reads but the forge's
+  comment. A version of any of them that reaches further, whoever
+  declares it, is refused when the process starts, over the whole
+  catalog, the engine's tools
   included.
 - **A review counts only on its own reads and findings.** A reviewer's
   result cites calls of its own session to read the pull request, read

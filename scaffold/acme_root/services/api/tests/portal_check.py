@@ -23,8 +23,8 @@ submits the result again, since a software engineer's loop ends only on its
 result. Its baseline runs before anything marks the session. Each
 command and each later validation wait for a decision, since a tool's
 output, such as its plan's answer, marks it. With `--scene support` it is
-the platform assistant answering in the support dock: it searches its
-corpus, then answers with a link to a page of the portal and a link to
+the support assistant answering in the support dock, in the request that
+asks it: it searches its corpus, then answers with a link to a page of the portal and a link to
 another site. With `--scene sharing` it is the one turn twice, for the
 sharing check's two sessions; a participant's suggestion wakes no run, since
 only the steerer's message instructs.
@@ -255,7 +255,7 @@ SUPPORT_ANSWER = (
 
 
 def support_scene() -> list[Any]:
-    """The platform assistant's turns in the support dock: a search of its
+    """The support assistant's turns in the support dock: a search of its
     corpus, then an answer that links a page of the portal and another
     site."""
     from acme.integrations.model_providers.calls import ModelReply

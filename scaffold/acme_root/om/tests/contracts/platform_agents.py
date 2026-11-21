@@ -32,7 +32,7 @@ from acme.om.agent_steps.types.header import LoopOutcome, ToolFailure, ToolRespo
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.rules import CHILDREN_PARK
 from acme.om.agents.types.kind import NO_AGENT_WORKSPACE, AgentKind
-from acme.om.agents.types.request import Start
+from acme.om.agents.types.request import Question, Start
 from acme.om.agents.types.result import Claim
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -144,6 +144,15 @@ class Platform:
             self.owner, Start(id=new_id(), kind=kind, title="a question")
         )
         return session.id
+
+    async def ask(self, kind: str, text: str) -> UUID:
+        """A session of `kind`, a request kind, started by the owner's
+        question, its loop not yet run."""
+        agent_session_id = new_id()
+        start = Start(id=agent_session_id, kind=kind, title="a question")
+        question = Question(id=new_id(), agent_session_id=agent_session_id, text=text, start=start)
+        await self.managers.agents.ask(self.owner, question)
+        return agent_session_id
 
     async def say(self, agent_session_id: UUID, text: str) -> None:
         person = Principal(kind=PrincipalKind.PERSON, id=self.owner.user_id)

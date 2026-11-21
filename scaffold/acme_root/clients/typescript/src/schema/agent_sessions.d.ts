@@ -380,11 +380,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Questions
-         * @description What the session waits on a person for, other than a call's decision.
-         */
-        get: operations["get_questions"];
+        get?: never;
         put?: never;
         /**
          * Ask
@@ -494,6 +490,26 @@ export interface paths {
          *     place moves between pages. The policy's page bounds `limit`.
          */
         get: operations["get_tool_output"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{agent_session_id}/unlocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unlocks
+         * @description What the session waits on a person to unlock, other than a call's decision.
+         */
+        get: operations["get_unlocks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1032,29 +1048,6 @@ export interface components {
             text: string;
         };
         /**
-         * QuestionView
-         * @description What a session asks of a person now: a park on a person that is no
-         *     call's decision, such as a step guard to lift, a deadline to move, or a
-         *     principal to name. `unlock` is what clears it, sent as a control; `seq`
-         *     is the step that parked it.
-         */
-        QuestionView: {
-            /**
-             * Agent Session Id
-             * Format: uuid
-             */
-            agent_session_id: string;
-            /**
-             * Asked At
-             * Format: date-time
-             */
-            asked_at: string;
-            /** Seq */
-            seq: number;
-            /** Unlock */
-            unlock: string;
-        };
-        /**
          * SnapshotView
          * @description A workspace's snapshot a step names: its id, which a restore names,
          *     the hash of its bytes keyed by its session, its size in bytes, and the
@@ -1223,6 +1216,31 @@ export interface components {
             root_id: string;
             /** Size */
             size: number;
+        };
+        /**
+         * UnlockView
+         * @description What a session waits on a person to unlock now: a park on a person
+         *     that is no call's decision, such as an answer to give, a step guard to
+         *     lift, a deadline to move, or a principal to name. `unlock` is what
+         *     clears it, sent as a control; `seq` is the step that parked it. A
+         *     question is another thing: what a person asks a kind whose loop runs in
+         *     the request.
+         */
+        UnlockView: {
+            /**
+             * Agent Session Id
+             * Format: uuid
+             */
+            agent_session_id: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Seq */
+            seq: number;
+            /** Unlock */
+            unlock: string;
         };
         /**
          * UsageRecordView
@@ -2168,41 +2186,6 @@ export interface operations {
             };
         };
     };
-    get_questions: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                agent_session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     ask: {
         parameters: {
             query?: never;
@@ -2414,6 +2397,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ToolOutputPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unlocks: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                agent_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnlockView"][];
                 };
             };
             /** @description Validation Error */

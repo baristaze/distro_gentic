@@ -28,6 +28,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports.redaction import forms
 from acme.integrations.mcp import McpAnswer, McpListedTool
 from acme.integrations.mcp.sdk import McpClientSdkImpl
+from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_steps.types.agent_step import AgentStep, AgentStepType
 from acme.om.agent_steps.types.header import (
     InputHeader,
@@ -35,7 +36,7 @@ from acme.om.agent_steps.types.header import (
     ToolFailure,
     ToolRequestHeader,
 )
-from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.kind import REQUEST_STEPS, REQUEST_TIME, AgentKind, DoneRule, RunsIn
 from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
@@ -81,6 +82,15 @@ OPS_ANALYST = AgentKind(
     prompts=("You keep the records, and act on them when asked.",),
     policy=ALLOWED,
 )
+
+ANSWERER = OPS_ANALYST.model_copy(
+    update={
+        "name": "answerer",
+        "limits": Limits(step_guard=REQUEST_STEPS, run_time=REQUEST_TIME),
+        "runs_in": RunsIn.REQUEST,
+    }
+)
+"""A kind whose loop runs in the request that asks it."""
 
 
 # The servers, and each side of the wall.
@@ -726,3 +736,22 @@ async def test_a_name_is_held_to_the_addresses_it_resolves_to() -> None:
 def test_a_servers_tool_is_called_by_its_connectors_name_and_its_own() -> None:
     assert tool_name("words", "lookUp-word.v2") == "words__lookup_word_v2"
     assert tool_name("words", "x" * 64) is None
+
+
+# Check: a kind whose loop runs in the request that asks it takes no
+# connector, so no toolset a connector attaches reaches its sessions.
+
+
+async def test_a_kind_whose_loop_runs_in_the_request_takes_no_connector(
+    tmp_path: Path, words: Served
+) -> None:
+    at = tenant(tmp_path, kinds=(OPS_ANALYST, ANSWERER))
+    connector_id = await connected(at, words.url, "lookup")
+
+    with pytest.raises(ValidationFailed, match="runs its loop in the request that asks it"):
+        await at.connectors.attach(
+            at.loop.owner, connector_id, ConnectorAttachment(kind=ANSWERER.name)
+        )
+
+    connector = await at.connectors.get_connector(at.loop.owner, connector_id)
+    assert [each.kind for each in connector.attachments] == [OPS_ANALYST.name]

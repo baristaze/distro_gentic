@@ -143,6 +143,7 @@ LENSES: dict[str, Severity] = {
     "FLT-14": "high",
     "FLT-15": "high",
     "FLT-16": "high",
+    "FLT-17": "high",
 }
 
 CORE: frozenset[str] = frozenset(

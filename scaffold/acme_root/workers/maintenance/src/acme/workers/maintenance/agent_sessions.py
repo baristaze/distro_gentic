@@ -27,6 +27,8 @@ from acme.om.agent_sessions.kinds import (
     WakeAgentSessionsPayload,
 )
 from acme.om.agent_sessions.types.agent_session import AgentSession, AgentSessionStatus
+from acme.om.agents.rules import runs_in_request
+from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import OmBase, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential, NotFound
@@ -149,7 +151,10 @@ class StalledSessionsSweep:
     passes find it. A session whose loop a run holds is never asked for: a
     second run would take the next writer epoch and fence the live one,
     whose call in flight is billed and thrown away. The run that takes it
-    up asks an approval that expired meanwhile again, at its gate."""
+    up asks an approval that expired meanwhile again, at its gate. A session
+    whose kind runs its loop in the request that asks it is never asked
+    for: no worker runs that loop, and the session's next question takes it
+    up."""
 
     def __init__(
         self,
@@ -157,12 +162,14 @@ class StalledSessionsSweep:
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
         options: StalledOptions,
+        kinds: AgentKindCatalog,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._sessions = sessions
         self._work = work
         self._tenancy = tenancy
         self._options = options
+        self._kinds = kinds
         self._clock = clock
         # The last write the next call reads on from; None until this process
         # has read once.
@@ -196,7 +203,10 @@ class StalledSessionsSweep:
         moves past it, and a loop whose work then fails for good is a dead
         letter an operator requeues. Any other is asked for, once: a live run
         always holds its loop item claimed, so a step the run wrote holds
-        nothing once its item failed for good."""
+        nothing once its item failed for good. A session of a kind whose loop
+        runs in the request that asks it is passed over."""
+        if runs_in_request(self._kinds, session):
+            return True
         try:
             ctx = await self._tenancy.service_context(rctx, org_id, session.created_by)
         except InvalidCredential:

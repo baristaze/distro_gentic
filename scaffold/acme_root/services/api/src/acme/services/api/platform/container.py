@@ -14,6 +14,7 @@ from acme.integrations.payments import PaymentProviderInterface
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om import product_namespaces
+from acme.om.agent_automations import AgentAutomationsManagerInterface
 from acme.om.agent_automations.root import build_agent_automations
 from acme.om.agent_billing.root import build_agent_billing, build_money_gate, refuse_open_money
 from acme.om.agent_knowledge.root import AgentKnowledgeLayer
@@ -32,6 +33,7 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.park_alerts.root import build_park_alerts
 from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_root import (
     PlatformManagers,
     PlatformPorts,
@@ -112,14 +114,20 @@ def build_platform_api(
     ports = ports or PlatformPorts()
     held: list[IntakeManagerInterface] = []
     streams = QuestionStreamsImpl()
-    # The example assistant, where the environment offers it and the product
-    # declares no kind; its tool reads the media manager the root below builds.
-    example_kinds, example_tools = offered(
-        settings.environment, ports.kinds.agent_kinds, lambda: managers.media
+    # The example assistant, where the environment offers it and neither the
+    # product's kinds nor the platform's agents take its place: the platform
+    # ships a kind of its own that answers in the request, and a tool of the
+    # example's name. Its tool reads the media manager the root below builds.
+    declared = (
+        ports.kinds.agent_kinds if platform_agents is None else (*SHIPPED, *ports.kinds.agent_kinds)
     )
+    example_kinds, example_tools = offered(settings.environment, declared, lambda: managers.media)
     # A start makes each session with its kind manual.
     agent_playbooks = AgentPlaybooksLayer(storage)
     agent_knowledge = AgentKnowledgeLayer(storage)
+    # The agent automations a request kind's readers read, built below over
+    # the managers, as the session runner builds them.
+    agent_automations: list[AgentAutomationsManagerInterface] = []
     # A tenant's own provider keys, saved and listed here and never read
     # back. A request kind's loop runs its calls here, in the cloud, so
     # its placement names this process.
@@ -130,6 +138,17 @@ def build_platform_api(
         placement=PlacementCloudImpl(api),
         probe=key_probe(settings),
         product_kinds=ports.kinds,
+    )
+
+    # The model matrix: its versions serve every model role the product's
+    # kinds call, beside the platform's own. A request kind's loop takes its
+    # fills here, and a tenant on its own keys calls on them through trust,
+    # as the session runner's loop does.
+    matrix = MatrixLayer(
+        storage,
+        options=MatrixOptions(environment=settings.environment),
+        clients=lambda: trust.managers.provider_clients,
+        kinds=ports.kinds.agent_kinds,
     )
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
@@ -153,8 +172,14 @@ def build_platform_api(
             product_kinds=ports.kinds,
             tools_layer=layers,
             agents_layer=agent_playbooks.agents,
+            # What a request kind's readers read: the agent knowledge base
+            # and the agent automations.
+            agent_knowledge=agent_knowledge.manager,
+            agent_automations=lambda: agent_automations[0],
             # The agent knowledge a session recalls before its first model
-            # call, as the session runner recalls it.
+            # call, as the session runner recalls it. No connector's toolset
+            # is attached here: the loops this process runs are request
+            # kinds', which take none.
             loop_hooks=agent_knowledge.loop_hooks(LoopHooksNullImpl()),
         ),
         agent_root_options=AgentRootOptions(
@@ -166,20 +191,28 @@ def build_platform_api(
             ),
             spend_budget_gate=ports.spend_budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
+            language_models_layer=matrix.layer,
             # A kind whose loop runs in the request that asks it runs here,
             # and streams to that request.
             stream_sink=streams,
         ),
     )
+    # Outside a local stack, a session starts in an agent project.
+    agent_project_required = settings.environment != LOCAL
+    # A person writes an agent automation here, so a product's action kind
+    # is held to its shape when it is saved.
+    agent_automations.append(
+        build_agent_automations(
+            storage,
+            managers,
+            agent_project_required=agent_project_required,
+            actions=ports.kinds.actions,
+            agent_playbooks=lambda: agent_playbooks.build(managers),
+        )
+    )
     refuse_open_money(settings.environment, managers)
     trusted = trust.build(managers)
-    # The model matrix: its versions serve every model role the
-    # product's kinds call, beside the platform's own.
-    matrix = MatrixLayer(
-        storage,
-        options=MatrixOptions(environment=settings.environment),
-        kinds=ports.kinds.agent_kinds,
-    ).build(managers)
+    matrix_managers = matrix.build(managers)
     # Where a tenant connects a system, and where a person reads and
     # clears what waits on them.
     intake = build_intake(storage, managers, integrations=integrations)
@@ -195,8 +228,6 @@ def build_platform_api(
         WatchOptions(live_read_key=settings.live_read_key),
         kind_streams=kind_streams,
     )
-    # Outside a local stack, a session starts in an agent project.
-    agent_project_required = settings.environment != LOCAL
     engine = build_services(
         managers,
         infra,
@@ -216,17 +247,9 @@ def build_platform_api(
         watch,
         trusted.trust_operator,
         intake=intake,
-        # A person writes an agent automation here, so a product's action kind
-        # is held to its shape when it is saved.
-        agent_automations=build_agent_automations(
-            storage,
-            managers,
-            agent_project_required=agent_project_required,
-            actions=ports.kinds.actions,
-            agent_playbooks=lambda: agent_playbooks.build(managers),
-        ),
+        agent_automations=agent_automations[0],
         park_alerts=build_park_alerts(storage, managers, integrations, intake),
-        matrix=matrix,
+        matrix=matrix_managers,
         trust=trusted.trust,
         # The ledger the operators read and grant units on, and the
         # payments a tenant posts, each checked by the provider's

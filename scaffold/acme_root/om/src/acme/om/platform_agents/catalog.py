@@ -31,6 +31,7 @@ from acme.om.platform_agents.kinds.platform_assistant.kind import (
     PLATFORM_ASSISTANT_KIND,
     PRODUCT_OBJECT_MODEL,
 )
+from acme.om.platform_agents.kinds.support_assistant.kind import SUPPORT_ASSISTANT_KIND
 from acme.om.platform_agents.tools.agent_knowledge import (
     ReadAgentKnowledgeImpl,
     SearchAgentKnowledgeImpl,
@@ -193,35 +194,50 @@ def with_shipped(
     return (*own, *comment, *theirs)
 
 
+READERS: tuple[AgentKind, ...] = (PLATFORM_ASSISTANT_KIND, SUPPORT_ASSISTANT_KIND)
+"""The current version of each assistant: the platform assistant, and the
+support assistant that answers in the dock. A product's readers and its
+section of the object model join both, so the dock reads what the assistant
+reads."""
+
+
 def with_assistant_tools(
     agent_kinds: Iterable[AgentKind], extra: Iterable[str]
 ) -> tuple[AgentKind, ...]:
-    """The kinds with a product's own tools added to the platform
-    assistant's current version, the one a new session starts on; the
+    """The kinds with a product's own tools added to the current version of
+    each assistant (`READERS`), the one a new session starts on; the
     versions before it keep what they named. A name the assistant already
     holds, or one named twice, is `UnsafeConfiguration`. A name no tool has,
-    or a tool past what the assistant may call, is refused with the rest of
-    its reach (`refuse_reach`)."""
+    or a tool past what an assistant may call, is refused with the rest of
+    its reach (`refuse_reach`), and one a request may not hold with the rest
+    of what the engine refuses of a request kind."""
     added = tuple(extra)
     if len(set(added)) != len(added):
         raise UnsafeConfiguration("the slot names one of the assistant's tools twice")
-    current = PLATFORM_ASSISTANT_KIND
-    taken = set(added) & set(current.tools)
-    if taken:
-        raise UnsafeConfiguration(
-            f"the slot names {', '.join(sorted(taken))}, which the assistant already holds"
-        )
+    for current in READERS:
+        taken = set(added) & set(current.tools)
+        if taken:
+            raise UnsafeConfiguration(
+                f"the slot names {', '.join(sorted(taken))}, which the {current.name} already holds"
+            )
     if not added:
         return tuple(agent_kinds)
-    widened = current.model_copy(update={"tools": (*current.tools, *added)})
-    return tuple(widened if kind == current else kind for kind in agent_kinds)
+    widened = {
+        (current.name, current.version): current.model_copy(
+            update={"tools": (*current.tools, *added)}
+        )
+        for current in READERS
+    }
+    return tuple(
+        widened[(kind.name, kind.version)] if kind in READERS else kind for kind in agent_kinds
+    )
 
 
 def with_object_model(
     agent_kinds: Iterable[AgentKind], path: str | None, corpus: Corpus
 ) -> tuple[AgentKind, ...]:
-    """The kinds with the platform assistant's current version told where a
-    product's own section of the object model is: one more prompt after the
+    """The kinds with the current version of each assistant (`READERS`) told
+    where a product's own section of the object model is: one more prompt after the
     platform's (`PRODUCT_OBJECT_MODEL`), so it explains the product's
     things from that document as it explains the platform's from
     `docs/object-model.md`. The versions before it keep their prompts, and a
@@ -236,11 +252,11 @@ def with_object_model(
             f"the slot names {path} as the product's object model, which the assistant's "
             "corpus does not hold: the knowledge map lists no such document for the tenant's users"
         )
-    current = PLATFORM_ASSISTANT_KIND
+    current = {(kind.name, kind.version) for kind in READERS}
     prompt = PRODUCT_OBJECT_MODEL.format(path=path)
     return tuple(
         kind.model_copy(update={"prompts": (*kind.prompts, prompt)})
-        if (kind.name, kind.version) == (current.name, current.version)
+        if (kind.name, kind.version) in current
         else kind
         for kind in agent_kinds
     )

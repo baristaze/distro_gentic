@@ -25,7 +25,9 @@ is made of](../../../../README.md).
   an agent project of the tenant; outside a local stack, one that names
   none is refused. A start may name a [agent
   playbook](../agent_playbooks/README.md) of the tenant's to invoke into
-  the session it starts; one with no version is refused. A product's
+  the session it starts; one with no version is refused. A start of a
+  kind whose loop runs in the request that asks it is refused: a firing
+  asks no question, so no worker would run its loop. A product's
   action names a kind the product declares, and its params hold to that
   kind's shape; any other is refused. An enabled one is refused, with
   the kind's reason, when its kind refuses the person writing it.

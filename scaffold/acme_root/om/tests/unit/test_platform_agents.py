@@ -28,6 +28,7 @@ from acme.om.agents.types.kind import (
     AgentKind,
     AgentKindCatalog,
     DoneRule,
+    RunsIn,
     Starter,
     TreeLimits,
 )
@@ -84,6 +85,7 @@ from acme.om.platform_agents.kinds.software_engineer.kind import (
     SOFTWARE_ENGINEER_V6,
     SOFTWARE_ENGINEER_V7,
 )
+from acme.om.platform_agents.kinds.support_assistant.kind import SUPPORT_ASSISTANT_KIND
 from acme.om.platform_agents.shipped import SHIPPED
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.platform_root import PlatformRootOptions, ProductKinds, build_platform_managers
@@ -217,6 +219,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("platform_assistant", 2),
         ("reviewer", 1),
         ("ops_analyst", 1),
+        ("support_assistant", 1),
     ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
@@ -464,7 +467,12 @@ async def test_a_spawn_starts_each_shipped_kind_a_lead_starts_and_refuses_the_re
         assert (child.kind, child.kind_version, child.parent_id) == (name, kind.version, lead_id)
         return
     assert kind.started_by == {Starter.PERSON}
-    with pytest.raises(ValidationFailed, match="started only when a person starts it"):
+    refused = (
+        "runs in the request that asks it"
+        if kind.runs_in is RunsIn.REQUEST
+        else "started only when a person starts it"
+    )
+    with pytest.raises(ValidationFailed, match=refused):
         await platform.managers.agents.spawn(platform.owner, lead_id, asked)
     with pytest.raises(NotFound):
         await platform.managers.agent_sessions.get_agent_session(platform.owner, asked.id)
@@ -565,6 +573,10 @@ RENDERED = {
     ): "a149e48cc527948be2e0cf7e634ae4bbc2bd8177cf31a9897af9935575189119",
     (kinds.REVIEWER, 1): "2228559c82dca8133ff510a145a9fcc97f19c89802dc7a2b163652f450f1bde7",
     (kinds.OPS_ANALYST, 1): "6a8f7bf77d69a4718ce6c482317ec111360dc29ac3bcc469d5ec9bccd2bfbb40",
+    (
+        kinds.SUPPORT_ASSISTANT,
+        1,
+    ): "e77644d5ab4fdb3758ff8eed1c030280e8fca68284320f4a4516369e494e6148",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's tools. A kind version pins those bytes and its prompt, which
@@ -593,10 +605,13 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
         PLATFORM_ASSISTANT_KIND,
         REVIEWER_KIND,
         OPS_ANALYST_KIND,
+        SUPPORT_ASSISTANT_KIND,
     ):
         before = len(platform.anthropic.calls)
         if kind is SOFTWARE_ENGINEER_KIND:
             agent_session_id = await a_software_engineer(platform, work, agent_project_id)
+        elif kind.runs_in is RunsIn.REQUEST:
+            agent_session_id = await platform.ask(kind.name, "Go on.")
         else:
             agent_session_id = await platform.start(kind.name)
             await platform.say(agent_session_id, "Go on.")
@@ -713,6 +728,20 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_spend",
         "search_agent_knowledge",
         "read_agent_knowledge",
+        "read_tool_output",
+    ),
+    (kinds.SUPPORT_ASSISTANT, 1): (
+        "search_corpus",
+        "draft_tool_policy",
+        "search_agent_knowledge",
+        "read_agent_knowledge",
+        "read_agent_session",
+        "list_agent_sessions",
+        "read_wait",
+        "list_agent_projects",
+        "read_agent_project",
+        "list_agent_automations",
+        "read_agent_automation",
         "read_tool_output",
     ),
 }

@@ -3116,6 +3116,18 @@ select.acme-field {
   padding: 16px 12px 12px;
 }
 
+/* Why the last answer stopped short, above the composer. */
+.acme-dock-stopped {
+  margin: 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--acme-warning-bg);
+  color: var(--acme-warning-text);
+  border: 1px solid var(--acme-warning-border);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .acme-dock-composer {
   padding: 8px 12px 12px;
 }
