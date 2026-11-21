@@ -333,8 +333,8 @@ async def test_what_a_session_waits_on_a_person_for_is_read_per_session_and_acro
     asked_at = f"/v1/agent-sessions/{asking['id']}"
 
     approvals = await client.get(f"{held_at}/approvals", headers=owner)
-    none_asked = await client.get(f"{held_at}/questions", headers=owner)
-    questions = await client.get(f"{asked_at}/questions", headers=owner)
+    none_asked = await client.get(f"{held_at}/unlocks", headers=owner)
+    unlocks = await client.get(f"{asked_at}/unlocks", headers=owner)
     none_held = await client.get(f"{asked_at}/approvals", headers=owner)
     first = await client.get("/v1/approvals", headers=owner, params={"limit": 1})
     rest = await client.get(
@@ -347,8 +347,8 @@ async def test_what_a_session_waits_on_a_person_for_is_read_per_session_and_acro
         (5, "read_log", "read"),
     ]
     assert none_asked.json() == [] and none_held.json() == []
-    assert questions.status_code == 200, questions.text
-    assert [(q["seq"], q["unlock"]) for q in questions.json()] == [(4, "step_guard")]
+    assert unlocks.status_code == 200, unlocks.text
+    assert [(u["seq"], u["unlock"]) for u in unlocks.json()] == [(4, "step_guard")]
     assert first.status_code == 200, first.text
     across = first.json()["items"] + rest.json()["items"]
     assert sorted((a["agent_session_id"], a["seq"]) for a in across) == [
@@ -681,7 +681,7 @@ async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_
     unknown = f"/v1/agent-sessions/{UUID(int=7)}"
     reads = [
         "/children",
-        "/questions",
+        "/unlocks",
         "/approvals",
         "/bounds",
         "/tool-calls",

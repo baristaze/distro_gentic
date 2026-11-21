@@ -244,7 +244,7 @@ export function useStepsBeforeAnswer(id: string, enabled: boolean) {
   return useQuery({
     queryKey: keys.agentSessions.read(id, "asked"),
     queryFn: async ({ signal }) => {
-      const parks = await api.get<agent_sessions.QuestionView[]>(`${path(id)}/questions`, { signal });
+      const parks = await api.get<agent_sessions.UnlockView[]>(`${path(id)}/unlocks`, { signal });
       const park = parks.find((one) => one.unlock === "answer");
       if (!park) return [];
       const after = Math.max(0, park.seq - ASKED_WINDOW);
@@ -254,7 +254,7 @@ export function useStepsBeforeAnswer(id: string, enabled: boolean) {
   });
 }
 
-export const useQuestions = (id: string, enabled = true) => useRead<agent_sessions.QuestionView[]>(id, "questions", "questions", enabled);
+export const useUnlocks = (id: string, enabled = true) => useRead<agent_sessions.UnlockView[]>(id, "unlocks", "unlocks", enabled);
 export const useApprovals = (id: string, enabled = true) => useRead<agent_sessions.ApprovalView[]>(id, "approvals", "approvals", enabled);
 export const useBounds = (id: string, enabled = true) => useRead<agent_sessions.BoundsView>(id, "bounds", "bounds", enabled);
 export const useUsage = (id: string, enabled = true) => useRead<agent_sessions.AgentSessionModelUsageView>(id, "usage", "usage", enabled);

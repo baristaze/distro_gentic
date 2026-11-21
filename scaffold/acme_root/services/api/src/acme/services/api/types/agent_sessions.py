@@ -210,11 +210,13 @@ class AgentStepPageView(View):
     has_more: bool
 
 
-class QuestionView(View):
-    """What a session asks of a person now: a park on a person that is no
-    call's decision, such as a step guard to lift, a deadline to move, or a
-    principal to name. `unlock` is what clears it, sent as a control; `seq`
-    is the step that parked it."""
+class UnlockView(View):
+    """What a session waits on a person to unlock now: a park on a person
+    that is no call's decision, such as an answer to give, a step guard to
+    lift, a deadline to move, or a principal to name. `unlock` is what
+    clears it, sent as a control; `seq` is the step that parked it. A
+    question is another thing: what a person asks a kind whose loop runs in
+    the request."""
 
     agent_session_id: UUID
     seq: int

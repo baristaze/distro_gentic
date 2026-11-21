@@ -1,5 +1,5 @@
-"""What a session's history says, projected for a reader: the question it
-asks of a person, the calls it holds for a decision, every tool call with
+"""What a session's history says, projected for a reader: the park a person
+unlocks, the calls it holds for a decision, every tool call with
 its decision and its answer, and what its model calls used. Pure: a
 session and its steps in, views out. Each reads the steps' headers, never
 their content, so a session whose key is revoked reads the same."""
@@ -31,7 +31,7 @@ from acme.services.api.types.agent_sessions import (
     BoundsView,
     FillUsageView,
     LoopLimitsView,
-    QuestionView,
+    UnlockView,
     ToolCallView,
     TreeBoundsView,
 )
@@ -41,7 +41,7 @@ def waits_on_approval(park: Park | None) -> bool:
     return park is not None and park.reason is ParkReason.PERSON and park.unlock == APPROVAL_UNLOCK
 
 
-def questions_of(session: AgentSession, history: Sequence[AgentStep]) -> list[QuestionView]:
+def unlocks_of(session: AgentSession, history: Sequence[AgentStep]) -> list[UnlockView]:
     """The park on a person the session waits on, when it is no call's
     decision and nothing clears it by itself."""
     park = session.park
@@ -51,7 +51,7 @@ def questions_of(session: AgentSession, history: Sequence[AgentStep]) -> list[Qu
     if parked is None or not needs_person(park):
         return []
     return [
-        QuestionView(
+        UnlockView(
             agent_session_id=session.id,
             seq=parked.seq,
             asked_at=parked.created_at,

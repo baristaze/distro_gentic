@@ -4,7 +4,7 @@ read one, archive, delete, and restore it, join one or leave it, switch
 who sees it, hand its steer on, send it a message or a control, decide a
 tool call it waits on, clear the park a person clears, and read its
 history and its tool outputs a page at a time. A session's derived reads
-follow: what it asks of a person, the calls it holds for a decision, its
+follow: what it waits on a person to unlock, the calls it holds for a decision, its
 bounds, its tool calls, and what its model calls used. Each function is
 one call into the agent
 sessions service; every create runs under the idempotency record, so a
@@ -59,7 +59,7 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     PrincipalRequest,
     QuestionRequest,
-    QuestionView,
+    UnlockView,
     StartAgentSessionRequest,
     StartQuestionRequest,
     ToolCallPageView,
@@ -351,12 +351,13 @@ async def get_tool_output(
     return await sessions.get_tool_output(ctx, agent_session_id, tool_output_id, start, limit)
 
 
-@router.get("/{agent_session_id}/questions", response_model=list[QuestionView])
-async def get_questions(
+@router.get("/{agent_session_id}/unlocks", response_model=list[UnlockView])
+async def get_unlocks(
     ctx: Ctx, sessions: AgentSessionsService, agent_session_id: UUID
-) -> list[QuestionView]:
-    """What the session waits on a person for, other than a call's decision."""
-    return await sessions.get_questions(ctx, agent_session_id)
+) -> list[UnlockView]:
+    """What the session waits on a person to unlock, other than a call's
+    decision."""
+    return await sessions.get_unlocks(ctx, agent_session_id)
 
 
 @router.get("/{agent_session_id}/approvals", response_model=list[ApprovalView])
