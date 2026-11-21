@@ -194,6 +194,11 @@ rebuilt from.
 - The root decorates the engine's sessions manager, so every session is
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.
+  Its check names no session, so before a new loop's first model call
+  the platform's loop hooks hold the pin to where the session runs
+  (`pinned.PinnedWorkspacesInterface`, the tools manager's): what a
+  prepare there would refuse for good ends the loop errored, no call
+  spent.
 - The checkout runs in the workspace through the transport the tools
   take, each command under the epoch its run held when it began, so a run
   that lost its claim moves nothing: for a session
