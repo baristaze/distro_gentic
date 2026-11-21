@@ -69,7 +69,7 @@ from acme.om.agent_steps.types.header import (
     ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.agents.types.kind import AgentKind, TreeLimits
+from acme.om.agents.types.kind import AgentKind, Starter, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
@@ -102,6 +102,7 @@ def forker(isolation: IsolationSpec) -> AgentKind:
             "tools": ("run_command", SPAWN_SUB_AGENT),
             "tree": TreeLimits(height=2, count=2),
             "share": Amount(tokens=1_000_000),
+            "started_by": frozenset(Starter),
             "policy": ToolPolicyLayer(
                 rules=tuple(
                     ToolPolicyRule(authorization_class=kind, decision=Decision.ALLOW)

@@ -19,7 +19,7 @@ from acme.om.agent_sessions.kinds import AgentSessionWorkKind
 from acme.om.agent_steps.types.agent_step import AgentStep
 from acme.om.agent_steps.types.content import Content, TextBlock, ToolUseBlock
 from acme.om.agent_steps.types.header import LoopOutcome
-from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import AgentKind, DoneRule, Starter, TreeLimits
 from acme.om.agents.types.report import Report
 from acme.om.agents.types.request import Spawn
 from acme.om.attribution.types.authority import AuthorityMode
@@ -56,7 +56,9 @@ COMMENTER = ASSISTANT.model_copy(update={"name": "commenter", "tools": (COMMENT,
 # A kind whose tree holds one sub-agent, and the kind it starts, whose share
 # is the budget its spawn writes.
 LEAD = ASSISTANT.model_copy(update={"name": "lead", "tree": TreeLimits(height=2, count=1)})
-HELPER = ASSISTANT.model_copy(update={"name": "helper", "share": Amount(cost_micros=5_000)})
+HELPER = ASSISTANT.model_copy(
+    update={"name": "helper", "share": Amount(cost_micros=5_000), "started_by": frozenset(Starter)}
+)
 
 
 @pytest.fixture
