@@ -16,9 +16,11 @@ from acme.om.exceptions import (
     NotFound,
     ValidationFailed,
 )
-from acme.om.hosts.exceptions import VersionBelowFloor
+from acme.om.hosts.exceptions import VersionBelowFloor, WorkspaceHeldElsewhere
 from acme.om.hosts.manager import HostsManagerInterface
 from acme.om.hosts.rules import (
+    CLIENT_KEY_PREFIX,
+    CLIENT_KEY_TTL,
     ENROLLMENT_PREFIX,
     WIRE_FLOOR,
     WireType,
@@ -118,6 +120,25 @@ def session_pool_id(org_id: UUID, agent_session_id: UUID) -> UUID:
     """The id of a session's pool in the cloud pool: one per session, the same
     whichever process makes it first."""
     return uuid5(org_id, f"cloud-pool:{agent_session_id}")
+
+
+def local_pool_id(org_id: UUID, agent_session_id: UUID) -> UUID:
+    """The id of a session's local pool of one, which its person's clients
+    serve it from: one per session, the same whichever call makes it first,
+    and never its pool in the cloud pool."""
+    return uuid5(org_id, f"local-pool:{agent_session_id}")
+
+
+LOCAL_REGION = "local"
+"""The region of every local pool of one: its person's own machine."""
+
+
+def _cloud_pool_of(org_id: UUID, held: HostPool | Host) -> UUID | None:
+    """The session's pool in the cloud pool, of a pool or a host that serves
+    one session; None for a tenant's own."""
+    if held.agent_session_id is None:
+        return None
+    return session_pool_id(org_id, held.agent_session_id)
 
 
 def _the_tenants(pool: HostPool) -> HostPool:
@@ -284,7 +305,7 @@ class HostsManagerImpl(HostsManagerInterface):
     async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> EnrolledClaimant:
         ctx.require(Permission.MANAGE_MEMBERS)
         host = await self._storage.read_host(ctx.org_id, claimant_id)
-        if host is not None and host.agent_session_id is not None:
+        if host is not None and host.pool_id == _cloud_pool_of(ctx.org_id, host):
             # Its VM runs on: it would bill with no host to work for.
             raise ValidationFailed(
                 f"host {claimant_id} is the platform's, for session {host.agent_session_id} alone: "
@@ -313,6 +334,17 @@ class HostsManagerImpl(HostsManagerInterface):
         if pool_id is not None:
             _the_tenants(await self._pool(ctx, pool_id))
         stored = await self._storage.read_placement(ctx.org_id, agent_session_id)
+        return await self._place(ctx, agent_session_id, pool_id, stored)
+
+    async def _place(
+        self,
+        ctx: TenantContext,
+        agent_session_id: UUID,
+        pool_id: UUID | None,
+        stored: SessionPlacement | None,
+    ) -> SessionPlacement:
+        """The session's placement written: `pool_id`, or the cloud with
+        None, over what `stored` read."""
         now = self._clock()
         if stored is None:
             placed = SessionPlacement(
@@ -360,6 +392,90 @@ class HostsManagerImpl(HostsManagerInterface):
             version=placed.version,
         )
 
+    # A person's own client: a local pool of one per session, and the key
+    # that lets the person's client serve it.
+
+    async def place_locally(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
+        ctx.require(Permission.WRITE)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        if session.root_id != session.id:
+            raise ValidationFailed(
+                f"session {agent_session_id} is a sub-agent: it runs where its root "
+                f"{session.root_id} runs"
+            )
+        stored = await self._storage.read_placement(ctx.org_id, agent_session_id)
+        if stored is None:
+            now = self._clock()
+            pool = HostPool(
+                id=local_pool_id(ctx.org_id, agent_session_id),
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                name=f"local-{agent_session_id}",
+                region=LOCAL_REGION,
+                agent_session_id=agent_session_id,
+            )
+            rows = (
+                outbox_row(
+                    ctx, POOL_CREATED_KIND, pool.id, {"agent_session_id": str(agent_session_id)}
+                ),
+            )
+            if await self._storage.create_pool(ctx.org_id, pool, rows):
+                await self._relay.relay_all(ctx.org_id, rows)
+            await self._place(ctx, agent_session_id, pool.id, None)
+        return await self.placement_of(ctx, agent_session_id)
+
+    async def issue_client_key(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> IssuedEnrollmentToken:
+        ctx.require(Permission.WRITE)
+        session = await self._sessions.get_agent_session(ctx, agent_session_id)
+        elsewhere = await self._served_elsewhere(ctx, session.id, session.root_id)
+        if elsewhere is None and session.created_by != ctx.user_id:
+            elsewhere = "served by the client of the person who started it"
+        if elsewhere is not None:
+            raise WorkspaceHeldElsewhere(
+                f"session {agent_session_id}'s workspace is {elsewhere}: "
+                "this client follows the session and serves nothing"
+            )
+        secret, digest = mint(CLIENT_KEY_PREFIX)
+        now = self._clock()
+        pool_id = local_pool_id(ctx.org_id, agent_session_id)
+        key = EnrollmentToken(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+            pool_id=pool_id,
+            kind=HOST,
+            digest=digest,
+            expires_at=now + CLIENT_KEY_TTL,
+            key_id=principal_of(ctx).key_id,
+        )
+        rows = (
+            outbox_row(ctx, TOKEN_ISSUED_KIND, key.id, {"pool_id": str(pool_id), "kind": HOST}),
+        )
+        await self._storage.create_enrollment_token(ctx.org_id, key, rows)
+        await self._relay.relay_all(ctx.org_id, rows)
+        return IssuedEnrollmentToken(token=secret, enrollment=key)
+
+    async def _served_elsewhere(
+        self, ctx: TenantContext, agent_session_id: UUID, root_id: UUID
+    ) -> str | None:
+        """Where the session's workspace is held, when not on its own local
+        pool of one: None when it is."""
+        if root_id != agent_session_id:
+            return f"its root {root_id}'s, where the sub-agent runs"
+        placed = await self._storage.read_placement(ctx.org_id, agent_session_id)
+        if placed is None or placed.pool_id is None:
+            return "of the platform's cloud, where a VM of the cloud pool holds it"
+        if placed.pool_id == local_pool_id(ctx.org_id, agent_session_id):
+            return None
+        pool = await self._storage.read_pool(ctx.org_id, placed.pool_id)
+        return f"held by a host of pool {placed.pool_id if pool is None else pool.name}"
+
     # The cloud pool's side: a pool of one per session, and its VM's host.
 
     async def session_pool(
@@ -400,7 +516,7 @@ class HostsManagerImpl(HostsManagerInterface):
         enrollment: Enrollment,
     ) -> IssuedCredential:
         pool = await self._storage.read_pool(org_id, pool_id)
-        if pool is None or pool.agent_session_id is None:
+        if pool is None or pool.id != _cloud_pool_of(org_id, pool):
             raise InvalidCredential("a VM enrolls only into its session's cloud pool")
         self._at_or_above_floor(enrollment.exec_version)
         now = self._clock()
@@ -427,12 +543,16 @@ class HostsManagerImpl(HostsManagerInterface):
     async def retire_host(
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
     ) -> None:
+        await self._retire(rctx, org_id, host_id, by, "vm_let_go")
+
+    async def _retire(
+        self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID, reason: str
+    ) -> None:
+        """Ends the host and every credential it holds, and what waits on
+        it; one gone or ended already ends nothing more."""
         rows = (
             outbox_row(
-                provenance(rctx, org_id, by),
-                HOST_REVOKED_KIND,
-                host_id,
-                {"reason": "vm_let_go"},
+                provenance(rctx, org_id, by), HOST_REVOKED_KIND, host_id, {"reason": reason}
             ),
         )
         now = self._clock()
@@ -469,6 +589,8 @@ class HostsManagerImpl(HostsManagerInterface):
     async def enroll(
         self, rctx: RequestContext, token: str, enrollment: Enrollment
     ) -> IssuedCredential:
+        if token.startswith(CLIENT_KEY_PREFIX):
+            return await self._enroll_client(rctx, token, enrollment)
         org_id, enrollment_token = await self._redeem(rctx, token)
         if enrollment_token.kind != HOST:
             raise InvalidCredential(f"this enrollment token enrolls a {enrollment_token.kind}")
@@ -489,6 +611,81 @@ class HostsManagerImpl(HostsManagerInterface):
             last_seen_at=now,
         )
         return await self._admit(rctx, org_id, host)
+
+    async def _enroll_client(
+        self, rctx: RequestContext, token: str, enrollment: Enrollment
+    ) -> IssuedCredential:
+        """A person's client trades its one-use key for a host's credential
+        of its session's local pool of one (`enroll`)."""
+        found = await self._storage.read_enrollment_token_by_digest(hash_token(token))
+        if found is None:
+            raise InvalidCredential("unknown client key")
+        org_id, key = found
+        now = self._clock()
+        if key.revoked_at is not None:
+            raise InvalidCredential("a client key is spent at its first trade")
+        if key.expires_at <= now:
+            raise CredentialExpired("client key expired")
+        pool = await self._storage.read_pool(org_id, key.pool_id)
+        if (
+            pool is None
+            or pool.agent_session_id is None
+            or pool.id != local_pool_id(org_id, pool.agent_session_id)
+        ):
+            raise InvalidCredential("a client key enrolls only into its session's local pool")
+        placed = await self._storage.read_placement(org_id, pool.agent_session_id)
+        if placed is None or placed.pool_id != pool.id:
+            raise CredentialExpired("client key's session is no longer served locally")
+        try:
+            person = await self._tenancy.delegated_context(rctx, org_id, key.created_by, key.key_id)
+        except NotAuthorized:
+            raise CredentialExpired("client key's person left the tenant") from None
+        if not person.has(Permission.WRITE):
+            raise CredentialExpired("client key's person no longer writes the tenant's sessions")
+        self._at_or_above_floor(enrollment.exec_version)
+        host = Host(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=key.created_by,
+            updated_by=key.created_by,
+            kind=HOST,
+            pool_id=pool.id,
+            name=enrollment.name,
+            enrolled_with=key.id,
+            advertisement=enrollment.advertisement,
+            exec_version=enrollment.exec_version,
+            last_seen_at=now,
+            agent_session_id=pool.agent_session_id,
+        )
+        rows = (
+            outbox_row(
+                provenance(rctx, org_id, key.created_by),
+                TOKEN_REVOKED_KIND,
+                key.id,
+                {"reason": "spent"},
+            ),
+        )
+        spent = await self._storage.revoke_enrollment_token(org_id, key.id, now, host.id, rows)
+        if spent is None or spent.revoked_by != host.id:
+            raise InvalidCredential("a client key is spent at its first trade")
+        await self._relay.relay_all(org_id, rows)
+        issued = await self._admit(rctx, org_id, host)
+        # One client serves a local session at a time: the latest.
+        for served in await self._storage.read_hosts(org_id, pool.id, self._options.max_hosts):
+            if served.id != host.id and served.revoked_at is None:
+                await self._retire(rctx, org_id, served.id, key.created_by, "client_replaced")
+        log.info(
+            "a client of %s enrolled as host %s for session %s",
+            key.created_by,
+            host.id,
+            pool.agent_session_id,
+        )
+        return issued
+
+    async def end_host(self, rctx: RequestContext, host: HostIdentity) -> None:
+        stored = await self._live_host(host)
+        await self._retire(rctx, host.org_id, host.id, stored.created_by, "ended_itself")
 
     async def enroll_claimant(
         self, rctx: RequestContext, token: str, enrollment: ClaimantEnrollment

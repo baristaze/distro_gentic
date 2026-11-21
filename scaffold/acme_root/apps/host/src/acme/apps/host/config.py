@@ -13,7 +13,11 @@ which hosts of a pool may share. `ACME_HOST_VM_SEED` names the seed of
 a VM of the platform's cloud pool: set, the host runs as that VM's
 (`pool_vm.py`), takes where the platform answers and its one-use key from
 the seed, and makes its workspace under `ACME_HOST_VM_WORKSPACE`
-(default `/workspace`). Nothing the platform answers changes any of them."""
+(default `/workspace`). A person's own client that serves one session's
+workspace (`serving.py`) runs the host with a home of that session's,
+which holds its credential while it serves, and reads its owner's
+ceilings, secrets, and snapshots from the host's own home
+(`owner_home`). Nothing the platform answers changes any of them."""
 
 import os
 from dataclasses import dataclass
@@ -44,6 +48,13 @@ class Settings(ClaimantSettings):
     snapshot_store: Path | None = None  # None: `snapshots` under its home
     vm_seed: Path | None = None  # set: a VM of the cloud pool
     vm_workspace: Path = Path("/workspace")
+    owner_home: Path | None = None  # set: a client serving one session
+
+    @property
+    def owners(self) -> Path:
+        """Where the owner's own files are: the host's home, or the home of
+        the host a client serving one session runs beside."""
+        return self.owner_home or self.home
 
     @property
     def vm(self) -> bool:
@@ -54,17 +65,17 @@ class Settings(ClaimantSettings):
     def snapshots_path(self) -> Path:
         """The store its workspaces' snapshots are kept in, inside its
         owner's wall: owner-only, never sent to the platform."""
-        return self.snapshot_store or self.home / STORE_FOLDER
+        return self.snapshot_store or self.owners / STORE_FOLDER
 
     @property
     def ceilings_path(self) -> Path:
-        return self.home / CEILINGS_FILE
+        return self.owners / CEILINGS_FILE
 
     @property
     def secrets_path(self) -> Path:
         """The host's own secret store, owner-only, keyed by tenant first:
         `org/<org_id>/<name>=value` lines."""
-        return self.home / SECRETS_FILE
+        return self.owners / SECRETS_FILE
 
     @property
     def records_path(self) -> Path:

@@ -13,7 +13,9 @@ uv run acme-host run          # every start after it
 
 On a tenant's machine it runs as a service of a user of its own, which
 [deployment/host/](../../deployment/host/README.md) installs on Linux and
-macOS.
+macOS. A person's own CLI runs the same program, with its `serve` extra,
+to serve the workspace of a session of theirs from their machine
+(`acme agent-session start --workspace local`, or `attach`).
 
 ## What it does
 
@@ -41,14 +43,24 @@ macOS.
   or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
   home: the agent projects it serves, its minimum isolation, its egress,
-  the paths a result may read, whether it accepts people's commands, how
-  many items it runs at once, and the MCP servers it starts, each named
-  whole: its program, its arguments, its environment, and its
+  the paths a result may read, the programs a command may start
+  (`commands`, none unless named), whether it accepts people's commands,
+  how many items it runs at once, and the MCP servers it starts, each
+  named whole: its program, its arguments, its environment, and its
   credential, a secret of its own store.
   Every item it claims is held to them, and to the modes it probed,
-  before anything runs. An item that does not say what it needs is read
-  as asking the most. Nothing the platform sends changes a ceiling, and
-  a host with no ceilings file does not start.
+  before anything runs; a command's program once it reads what the
+  command runs, still before it starts. An item that does not say what
+  it needs is read as asking the most, and a refusal names the ceiling
+  that refused. Nothing the platform sends changes a ceiling, and a host
+  with no ceilings file does not start.
+- **Serves a person's own session, as their client.** Run by a person's
+  CLI, it trades the one-use key the platform issued for that session
+  for a credential of the session's local pool of one, and claims that
+  session's work alone, from a home of its own that goes as it stops.
+  Its owner's ceilings and secrets are this machine's, in the host's
+  home. As it stops it ends its host, and the session waits for the next
+  client.
 - **Prepares the workspaces of its pool.** A session pinned to its pool
   asks a host of the pool to prepare its workspace. The host that claims
   the ask makes it to the session's isolation, a container per session,
@@ -145,6 +157,7 @@ agent_projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
 min_isolation = "container"                           # vm, container, or directory
 egress = ["github.com:443"]                           # or "open"
 readable = ["/srv/work"]
+commands = ["git", "python3", "pytest"]                # or "all"
 people_commands = false
 items_at_once = 4
 

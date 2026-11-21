@@ -22,7 +22,7 @@ from acme.services.api.services import (
     WebhooksServiceInterface,
 )
 from acme.services.api.services.impl.admin import AdminServiceImpl
-from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
+from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl, PlaceLocally
 from acme.services.api.services.impl.change_events import ChangeEventsServiceImpl
 from acme.services.api.services.impl.flags import FlagsServiceImpl
 from acme.services.api.services.impl.leases import LeasesServiceImpl
@@ -97,12 +97,14 @@ def build_services(
     agent_projects: AgentProjectsManagerInterface,
     agent_project_required: bool,
     kinds: AgentKindCatalog,
+    place_locally: PlaceLocally,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`. A
     delivery from an integration reaches `intake`, a session starts in one
     of `agent_projects`, as `agent_project_required` says, and its kind's
-    bounds are read from `kinds`."""
+    bounds are read from `kinds`. A session started local is pinned by
+    `place_locally`."""
     return ServicesImpl(
         admin=AdminServiceImpl(managers.tenancy_operator, managers.work_operator),
         change_events=ChangeEventsServiceImpl(managers.change_events),
@@ -132,5 +134,6 @@ def build_services(
             agent_projects,
             agent_project_required=agent_project_required,
             kinds=kinds,
+            place_locally=place_locally,
         ),
     )

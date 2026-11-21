@@ -1,7 +1,8 @@
-"""Pure rules of the hosts namespace: the enrollment token's prefix, the
-versions of the wire types a host reads and their floors, when a host
-counts as online, and how a rotation ends the credential it replaces.
-Values in, values out; no clock, no storage, no settings."""
+"""Pure rules of the hosts namespace: the enrollment token's prefix and a
+client key's, the versions of the wire types a host reads and their
+floors, when a host counts as online, and how a rotation ends the
+credential it replaces. Values in, values out; no clock, no storage, no
+settings."""
 
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -13,6 +14,16 @@ ENROLLMENT_PREFIX = "hen_"
 enrolls a claimant of the kind it names into its pool and does nothing
 else. A claimant's own credential carries its kind's prefix
 (`placement.kinds.ClaimantKindSpec.prefix`)."""
+
+CLIENT_KEY_PREFIX = "hck_"
+"""A client key's prefix. The platform issues one to a person for their
+own session whose workspace is local, and their client trades it, once,
+for a host's credential of the session's local pool of one. It lets in
+nothing else, and an enrollment token's call refuses it."""
+
+CLIENT_KEY_TTL = timedelta(minutes=5)
+"""How long a client key waits to be traded: its client trades it at
+once, so one copied from a terminal lets nothing in for long."""
 
 
 class WireType(StrEnum):

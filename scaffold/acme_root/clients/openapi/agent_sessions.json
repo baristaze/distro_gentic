@@ -1123,7 +1123,7 @@
       },
       "StartAgentSessionRequest": {
         "additionalProperties": false,
-        "description": "A session to start on the latest version of a kind the product runs,\nin an agent project of the caller's tenant. Outside a local stack a session\nstarts in an agent project or not at all.",
+        "description": "A session to start on the latest version of a kind the product runs,\nin an agent project of the caller's tenant. Outside a local stack a session\nstarts in an agent project or not at all. `local` pins it to a pool of\none of its own, which only its person's client serves; a kind that asks\nfor no workspace is refused it.",
         "properties": {
           "agent_project_id": {
             "anyOf": [
@@ -1148,6 +1148,10 @@
             "minLength": 1,
             "title": "Title",
             "type": "string"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspacePlace",
+            "default": "cloud"
           }
         },
         "required": [
@@ -1661,6 +1665,15 @@
         ],
         "title": "WaitLineParkView",
         "type": "object"
+      },
+      "WorkspacePlace": {
+        "description": "Where a session's workspace is held, when its kind asks for one: in\nthe platform's cloud, on a VM of the cloud pool when its kind asks a VM,\nor on the machine of the person who started it, served by their own\nclient for as long as it runs. A session whose kind asks for no\nworkspace has none, and runs with no workspace tools.",
+        "enum": [
+          "cloud",
+          "local"
+        ],
+        "title": "WorkspacePlace",
+        "type": "string"
       }
     }
   },

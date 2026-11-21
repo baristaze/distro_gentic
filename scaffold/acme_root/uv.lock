@@ -75,11 +75,18 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+serve = [
+    { name = "acme-host" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "acme-client", editable = "clients/python" },
+    { name = "acme-host", marker = "extra == 'serve'", editable = "apps/host" },
     { name = "typer", specifier = ">=0.15" },
 ]
+provides-extras = ["serve"]
 
 [[package]]
 name = "acme-client"

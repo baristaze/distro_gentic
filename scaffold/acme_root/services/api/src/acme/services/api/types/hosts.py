@@ -69,6 +69,19 @@ class IssuedEnrollmentTokenView(View):
     enrollment: EnrollmentTokenView
 
 
+class IssuedClientKeyView(View):
+    """A one-use key in the clear, once: the person's own client trades it,
+    at once, for a host's credential of the session's local pool of one, and
+    serves the session's workspace with it. It is minted on every call, so a
+    retry mints another, and the one never traded expires on its own."""
+
+    secret_fields = frozenset({"key"})
+
+    key: str | None
+    agent_session_id: UUID
+    expires_at: datetime
+
+
 class AdvertisementBody(RequestBody):
     """What a host probed at its startup, and nothing it did not."""
 

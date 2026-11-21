@@ -1,8 +1,10 @@
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
 from pydantic import JsonValue
 
+from acme.infra.agent_workspaces import IsolationMode
 from acme.infra.base import thaw_mapping
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_projects import AgentProjectsManagerInterface
@@ -83,6 +85,7 @@ from acme.services.api.types.agent_sessions import (
     ToolOutputPageView,
     ToolUseView,
     VisibilityRequest,
+    WorkspacePlace,
 )
 from acme.services.api.types.common import LIMIT_MAX, clamp_limit
 
@@ -266,6 +269,10 @@ def snapshot_view(snapshot: AgentWorkspaceSnapshot | None) -> SnapshotView | Non
     return None if snapshot is None else SnapshotView.model_validate(snapshot.model_dump())
 
 
+PlaceLocally = Callable[[TenantContext, UUID], Awaitable[object]]
+"""Pins a session to its own local pool of one (`HostsManagerInterface.place_locally`)."""
+
+
 class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
     def __init__(
         self,
@@ -281,10 +288,12 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         *,
         agent_project_required: bool,
         kinds: AgentKindCatalog,
+        place_locally: PlaceLocally,
     ) -> None:
         """`agent_project_required` refuses a session started in no agent project: what
         every stack but a local one sets, so no per-agent-project policy is
-        skipped by a session that names none."""
+        skipped by a session that names none. `place_locally` pins a session
+        started with its workspace local to its own pool of one."""
         self._windows = windows
         self._sessions = sessions
         self._agents = agents
@@ -296,6 +305,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self._agent_projects = agent_projects
         self._project_required = agent_project_required
         self._kinds = kinds
+        self._place_locally = place_locally
 
     async def _viewed(self, ctx: TenantContext, session: AgentSession) -> AgentSessionView:
         (opened,) = await self._sessions.open_titles(ctx, [session])
@@ -313,16 +323,26 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self, ctx: TenantContext, body: StartAgentSessionRequest, agent_session_id: UUID
     ) -> AgentSessionView:
         start = Start(id=agent_session_id, kind=body.kind, title=body.title)
-        if body.agent_project_id is not None:
-            return await self._viewed(
-                ctx,
-                await self._agent_projects.start_agent_session(ctx, body.agent_project_id, start),
+        local = body.workspace is WorkspacePlace.LOCAL
+        if local and self._kinds.latest(body.kind).isolation.mode is IsolationMode.NONE:
+            raise ValidationFailed(
+                f"kind {body.kind} asks for no workspace, so there is none to serve locally"
             )
-        if self._project_required:
+        if body.agent_project_id is not None:
+            started = await self._agent_projects.start_agent_session(
+                ctx, body.agent_project_id, start
+            )
+        elif self._project_required:
             raise ValidationFailed(
                 "a session starts in an agent project: name its agent_project_id"
             )
-        return await self._viewed(ctx, await self._agents.start_agent_session(ctx, start))
+        else:
+            started = await self._agents.start_agent_session(ctx, start)
+        if local:
+            # Pinned before anything can wake it: its person's client serves
+            # its workspace, and it waits while none does.
+            await self._place_locally(ctx, started.id)
+        return await self._viewed(ctx, started)
 
     async def get_agent_session(
         self, ctx: TenantContext, agent_session_id: UUID

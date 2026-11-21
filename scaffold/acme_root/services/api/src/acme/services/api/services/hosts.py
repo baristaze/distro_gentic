@@ -24,6 +24,7 @@ from acme.services.api.types.hosts import (
     HeartbeatRequest,
     HostView,
     IssuedClaimantCredentialView,
+    IssuedClientKeyView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
@@ -80,6 +81,14 @@ class HostsServiceInterface(ABC):
     @abstractmethod
     async def placement_of(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementView: ...
 
+    @abstractmethod
+    async def issue_client_key(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> IssuedClientKeyView:
+        """A key the person's own client serves the session's local
+        workspace with; `WorkspaceHeldElsewhere` for any other."""
+        ...
+
     # A host's calls.
 
     @abstractmethod
@@ -98,6 +107,9 @@ class HostsServiceInterface(ABC):
     async def rotate(
         self, rctx: RequestContext, host: HostIdentity
     ) -> IssuedHostCredentialView: ...
+
+    @abstractmethod
+    async def end_host(self, rctx: RequestContext, host: HostIdentity) -> None: ...
 
     @abstractmethod
     async def heartbeat(

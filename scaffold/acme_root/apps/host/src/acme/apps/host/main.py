@@ -32,7 +32,7 @@ from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_mod
 from acme.apps.host.seed import forget_key
 from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.claimant import RETRY
-from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
+from acme.client.claimant.enrollment import ClientFactory, CredentialRefused, NotEnrolled
 from acme.client.client import ApiClient
 from acme.client.transport import WIRE_FAILURES, ApiError
 from acme.client.types.hosts import IsolationMode as HostIsolation
@@ -106,41 +106,7 @@ def run() -> None:
     settings = settings_from_env()
 
     async def go() -> None:
-        agents: list[HostAgent] = []
-        workspaces = host_workspaces(settings)
-        # A VM of the cloud pool keeps no snapshot store: its pool keeps
-        # the VM's whole disk.
-        store = (
-            None if settings.vm else HostSnapshots(settings.snapshots_path, settings.secrets_path)
-        )
-        # One broker: what the transport attaches, a snapshot takes back.
-        broker = BrokerNullImpl()
-        owner = ceilings.load(settings.ceilings_path)
-        executor = ExecutorRelayImpl(
-            lambda: agents[0].client(),
-            host_transports(settings, broker),
-            workspaces,
-            snapshots=store,
-            broker=broker,
-            snapshot_modes=lambda: frozenset(
-                ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
-            ),
-            kept_whole=KEPT_WHOLE if settings.vm else frozenset(),
-            spool=settings.transfers_path,
-            # The servers the owner names, each started for one call with a
-            # credential from the host's own store.
-            servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),
-        )
-        agent = HostAgent(
-            settings,
-            owner,
-            pool_vm_probes()
-            if store is None
-            else real_probes(settings.workspace_user, host_snapshots(workspaces, store)),
-            lambda token: build_client(settings.api_url, token),
-            executor,
-        )
-        agents.append(agent)
+        agent = host_agent(settings)
         await agent.start()
         if settings.vm_seed is not None:
             # Traded: a key is spent once.
@@ -148,6 +114,50 @@ def run() -> None:
         await serve(agent, settings)
 
     _guarded(go())
+
+
+def host_agent(settings: Settings, client_for: ClientFactory | None = None) -> HostAgent:
+    """The host `settings` and its owner's ceilings make, not yet started:
+    the executor of the relay over its own transports and workspaces, held
+    to its owner's commands, and the agent that claims for it, which calls
+    through `client_for`, or the platform `settings` name. A VM of the
+    cloud pool, and a client that serves one session, are made here as
+    any host is, so its ceilings and every wall stay one."""
+    agents: list[HostAgent] = []
+    workspaces = host_workspaces(settings)
+    # A VM of the cloud pool keeps no snapshot store: its pool keeps
+    # the VM's whole disk.
+    store = None if settings.vm else HostSnapshots(settings.snapshots_path, settings.secrets_path)
+    # One broker: what the transport attaches, a snapshot takes back.
+    broker = BrokerNullImpl()
+    owner = ceilings.load(settings.ceilings_path)
+    executor = ExecutorRelayImpl(
+        lambda: agents[0].client(),
+        host_transports(settings, broker),
+        workspaces,
+        snapshots=store,
+        broker=broker,
+        snapshot_modes=lambda: frozenset(
+            ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
+        ),
+        kept_whole=KEPT_WHOLE if settings.vm else frozenset(),
+        spool=settings.transfers_path,
+        # The servers the owner names, each started for one call with a
+        # credential from the host's own store.
+        servers=HostServers(owner.mcp_servers, SecretsLocalImpl(settings.secrets_path)),
+        commands=owner.commands,
+    )
+    agent = HostAgent(
+        settings,
+        owner,
+        pool_vm_probes()
+        if store is None
+        else real_probes(settings.workspace_user, host_snapshots(workspaces, store)),
+        client_for or (lambda token: build_client(settings.api_url, token)),
+        executor,
+    )
+    agents.append(agent)
+    return agent
 
 
 def host_network() -> HostNetwork:

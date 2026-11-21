@@ -35,6 +35,7 @@ RUNNER = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER,
 
 HOST_ROUTES = {
     ("POST", "/v1/hosts/me/credentials"),
+    ("DELETE", "/v1/hosts/me/credentials"),
     ("POST", "/v1/hosts/me/heartbeats"),
     ("POST", "/v1/hosts/me/claims"),
     ("GET", "/v1/hosts/me/exec/{item_id}"),

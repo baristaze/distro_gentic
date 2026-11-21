@@ -24,12 +24,18 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.hosts import rules
-from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor
+from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor, WorkspaceHeldElsewhere
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.rules import ENROLLMENT_PREFIX, WireType
 from acme.om.hosts.types.credential import IssuedCredential
-from acme.om.hosts.types.host import Advertisement, Enrollment, HostReport, IsolationMode
+from acme.om.hosts.types.host import (
+    Advertisement,
+    ClaimantEnrollment,
+    Enrollment,
+    HostReport,
+    IsolationMode,
+)
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.kinds import HOST, HOST_PREFIX, PlacementWorkKind, platform_claimant_kinds
 from acme.om.placement.rules import host_lane, pool_lane
@@ -39,6 +45,7 @@ from acme.om.platform_root import PlatformManagers, build_platform_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
 from acme.om.trust.types.identities import Executor, ExecutorKind
+from acme.om.work.impl.manager import DEAD_LETTER_KIND
 from acme.om.work.types.work_item import WorkItem
 
 from contracts.agent_session_storage import make_agent_session
@@ -721,3 +728,108 @@ async def test_a_sub_agent_runs_where_its_root_runs(
     assert await placement.inside_wall(owner.org_id, child.id)
     await hosts.place_session(owner, root.id, None)
     assert await placement.executor_of(owner.org_id, grandchild.id) == runner
+
+
+# A person's own client serves their session's local workspace.
+
+
+async def a_local_session(managers: PlatformManagers, hosts: HostsManagerImpl, by: TenantContext):
+    """A root session `by` started, its workspace local: pinned to its own pool."""
+    session = make_agent_session(visibility=Visibility.ORG_WIDE).model_copy(
+        update={"created_by": by.user_id, "updated_by": by.user_id}
+    )
+    created = await managers.agent_sessions.create_agent_session(by, session)
+    await hosts.place_locally(by, created.id)
+    return created
+
+
+def client_enrollment(name: str = "laptop") -> Enrollment:
+    return Enrollment(name=name, advertisement=PROBED, exec_version=2)
+
+
+async def test_a_persons_client_serves_their_local_session_alone_one_client_at_a_time(
+    managers: PlatformManagers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    session = await a_local_session(managers, hosts, owner)
+    placed = await hosts.placement_of(owner, session.id)
+    assert placed.pool is not None and placed.pool.agent_session_id == session.id
+    assert placed.pool.region == "local" and placed.waiting
+    assert placed.pool not in await hosts.get_pools(owner), "the tenant does not list it"
+    with pytest.raises(ValidationFailed):
+        await hosts.issue_enrollment_token(owner, placed.pool.id)
+    other = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    with pytest.raises(ValidationFailed):
+        await hosts.place_session(owner, other.id, placed.pool.id)
+
+    # The key is one-use, of its own prefix, and an enrollment token's call
+    # refuses it as one.
+    issued = await hosts.issue_client_key(owner, session.id)
+    assert issued.token.startswith(rules.CLIENT_KEY_PREFIX)
+    assert issued.enrollment.expires_at - issued.enrollment.created_at == rules.CLIENT_KEY_TTL
+    with pytest.raises(InvalidCredential):
+        await hosts.enroll_claimant(request(), issued.token, ClaimantEnrollment(name="x"))
+    first = await hosts.enroll(request(), issued.token, client_enrollment())
+    with pytest.raises(InvalidCredential, match="spent"):
+        await hosts.enroll(request(), issued.token, client_enrollment())
+    assert first.pool_id == placed.pool.id
+    identity = await hosts.authenticate(request(), first.credential)
+    assert identity.agent_session_id == session.id
+    assert not (await hosts.placement_of(owner, session.id)).waiting
+
+    # Its credential is refused another session's work, routed to its own
+    # lane: the stray item fails for good, and its own session's is handed.
+    stray = await managers.work.enqueue(
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(identity.host_id, other.id))
+    )
+    assert await hosts.claim(request(), identity, 2) is None
+    events = await managers.change_events.get_change_events(owner, after_seq=0, limit=100)
+    (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND and e.target_id == stray.id]
+    assert "another session" in str(dead.payload["last_error"])
+    own = await managers.work.enqueue(
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(identity.host_id, session.id))
+    )
+    claimed = await hosts.claim(request(), identity, 2)
+    assert claimed is not None and claimed[1].id == own.id
+
+    # The person's next client takes the session over: the first one ends.
+    second = await hosts.enroll(
+        request(), (await hosts.issue_client_key(owner, session.id)).token, client_enrollment()
+    )
+    with pytest.raises((CredentialExpired, InvalidCredential)):
+        await hosts.authenticate(request(), first.credential)
+    # It ends itself as it stops, and the session waits for the next.
+    await hosts.end_host(request(), await hosts.authenticate(request(), second.credential))
+    with pytest.raises((CredentialExpired, InvalidCredential)):
+        await hosts.authenticate(request(), second.credential)
+    assert (await hosts.placement_of(owner, session.id)).waiting
+
+
+async def test_a_client_is_told_to_follow_a_workspace_it_may_not_serve(
+    managers: PlatformManagers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    member = await a_member(managers, "ajax", Role.MEMBER)
+    # A session of the cloud, whose workspace a VM of the cloud pool holds.
+    cloud = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    await hosts.session_pool(owner, cloud.id, "eu-west")
+    with pytest.raises(WorkspaceHeldElsewhere, match="a VM of the cloud pool"):
+        await hosts.issue_client_key(owner, cloud.id)
+    # One pinned to a pool of the tenant's hosts.
+    pool = await hosts.create_pool(owner, a_pool())
+    pinned = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    await hosts.place_session(owner, pinned.id, pool.id)
+    with pytest.raises(WorkspaceHeldElsewhere, match="a host of pool build"):
+        await hosts.issue_client_key(owner, pinned.id)
+    # Another person's local session.
+    theirs = await a_local_session(managers, hosts, owner)
+    with pytest.raises(WorkspaceHeldElsewhere, match="the person who started it"):
+        await hosts.issue_client_key(member, theirs.id)
+    # A key issued before a principal moved the session to the cloud lets
+    # nothing in.
+    issued = await hosts.issue_client_key(owner, theirs.id)
+    await hosts.place_session(owner, theirs.id, None)
+    with pytest.raises(CredentialExpired, match="no longer served locally"):
+        await hosts.enroll(request(), issued.token, client_enrollment())
+    with pytest.raises(WorkspaceHeldElsewhere):
+        await hosts.issue_client_key(owner, theirs.id)

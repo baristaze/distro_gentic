@@ -25,8 +25,13 @@ enrolls and calls the same way, as a kind of its own
 - **A claimant's credential**: its own, under its kind's prefix (`hst_`
   for a host), which no other credential has. It lives an hour, and the
   claimant rotates it at half its life. Only its digest is kept.
-- **A session's placement**: the cloud, or one of the tenant's pools. A
-  session no principal placed runs in the cloud.
+- **A session's placement**: the cloud, one of the tenant's pools, or
+  the session's own local pool of one, which its person's own client
+  serves. A session no principal placed runs in the cloud.
+- **A client key**: a one-use key the platform issues a person for their
+  own session whose workspace is local. Their client trades it, at once,
+  for a host's credential of that session's local pool of one. It waits
+  five minutes at most, and only its digest is kept.
 
 ## What can happen
 
@@ -37,6 +42,14 @@ enrolls and calls the same way, as a kind of its own
   pool are the token's; the host names neither. A product's claimant
   presents a token of its kind with its name alone, and its kind is the
   token's too.
+- **Serve a session from a person's own client.** A session started
+  with its workspace local is pinned to a pool of one of its own. Its
+  person asks for a client key, and their client trades it as a host
+  enrolls, with its name and what it probed. The host serves that
+  session alone; every host that served it before ends, so one client
+  serves it at a time. Any other session, or another person's, is
+  refused as `workspace_held_elsewhere`, which a client reads as
+  "follow". A client ends its own host as it stops.
 - **Rotate.** A claimant trades its credential for the next one. The one it
   called with still works for a minute, so a call in flight with it
   lands. A credential rotates once. A second rotation of it, or a call
@@ -57,7 +70,8 @@ enrolls and calls the same way, as a kind of its own
 - **Revoke.** An owner or an admin ends a token, or a claimant and every
   credential it holds, at once.
 - **Place a session.** A principal pins it to a pool, or moves it back to
-  the cloud. Nothing else moves it. A sub-agent runs where its tree's
+  the cloud; one started local is pinned to its own pool as it starts.
+  Nothing else moves it. A sub-agent runs where its tree's
   root runs, so only a root is placed.
 - **Purge.** A tenant deleted past its retention loses all of it.
 

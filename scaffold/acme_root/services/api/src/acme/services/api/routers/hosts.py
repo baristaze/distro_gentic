@@ -45,6 +45,7 @@ from acme.services.api.types.hosts import (
     HostStandingView,
     HostView,
     IssuedClaimantCredentialView,
+    IssuedClientKeyView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
     IssueEnrollmentTokenRequest,
@@ -124,6 +125,23 @@ async def place_session(
 
 
 @router.post(
+    "/agent-sessions/{agent_session_id}/workspace-keys",
+    response_model=IssuedClientKeyView,
+    status_code=201,
+)
+async def issue_client_key(
+    ctx: Ctx, hosts: HostsService, agent_session_id: UUID
+) -> IssuedClientKeyView:
+    """A one-use key, in the clear once, that the person's own client trades
+    at `POST /hosts/enrollments` to serve their session's local workspace
+    from the machine it runs on. A 409 `workspace_held_elsewhere` for a
+    session whose workspace a VM of the cloud pool, a host of a pool, or
+    another person's client holds: the client follows it and serves
+    nothing. A retry mints another key, so it takes no Idempotency-Key."""
+    return await hosts.issue_client_key(ctx, agent_session_id)
+
+
+@router.post(
     "/hosts/enrollments",
     response_model=IssuedHostCredentialView,
     dependencies=[rate_limited("login")],
@@ -132,8 +150,9 @@ async def enroll(
     rctx: Rctx, hosts: HostsService, token: EnrollmentBearer, body: EnrollRequest
 ) -> IssuedHostCredentialView:
     """A host enrolls once, with its tenant's enrollment token as its bearer,
-    and gets a credential of its own. A retry enrolls another host, so it
-    takes no Idempotency-Key."""
+    and gets a credential of its own; a person's own client enrolls the
+    same way with the one-use key its session's workspace was issued. A
+    retry enrolls another host, so it takes no Idempotency-Key."""
     return await hosts.enroll(rctx, token, body)
 
 
@@ -158,6 +177,15 @@ async def rotate(rctx: Rctx, hosts: HostsService, host: Host) -> IssuedHostCrede
     """The host's next credential; the one it called with ends after a short
     grace."""
     return await hosts.rotate(rctx, host)
+
+
+@router.delete("/hosts/me/credentials", status_code=204)
+async def end_host(rctx: Rctx, hosts: HostsService, host: Host) -> Response:
+    """The host ends itself as it stops: its credentials end at once, and
+    its pool waits for another. A person's client that served a session's
+    workspace ends so."""
+    await hosts.end_host(rctx, host)
+    return Response(status_code=204)
 
 
 @router.post("/hosts/me/heartbeats", response_model=HostView, dependencies=[HOLDER_CALL])

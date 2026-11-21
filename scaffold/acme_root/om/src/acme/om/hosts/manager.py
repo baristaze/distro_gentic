@@ -109,7 +109,8 @@ class HostsManagerInterface(ABC):
     ) -> SessionPlacement:
         """A principal sets where the session runs: one of the tenant's pools,
         or the cloud with None. This is the one way a session's placement
-        changes, and it places a tree's root: a sub-agent runs where its
+        changes once it started (`place_locally` places one as it starts),
+        and it places a tree's root: a sub-agent runs where its
         root runs, and placing one is `ValidationFailed`. Requires the write
         permission. NotFound when the tenant holds no such session or pool."""
         ...
@@ -120,6 +121,37 @@ class HostsManagerInterface(ABC):
         a pinned session with none online waits, and reads so here. A
         sub-agent reads its root's. NotFound when the tenant holds no such
         session."""
+        ...
+
+    # A person's own client: the local pool of one a session whose
+    # workspace is local gets, and the one-use key that lets that person's
+    # client serve it.
+
+    @abstractmethod
+    async def place_locally(self, ctx: TenantContext, agent_session_id: UUID) -> PlacementState:
+        """The session's workspace is local: served by its person's own
+        client from the machine it runs on. The session is pinned to a pool
+        of one of its own, made for it here under an id read off the tenant
+        and the session, which the tenant does not list, place another
+        session on, or issue a token for. It waits while no client serves
+        it, as any pinned session does, and never moves to the cloud unless
+        a principal places it there. A session placed already is answered
+        as it is. Only a root is placed. Requires the write permission;
+        NotFound when the tenant holds no such session."""
+        ...
+
+    @abstractmethod
+    async def issue_client_key(
+        self, ctx: TenantContext, agent_session_id: UUID
+    ) -> IssuedEnrollmentToken:
+        """A one-use key, in the clear once, that the person's own client
+        trades for a host's credential of the session's local pool of one
+        (`enroll`). Only the person who started the session, while its
+        workspace is local: `WorkspaceHeldElsewhere`, which a client reads
+        as "follow", when a VM of the cloud pool, a host of a pool, or no
+        host holds the session's workspace, or it is another person's.
+        Requires the write permission; NotFound when the tenant holds no
+        such session."""
         ...
 
     # The cloud pool's side: the pool of one each session that runs on a
@@ -206,8 +238,24 @@ class HostsManagerInterface(ABC):
         host kind, once, and gets a credential of its kind and prefix,
         short-lived, in the clear once. The tenant and the pool are the
         token's, never the host's. Refuses any credential but a live
-        enrollment token of the host kind, and a host that reads `exec`
-        work below the floor."""
+        enrollment token of the host kind, or a live client key, and a host
+        that reads `exec` work below the floor.
+
+        A client key (`issue_client_key`) is spent at its first trade: its
+        host serves the key's session alone, on the session's local pool of
+        one, while the session is still placed there and its person is
+        still the tenant's; the person answers for it. Every host that
+        served the session before it ends, so one client serves a local
+        session at a time."""
+        ...
+
+    @abstractmethod
+    @transition
+    async def end_host(self, rctx: RequestContext, host: HostIdentity) -> None:
+        """System-internal: a host ends itself as it stops, its credentials
+        with it, as a revocation does; what waits on it is ended the same
+        way. A client serving its person's session ends so as it stops, and
+        the session waits on its next workspace call at once."""
         ...
 
     @abstractmethod

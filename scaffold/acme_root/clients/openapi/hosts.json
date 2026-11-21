@@ -833,6 +833,39 @@
         "title": "IssuedClaimantCredentialView",
         "type": "object"
       },
+      "IssuedClientKeyView": {
+        "description": "A one-use key in the clear, once: the person's own client trades it,\nat once, for a host's credential of the session's local pool of one, and\nserves the session's workspace with it. It is minted on every call, so a\nretry mints another, and the one never traded expires on its own.",
+        "properties": {
+          "agent_session_id": {
+            "format": "uuid",
+            "title": "Agent Session Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          }
+        },
+        "required": [
+          "key",
+          "agent_session_id",
+          "expires_at"
+        ],
+        "title": "IssuedClientKeyView",
+        "type": "object"
+      },
       "IssuedEnrollmentTokenView": {
         "description": "The token in the clear, once: it enrolls claimants of its kind into\nits pool until it expires or is revoked. It is minted on every call, so\na retry mints another, and the one never read expires on its own.",
         "properties": {
@@ -1331,6 +1364,98 @@
           }
         },
         "summary": "Place Session",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{agent_session_id}/workspace-keys": {
+      "post": {
+        "description": "A one-use key, in the clear once, that the person's own client trades\nat `POST /hosts/enrollments` to serve their session's local workspace\nfrom the machine it runs on. A 409 `workspace_held_elsewhere` for a\nsession whose workspace a VM of the cloud pool, a host of a pool, or\nanother person's client holds: the client follows it and serves\nnothing. A retry mints another key, so it takes no Idempotency-Key.",
+        "operationId": "issue_client_key",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedClientKeyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Client Key",
         "tags": [
           "hosts"
         ]
@@ -2915,7 +3040,7 @@
     },
     "/v1/hosts/enrollments": {
       "post": {
-        "description": "A host enrolls once, with its tenant's enrollment token as its bearer,\nand gets a credential of its own. A retry enrolls another host, so it\ntakes no Idempotency-Key.",
+        "description": "A host enrolls once, with its tenant's enrollment token as its bearer,\nand gets a credential of its own; a person's own client enrolls the\nsame way with the one-use key its session's workspace was issued. A\nretry enrolls another host, so it takes no Idempotency-Key.",
         "operationId": "enroll",
         "parameters": [
           {
@@ -3000,6 +3125,81 @@
           }
         },
         "summary": "Enroll",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me": {
+      "delete": {
+        "description": "The host ends itself as it stops: its credentials end at once, and\nits pool waits for another. A person's client that served a session's\nworkspace ends so.",
+        "operationId": "end_host",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "common.json#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Host",
         "tags": [
           "hosts"
         ]

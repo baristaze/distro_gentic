@@ -1,18 +1,24 @@
 [project]
 name = "acme-cli"
 version = "0.1.0"
-description = "The Acme command line: sign-in, orgs, uploads, and a listener that prints every change in the org as it happens."
+description = "The Acme command line: sign-in, orgs, uploads, sessions, and a listener that prints every change in the org as it happens; with `serve`, it serves a person's own session's workspace from their machine."
 requires-python = ">=3.14"
 dependencies = [
     "acme-client",
     "typer>=0.15",
 ]
 
+[project.optional-dependencies]
+# The host program, whose claim loop serves a person's own session's
+# workspace from the machine the CLI runs on.
+serve = ["acme-host"]
+
 [project.scripts]
 acme = "acme.apps.cli.main:main"
 
 [tool.uv.sources]
 acme-client = { workspace = true }
+acme-host = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
