@@ -8,7 +8,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from api_support import build_container
+from api_support import build_container, open_spend_account, sign_in
 
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
@@ -36,6 +36,15 @@ def container(tmp_path: Path, providers: ModelProvidersInterface) -> AppContaine
         integrations=IntegrationsOverImpl(IdentityProviderTwinImpl(), providers),
         environment="local",
     )
+
+
+@pytest.fixture
+async def owner(client: httpx.AsyncClient, container: AppContainer) -> dict[str, str]:
+    """The owner, signed in, the tenant's account open: a loop's calls have
+    someone to charge."""
+    headers = await sign_in(client, container)
+    await open_spend_account(container, headers)
+    return headers
 
 
 @pytest.mark.parametrize(

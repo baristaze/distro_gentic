@@ -28,6 +28,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
+from acme.services.api.seed import seed_platform
 from acme.workers.agent_session_runner.container import RunnerContainer
 from acme.workers.agent_session_runner.main import build_runner
 from acme.workers.agent_session_runner.settings import AgentSessionRunnerSettings
@@ -70,6 +71,9 @@ async def test_recovery_and_the_sweep_leave_a_request_kinds_session_alone(
     )
     rctx = RequestContext(request_id=new_id(), app=APP)
     owner, _ = await api.managers.tenancy.bootstrap(rctx, "Ajax", "ajax", "ann@example.test", "Ann")
+    # Its account open and the matrix published: the loop's calls have
+    # someone to charge and a fill to resolve.
+    await seed_platform(storage, api.managers, owner, (READER,))
     agent_session_id = new_id()
     start = Start(id=agent_session_id, kind="reader", title="the dropped object")
     question = Question(id=new_id(), agent_session_id=agent_session_id, text="Why?", start=start)
