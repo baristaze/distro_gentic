@@ -31,9 +31,9 @@ from host_support import Stack, postgres, probes, stack
 from runner_support import TOOLS, answers, assistant, runs
 
 from acme.apps.cli import main as cli
+from acme.apps.host import ceilings as owner_file
 from acme.apps.host import main as host_main
 from acme.apps.host import serving
-from acme.apps.host import ceilings as owner_file
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
@@ -58,6 +58,8 @@ from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om import platform_root
+from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.agent_steps.rules import message_step
 from acme.om.agent_steps.types.agent_step import AgentStepType
 from acme.om.agent_steps.types.header import LoopOutcome, ParkReason
@@ -65,8 +67,6 @@ from acme.om.agent_workspaces.impl.agent_projects import WorkspaceAgentProjectsB
 from acme.om.agent_workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.agent_workspaces.types.source import RepositoryBinding
 from acme.om.agents.types.run import RunEnd
-from acme.om import platform_root
-from acme.om.agent_projects.storage import AgentProjectStorageInterface
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.placement.kinds import PlacementWorkKind

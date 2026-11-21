@@ -12,12 +12,12 @@ from uuid import UUID
 import pytest
 from unit.test_placement import exec_on
 
-from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationSpec
+from acme.infra.agent_workspaces import IsolationMode as ProviderMode
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.attribution.types.authority import Visibility
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
-from acme.om.exec_relay.types.exec import PrepareAnswer
 from acme.om.exceptions import (
     CredentialExpired,
     InvalidCredential,
@@ -25,6 +25,7 @@ from acme.om.exceptions import (
     NotFound,
     ValidationFailed,
 )
+from acme.om.exec_relay.types.exec import PrepareAnswer
 from acme.om.hosts import rules
 from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor, WorkspaceHeldElsewhere
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
@@ -845,7 +846,7 @@ async def test_a_persons_client_serves_its_sessions_tree_and_no_session_outside_
     issued = await hosts.issue_client_key(owner, root.id)
     served = await hosts.enroll(request(), issued.token, client_enrollment())
     identity = await hosts.authenticate(request(), served.credential)
-    spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    spec = IsolationSpec(mode=ProviderMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     relay = managers.exec_relay
 
     async def made(target: UUID, location: str) -> None:

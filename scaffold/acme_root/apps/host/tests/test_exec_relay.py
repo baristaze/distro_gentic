@@ -453,9 +453,7 @@ async def test_a_command_past_the_owners_paths_or_isolation_is_refused_by_name_b
     # A directory, on a host whose owner asks a container at the least.
     (tmp_path / "isolation").mkdir()
     weaker = await relay_to(api, tmp_path / "isolation", min_isolation=HostMode.container)
-    assert "min_isolation: isolation directory below this host's minimum" in await refused(
-        weaker
-    )
+    assert "min_isolation: isolation directory below this host's minimum" in await refused(weaker)
     assert not marker.exists()
 
 
