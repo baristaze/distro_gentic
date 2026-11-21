@@ -27,6 +27,7 @@ from acme.om.platform_agents.kinds import (
     RECORDS_TOOLSET,
     SEARCH_CORPUS,
     SUPPORT_ASSISTANT,
+    TOOL_OUTPUTS_TOOLSET,
     allowing,
 )
 from acme.om.tools.types.tool import ToolClass
@@ -35,7 +36,7 @@ SUPPORT_ASSISTANT_KIND = AgentKind(
     name=SUPPORT_ASSISTANT,
     version=1,
     tools=(SEARCH_CORPUS, DRAFT_TOOL_POLICY),
-    toolsets=(AGENT_KNOWLEDGE_TOOLSET, RECORDS_TOOLSET),
+    toolsets=(AGENT_KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, TOOL_OUTPUTS_TOOLSET),
     asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
@@ -47,7 +48,10 @@ SUPPORT_ASSISTANT_KIND = AgentKind(
     started_by=BY_A_PERSON,
 )
 """The support assistant. It takes the platform assistant's readers whole
-and leaves its hand-off out, since a request starts no session. A product's
+and leaves its hand-off out, since a request starts no session. A result too
+long for its window, or elided once read, it reads back with
+`read_tool_output`, by the handle the notice names: a request's loop keeps
+it outside the window as a worker's does. A product's
 readers (`ProductKinds.assistant_tools`) and its section of the object model
 (`ProductKinds.object_model`) join this version as they join the
 assistant's."""

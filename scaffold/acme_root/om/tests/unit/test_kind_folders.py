@@ -95,7 +95,7 @@ SETTINGS = {
     (
         kinds.SUPPORT_ASSISTANT,
         1,
-    ): "52153d507a146a3898af446c2c8f5f72f210cfa85e5a6b856ae10b2c40161f8a",
+    ): "e5f4ea0fc5091b77a1b876a8971b6241df446cd7df9227c69f4987af4a9e2e38",
 }
 """Each version of each shipped kind, and the digest of its settings: every
 field it sets but its prompt, which its folder's lock pins. A released

@@ -37,6 +37,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import DEFAULT_CEILINGS
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
+from acme.om.windows.rules import READ_TOOL_OUTPUT
 
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, platform_over
@@ -89,9 +90,13 @@ def test_the_support_assistant_passes_the_engines_check_for_a_request_kind() -> 
     as_request = PLATFORM_ASSISTANT_KIND.model_copy(update={"runs_in": RunsIn.REQUEST})
     breaches = request_kind_breaches(as_request, specs, DEFAULT_CEILINGS)
     assert f"{kinds.HAND_OFF} starts a session, a sub-agent's or a handoff's" in breaches
-    # It reads what the assistant reads.
+    # It reads what the assistant reads, and reads back a result its window
+    # keeps outside it, as every kind that calls tools does.
     handed = {kinds.HAND_OFF}
-    assert set(SUPPORT_ASSISTANT_KIND.tools) == set(PLATFORM_ASSISTANT_KIND.tools) - handed
+    read_back = {READ_TOOL_OUTPUT}
+    assert (
+        set(SUPPORT_ASSISTANT_KIND.tools) == set(PLATFORM_ASSISTANT_KIND.tools) - handed | read_back
+    )
 
 
 async def test_a_products_reader_joins_the_support_assistant_and_one_a_request_refuses_stops_the_start(

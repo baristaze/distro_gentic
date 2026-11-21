@@ -576,7 +576,7 @@ RENDERED = {
     (
         kinds.SUPPORT_ASSISTANT,
         1,
-    ): "d669f0094af961bbe6d67f83ddae3ca6acc6c97fb835c4ea0c2d950adeee4f65",
+    ): "e77644d5ab4fdb3758ff8eed1c030280e8fca68284320f4a4516369e494e6148",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's tools. A kind version pins those bytes and its prompt, which
@@ -742,6 +742,7 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "read_agent_project",
         "list_agent_automations",
         "read_agent_automation",
+        "read_tool_output",
     ),
 }
 """Each shipped kind's tools by name: as it named them one by one before it
