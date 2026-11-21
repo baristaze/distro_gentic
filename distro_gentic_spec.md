@@ -1209,7 +1209,11 @@ review starts a software engineer on it, then a reviewer on the pull
 request the software engineer opened, and answers with both reports. A
 child holds no tool its lead may not call, each call passes its own
 kind's policy and the lead's, and each spends from its own share, so the
-lead adds no power and no noun.
+lead adds no power and no noun. A spawn starts only a kind that names an
+agent among those who may start it ([`agentic_core` Agent
+Kinds][e-kinds]). The software engineer, analysis, and the reviewer
+name an agent and a person. The planner, the platform assistant, and
+the ops analyst are a person's alone, so no spawn starts one.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never

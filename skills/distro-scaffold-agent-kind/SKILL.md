@@ -17,7 +17,7 @@ for where a kind lives.
 
 ## Input
 
-`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
+`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--started-by person|both] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
 and what the kind's agent does and may never do, in the arguments or
 in the conversation.
 
@@ -35,6 +35,14 @@ session should take it".
   live permissions; `steady` under one principal fixed when the session
   is made. Unattended, an agent a person talks to is `delegated`, and
   one that works on its own is `steady`.
+- `--started-by`: who may start a session of the kind, as
+  `AgentKind.started_by` holds it. `person`, the default, leaves it
+  unset: a person starts the kind, or a hand-off reaches it, and a spawn
+  of it is refused. `both` sets `SPAWNED` in `kinds.py`, for a kind a
+  person starts and a lead or another kind spawns, and the kind names a
+  share beside it, as the reviewer names `REVIEWER_SHARE`. When it is
+  not given, a kind the arguments or the conversation say a spawn
+  starts is `both`, and any other is `person`.
 - `--workspace`: `container` for a kind that reads or changes files or
   runs commands (the profile's `isolation` is `WORKSPACE`), `none` for
   one that has no workspace (`NO_WORKSPACE`). A delegated kind a person
@@ -63,7 +71,7 @@ The shape of a kind is the four profiles in
 | `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
 | `om/src/<name>/om/platform_agents/tools/<toolset>.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output, in the module of its toolset |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
-| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
+| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, its name in `SPAWNED_KINDS` when it is `both`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
 | `om/tests/contracts/matrix.py`, `om/tests/unit/test_matrix.py`, and `services/api/tests/test_matrix_api.py` (a model size no shipped kind asked before) | `SIZED` holds a row for the size, since a version is published only with a row for each size a shipped kind asks; in `test_matrix.py`, the roles zipped strictly with `SIZED` take the role the size is asked of, and the set of the sizes the shipped kinds ask takes the pair; in `test_matrix_api.py`, the list of the sizes a published version's rows match takes the size |
@@ -122,7 +130,8 @@ The shape of a kind is the four profiles in
    (`git show HEAD:om/src/<name>/om/platform_agents/kinds.py`) is the
    next version, a profile of its own beside the last, and both stay in
    `SHIPPED` while a session may run the last. A kind only this work
-   wrote changes in place.
+   wrote changes in place, and so does who may start a kind, which only
+   a start of its latest version reads.
 3. A kind names its tools by name and holds no more power than they and
    its policy layer give. A tool the tree has is named by its constant.
    A tool the platform ships for it is a `NativeToolImpl` in the module

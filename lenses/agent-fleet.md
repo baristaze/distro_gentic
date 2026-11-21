@@ -19,15 +19,19 @@ profile with its own powers: the software engineer takes an objective to
 a validated, reviewable change; analysis agents read what a run produced
 and turn it into findings; a planner turns findings into tasks and
 decides whether an existing session should continue or a new one should
-start.
+start. A spawn starts only a kind that names an agent among those who
+may start it: the software engineer, analysis, and the reviewer name an
+agent and a person, and every other shipped kind a person alone.
 
 **Source.** The Agents a Platform Ships.
 
 **Look for.** How each shipped agent is defined; whether any runs a loop
-of its own.
+of its own; who may start each one.
 
 **Violation.** A shipped agent with a loop of its own; a kind whose
-powers its profile does not set.
+powers its profile does not set; a kind a lead or another kind spawns
+whose latest version names no agent among those who may start it, or a
+kind only a person starts that names one.
 
 **Severity.** medium
 

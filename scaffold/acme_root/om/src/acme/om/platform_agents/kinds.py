@@ -522,9 +522,10 @@ ANALYSIS_KIND = revised(
     ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, TOOL_OUTPUTS_TOOLSET)
 )
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
-way a software engineer splits a question, so it names a share. A result too large
-for its window, or one compaction elided, it reads back with
-`read_tool_output`, by the handle the notice names."""
+way a software engineer splits a question, so it names an agent among those
+who may start it, and a share. A result too large for its window, or one
+compaction elided, it reads back with `read_tool_output`, by the handle the
+notice names."""
 
 PLANNER_KIND = AgentKind(
     name=PLANNER,
@@ -671,8 +672,9 @@ REVIEWER_KIND = AgentKind(
 """The reviewer. It reads one pull request through the forge, at its head,
 and changes nothing: it has no workspace, and no tool it holds writes a
 file, runs code, or pushes. It delivers its review through its result
-tool, citing the findings it noted, and its share lets a lead start it as
-a sub-agent on the pull request another kind opened."""
+tool, citing the findings it noted. It names an agent among those who
+may start it, and a share, so a lead starts it as a sub-agent on the pull
+request another kind opened."""
 
 OPS_ANALYST_PROMPT = (
     "You read how the tenant's part of the platform runs, and you change nothing: every "
