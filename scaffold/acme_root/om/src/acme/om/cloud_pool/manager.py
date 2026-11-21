@@ -37,15 +37,18 @@ class CloudPoolManagerInterface(ABC):
     ) -> AgentWorkspace:
         """The session's workspace on its VM, once the VM's host
         holds it. The VM is the one that serves the session, else a
-        warm one it claims, else one started from the pool's image; with
-        `restore`, one started from that snapshot of the session's VM,
-        held to its digest first. A new VM, or a warm one claimed, counts
+        warm one it claims at the default size, else one of the size the
+        spec asks, started from the pool's image; with `restore`, one
+        started from that snapshot of the session's VM, held to its digest
+        first. A new VM, or a warm one claimed, counts
         against the most the pool holds and the most the session's tenant
         holds, as the pool's limits stand at this claim. `IsolationRefused`
         that clears while either maximum stands, the VM starts, or its
         host has not prepared it in time, and the loop waits on the
         resource; its cause names no count and no other tenant's use. One
-        that never clears for a spec the pool's VMs cannot hold.
+        that never clears, its cause the spec's, for a spec the pool's VMs
+        cannot hold: a size the deployment does not allow among them, before
+        any VM starts.
         `AgentWorkspaceLost` when the snapshot is gone, was not taken by the
         pool, or does not match its digest."""
         ...
@@ -64,6 +67,15 @@ class CloudPoolManagerInterface(ABC):
     @abstractmethod
     async def holds(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
         """Whether a VM of the pool serves the session."""
+        ...
+
+    @abstractmethod
+    async def recycle(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
+        """Between runs, once the run's end kept the session's work: lets
+        go of the VM that serves the session if it is past the pool's
+        maximum age, as `release` does, and answers whether it went. The
+        session's next prepare starts another. Nothing else lets go of a
+        session's VM for its age, so none goes under a running loop."""
         ...
 
     @abstractmethod
@@ -120,7 +132,8 @@ class CloudPoolManagerInterface(ABC):
         one whose session, or tenant, is gone, and of one under the pool's
         names that no row holds; stops a session's VM that runs with no
         host to work for, its host never enrolled, ended, or silent, and
-        keeps its disk; does the erasures asked; then starts warm VMs
+        keeps its disk; lets go of a warm VM past the pool's maximum age,
+        and of no session's; does the erasures asked; then starts warm VMs
         until the pool's warm count stands, never past its maximum. A warm
         VM's row goes before its VM, so a session that claimed it
         meanwhile keeps it. Answers how many VMs it let go or stopped."""

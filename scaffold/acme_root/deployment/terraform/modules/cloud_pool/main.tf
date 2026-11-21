@@ -8,11 +8,14 @@
 # network: the closed group reaches the gateway alone, and the open group
 # adds the open egress a session's policy chose. Neither admits anything in.
 # Its disk, and every snapshot the pool keeps of it, are encrypted under the
-# pool's own key.
+# pool's own key. Its size is one of the size map's machine types, the only
+# ones the platform's role may launch (ADR 2069).
 
 locals {
   name = "acme-${var.environment}-cloud-pool"
   tags = { "acme:component" = "cloud-pool", "acme:environment" = var.environment }
+  # The machine types the size map names, each once: what a VM may run on.
+  types = sort(distinct([for size in values(var.sizes) : size.type]))
 }
 
 data "aws_caller_identity" "current" {}
@@ -81,7 +84,7 @@ resource "aws_launch_template" "vm" {
   name          = local.name
   description   = "A VM of the cloud pool: no role, metadata by token alone, an encrypted disk"
   image_id      = var.image_id
-  instance_type = var.instance_type
+  instance_type = var.sizes["s"].type
 
   # No iam_instance_profile: a VM holds no credential of the cloud's.
   metadata_options {
@@ -116,9 +119,10 @@ resource "aws_launch_template" "vm" {
 }
 
 # What the platform's runner and its sweep may do to the pool's VMs,
-# and nothing more: start one from the pool's template and only with its
-# name's tag, then stop, start, seal, snapshot, and end only what carries
-# one. It passes no role, so no VM ever holds one.
+# and nothing more: start one from the pool's template, of a type the size
+# map names, and only with its name's tag, then stop, start, seal,
+# snapshot, and end only what carries one, never moving one to another
+# type. It passes no role, so no VM ever holds one.
 data "aws_iam_policy_document" "operate" {
   statement {
     sid       = "Read"
@@ -134,6 +138,38 @@ data "aws_iam_policy_document" "operate" {
       "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}::image/*",
       "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*",
     ]
+  }
+
+  # A start names its type, or takes the template's; either way the
+  # instance is one of the map's, or nothing starts.
+  statement {
+    sid       = "OnlyTheSizesTypes"
+    effect    = "Deny"
+    actions   = ["ec2:RunInstances"]
+    resources = ["arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:instance/*"]
+    condition {
+      test     = "StringNotEquals"
+      variable = "ec2:InstanceType"
+      values   = local.types
+    }
+  }
+
+  # A stopped VM moved to a type the map does not name would start as one.
+  statement {
+    sid       = "NoOtherTypeLater"
+    effect    = "Deny"
+    actions   = ["ec2:ModifyInstanceAttribute"]
+    resources = ["*"]
+    condition {
+      test     = "Null"
+      variable = "ec2:Attribute/InstanceType"
+      values   = ["false"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "ec2:Attribute/InstanceType"
+      values   = local.types
+    }
   }
 
   statement {

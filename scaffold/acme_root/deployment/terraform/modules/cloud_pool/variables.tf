@@ -23,10 +23,23 @@ variable "image_id" {
   type        = string
 }
 
-variable "instance_type" {
-  description = "Every VM's size. The cloud pool asks for no other."
-  type        = string
-  default     = "m7g.large"
+variable "sizes" {
+  description = "Each size a kind may ask its VM by name, and the machine type it starts, with its CPUs and memory: the only types the pool's role may launch. It names `s`, the size of a VM whose kind asks none, and of every warm VM."
+  type = map(object({
+    type      = string
+    cpus      = number
+    memory_mb = number
+  }))
+  default = {
+    xs = { type = "m7g.medium", cpus = 1, memory_mb = 4096 }
+    s  = { type = "m7g.large", cpus = 2, memory_mb = 8192 }
+    m  = { type = "m7g.xlarge", cpus = 4, memory_mb = 16384 }
+  }
+
+  validation {
+    condition     = contains(keys(var.sizes), "s") && length(setsubtract(keys(var.sizes), ["xs", "s", "m"])) == 0
+    error_message = "The sizes are named xs, s, and m, and name s."
+  }
 }
 
 variable "disk_gb" {

@@ -4,7 +4,11 @@ credential of the session's pool of one. A warm VM serves no session
 until one claims it, and the pool starts another in its place. A snapshot
 ends the host's credential, stops the VM, and keeps its disk; a
 restore holds the disk to its digest and starts a VM on a copy of it.
-A spec the VMs cannot hold is refused for good. The sweep reads every
+A spec the VMs cannot hold is refused for good, a size the deployment
+does not allow among them; a VM is the machine type its size maps to,
+and a warm one the default size's. A cold start records its boot once, a
+warm claim none. A VM past its maximum age goes between runs and never
+under a running loop, and a warm one past it goes at the sweep. The sweep reads every
 row, a page at a time: it lets go of a first start that died, one whose
 session is gone, and one no row holds, and stops a VM that runs with
 no host to work for, whose disk its session's next prepare starts again; a
@@ -28,6 +32,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from prometheus_client import REGISTRY
 
 from acme.infra.agent_workspaces import (
     AgentWorkspace,
@@ -41,9 +46,10 @@ from acme.infra.agent_workspaces import (
     IsolationSpec,
     ResourceLimits,
     SnapshotRefused,
+    VmSize,
 )
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.vms import SEED_FILE, VmSpec, VmState
+from acme.infra.vms import SEED_FILE, MachineType, VmSpec, VmState
 from acme.infra.vms.seeded import PLAIN_WRITE, SeedsChannelImpl
 from acme.infra.vms.twin import VmsNullImpl, VmsTwinImpl
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
@@ -72,6 +78,7 @@ PREFIX = "acme-vm-"
 IMAGE = "acme-vm-image"
 OPEN = IsolationSpec(mode=IsolationMode.VM, egress=EgressPolicy(mode=EgressMode.OPEN))
 KEPT = OPEN.model_copy(update={"durability": Durability.SNAPSHOT})
+MEDIUM = OPEN.model_copy(update={"limits": ResourceLimits(size=VmSize.M)})
 ENROLLMENT = Enrollment(
     name="vm",
     advertisement=Advertisement(os="Linux", isolation_modes=(HostMode.VM,)),
@@ -184,9 +191,10 @@ class Pool:
         page: int = 1000,
         most: int | None = None,
         tenant_most: int | None = None,
+        sizes: dict[VmSize, MachineType] | None = None,
     ) -> None:
         # Only the limits a test names, so the options' own stand otherwise.
-        named = {"most": most, "tenant_most": tenant_most}
+        named = {"most": most, "tenant_most": tenant_most, "sizes": sizes}
         limits: dict[str, Any] = {key: value for key, value in named.items() if value is not None}
         self.vms = VmsTwinImpl(root / "vms", closes_egress=closes_egress)
         self.storage = CloudPoolStorageMemoryImpl()
@@ -370,6 +378,132 @@ async def test_a_new_session_claims_a_started_warm_vm_and_the_pool_starts_anothe
     assert len(await pool.rows()) == 2, "the warm count stands; no more start"
 
 
+# A VM is the size its spec asks, as the deployment maps it.
+
+
+async def test_a_spec_asking_m_gets_a_vm_of_the_type_its_deployment_maps_m_to(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (warm,) = await pool.rows()
+    small = pool.options.sizes[VmSize.S]
+    assert pool.vms.vms[warm.name].spec.machine_type == small.name, "warm at the default size"
+
+    agent_session_id = new_id()
+    await pool.prepare(ctx, agent_session_id, MEDIUM)
+    (row,) = [row for row in await pool.rows() if row.agent_session_id == agent_session_id]
+    assert row.id != warm.id, "a warm VM serves the default size alone"
+    started = pool.vms.vms[row.name].spec
+    medium = pool.options.sizes[VmSize.M]
+    assert (started.machine_type, started.cpus, started.memory_mb) == (
+        medium.name,
+        medium.cpus,
+        medium.memory_mb,
+    )
+    assert (await pool.storage.read_vm(warm.id)) == warm, "the warm VM still stands"
+
+
+async def test_a_size_the_deployment_does_not_allow_is_refused_for_good_before_any_start(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, sizes={VmSize.S: MachineType(name="m7g.large", cpus=2, memory_mb=8192)})
+    await pool.image()
+    made = len(pool.vms.calls)
+    with pytest.raises(IsolationRefused) as refused:
+        await pool.manager.prepare(ctx, new_id(), MEDIUM)
+    assert not refused.value.clears
+    assert refused.value.cause == "the cloud pool runs no VM of size m here"
+    assert await pool.rows() == [] and len(pool.vms.calls) == made, "no VM started"
+
+
+# A cold start is timed, from its start to its host's enrollment.
+
+
+def boots(source: str) -> tuple[float, float]:
+    """The boots the process recorded from `source`: how many, and their
+    seconds together."""
+    name = "acme_cloud_pool_boot_seconds"
+    count = REGISTRY.get_sample_value(f"{name}_count", {"source": source}) or 0.0
+    total = REGISTRY.get_sample_value(f"{name}_sum", {"source": source}) or 0.0
+    return count, total
+
+
+async def test_a_cold_start_records_one_boot_from_its_start_to_enrollment_and_a_warm_claim_none(
+    tmp_path: Path, ctx: TenantContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    before = boots("image")
+    launch = pool.vms.launch
+
+    async def booting(name: str, spec: VmSpec, snapshot: str | None = None) -> None:
+        await launch(name, spec, snapshot)
+        pool.now += timedelta(seconds=42)  # it boots, and then its host calls
+
+    monkeypatch.setattr(pool.vms, "launch", booting)
+    await pool.prepare(ctx, new_id())
+    monkeypatch.undo()
+    assert boots("image") == (before[0] + 1, before[1] + 42), "one boot, start to enrollment"
+
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    pool.now += timedelta(minutes=5)
+    claimed = new_id()
+    await pool.prepare(ctx, claimed)
+    await pool.manager.close()
+    (row,) = [row for row in await pool.rows() if row.agent_session_id == claimed]
+    assert row.host_id is not None and row.bound_at is not None
+    assert row.created_at < row.bound_at, "a warm VM, claimed"
+    assert boots("image") == (before[0] + 1, before[1] + 42), "a warm claim records none"
+
+
+# A VM is recycled at its maximum age, between runs.
+
+
+async def test_a_vm_past_its_age_goes_between_runs_never_under_a_loop_and_another_starts(
+    pool: Pool, ctx: TenantContext
+) -> None:
+    agent_session_id = new_id()
+    await pool.prepare(ctx, agent_session_id)
+    (old,) = await pool.rows()
+    assert not await pool.manager.recycle(ctx, agent_session_id), "under its age it stays"
+
+    pool.now += pool.options.max_age + timedelta(minutes=1)
+    assert old.host_id is not None
+    pool.hosts.seen[old.host_id].last_seen_at = pool.now  # its loop runs, and its host calls
+    assert await pool.manager.sweep(stage()) == 0, "no sweep lets it go under a running loop"
+    assert await pool.rows() == [old] and await pool.vms.state(old.name) is VmState.RUNNING
+
+    assert await pool.manager.recycle(ctx, agent_session_id), "its run's end lets it go"
+    assert await pool.rows() == [] and await pool.vms.state(old.name) is VmState.ABSENT
+    assert pool.hosts.retired == [old.host_id], "its host's credential ended first"
+
+    await pool.prepare(ctx, agent_session_id)
+    (new,) = await pool.rows()
+    assert new.id != old.id and new.name != old.name and new.created_at == pool.now
+    assert (pool.vms.root / new.name / "host-program").exists(), "from the pool's image"
+
+
+async def test_a_warm_vm_past_its_age_goes_at_the_sweep_and_another_stands(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (old,) = await pool.rows()
+
+    pool.now += pool.options.max_age + timedelta(minutes=1)
+    assert await pool.manager.sweep(stage()) == 1
+    await pool.manager.close()
+    (new,) = await pool.rows()
+    assert new.warm and new.id != old.id and new.started_at is not None
+    assert await pool.vms.state(old.name) is VmState.ABSENT
+
+
 # A snapshot is the VM's whole disk.
 
 
@@ -442,6 +576,7 @@ async def test_a_snapshot_with_no_vm_is_refused(pool: Pool, ctx: TenantContext) 
         ),
         (OPEN.model_copy(update={"egress": EgressPolicy(mode=EgressMode.NONE)}), "none"),
         (OPEN.model_copy(update={"limits": ResourceLimits(processes=10)}), "processes"),
+        (OPEN.model_copy(update={"limits": ResourceLimits(cpus=2, size=VmSize.M)}), "cpus"),
         (
             OPEN.model_copy(
                 update={

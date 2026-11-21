@@ -53,8 +53,10 @@ name's tag, as a snapshot is."""
 class VmsEc2Impl(VmsInterface, SeedsInterface):
     """Vms through the EC2 API, each call bounded by the client's
     timeout, and each wait for a state by `boot`. `template` is the launch
-    template the cloud pool's module makes: the instance's size, its
-    encrypted disk under the pool's key, and no instance role. A VM
+    template the cloud pool's module makes: the instance's default size, its
+    encrypted disk under the pool's key, and no instance role. A start that
+    names a machine type runs that type, which the module's role allows only
+    from its size map. A VM
     starts in one of `subnets`, picked at each start, and in `closed` or
     `open`, the security group of its egress. `encrypted` declares the
     template's disks encrypted, which the module holds."""
@@ -110,7 +112,8 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
         return True
 
     def limits(self) -> frozenset[str]:
-        # A VM is the launch template's size; it holds no other limit.
+        # A VM is the size of its machine type (`VmSpec.machine_type`), else
+        # the launch template's; it holds no other limit.
         return frozenset()
 
     def encrypted_at_rest(self) -> bool:
@@ -323,6 +326,10 @@ class VmsEc2Impl(VmsInterface, SeedsInterface):
             },
             "TagSpecifications": _tagged(name, "instance", "volume"),
         }
+        if spec.machine_type is not None:
+            # The size its caller asked, which the module's role allows by
+            # type; none asked starts the template's.
+            asked["InstanceType"] = spec.machine_type
         if seed is not None:
             # As it stands: botocore encodes a start's user data to base64
             # itself, so the VM reads the seed back whole.
