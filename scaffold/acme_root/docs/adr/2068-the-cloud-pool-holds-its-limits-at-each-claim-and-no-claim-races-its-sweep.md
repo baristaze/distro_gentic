@@ -41,7 +41,18 @@ writes the new VM's row. The refill counts and writes under the same
 lock, and never starts past the maximum. So two claims never pass a
 maximum together. A warm VM already counts, so binding one at the
 maximum is allowed. Warm VMs stand below the maximum, which a write
-holds, so a session that cannot take one still finds room.
+holds.
+
+**A warm VM gives way at the maximum.** A restore, a session that asks
+limits, and a session of another egress cannot take a warm VM. At the
+maximum, such a claim takes the place of the oldest idle warm VM, one
+that started and that no session claimed. Under the same lock, the warm
+VM's row goes and the claim's own is written. The warm VM is destroyed
+before the claim's VM starts, so the VMs that run never pass the
+maximum. If that destroy fails, the claim's row goes too, and the
+sweep destroys the warm VM, which no row holds. A warm VM still
+starting keeps its place, and the claim waits. A claim past its
+tenant's maximum takes no warm VM's place.
 
 **Past a maximum, the session waits.** A claim past either maximum
 starts no VM. It raises the refusal that clears, so the loop parks on

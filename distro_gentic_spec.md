@@ -371,7 +371,9 @@ in.
   tenant's use.
 - **Warm, and always let go.** A few VMs may stand started ahead of
   demand, as many as an operator sets, below the maximum. They name no
-  tenant until a session claims one, and serve that session alone.
+  tenant until a session claims one, and serve that session alone. At
+  the maximum, a session that cannot take one takes the place of an
+  idle one, which goes.
   Every path that starts a VM has the one that lets it go: the run's
   release, the sweep past the grace, a session or a tenant that is
   gone, a VM that died, a purge, and a key's revocation, since a VM
