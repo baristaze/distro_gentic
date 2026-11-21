@@ -122,3 +122,18 @@ output "agent_session_runner_access" {
     secret_names = module.agent_session_runner.injected_secret_names
   }
 }
+
+# Each process's task role, by the name its module gives the process, with
+# the policies it attaches: every service and one-off task the environment
+# runs, read by the staging root's test of who holds the session key. A
+# process added to the environment joins it.
+output "task_policy_arns" {
+  description = "Each process's task role policies, by ARN, keyed by the process's name: what each process itself may reach."
+  value = {
+    "api"                  = module.api.task_policy_arns
+    "maintenance"          = module.maintenance.task_policy_arns
+    "agent-session-runner" = module.agent_session_runner.task_policy_arns
+    "migrate"              = module.migrate.task_policy_arns
+    "grant"                = module.grant.task_policy_arns
+  }
+}
