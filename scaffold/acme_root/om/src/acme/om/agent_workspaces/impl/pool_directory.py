@@ -24,7 +24,6 @@ from collections.abc import AsyncGenerator, AsyncIterable
 from datetime import datetime, timedelta
 
 from acme.infra.agent_workspaces import AgentWorkspace, DirectoryPack, SnapshotRefused
-from acme.infra.agent_workspaces.packs import AS_ROOT, PAST
 from acme.infra.exceptions import BackendFailed
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
 from acme.om.base import new_id
@@ -39,6 +38,13 @@ a restore writes, and nothing of the session's."""
 
 PACKED = f"{KEPT}/pack"
 """Where a pack is written in the directory."""
+
+AS_ROOT = 'as=; if [ "$(id -u)" != 0 ] && sudo -n true 2>/dev/null; then as="sudo -n"; fi'
+"""Root where the VM's user may become it without a password, as the
+engine's packs run."""
+
+PAST = 3
+"""The pack script's exit when the directory holds more than the bound."""
 
 PACK = f"""set -u
 {AS_ROOT}
