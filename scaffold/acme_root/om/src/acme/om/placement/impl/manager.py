@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -56,7 +56,17 @@ class PlacementOptions(OmBase):
         return lane_cap(lane, self.tier_shares, self.default_share)
 
 
+TreeOf = Callable[[UUID, WorkItem], Awaitable[UUID | None]]
+"""The root of the session tree an item serves, by its tenant: what a claim
+reads for a claimant that serves a session's tree. None when the item names
+no session it can read."""
+
+
 class PlacementManagerImpl(PlacementManagerInterface):
+    """`tree_of` reads an item's session tree for a claimant that serves
+    one (`Claimant.serves_tree`); without it, such a claimant is handed its
+    own session's work alone."""
+
     def __init__(
         self,
         storage: PlacementStorageInterface,
@@ -66,6 +76,8 @@ class PlacementManagerImpl(PlacementManagerInterface):
         kinds: WorkKinds,
         claimants: ClaimantKinds,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        tree_of: TreeOf | None = None,
     ) -> None:
         held_to(claimants, kinds)
         self._storage = storage
@@ -75,6 +87,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
         self._kinds = kinds
         self._claimants = claimants
         self._clock = clock
+        self._tree_of = tree_of
 
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
         if item.kind == AgentSessionWorkKind.LOOP:
@@ -91,10 +104,12 @@ class PlacementManagerImpl(PlacementManagerInterface):
                     break
                 ctx, item = claimed
                 foreign = claimant.org_id is not None and ctx.org_id != claimant.org_id
-                if not foreign and not another_session(claimant, item):
+                if not foreign and not another_session(
+                    claimant, item, await self._root(ctx.org_id, claimant, item)
+                ):
                     return claimed
-                # Routed into another tenant's wall, or to a VM that
-                # serves another session: never handed over, and never
+                # Routed into another tenant's wall, or to a VM or a client
+                # that serves another session: never handed over, and never
                 # claimed again, since no claimant of that lane may run it.
                 OUTCOMES.labels(subsystem="placement", outcome="foreign_claim").inc()
                 log.error(
@@ -111,6 +126,15 @@ class PlacementManagerImpl(PlacementManagerInterface):
                     ctx, item, f"routed to {claimant.worker_id} of {whose}"
                 )
         return None
+
+    async def _root(self, org_id: UUID, claimant: Claimant, item: WorkItem) -> UUID | None:
+        """The root of the item's session tree, read only for a claimant
+        that serves a tree, and an item not of its session itself."""
+        if self._tree_of is None or not claimant.serves_tree:
+            return None
+        if not another_session(claimant, item):
+            return None
+        return await self._tree_of(org_id, item)
 
     async def holding_for(self, claimant: Claimant, org_id: UUID) -> Holding:
         claims = claims_of(self._claimants, self._kinds, claimant)

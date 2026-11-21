@@ -154,13 +154,18 @@ def _the_tenants(pool: HostPool) -> HostPool:
 def claimant_of(identity: ClaimantIdentity) -> Claimant:
     """The claimant placement claims for: the identity the credential
     resolved to, its kind, its id, the tenant whose wall it sits in, and the
-    pool its enrollment named."""
+    pool its enrollment named. A host of a session's local pool is a
+    person's own client, which serves the session's tree: its sub-agents
+    run where their root runs, and their checks' instances with them."""
+    session = identity.agent_session_id
     return Claimant(
         kind=identity.kind,
         id=identity.id,
         org_id=identity.org_id,
         pool_id=identity.pool_id,
-        agent_session_id=identity.agent_session_id,
+        agent_session_id=session,
+        serves_tree=session is not None
+        and identity.pool_id == local_pool_id(identity.org_id, session),
     )
 
 

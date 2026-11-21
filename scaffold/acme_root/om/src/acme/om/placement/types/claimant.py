@@ -18,13 +18,22 @@ class Claimant(OmBase):
     tenant whose wall it sits in, and the pool it serves. `org_id` None is
     a claimant of the platform's own pool, which serves every tenant.
     `agent_session_id` names the one session a VM of the cloud pool serves:
-    it is handed that session's work and no other."""
+    it is handed that session's work and no other. A person's own client
+    serves that session's tree (`serves_tree`): the session, its
+    sub-agents, and the instances their checks ask for."""
 
     kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     id: UUID
     org_id: UUID | None = None
     pool_id: UUID
     agent_session_id: UUID | None = None
+    serves_tree: bool = False
+
+    @model_validator(mode="after")
+    def _a_tree_of_its_session(self) -> Self:
+        if self.serves_tree and self.agent_session_id is None:
+            raise ValueError("a claimant serves the tree of the session it names")
+        return self
 
     @property
     def worker_id(self) -> str:

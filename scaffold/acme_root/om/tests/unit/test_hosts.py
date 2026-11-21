@@ -12,10 +12,12 @@ from uuid import UUID
 import pytest
 from unit.test_placement import exec_on
 
+from acme.infra.agent_workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.attribution.types.authority import Visibility
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
+from acme.om.exec_relay.types.exec import PrepareAnswer
 from acme.om.exceptions import (
     CredentialExpired,
     InvalidCredential,
@@ -833,3 +835,67 @@ async def test_a_client_is_told_to_follow_a_workspace_it_may_not_serve(
         await hosts.enroll(request(), issued.token, client_enrollment())
     with pytest.raises(WorkspaceHeldElsewhere):
         await hosts.issue_client_key(owner, theirs.id)
+
+
+async def test_a_persons_client_serves_its_sessions_tree_and_no_session_outside_it(
+    managers: PlatformManagers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    root = await a_local_session(managers, hosts, owner)
+    issued = await hosts.issue_client_key(owner, root.id)
+    served = await hosts.enroll(request(), issued.token, client_enrollment())
+    identity = await hosts.authenticate(request(), served.credential)
+    spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    relay = managers.exec_relay
+
+    async def made(target: UUID, location: str) -> None:
+        """The client claims the prepare of `target`'s workspace and makes it."""
+        claimed = await hosts.claim(request(), identity, 2)
+        assert claimed is not None, f"the prepare of {target} reached no one"
+        assert claimed[1].payload["agent_session_id"] == str(target)
+        bound = await relay.prepared(
+            request(), identity, claimed[1].id, PrepareAnswer(location=location)
+        )
+        assert bound is not None and bound.host_id == identity.host_id
+
+    # A sub-agent runs where its root runs: its root's client makes its
+    # workspace.
+    child = await managers.agent_sessions.create_agent_session(
+        owner, make_agent_session(parent=root)
+    )
+    assert await relay.ask_prepare(owner, child.id, spec)
+    await made(child.id, "/work/child")
+    # Its validation's instance, under an id of its own, is made there too,
+    # and a command in it is handed to the client.
+    instance = new_id()
+    await relay.ask_instance(owner, child.id, instance, spec)
+    await made(instance, "/work/instance")
+    held = await relay.binding_of(owner, instance)
+    assert held is not None and held.instance_of == child.id
+    in_it = await managers.work.enqueue(
+        owner, an_item(owner, PlacementWorkKind.EXEC, exec_on(identity.host_id, instance))
+    )
+    claimed = await hosts.claim(request(), identity, 2)
+    assert claimed is not None and claimed[1].id == in_it.id
+
+    # An item of a session outside its tree, reaching its lane, fails for
+    # good: another root's sub-agent, an instance made for it, and an item
+    # that names no session it can read.
+    other = await managers.agent_sessions.create_agent_session(owner, make_agent_session())
+    theirs = await managers.agent_sessions.create_agent_session(
+        owner, make_agent_session(parent=other)
+    )
+    made_for_theirs = {"agent_session_id": str(new_id()), "instance_of": str(theirs.id)}
+    strays = [
+        (PlacementWorkKind.EXEC, exec_on(identity.host_id, theirs.id)),
+        (PlacementWorkKind.WORKSPACE, {**prepare_in(served.pool_id), **made_for_theirs}),
+        (PlacementWorkKind.EXEC, exec_on(identity.host_id)),
+    ]
+    stray_ids = set()
+    for kind, payload in strays:
+        stray_ids.add((await managers.work.enqueue(owner, an_item(owner, kind, payload))).id)
+    assert await hosts.claim(request(), identity, 2) is None
+    events = await managers.change_events.get_change_events(owner, after_seq=0, limit=200)
+    dead = {e.target_id: e.payload["last_error"] for e in events if e.kind == DEAD_LETTER_KIND}
+    assert stray_ids <= set(dead)
+    assert all("another session" in str(dead[stray]) for stray in stray_ids)

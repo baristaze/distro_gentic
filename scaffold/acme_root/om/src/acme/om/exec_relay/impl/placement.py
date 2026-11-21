@@ -1,12 +1,14 @@
-"""Two decorators the root wires around placement. Trust's question of where
-a session's next call runs, answered with the host that holds the session's
-workspace once one does. And placement's claim for a host, which hands over
-an `exec` item only once the exec relay has started it."""
+"""What the root wires around placement. Trust's question of where a
+session's next call runs, answered with the host that holds the session's
+workspace once one does. Placement's claim for a host, which hands over an
+`exec` item only once the exec relay has started it. And the session tree an
+item serves, which a claim reads for a person's own client."""
 
 from collections.abc import Callable
 from datetime import timedelta
 from uuid import UUID
 
+from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exec_relay.manager import ExecRelayManagerInterface
 from acme.om.exec_relay.storage import ExecRelayStorageInterface
@@ -100,3 +102,45 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)
+
+
+class ItemTreesImpl:
+    """The root of the session tree an item serves (`placement`'s `TreeOf`),
+    which a claim reads for a person's own client: the session the item
+    names, read up to its tree's root. An instance a run made for a session
+    under an id of its own is no session: the session it is made for is the
+    one its prepare names, or the one its binding keeps. None when the item
+    names no session either reads."""
+
+    def __init__(
+        self, sessions: AgentSessionStorageInterface, storage: ExecRelayStorageInterface
+    ) -> None:
+        self._sessions = sessions
+        self._storage = storage
+
+    async def __call__(self, org_id: UUID, item: WorkItem) -> UUID | None:
+        named = _named(item.payload.get("agent_session_id"))
+        if named is None:
+            return None
+        session = await self._sessions.read_agent_session(org_id, named)
+        if session is None:
+            owner = _named(item.payload.get("instance_of"))
+            if owner is None:
+                binding = await self._storage.read_binding(org_id, named)
+                owner = None if binding is None else binding.instance_of
+            if owner is None:
+                return None
+            session = await self._sessions.read_agent_session(org_id, owner)
+        return None if session is None else session.root_id
+
+
+def _named(value: object) -> UUID | None:
+    """The id a payload's field names, or None when it names none."""
+    if isinstance(value, UUID):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
