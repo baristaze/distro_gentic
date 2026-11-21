@@ -14,16 +14,18 @@ A VM is the size its session's spec asks by name, which the
 deployment's map turns into a machine type; a warm VM is the default
 size. A start is inline for a session's prepare, bounded by the VMs' own
 boot bound, as the VM workspace provider's is; a warm VM starts in the
-background, since nothing waits on it. A cold start's boot, from its start
-to its host's enrollment, is a metric; a warm claim records none. Every path that starts a VM has
-the one that lets it go: a session's snapshot, its release after the
-grace, its purge, its tenant's purge, and the sweep, which lets go of a
-start that never ran, of a VM whose session or tenant is gone, and of
-a VM no row holds. A VM that ran keeps its disk until its session
-lets it go: the sweep stops one that runs with no host to work for, and its
-session's next prepare starts it again under a new key. A VM past its
-maximum age goes between runs, once its run's end kept its work, never
-under a running loop; a warm one past it goes at the sweep."""
+background, since nothing waits on it. A cold start's boot, from its
+start to its host's enrollment, is a metric; a warm claim records none.
+
+Every path that starts a VM has the one that lets it go: a session's
+snapshot, its release after the grace, its purge, its tenant's purge,
+and the sweep, which lets go of a start that never ran, of a VM whose
+session or tenant is gone, and of a VM no row holds. A VM that ran
+keeps its disk until its session lets it go: the sweep stops one that
+runs with no host to work for, and its session's next prepare starts it
+again under a new key. A VM past its maximum age goes between runs, once
+its run's end kept its work, never under a running loop; a warm one past
+it goes at the sweep."""
 
 import asyncio
 import logging
@@ -463,10 +465,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         """The session's VM: a warm one it claims, when it starts from the
         pool's image at the default size, else a new one of its size, from
         its snapshot or the pool's image, within the pool's limits as they
-        stand now. Its row
-        is written first, so a start that dies leaves a row the sweep finds;
-        one that fails here leaves nothing. Past a maximum, the loop waits on
-        the resource."""
+        stand now. Its row is written first, so a start that dies leaves a
+        row the sweep finds; one that fails here leaves nothing. Past a
+        maximum, the loop waits on the resource."""
         key = new_key()
         now = self._clock()
         vm = PoolVm(

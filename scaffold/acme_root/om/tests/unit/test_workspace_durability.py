@@ -559,6 +559,7 @@ class Cloud:
 @pytest.mark.parametrize(
     ("kept_by", "lands", "recycled"),
     [(CACHER, True, True), (KEEPER, True, False), (CACHER, False, False)],
+    ids=["cache", "kept-by-snapshots", "push-not-landed"],
 )
 async def test_a_cache_vm_is_offered_to_recycle_at_its_runs_end_once_its_work_is_kept(
     tmp_path: Path, kept_by: AgentKind, lands: bool, recycled: bool
