@@ -24,11 +24,12 @@ KEPT_BY_THE_POOL = "the cloud pool keeps this VM's whole disk, and the host take
 
 class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
     """A folder under `root`, at the VM's level. It holds open egress and
-    none alike, which the VM's network enforces, and no allowlist and
-    no limit of its own. It keeps no snapshot and starts from none, nor from
-    a base: the pool keeps the VM's whole disk, and starts the VM
-    again from it. Its release ends what its commands left running and keeps
-    its files, as a host directory's does."""
+    none alike, which the VM's network enforces, and the size the pool
+    started the VM to, and no allowlist and no other limit. It keeps no
+    snapshot and starts from none, nor from a base: the pool keeps the
+    VM's whole disk, and starts the VM again from it. Its release ends
+    what its commands left running and keeps its files, as a host
+    directory's does."""
 
     async def prepare(
         self,
@@ -41,7 +42,10 @@ class AgentWorkspacePoolVmImpl(AgentWorkspaceHostImpl):
         building: bool = False,
     ) -> AgentWorkspace:
         why = refusal(
-            spec, mode=IsolationMode.VM, egress={EgressMode.OPEN, EgressMode.NONE}, limits=()
+            spec,
+            mode=IsolationMode.VM,
+            egress={EgressMode.OPEN, EgressMode.NONE},
+            limits=("size",),
         )
         if why is None and (snapshot is not None or base is not None or spec.base is not None):
             why = "a VM's workspace starts from the VM as its pool started it: " + KEPT_BY_THE_POOL

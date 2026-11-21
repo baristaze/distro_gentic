@@ -8,13 +8,16 @@ provider that refuses for good what a prepare asks beyond its isolation
 ends the loop with its reason. Past a session's content's life, the sweep
 takes its snapshots from the bucket and their records. A workspace a host
 holds inside its tenant's wall is snapshotted by that host, and restored
-there from a snapshot decided before any host is asked."""
+there from a snapshot decided before any host is asked. A VM of the cloud
+pool whose disk is a cache is offered to the pool to recycle at its run's
+end, once its work is kept; one kept by snapshots, or whose work did not
+land, never is."""
 
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -528,3 +531,61 @@ async def test_a_hosts_refusal_keeps_no_snapshot_and_a_bucket_snapshot_never_rea
             loop.owner, agent_session_id, workspace, epoch=epoch, loop_id=new_id(), tools=()
         )
     assert len(of_type(await loop.history(agent_session_id), AgentStepType.SNAPSHOTTED)) == 1
+
+
+# A VM of the cloud pool past its age goes at its run's end, its work kept.
+
+
+class Cloud:
+    """The cloud pool as the platform's tools reach it: every spec runs on a
+    VM of it, and each recycle it is asked is kept."""
+
+    def __init__(self) -> None:
+        self.recycled: list[UUID] = []
+
+    async def runs(self, spec: IsolationSpec) -> bool:
+        return True
+
+    async def prepare(
+        self, ctx: TenantContext, agent_session_id: UUID, spec: IsolationSpec, restore: Any = None
+    ) -> AgentWorkspace:
+        return AgentWorkspace(id=agent_session_id, org_id=ctx.org_id, spec=spec, location="vm:1")
+
+    async def recycle(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
+        self.recycled.append(agent_session_id)
+        return True
+
+
+@pytest.mark.parametrize(
+    ("kept_by", "lands", "recycled"),
+    [(CACHER, True, True), (KEEPER, True, False), (CACHER, False, False)],
+    ids=["cache", "kept-by-snapshots", "push-not-landed"],
+)
+async def test_a_cache_vm_is_offered_to_recycle_at_its_runs_end_once_its_work_is_kept(
+    tmp_path: Path, kept_by: AgentKind, lands: bool, recycled: bool
+) -> None:
+    loop, _ = kept_loop(tmp_path)
+    cloud = Cloud()
+    tools = ToolsManagerAgentWorkspacesImpl(
+        loop.managers.tools,
+        loop.platform.agent_workspaces,
+        loop.managers.agent_steps,
+        HostOffer(),
+        local=True,
+        cloud=cast(Any, cloud),
+    )
+    agent_session_id = await loop.start(kept_by.name)
+    await loop.managers.agent_steps.begin_run(loop.owner, agent_session_id)
+    workspace = await tools.prepare_agent_workspace(loop.owner, agent_session_id, kept_by.isolation)
+    assert cloud.recycled == [], "nothing goes for its age while its loop runs"
+    if not lands:
+
+        async def unpushed(*args: Any, **kwargs: Any) -> None:
+            raise ValidationFailed("the push did not land")
+
+        loop.platform.agent_workspaces.detach = unpushed  # type: ignore[method-assign]
+        with pytest.raises(ValidationFailed):
+            await tools.release_agent_workspace(loop.owner, workspace)
+    else:
+        await tools.release_agent_workspace(loop.owner, workspace)
+    assert cloud.recycled == ([agent_session_id] if recycled else [])

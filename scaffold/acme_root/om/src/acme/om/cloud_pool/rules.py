@@ -1,14 +1,15 @@
 """Pure rules of the cloud pool: how its VMs and their snapshots are
 named, the key a VM is handed, what a session's spec may ask of the
-pool's VMs, and how many warm VMs to start. Values in, values
-out; no clock, no storage, no settings."""
+pool's VMs and the size it gets, and how many warm VMs to start. Values
+in, values out; no clock, no storage, no settings."""
 
 import hashlib
 import json
 import secrets
+from collections.abc import Collection
 from uuid import UUID
 
-from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec
+from acme.infra.agent_workspaces import EgressMode, IsolationMode, IsolationSpec, VmSize
 from acme.infra.agent_workspaces import refusal as infra_refusal
 from acme.om.base import EMPTY_UUID
 
@@ -32,6 +33,10 @@ where a backend bounds it."""
 
 TAG = 8
 """Hex digits that tell a session's snapshots apart."""
+
+DEFAULT_SIZE = VmSize.S
+"""The size of a VM whose session's spec asks none, and of every warm
+VM: a claim of another size starts a VM of its own."""
 
 
 def vm_name(prefix: str) -> str:
@@ -92,27 +97,37 @@ def seed(api_url: str, key: str) -> bytes:
     return json.dumps({"api_url": api_url, "key": key}, sort_keys=True).encode()
 
 
+def size_of(spec: IsolationSpec) -> VmSize:
+    """The size of the VM a session's spec asks for: its own, else the
+    pool's default."""
+    return spec.limits.size or DEFAULT_SIZE
+
+
 def refusal(
     spec: IsolationSpec,
     *,
     closes_egress: bool,
-    limits: frozenset[str],
+    sizes: Collection[VmSize],
 ) -> str | None:
     """Why the pool's VMs cannot hold a session's spec, for good; None
     when they can. A VM's egress is closed at its network, never in its
     guest, whose root its commands hold: an allowlist needs an egress proxy
     no VM runs, and a VMs' backend that closes no egress refuses
-    a session that must reach nothing. A limit the backend does not enforce
-    is refused, never dropped, and a VM holds whole cpus. A base is not
-    built on the pool's VMs: a session starts from the pool's image, or
-    from its own snapshot."""
+    a session that must reach nothing. A VM is sized by name, one of the
+    `sizes` its deployment allows, never by cpus, memory, or processes,
+    which name no machine a cloud runs: any other ask is refused, never
+    met with another size. A base is not built on the pool's VMs: a
+    session starts from the pool's image, or from its own snapshot. The
+    answer names only what the spec declares, so it is the session's to
+    read."""
+    if raw := sorted(spec.limits.asked() - {"size"}):
+        return f"a VM of the cloud pool is sized by name, never by {', '.join(raw)}"
     egress = {EgressMode.OPEN, *((EgressMode.NONE,) if closes_egress else ())}
-    why = infra_refusal(spec, mode=IsolationMode.VM, egress=egress, limits=limits)
+    why = infra_refusal(spec, mode=IsolationMode.VM, egress=egress, limits=("size",))
     if why is not None:
         return why
-    cpus = spec.limits.cpus
-    if cpus is not None and not float(cpus).is_integer():
-        return f"a VM of the cloud pool holds whole cpus, not {cpus}"
+    if (size := size_of(spec)) not in sizes:
+        return f"the cloud pool runs no VM of size {size.value} here"
     if spec.base is not None:
         return "a session of the cloud pool starts from the pool's image, never from a base"
     return None

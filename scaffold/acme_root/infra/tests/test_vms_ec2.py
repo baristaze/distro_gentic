@@ -245,6 +245,18 @@ async def test_a_new_vm_boots_the_pools_image_named_by_its_ami_id(
     assert await vms.state("acme-vm-pb") is VmState.ABSENT
 
 
+async def test_a_vm_runs_the_machine_type_its_start_names_else_the_templates(
+    cloud: tuple[VmsEc2Impl, Ec2],
+) -> None:
+    vms, ec2 = cloud
+    sized = VmSpec(image=AMI, machine_type="m7g.xlarge", cpus=4, egress_open=False)
+    await vms.launch_seeded("acme-vm-psized", sized, None, b"seed")
+    await vms.launch_seeded("acme-vm-pplain", spec(), None, b"seed")
+    asked, plain = [request for name, request in ec2.calls if name == "run_instances"]
+    assert asked["InstanceType"] == "m7g.xlarge"
+    assert "InstanceType" not in plain, "the template's own type"
+
+
 async def test_a_running_vm_handed_a_new_seed_is_stopped_reseeded_and_started(
     cloud: tuple[VmsEc2Impl, Ec2],
 ) -> None:

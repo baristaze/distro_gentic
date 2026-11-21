@@ -118,6 +118,19 @@ MODEL_SPEND_MICROS = Counter(
     ["matrix_version", "plan_tier"],
 )
 
+# A cold start of a VM of the cloud pool, from its start to its host's
+# enrollment, by what it booted: the pool's image, which a warm VM stands
+# in for, or a session's snapshot. A warm claim, and a VM started again on
+# its own disk, record none, so the image's line is what the warm count is
+# set by.
+CLOUD_POOL_BOOT_SECONDS = Histogram(
+    "acme_cloud_pool_boot_seconds",
+    "How long a new VM of the cloud pool took from its start to its host's enrollment, "
+    "by what it booted",
+    ["source"],
+    buckets=(5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600, 900),
+)
+
 
 @dataclass(frozen=True)
 class ProcessIdentity:

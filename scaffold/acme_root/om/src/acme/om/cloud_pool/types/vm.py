@@ -51,6 +51,14 @@ class PoolVm(Identifiable, Created):
         """Started ahead, and claimed by no session yet."""
         return self.agent_session_id is None
 
+    @property
+    def cold(self) -> bool:
+        """Started for its session by the claim that made its row, so the
+        session waits on its whole boot: it is bound as the row is
+        written, at one instant. A warm VM is bound at its claim, after it
+        started, and a VM started again at its new start."""
+        return self.bound_at is not None and self.bound_at == self.created_at
+
 
 class PoolClaim(OmBase):
     """What a claim got: the VM that serves its session, a warm one bound or

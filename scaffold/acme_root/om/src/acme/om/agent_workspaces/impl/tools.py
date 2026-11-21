@@ -318,9 +318,14 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         elif workspace.id in self._hosted or workspace.id in self._pooled:
             # Its host holds it, warm for the next loop: nothing of this
             # process's goes. A VM of the cloud pool is let go past the
-            # grace, by the sweep.
+            # grace, by the sweep, or now when it is past its age, since
+            # its work was just kept; one kept by snapshots is not, since
+            # its disk holds what no snapshot kept.
+            pooled = workspace.id in self._pooled
             self._hosted.discard(workspace.id)
             self._pooled.discard(workspace.id)
+            if pooled and workspace.spec.durability is Durability.CACHE:
+                await self._recycled(ctx, workspace.id)
         else:
             await self._inner.release_agent_workspace(ctx, workspace)
         if epoch is not None:
@@ -624,6 +629,16 @@ class ToolsManagerAgentWorkspacesImpl(ToolsManagerInterface):
         self._kept_whole.discard(agent_session_id)
         self._held.hold(attached, epoch)
         return attached
+
+    async def _recycled(self, ctx: TenantContext, agent_session_id: UUID) -> None:
+        """The session's VM let go if it is past its age. One that does not
+        go stays as it was, for a later run's end or the sweep past the
+        grace: the run has ended either way."""
+        assert self._cloud is not None
+        try:
+            await self._cloud.recycle(ctx, agent_session_id)
+        except Exception:
+            log.exception("session %s: its VM past its age was not let go", agent_session_id)
 
     async def _snapshot_on_vm(
         self,

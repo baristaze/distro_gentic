@@ -57,6 +57,7 @@ __all__ = [
     "IsolationSpec",
     "ResourceLimits",
     "SnapshotRefused",
+    "VmSize",
     "refusal",
 ]
 
@@ -92,12 +93,26 @@ class Durability(StrEnum):
     SNAPSHOT = "snapshot"  # a snapshot can keep it whole: what a provider that cannot refuses
 
 
+class VmSize(StrEnum):
+    """A VM's size by name, which a deployment maps onto a machine type
+    it allows, with its cpus and its memory."""
+
+    XS = "xs"
+    S = "s"
+    M = "m"
+
+
 class ResourceLimits(InfraModel):
-    """What a workspace may use of its host. None asks for no limit."""
+    """What a workspace may use of its host. None asks for no limit. A
+    size asks for a VM of that size by name, whatever cpus and memory its
+    deployment maps the name to; None asks for the deployment's default.
+    A size not asked is left out of the dump, so a host whose limits have
+    no size, and refuse a field they do not know, still reads the spec."""
 
     cpus: float | None = Field(default=None, gt=0)
     memory_mb: int | None = Field(default=None, gt=0)
     processes: int | None = Field(default=None, gt=0)
+    size: VmSize | None = Field(default=None, exclude_if=lambda size: size is None)
 
     def asked(self) -> frozenset[str]:
         return frozenset(name for name, value in self if value is not None)

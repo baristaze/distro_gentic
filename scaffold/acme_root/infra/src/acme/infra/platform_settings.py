@@ -6,7 +6,9 @@ limit, a VM of the platform's cloud account, and the cloud pool."""
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from acme.infra.agent_workspaces import VmSize
 from acme.infra.agent_workspaces.container import DEFAULT_IMAGE
+from acme.infra.vms import MachineType
 
 
 class PlatformInfraSettings(BaseSettings):
@@ -39,3 +41,8 @@ class PlatformInfraSettings(BaseSettings):
     # limits are records its operators write, never a setting.
     cloud_pool_image: str = ""
     cloud_pool_api_url: str = ""
+    # The sizes a kind may ask its VM by name, each the machine type it
+    # starts on ec2 and the cpus and memory it holds on Lima, as JSON:
+    # the cloud pool module's `sizes` output. Empty takes the pool's own,
+    # the module's defaults; it names `s`, the size of a spec that asks none.
+    cloud_pool_sizes: dict[VmSize, MachineType] = {}

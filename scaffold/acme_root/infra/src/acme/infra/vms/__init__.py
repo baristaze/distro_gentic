@@ -33,6 +33,7 @@ from acme.infra.exceptions import InfraNotFound
 
 __all__ = [
     "Channel",
+    "MachineType",
     "SeedsInterface",
     "SnapshotNotFound",
     "VmReply",
@@ -48,14 +49,27 @@ class VmState(StrEnum):
     ABSENT = "absent"  # no VM, and no snapshot, under the name
 
 
+class MachineType(InfraModel):
+    """A machine a deployment allows its VMs to run on: its name in the
+    cloud's terms, and the whole cpus and the memory it holds."""
+
+    name: str = Field(min_length=1, max_length=64)
+    cpus: int = Field(gt=0)
+    memory_mb: int = Field(gt=0)
+
+
 class VmSpec(InfraModel):
     """What a VM is started to: the image a new one boots from, in the
     backend's own terms, the whole cpus and the memory it may use (None asks
-    for the backend's default), and whether anything leaves it."""
+    for the backend's default), the machine type a cloud starts a new one
+    on (None asks for its template's), and whether anything leaves it. A
+    backend that names no machine types holds the cpus and the memory; one
+    that does starts the type, which holds them."""
 
     image: str = Field(min_length=1)
     cpus: int | None = Field(default=None, gt=0)
     memory_mb: int | None = Field(default=None, gt=0)
+    machine_type: str | None = Field(default=None, min_length=1)
     egress_open: bool
 
 

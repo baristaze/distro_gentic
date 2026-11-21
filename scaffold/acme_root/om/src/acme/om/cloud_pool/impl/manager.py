@@ -12,15 +12,22 @@ goes first. Otherwise a claim past either maximum starts no VM: the
 session's loop waits on the resource and asks again, told no count and
 no other tenant's use.
 
-A start is inline for a session's prepare, bounded by the VMs' own
+A VM is the size its session's spec asks by name, which the
+deployment's map turns into a machine type; a warm VM is the default
+size. A start is inline for a session's prepare, bounded by the VMs' own
 boot bound, as the VM workspace provider's is; a warm VM starts in the
-background, since nothing waits on it. Every path that starts a VM has
-the one that lets it go: a session's snapshot, its release after the
-grace, its purge, its tenant's purge, and the sweep, which lets go of a
-start that never ran, of a VM whose session or tenant is gone, and of
-a VM no row holds. A VM that ran keeps its disk until its session
-lets it go: the sweep stops one that runs with no host to work for, and its
-session's next prepare starts it again under a new key."""
+background, since nothing waits on it. A cold start's boot, from its
+start to its host's enrollment, is a metric; a warm claim records none.
+
+Every path that starts a VM has the one that lets it go: a session's
+snapshot, its release after the grace, its purge, its tenant's purge,
+and the sweep, which lets go of a start that never ran, of a VM whose
+session or tenant is gone, and of a VM no row holds. A VM that ran
+keeps its disk until its session lets it go: the sweep stops one that
+runs with no host to work for, and its session's next prepare starts it
+again under a new key. A VM past its maximum age goes between runs, once
+its run's end kept its work, never under a running loop; a warm one past
+it goes at the sweep."""
 
 import asyncio
 import logging
@@ -39,8 +46,10 @@ from acme.infra.agent_workspaces import (
     IsolationRefused,
     IsolationSpec,
     SnapshotRefused,
+    VmSize,
 )
 from acme.infra.exceptions import InfraException
+from acme.infra.observability import CLOUD_POOL_BOOT_SECONDS
 from acme.infra.vms import SeedsInterface, VmsInterface, VmSpec, VmState
 from acme.om.agent_workspaces.placed import PlacedWorkspacesInterface
 from acme.om.agent_workspaces.types.snapshot import KeptSnapshot
@@ -48,6 +57,7 @@ from acme.om.base import EMPTY_UUID, OmBase, new_id, utcnow
 from acme.om.cloud_pool.exceptions import VmUnbound
 from acme.om.cloud_pool.manager import CloudPoolManagerInterface
 from acme.om.cloud_pool.rules import (
+    DEFAULT_SIZE,
     KEY_PREFIX,
     MARK,
     is_snapshot,
@@ -55,6 +65,7 @@ from acme.om.cloud_pool.rules import (
     new_key,
     refusal,
     seed,
+    size_of,
     snapshot_name,
     snapshots_of,
     tenant_snapshots,
@@ -63,6 +74,7 @@ from acme.om.cloud_pool.rules import (
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.limits import MOST_VMS, Full, PoolLimits
+from acme.om.cloud_pool.types.sizes import SIZES, PoolSizes
 from acme.om.cloud_pool.types.vm import PoolVm, VmSnapshot
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
@@ -104,6 +116,13 @@ class CloudPoolOptions(OmBase):
     warm: int = Field(default=0, ge=0, le=MOST_VMS)
     most: int = Field(default=20, ge=0, le=MOST_VMS)
     tenant_most: int = Field(default=5, ge=0, le=MOST_VMS)
+    # Each size a session's spec may ask by name, and the machine it starts:
+    # the deployment's map, whose types are the only ones its role may
+    # launch. A size it does not name is refused for good.
+    sizes: PoolSizes = SIZES
+    # How long a VM serves its session across runs: past it, its run's end
+    # lets it go, its work kept, and the next loop starts another.
+    max_age: timedelta = Field(default=timedelta(hours=72), gt=timedelta(0))
     # The region a session's pool of one names.
     region: Region = "cloud"
     # Where the platform answers, as the pool's VMs reach it.
@@ -198,9 +217,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         spec: IsolationSpec,
         restore: KeptSnapshot | None = None,
     ) -> AgentWorkspace:
-        why = refusal(spec, closes_egress=self._vms.closes_egress(), limits=self._vms.limits())
+        why = refusal(
+            spec, closes_egress=self._vms.closes_egress(), sizes=self._options.sizes.allowed()
+        )
         if why is not None:
-            raise IsolationRefused(why)
+            # Composed from what the spec declares: the session reads it.
+            raise IsolationRefused(why, cause=why)
         if restore is not None and not restore.on_vms:
             raise AgentWorkspaceLost(
                 f"snapshot {restore.id} of session {agent_session_id} was not taken of a VM "
@@ -237,6 +259,14 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         vm = await self._storage.read_of_session(ctx.org_id, agent_session_id)
         if vm is not None:
             await self._let_go(ctx, vm)
+
+    async def recycle(self, ctx: TenantContext, agent_session_id: UUID) -> bool:
+        vm = await self._storage.read_of_session(ctx.org_id, agent_session_id)
+        if vm is None or not self._aged(vm, self._clock()):
+            return False
+        log.info("VM %s of session %s is past its maximum age, and goes", vm.name, agent_session_id)
+        await self._let_go(ctx, vm)
+        return True
 
     async def purge(self, org_id: UUID, agent_session_id: UUID) -> None:
         vm = await self._storage.read_of_session(org_id, agent_session_id)
@@ -299,6 +329,13 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             enrollment,
         )
         await self._storage.mark_enrolled(vm.id, issued.claimant_id)
+        if vm.cold:
+            # Once a cold start: its key is spent here, and a start again
+            # binds it anew. A warm VM's boot was over before its claim.
+            booted = (self._clock() - vm.created_at).total_seconds()
+            source = "image" if vm.restored_from is None else "snapshot"
+            CLOUD_POOL_BOOT_SECONDS.labels(source=source).observe(booted)
+            log.info("VM %s booted from its %s in %.1fs", vm.name, source, booted)
         log.info(
             "VM %s: its host %s enrolled for session %s",
             vm.name,
@@ -428,12 +465,12 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         restore: KeptSnapshot | None,
     ) -> PoolVm:
         """The session's VM: a warm one it claims, when it starts from the
-        pool's image and asks no limit, else a new one, from its snapshot or
-        the pool's image, within the pool's limits as they stand now. At the
-        pool's maximum, a new one takes the place of an idle warm VM, which
-        goes first. Its row is written first, so a start that dies leaves a
-        row the sweep finds; one that fails here leaves nothing. Past a
-        maximum, the loop waits on the resource."""
+        pool's image at the default size, else a new one of its size, from
+        its snapshot or the pool's image, within the pool's limits as they
+        stand now. At the pool's maximum, a new one takes the place of an
+        idle warm VM, which goes first. Its row is written first, so a start
+        that dies leaves a row the sweep finds; one that fails here leaves
+        nothing. Past a maximum, the loop waits on the resource."""
         key = new_key()
         now = self._clock()
         vm = PoolVm(
@@ -455,7 +492,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             vm,
             most=limits.most,
             tenant_most=limits.tenant_most if own is None else own.most,
-            warm=restore is None and not spec.limits.asked(),
+            warm=restore is None and size_of(spec) is DEFAULT_SIZE,
         )
         if isinstance(got, Full):
             # The cause is what the tenant reads: no count, and no other
@@ -583,7 +620,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             await self._let_go(rctx, vm)
             return True
         if vm.tenant_id is None or vm.agent_session_id is None:
-            return False  # warm: no host enrolls until a session claims it
+            # Warm: no host enrolls until a session claims it, and no loop
+            # runs on it, so one past its age goes, and the refill starts
+            # another.
+            return vm.warm and self._aged(vm, now) and await self._drop_warm(vm)
         if await self._session_gone(vm.tenant_id, vm.agent_session_id):
             await self._let_go(rctx, vm)
             return True
@@ -621,6 +661,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self._vms.destroy(vm.name)
         log.info("warm VM %s let go", vm.name)
         return True
+
+    def _aged(self, vm: PoolVm, now: datetime) -> bool:
+        """Whether a VM is past the pool's maximum age, from its row's start."""
+        return now - vm.created_at > self._options.max_age
 
     async def _displace(self, vm: PoolVm, warm: PoolVm) -> None:
         """The idle warm VM whose place a claim took goes before the claim's
@@ -687,7 +731,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         written = await self._storage.reserve_warm(limits.warm, limits.most, made)
         if not written:
             return
-        spec = VmSpec(image=self._options.vm_image, egress_open=egress_open)
+        spec = self._sized(DEFAULT_SIZE, egress_open=egress_open)
         for vm, key in zip(made[:written], keys[:written], strict=True):
             self._spawn(self._warm(vm, spec, key))
         log.info("the cloud pool starts %d warm VMs", written)
@@ -711,10 +755,18 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         task.add_done_callback(self._starting.discard)
 
     def _spec(self, spec: IsolationSpec) -> VmSpec:
-        cpus = spec.limits.cpus
+        return self._sized(size_of(spec), egress_open=spec.egress.mode is EgressMode.OPEN)
+
+    def _sized(self, size: VmSize, *, egress_open: bool) -> VmSpec:
+        """A VM of `size`, as the deployment's map names it: its machine
+        type for a cloud that starts types, its cpus and its memory for one
+        that holds them."""
+        machine = self._options.sizes.of(size)
+        assert machine is not None  # a size not allowed is refused before
         return VmSpec(
             image=self._options.vm_image,
-            cpus=None if cpus is None else int(cpus),
-            memory_mb=spec.limits.memory_mb,
-            egress_open=spec.egress.mode is EgressMode.OPEN,
+            cpus=machine.cpus,
+            memory_mb=machine.memory_mb,
+            machine_type=machine.name,
+            egress_open=egress_open,
         )

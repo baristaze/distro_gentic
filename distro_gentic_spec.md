@@ -394,16 +394,41 @@ in.
   claim past either maximum starts no VM. Its session waits on the
   resource and asks again, and its park names no count and no other
   tenant's use.
+- **Sized by its kind.** A kind asks its VM's size by name, `xs`, `s`,
+  or `m`, and gets `s` when it asks none. The deployment maps each name
+  it allows onto a machine type, with its CPUs and its memory, and the
+  pool's role in the cloud launches no other type. A size the
+  deployment does not map is refused for good, with its cause, before
+  any VM starts. So is an ask of CPUs or memory, which names no machine
+  a cloud runs: a VM is never met with another size.
 - **Warm, and always let go.** A few VMs may stand started ahead of
-  demand, as many as an operator sets, below the maximum. They name no
+  demand, as many as an operator sets, below the maximum, all of the
+  default size: a claim of another size starts its own. They name no
   tenant until a session claims one, and serve that session alone. At
   the maximum, a session that cannot take one takes the place of an
   idle one, which goes.
   Every path that starts a VM has the one that lets it go: the run's
-  release, the sweep past the grace, a session or a tenant that is
-  gone, a VM that died, a purge, and a key's revocation, since a VM
-  left running is money. A revocation the API takes reaches no VM, so
-  the sweep destroys its disks.
+  release, the sweep past the grace, a run's end past the VM's age, a
+  session or a tenant that is gone, a VM that died, a purge, and a
+  key's revocation, since a VM left running is money. A revocation the
+  API takes reaches no VM, so the sweep destroys its disks.
+- **Idle, it goes after the grace.** After a run, a VM stays for its
+  kind's grace, so a follow-up finds it, and is then let go. No session
+  has a time budget of its own: the grace bounds an idle VM, and the
+  bounds of its loops a busy one.
+- **Recycled at an age, between runs.** A VM that serves its session
+  across runs keeps every change its commands made, and the image it
+  booted, however old. Past a maximum age, 72 hours by default, it goes
+  at its run's end, once the run kept its work, and the session's next
+  loop starts another, from its kept state when it has one. Nothing
+  lets a VM go for its age under a running loop, or before its work is
+  kept: a VM kept by snapshots goes at each run's end that snapshots it,
+  and never for its age before one does. A warm VM past its age goes
+  at the sweep.
+- **Its boot is timed.** Each cold start records how long it took
+  from its start to its host's enrollment, by what it booted: the
+  pool's image, or a session's snapshot. A warm claim records none, so
+  the image's time is what the warm count is set by.
 - **No race between a claim and the sweep.** A VM's host is handed
   its session's work only once it holds the session's workspace. The
   sweep takes a warm VM's record before it destroys the VM, under the
