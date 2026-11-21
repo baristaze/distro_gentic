@@ -14,7 +14,7 @@ session started on the cloud has its workspace prepared by the cloud pool.
 Needs a migrated database (`make migrate`)."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -171,7 +171,9 @@ def machine(
 
 
 async def until[T](
-    read: Callable[[], Any], check: Callable[[T], bool], beside: asyncio.Future[Any] | None = None
+    read: Callable[[], Awaitable[T]],
+    check: Callable[[T], bool],
+    beside: asyncio.Future[Any] | None = None,
 ) -> T:
     """What `read` answers once `check` holds of it, within `WAIT`; what
     ended `beside`, the client's serving, if it ends first."""
@@ -249,6 +251,7 @@ async def bound_on_the_client(runner: RunnerContainer, api: Stack, agent_session
         lambda: managers.exec_relay.binding_of(api.owner, agent_session_id),
         lambda bound: bound is not None,
     )
+    assert binding is not None
     await managers.agent_sessions.wake_agent_session(api.owner, agent_session_id, parked.park)
     return binding.host_id
 
@@ -339,7 +342,12 @@ async def test_with_its_client_gone_a_local_session_waits_and_never_reaches_the_
 
     # A client serves it again: the call runs there, on its new host.
     again = asyncio.ensure_future(cli.attach_to(person, API_URL, agent_session_id, as_json=False))
-    second = await until(lambda: _bound_host(runner, api, agent_session_id), lambda h: h != first)
+    second = await until(
+        lambda: _bound_host(runner, api, agent_session_id),
+        lambda host: host is not None and host != first,
+        again,
+    )
+    assert second is not None
     await runner.managers.agent_sessions.wake_agent_session(
         api.owner, agent_session_id, parked.park
     )

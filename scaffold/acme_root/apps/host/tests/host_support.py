@@ -252,18 +252,18 @@ async def stack(
     *,
     agent_kinds: tuple[AgentKind, ...] = (),
     tools: tuple[ToolInterface, ...] = SESSION_TOOLS,
-    **overrides: object,
+    environment: str = "test",
 ) -> AsyncIterator[Stack]:
     """Over the memory storage, or over `storage`, where a tenant of its own
     is bootstrapped under a fresh slug, and over the local infra or `infra`,
-    running `agent_kinds` and `tools` with the settings `overrides` names."""
+    running `agent_kinds` and `tools`, as a stack of `environment` does."""
     container = build_container(
         tmp_path,
         storage,
         tool_catalog=tools,
         infra=infra,
         agent_kinds=agent_kinds,
-        **overrides,
+        environment=environment,
     )
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
