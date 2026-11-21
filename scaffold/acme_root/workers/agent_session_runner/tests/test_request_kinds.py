@@ -23,6 +23,7 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
 from acme.om.context import RequestContext, TenantContext
+from acme.om.platform_root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.types.policy import Decision, ToolPolicyLayer, ToolPolicyRule
 from acme.om.tools.types.tool import ToolClass
@@ -56,6 +57,8 @@ async def test_recovery_and_the_sweep_leave_a_request_kinds_session_alone(
     storage, infra = StorageMemoryImpl(), InfraLocalImpl(tmp_path)
     providers = scripted_model_providers()
     slow = Lookup("slow", holds=True, workspace=False)
+    # Every process knows the product's kinds.
+    ports = PlatformPorts(kinds=ProductKinds(agents=(READER,), tools=lambda _managers: (slow,)))
     api = RunnerContainer.over(
         AgentSessionRunnerSettings.model_validate(
             {"_env_file": None, "environment": "test", "runner_id": "runner-test"}
@@ -63,8 +66,7 @@ async def test_recovery_and_the_sweep_leave_a_request_kinds_session_alone(
         storage,
         infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
-        agent_kinds=(READER,),
-        tool_catalog=(slow,),
+        ports=ports,
     )
     rctx = RequestContext(request_id=new_id(), app=APP)
     owner, _ = await api.managers.tenancy.bootstrap(rctx, "Ajax", "ajax", "ann@example.test", "Ann")
@@ -84,7 +86,7 @@ async def test_recovery_and_the_sweep_leave_a_request_kinds_session_alone(
     assert before[-1] == AgentStepType.TOOL_REQUEST, "the loop is open, its call in flight"
 
     runner = build_runner(api)
-    maintenance = build_loop(WorkerContainer.for_tests(storage, infra))
+    maintenance = build_loop(WorkerContainer.for_tests(storage, infra, ports=ports))
     await runner._recover_once()  # pyright: ignore[reportPrivateUsage]
     await maintenance._sweep_once()  # pyright: ignore[reportPrivateUsage]
     running = asyncio.create_task(runner.run())
